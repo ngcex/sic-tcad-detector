@@ -13,7 +13,7 @@ This roadmap builds a validated TCAD simulation pipeline from the ground up: sta
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Material Parameters and Device Electrostatics** - 4H-SiC parameter module, Poisson solver, electric field and depletion width validated against analytical and experimental references
+- [x] **Phase 1: Material Parameters and Device Electrostatics** - 4H-SiC parameter module, Poisson solver, electric field and depletion width validated against analytical and experimental references
 - [ ] **Phase 2: Electrical Characterization** - I-V and C-V simulation validated against Petringa experimental data
 - [ ] **Phase 3: Charge Collection Efficiency** - CCE vs bias validated against alpha particle data and Hecht equation, with radiation generation profiles
 - [ ] **Phase 4: FLASH Plasma Recombination** - Transient high-injection simulation producing CCE vs dose-rate across the FLASH regime
@@ -37,8 +37,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 Plans:
 
-- [ ] 01-01-PLAN.md -- Material parameters, incomplete ionization, and analytical electrostatics formulas with tests
-- [ ] 01-02-PLAN.md -- devsim Poisson solver, E-field/depletion validation, plotting, and Jupyter notebook
+- [x] 01-01-PLAN.md -- Material parameters, incomplete ionization, and analytical electrostatics formulas with tests
+- [x] 01-02-PLAN.md -- devsim Poisson solver, E-field/depletion validation, plotting, and Jupyter notebook
 
 ### Phase 2: Electrical Characterization
 
@@ -113,10 +113,10 @@ Plans:
 **Execution Order:**
 Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 
-| Phase                                            | Plans Complete | Status      | Completed |
-| ------------------------------------------------ | -------------- | ----------- | --------- |
-| 1. Material Parameters and Device Electrostatics | 0/2            | Planning    | -         |
-| 2. Electrical Characterization                   | 0/?            | Not started | -         |
-| 3. Charge Collection Efficiency                  | 0/?            | Not started | -         |
-| 4. FLASH Plasma Recombination                    | 0/?            | Not started | -         |
-| 5. Parametric Studies and Publication            | 0/?            | Not started | -         |
+| Phase                                            | Plans Complete | Status      | Completed  |
+| ------------------------------------------------ | -------------- | ----------- | ---------- |
+| 1. Material Parameters and Device Electrostatics | 2/2            | Complete    | 2026-03-20 |
+| 2. Electrical Characterization                   | 0/?            | Not started | -          |
+| 3. Charge Collection Efficiency                  | 0/?            | Not started | -          |
+| 4. FLASH Plasma Recombination                    | 0/?            | Not started | -          |
+| 5. Parametric Studies and Publication            | 0/?            | Not started | -          |
