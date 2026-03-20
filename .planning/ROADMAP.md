@@ -33,12 +33,13 @@ Decimal phases appear between their surrounding integers in numeric order.
 3. Electric field distribution is computed across the p-n junction at multiple bias voltages (0 to -60V) and plotted as a 2D map vs depth
 4. Depletion width vs bias matches experimental C-V data within tolerance (1.7 um at 0V, 9.5 um at -10V, 9.73 um at -30V)
 5. Built-in potential is correctly computed from the asymmetric doping profile (N_D ~ 0.5-1e14 vs N_A ~ 1e19)
-   **Plans**: 2 plans
+   **Plans**: 3 plans
 
 Plans:
 
 - [x] 01-01-PLAN.md -- Material parameters, incomplete ionization, and analytical electrostatics formulas with tests
 - [x] 01-02-PLAN.md -- devsim Poisson solver, E-field/depletion validation, plotting, and Jupyter notebook
+- [ ] 01-03-PLAN.md -- Gap closure: descope bias-dependent W targets, update Vbi range, fix key_links
 
 ### Phase 2: Electrical Characterization
 
