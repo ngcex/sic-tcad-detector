@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-20T19:31:45.632Z"
+last_updated: "2026-03-20T23:48:10.823Z"
 progress:
-  total_phases: 1
-  completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
+  total_phases: 2
+  completed_phases: 2
+  total_plans: 4
+  completed_plans: 4
 ---
 
 # Project State
@@ -18,34 +18,35 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-20)
 
 **Core value:** Predict how CCE in 4H-SiC detectors degrades under FLASH dose rates, providing the first TCAD-based explanation of plasma recombination effects in SiC dosimeters.
-**Current focus:** Phase 1 - Material Parameters and Device Electrostatics
+**Current focus:** Phase 1.1 - Tech Debt Cleanup (COMPLETE)
 
 ## Current Position
 
-Phase: 1 of 5 (Material Parameters and Device Electrostatics) -- COMPLETE
-Plan: 3 of 3 in current phase (all plans complete)
+Phase: 1.1 of 5 (Tech Debt Cleanup) -- COMPLETE
+Plan: 1 of 1 in current phase (all plans complete)
 Status: Phase Complete
-Last activity: 2026-03-20 -- Completed 01-03 (gap closure: descope W targets, fix Vbi range, honest tests)
+Last activity: 2026-03-20 -- Completed 01.1-01 (dead imports, plot tests, analytical-W docstring)
 
-Progress: [██░░░░░░░░] 20%
+Progress: [███░░░░░░░] 25%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 3
-- Average duration: 5.3 min
-- Total execution time: 0.27 hours
+- Total plans completed: 4
+- Average duration: 4.5 min
+- Total execution time: 0.30 hours
 
 **By Phase:**
 
 | Phase | Plans | Total  | Avg/Plan |
 | ----- | ----- | ------ | -------- |
 | 1     | 3     | 16 min | 5.3 min  |
+| 1.1   | 1     | 2 min  | 2 min    |
 
 **Recent Trend:**
 
-- Last 5 plans: 01-01 (5 min), 01-02 (8 min), 01-03 (3 min)
+- Last 5 plans: 01-01 (5 min), 01-02 (8 min), 01-03 (3 min), 01.1-01 (2 min)
 - Trend: Steady
 
 _Updated after each plan completion_
@@ -82,5 +83,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-20
-Stopped at: Completed 01-03-PLAN.md (Phase 1 gap closure complete)
+Stopped at: Completed 01.1-01-PLAN.md (Phase 1.1 tech debt cleanup complete)
 Resume file: None
