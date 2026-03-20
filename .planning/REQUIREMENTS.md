@@ -81,33 +81,33 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase   | Status  |
 | ----------- | ------- | ------- |
-| MAT-01      | Phase ? | Pending |
-| MAT-02      | Phase ? | Pending |
-| MAT-03      | Phase ? | Pending |
-| MAT-04      | Phase ? | Pending |
-| ELEC-01     | Phase ? | Pending |
-| ELEC-02     | Phase ? | Pending |
-| ELEC-03     | Phase ? | Pending |
-| CCE-01      | Phase ? | Pending |
-| CCE-02      | Phase ? | Pending |
-| CCE-03      | Phase ? | Pending |
-| CCE-04      | Phase ? | Pending |
-| FLASH-01    | Phase ? | Pending |
-| FLASH-02    | Phase ? | Pending |
-| FLASH-03    | Phase ? | Pending |
-| FLASH-04    | Phase ? | Pending |
-| VAL-01      | Phase ? | Pending |
-| VAL-02      | Phase ? | Pending |
-| VAL-03      | Phase ? | Pending |
-| VAL-04      | Phase ? | Pending |
+| MAT-01      | Phase 1 | Pending |
+| MAT-02      | Phase 1 | Pending |
+| MAT-03      | Phase 1 | Pending |
+| MAT-04      | Phase 1 | Pending |
+| ELEC-01     | Phase 2 | Pending |
+| ELEC-02     | Phase 2 | Pending |
+| ELEC-03     | Phase 1 | Pending |
+| CCE-01      | Phase 3 | Pending |
+| CCE-02      | Phase 3 | Pending |
+| CCE-03      | Phase 3 | Pending |
+| CCE-04      | Phase 3 | Pending |
+| FLASH-01    | Phase 4 | Pending |
+| FLASH-02    | Phase 4 | Pending |
+| FLASH-03    | Phase 4 | Pending |
+| FLASH-04    | Phase 5 | Pending |
+| VAL-01      | Phase 2 | Pending |
+| VAL-02      | Phase 3 | Pending |
+| VAL-03      | Phase 5 | Pending |
+| VAL-04      | Phase 5 | Pending |
 
 **Coverage:**
 
 - v1 requirements: 19 total
-- Mapped to phases: 0
-- Unmapped: 19 ⚠️
+- Mapped to phases: 19
+- Unmapped: 0
 
 ---
 
 _Requirements defined: 2026-03-20_
-_Last updated: 2026-03-20 after initial definition_
+_Last updated: 2026-03-20 after roadmap creation_
