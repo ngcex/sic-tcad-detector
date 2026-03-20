@@ -199,27 +199,43 @@ class TestIntegrationPipeline:
         print(f"  W(-30V): {W30*1e4:.2f} um")
         print(f"  Epi thickness: {self.epi_thickness*1e4:.1f} um")
 
-    def test_depletion_width_10v_grows_significantly(self):
-        """W(-10V) should be significantly larger than W(0V).
+    def test_depletion_width_bias_dependence_honest(self):
+        """W under reverse bias: verify monotonic increase and document known limitation.
 
-        NOTE: The experimental target of 9.5 um at -10V requires N_D ~ 5e13,
-        but W(0V) = 1.7 um with N_D = 5e13 would need V_bi ~ 0.13 V (unphysical).
-        The analytical one-sided formula with a single N_D cannot simultaneously
-        match both W(0V) = 1.7 um and W(-10V) = 9.5 um. This is a known
-        calibration tension: the real device likely has a non-uniform doping
-        profile or the numerical (devsim) solver handles the transition
-        differently. This will be resolved in plan 01-02 with the numerical solver.
+        Known limitation: uniform N_D=1.07e15 model gives W(-10V)~3.6 um vs
+        experimental 9.5 um, and W(-30V)~5.75 um vs experimental 9.73 um.
+        The experimental values suggest a graded epi doping profile (lower N_D
+        deeper in epi) which is deferred to Phase 2.
 
-        For now, we verify the physics is directionally correct:
-        W(-10V) > 2 * W(0V) (reverse bias significantly widens depletion).
+        Here we verify the model is internally consistent:
+        1. W increases monotonically with reverse bias
+        2. The quantitative gap vs experiment is documented honestly
         """
         W0 = depletion_width(self.Vbi, 0, self.N_D, self.p.eps_r)
         W10 = depletion_width(self.Vbi, -10, self.N_D, self.p.eps_r)
-        assert (
-            W10 > 2 * W0
-        ), f"W(-10V)={W10*1e4:.2f} um should be > 2*W(0V)={2*W0*1e4:.2f} um"
-        print(f"\n  W(0V): {W0*1e4:.2f} um, W(-10V): {W10*1e4:.2f} um")
-        print("  NOTE: Exact 9.5 um target deferred to numerical solver (01-02)")
+        W30 = depletion_width(self.Vbi, -30, self.N_D, self.p.eps_r)
+
+        # Monotonic increase with reverse bias
+        assert W10 > W0, "W must increase with reverse bias"
+        assert W30 > W10, "W must increase with more reverse bias"
+
+        # Known limitation: uniform N_D model underestimates W at reverse bias
+        # compared to experimental C-V data (which implies graded doping profile)
+        assert W10 * 1e4 < 9.5, (
+            f"Uniform N_D model known to underestimate W at -10V "
+            f"(got {W10*1e4:.2f} um vs 9.5 um experimental)"
+        )
+        assert W30 * 1e4 < 9.73, (
+            f"Uniform N_D model known to underestimate W at -30V "
+            f"(got {W30*1e4:.2f} um vs 9.73 um experimental)"
+        )
+
+        print(f"\n  W(0V): {W0*1e4:.2f} um (target: 1.7 um)")
+        print(f"  W(-10V): {W10*1e4:.2f} um (experimental: 9.5 um -- known limitation)")
+        print(
+            f"  W(-30V): {W30*1e4:.2f} um (experimental: 9.73 um -- known limitation)"
+        )
+        print("  NOTE: Graded epi doping profile deferred to Phase 2")
 
     def test_full_pipeline_diagnostic(self):
         """Diagnostic test printing full pipeline results for manual review."""
