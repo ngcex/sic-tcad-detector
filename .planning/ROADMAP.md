@@ -53,11 +53,11 @@ Plans:
 1. Notebook cell 1 contains only imports that are actually used in the notebook
 2. Plotting utilities (`plot_electric_field_multi`, `plot_doping_profile`, `save_figure`) have unit test coverage
 3. `poisson.extract_depletion_width` has explicit docstring or comment documenting that it returns analytically-derived W under bias (not numerically-solved W from Poisson field), so Phase 2 drift-diffusion code does not assume numerical extraction
-   **Plans**: TBD
+   **Plans**: 1 plan
 
 Plans:
 
-- [ ] 01.1-01: TBD
+- [ ] 01.1-01-PLAN.md -- Remove dead notebook imports, add plotting test coverage, document analytical-W contract
 
 ### Phase 2: Electrical Characterization
 
@@ -135,7 +135,7 @@ Phases execute in numeric order: 1 -> 1.1 -> 2 -> 3 -> 4 -> 5
 | Phase                                            | Plans Complete | Status      | Completed  |
 | ------------------------------------------------ | -------------- | ----------- | ---------- |
 | 1. Material Parameters and Device Electrostatics | 3/3            | Complete    | 2026-03-20 |
-| 1.1. Phase 1 Tech Debt Cleanup (INSERTED)        | 0/?            | Not started | -          |
+| 1.1. Phase 1 Tech Debt Cleanup (INSERTED)        | 0/1            | Not started | -          |
 | 2. Electrical Characterization                   | 0/?            | Not started | -          |
 | 3. Charge Collection Efficiency                  | 0/?            | Not started | -          |
 | 4. FLASH Plasma Recombination                    | 0/?            | Not started | -          |
