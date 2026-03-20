@@ -33,12 +33,12 @@ Decimal phases appear between their surrounding integers in numeric order.
 3. Electric field distribution is computed across the p-n junction at multiple bias voltages (0 to -60V) and plotted as a 2D map vs depth
 4. Depletion width vs bias matches experimental C-V data within tolerance (1.7 um at 0V, 9.5 um at -10V, 9.73 um at -30V)
 5. Built-in potential is correctly computed from the asymmetric doping profile (N_D ~ 0.5-1e14 vs N_A ~ 1e19)
-   **Plans**: TBD
+   **Plans**: 2 plans
 
 Plans:
 
-- [ ] 01-01: TBD
-- [ ] 01-02: TBD
+- [ ] 01-01-PLAN.md -- Material parameters, incomplete ionization, and analytical electrostatics formulas with tests
+- [ ] 01-02-PLAN.md -- devsim Poisson solver, E-field/depletion validation, plotting, and Jupyter notebook
 
 ### Phase 2: Electrical Characterization
 
@@ -115,7 +115,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 
 | Phase                                            | Plans Complete | Status      | Completed |
 | ------------------------------------------------ | -------------- | ----------- | --------- |
-| 1. Material Parameters and Device Electrostatics | 0/?            | Not started | -         |
+| 1. Material Parameters and Device Electrostatics | 0/2            | Planning    | -         |
 | 2. Electrical Characterization                   | 0/?            | Not started | -         |
 | 3. Charge Collection Efficiency                  | 0/?            | Not started | -         |
 | 4. FLASH Plasma Recombination                    | 0/?            | Not started | -         |
