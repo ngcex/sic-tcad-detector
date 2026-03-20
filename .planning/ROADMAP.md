@@ -31,7 +31,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 1. Running the material module produces all required 4H-SiC parameters (bandgap, mobility, lifetime, ni, recombination coefficients) with values sourced from literature and documented citations
 2. Incomplete ionization of Al acceptors is modeled and produces 10-30% ionization at 300K consistent with literature
 3. Electric field distribution is computed across the p-n junction at multiple bias voltages (0 to -60V) and plotted as a 2D map vs depth
-4. Depletion width vs bias matches experimental C-V data within tolerance (1.7 um at 0V, 9.5 um at -10V, 9.73 um at -30V)
+4. Depletion width at 0V bias matches experimental C-V data (1.7 um) using calibrated N_D=1.07e15 cm^-3. Bias-dependent targets (9.5 um at -10V, 9.73 um at -30V) require a graded epi doping profile and are deferred to Phase 2.
 5. Built-in potential is correctly computed from the asymmetric doping profile (N_D ~ 0.5-1e14 vs N_A ~ 1e19)
    **Plans**: 3 plans
 
@@ -39,7 +39,7 @@ Plans:
 
 - [x] 01-01-PLAN.md -- Material parameters, incomplete ionization, and analytical electrostatics formulas with tests
 - [x] 01-02-PLAN.md -- devsim Poisson solver, E-field/depletion validation, plotting, and Jupyter notebook
-- [ ] 01-03-PLAN.md -- Gap closure: descope bias-dependent W targets, update Vbi range, fix key_links
+- [x] 01-03-PLAN.md -- Gap closure: descope bias-dependent W targets, update Vbi range, fix key_links
 
 ### Phase 2: Electrical Characterization
 
@@ -116,7 +116,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 
 | Phase                                            | Plans Complete | Status      | Completed  |
 | ------------------------------------------------ | -------------- | ----------- | ---------- |
-| 1. Material Parameters and Device Electrostatics | 2/2            | Complete    | 2026-03-20 |
+| 1. Material Parameters and Device Electrostatics | 3/3            | Complete    | 2026-03-20 |
 | 2. Electrical Characterization                   | 0/?            | Not started | -          |
 | 3. Charge Collection Efficiency                  | 0/?            | Not started | -          |
 | 4. FLASH Plasma Recombination                    | 0/?            | Not started | -          |
