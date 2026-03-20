@@ -284,6 +284,23 @@ def extract_depletion_width(device_info, V_applied=0.0):
     -------
     W : float
         Depletion width (cm), measured from junction into the n-side.
+
+    Note
+    ----
+    This returns W computed from the **analytical** one-sided depletion
+    approximation (W = sqrt(2*eps*(V_bi - V)/(q*N_D))), NOT a W extracted
+    from the numerical Poisson electric field solution. The analytical
+    formula was validated against the numerical equilibrium solution at
+    0V (agreement within ~20%), but under reverse bias it does not account
+    for carrier redistribution or non-abrupt junction profiles.
+
+    Phase 2 drift-diffusion code should NOT assume this function returns
+    a numerically-derived depletion width.
+
+    See Also
+    --------
+    extract_depletion_width_numerical : Extracts W from the numerical
+        Poisson E-field solution (equilibrium only, uses 1% threshold).
     """
     params = device_info["params"]
     N_A_ionized = device_info["N_A_ionized"]
