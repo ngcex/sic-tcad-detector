@@ -214,10 +214,10 @@ def create_sic_device(
     N_A_ionized = ionized_acceptor_concentration(N_A, T)
 
     if doping_profile == "graded":
-        # Defaults for graded profile if not provided
-        _N_D_junction = N_D_junction if N_D_junction is not None else 1e15
-        _N_D_bulk = N_D_bulk if N_D_bulk is not None else 5e13
-        _L_transition = L_transition if L_transition is not None else 2e-4
+        # Calibrated defaults for graded profile (from calibrate_graded_doping)
+        _N_D_junction = N_D_junction if N_D_junction is not None else 2.9e15
+        _N_D_bulk = N_D_bulk if N_D_bulk is not None else 8.5e13
+        _L_transition = L_transition if L_transition is not None else 1e-4
         set_graded_doping_profile(
             device_name,
             region_name,
@@ -383,10 +383,16 @@ def calibrate_graded_doping(
     squared relative errors between simulated and experimental depletion
     widths at multiple bias voltages.
 
+    Uses the full drift-diffusion solver for proper carrier transport under
+    bias. The target voltages use reverse-bias convention (negative V means
+    reverse bias on the diode); internally these are applied as positive
+    cathode bias in devsim.
+
     Parameters
     ----------
     target_W_data : dict or None
         Mapping of voltage (V) to target depletion width (cm).
+        Negative voltages = reverse bias on diode.
         Default: {0.0: 1.7e-4, -10.0: 9.5e-4, -30.0: 9.73e-4}.
     epi_thickness_cm : float
         Epitaxial layer thickness (cm).
@@ -398,7 +404,7 @@ def calibrate_graded_doping(
         Temperature (K).
     x0 : array_like or None
         Initial guess [N_D_junction, N_D_bulk, L_transition].
-        Default: [5e14, 5e13, 2e-4].
+        Default: [2.9e15, 8.5e13, 1e-4].
     maxiter : int
         Maximum optimizer iterations.
 
@@ -408,22 +414,24 @@ def calibrate_graded_doping(
         Dictionary with keys: N_D_junction, N_D_bulk, L_transition,
         final_cost, success, W_simulated (dict of V: W pairs).
     """
-    from src.poisson import (
-        setup_poisson,
-        solve_equilibrium,
-        ramp_voltage,
-        extract_depletion_width_numerical,
-    )
+    from src.drift_diffusion import create_dd_device
+    from src.poisson import extract_depletion_width_numerical
+    import devsim.python_packages.simple_physics as simple_physics
 
     if target_W_data is None:
         target_W_data = {0.0: 1.7e-4, -10.0: 9.5e-4, -30.0: 9.73e-4}
 
     if x0 is None:
-        x0 = [5e14, 5e13, 2e-4]
+        x0 = [2.9e15, 8.5e13, 1e-4]
 
     voltages = sorted(target_W_data.keys(), reverse=True)  # 0, -10, -30
     W_exp = np.array([target_W_data[v] for v in voltages])
+    # Convert reverse bias convention to cathode voltage (positive = reverse)
+    cathode_voltages = [-v for v in voltages]  # 0, 10, 30
 
+    import uuid as _uuid
+
+    _run_id = _uuid.uuid4().hex[:8]
     _trial_counter = [0]
 
     def objective(params_vec):
@@ -442,11 +450,12 @@ def calibrate_graded_doping(
         ):
             return 1e6
 
-        trial_name = f"cal_trial_{_trial_counter[0]}"
+        trial_name = f"cal_{_run_id}_{_trial_counter[0]}"
+        mesh_name = f"{trial_name}_mesh"
         _trial_counter[0] += 1
 
         try:
-            device_info = create_sic_device(
+            device_info = create_dd_device(
                 device_name=trial_name,
                 epi_thickness_cm=epi_thickness_cm,
                 substrate_thickness_cm=substrate_thickness_cm,
@@ -458,21 +467,35 @@ def calibrate_graded_doping(
                 L_transition=L_t,
             )
 
-            setup_poisson(device_info)
-            solve_equilibrium(device_info)
+            device = device_info["device_name"]
+            bias_name = simple_physics.GetContactBiasName("cathode")
 
             W_sim = []
-            for v in voltages:
-                if v == 0.0:
+            current_V = 0.0
+            for v_cath in cathode_voltages:
+                if abs(v_cath) < 1e-12:
                     W = extract_depletion_width_numerical(device_info)
                 else:
-                    ramp_voltage(
-                        device_info,
-                        contact_name="cathode",
-                        V_start=0.0,
-                        V_end=v,
-                        V_step=-0.5 if v < 0 else 0.5,
-                    )
+                    # Ramp cathode in 0.5V steps
+                    V = current_V + 0.5
+                    while V <= v_cath + 1e-10:
+                        devsim.set_parameter(device=device, name=bias_name, value=V)
+                        try:
+                            devsim.solve(
+                                type="dc",
+                                absolute_error=1e10,
+                                relative_error=1e-10,
+                                maximum_iterations=40,
+                            )
+                        except devsim.error:
+                            devsim.solve(
+                                type="dc",
+                                absolute_error=1e12,
+                                relative_error=1e-8,
+                                maximum_iterations=100,
+                            )
+                        V += 0.5
+                    current_V = v_cath
                     W = extract_depletion_width_numerical(device_info)
                 W_sim.append(W)
 
@@ -485,6 +508,10 @@ def calibrate_graded_doping(
         finally:
             try:
                 devsim.delete_device(device=trial_name)
+            except Exception:
+                pass
+            try:
+                devsim.delete_mesh(mesh=mesh_name)
             except Exception:
                 pass
 
