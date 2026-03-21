@@ -14,7 +14,7 @@ This roadmap builds a validated TCAD simulation pipeline from the ground up: sta
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Material Parameters and Device Electrostatics** - 4H-SiC parameter module, Poisson solver, electric field and depletion width validated against analytical and experimental references
-- [ ] **Phase 1.1: Phase 1 Tech Debt Cleanup** — INSERTED — Remove unused imports, test plotting utilities, document analytical W contract for Phase 2 handoff
+- [x] **Phase 1.1: Phase 1 Tech Debt Cleanup** — INSERTED — Remove unused imports, test plotting utilities, document analytical W contract for Phase 2 handoff
 - [x] **Phase 2: Electrical Characterization** - I-V and C-V simulation validated against Petringa experimental data
 - [x] **Phase 3: Charge Collection Efficiency** - CCE vs bias validated against alpha particle data and Hecht equation, with radiation generation profiles
 - [ ] **Phase 4: FLASH Plasma Recombination** - Transient high-injection simulation producing CCE vs dose-rate across the FLASH regime
@@ -57,7 +57,7 @@ Plans:
 
 Plans:
 
-- [ ] 01.1-01-PLAN.md -- Remove dead notebook imports, add plotting test coverage, document analytical-W contract
+- [x] 01.1-01-PLAN.md -- Remove dead notebook imports, add plotting test coverage, document analytical-W contract
 
 ### Phase 2: Electrical Characterization
 
@@ -140,7 +140,7 @@ Phases execute in numeric order: 1 -> 1.1 -> 2 -> 3 -> 4 -> 5
 | Phase                                            | Plans Complete | Status      | Completed  |
 | ------------------------------------------------ | -------------- | ----------- | ---------- |
 | 1. Material Parameters and Device Electrostatics | 3/3            | Complete    | 2026-03-20 |
-| 1.1. Phase 1 Tech Debt Cleanup (INSERTED)        | 0/1            | Not started | -          |
+| 1.1. Phase 1 Tech Debt Cleanup (INSERTED)        | 1/1            | Complete    | 2026-03-21 |
 | 2. Electrical Characterization                   | 5/5            | Complete    | 2026-03-21 |
 | 3. Charge Collection Efficiency                  | 3/3            | Complete    | 2026-03-21 |
 | 4. FLASH Plasma Recombination                    | 0/?            | Not started | -          |

@@ -12,7 +12,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **MAT-01**: Simulate 4H-SiC with complete material parameter module (E_g=3.26eV, ε_r=9.7, n_i, mobility models, SRH/Auger recombination coefficients)
 - [x] **MAT-02**: Model incomplete ionization of Al acceptors in p⁺ substrate (~10-30% ionization at 300K, E_A≈200meV)
 - [x] **MAT-03**: Compute 2D electric field distribution in p-n junction vs depth and reverse bias (0 to -60V)
-- [~] **MAT-04**: Calculate depletion width vs doping concentration and bias voltage (analytical + devsim numerical, validated against C-V data: 1.7μm@0V). Bias-dependent targets (9.5μm@-10V, 9.73μm@-30V) not achievable with uniform N_D model; graded epi doping profile deferred to Phase 2.
+- [x] **MAT-04**: Calculate depletion width vs doping concentration and bias voltage (analytical + devsim numerical, validated against C-V data: 1.7μm@0V). Bias-dependent targets resolved in Phase 2 via graded epi doping calibration (R²=0.998).
 
 ### Electrical Characterization
 
@@ -84,7 +84,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MAT-01      | Phase 1 | Complete |
 | MAT-02      | Phase 1 | Complete |
 | MAT-03      | Phase 1 | Complete |
-| MAT-04      | Phase 1 | Partial  |
+| MAT-04      | Phase 1 | Complete |
 | ELEC-01     | Phase 2 | Partial  |
 | ELEC-02     | Phase 2 | Complete |
 | ELEC-03     | Phase 1 | Complete |
