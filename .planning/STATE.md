@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-21T18:57:17.299Z"
+last_updated: "2026-03-21T20:18:06Z"
 progress:
-  total_phases: 4
+  total_phases: 5
   completed_phases: 4
-  total_plans: 12
-  completed_plans: 12
+  total_plans: 14
+  completed_plans: 13
 ---
 
 # Project State
@@ -18,24 +18,24 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-20)
 
 **Core value:** Predict how CCE in 4H-SiC detectors degrades under FLASH dose rates, providing the first TCAD-based explanation of plasma recombination effects in SiC dosimeters.
-**Current focus:** Phase 3 complete -- ready for Phase 4 (FLASH Plasma Recombination)
+**Current focus:** Phase 4 in progress -- FLASH Plasma Recombination (Auger model complete, CCE vs dose-rate next)
 
 ## Current Position
 
-Phase: 3 of 5 (Charge Collection Efficiency) -- COMPLETE
-Plan: 3 of 3 in current phase (complete)
-Status: Phase 3 complete -- CCE vs epi thickness parametric sweep, validation notebook approved.
-Last activity: 2026-03-21 -- Completed 03-03 (CCE vs epi thickness, plotting, validation notebook)
+Phase: 4 of 5 (FLASH Plasma Recombination)
+Plan: 1 of 2 in current phase (04-01 complete)
+Status: Auger recombination model and continuation solver implemented and tested.
+Last activity: 2026-03-21 -- Completed 04-01 (Auger model, continuation solver, 5 integration tests)
 
-Progress: [██████████] 100%
+Progress: [█████████░] 93%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 12
-- Average duration: 4.2 min
-- Total execution time: 0.83 hours
+- Total plans completed: 13
+- Average duration: 4.0 min
+- Total execution time: 0.87 hours
 
 **By Phase:**
 
@@ -45,10 +45,11 @@ Progress: [██████████] 100%
 | 1.1   | 1     | 2 min  | 2 min    |
 | 2     | 5     | 24 min | 4.8 min  |
 | 3     | 3     | 15 min | 5.0 min  |
+| 4     | 1     | 2 min  | 2.0 min  |
 
 **Recent Trend:**
 
-- Last 5 plans: 02-04 (8 min), 02-05 (3 min), 03-01 (3 min), 03-02 (4 min), 03-03 (8 min)
+- Last 5 plans: 02-05 (3 min), 03-01 (3 min), 03-02 (4 min), 03-03 (8 min), 04-01 (2 min)
 - Trend: Steady
 
 _Updated after each plan completion_
@@ -95,6 +96,9 @@ Recent decisions affecting current work:
 - [03-02]: Effective N_D for Hecht W(V) uses geometric mean of graded doping endpoints
 - [03-03]: Adaptive mesh points for variable epi thickness to prevent solver divergence on thin layers
 - [03-03]: np.trapezoid used instead of np.trapz for NumPy 2.0+ compatibility
+- [04-01]: Auger added after bias ramp but before generation for Jacobian stability
+- [04-01]: Continuation solver uses 5-step linear ramp with up to 3 bisection retries per step
+- [04-01]: RadGenRate existence checked at Auger setup time for flexible call ordering
 
 ### Pending Todos
 
@@ -110,5 +114,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-21
-Stopped at: Completed 03-03-PLAN.md (CCE vs epi thickness, plotting, validation notebook)
+Stopped at: Completed 04-01-PLAN.md (Auger recombination model and continuation solver)
 Resume file: None
