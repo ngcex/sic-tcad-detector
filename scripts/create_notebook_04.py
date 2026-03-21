@@ -91,10 +91,10 @@ nb.cells.append(
         "    print(f'{dr:>20.0f} {G:>30.3e}')\n"
         "\n"
         "print()\n"
-        "print('Note: At 20 Gy/s, G ~ 4.8e15 cm^-3 s^-1')\n"
-        "print('      At 230 Gy/s, G ~ 5.5e16 cm^-3 s^-1')\n"
+        "print(f'Note: At 20 Gy/s, G ~ {dose_rate_to_generation(20):.1e} cm^-3 s^-1')\n"
+        "print(f'      At 230 Gy/s, G ~ {dose_rate_to_generation(230):.1e} cm^-3 s^-1')\n"
         "print(f'      With tau_SRH ~ 1e-9 s: delta_n ~ {dose_rate_to_generation(230)*1e-9:.1e} cm^-3')\n"
-        "print(f'      Auger threshold: ~1e16 cm^-3 (nine orders of magnitude higher)')"
+        "print(f'      Auger threshold: ~1e16 cm^-3')"
     )
 )
 
