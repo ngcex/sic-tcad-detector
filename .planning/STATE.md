@@ -8,7 +8,7 @@ progress:
   total_phases: 6
   completed_phases: 6
   total_plans: 16
-  completed_plans: 16
+  completed_plans: 18
 ---
 
 # Project State
@@ -18,22 +18,22 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-20)
 
 **Core value:** Predict how CCE in 4H-SiC detectors degrades under FLASH dose rates, providing the first TCAD-based explanation of plasma recombination effects in SiC dosimeters.
-**Current focus:** All phases complete. v1.0 milestone delivered.
+**Current focus:** Phase 6 code quality cleanup complete.
 
 ## Current Position
 
-Phase: 5 of 5 (Parametric Studies and Publication)
-Plan: 2 of 2 in current phase (05-02 complete)
-Status: All plans complete. Publication-quality parametric figures and notebook delivered.
-Last activity: 2026-03-21 -- Completed 05-02 (publication figures and notebook)
+Phase: 6 of 6 (Code Quality Cleanup)
+Plan: 1 of 2 in current phase (06-01 complete)
+Status: 06-01 complete. Dead imports removed, material constants centralized.
+Last activity: 2026-03-21 -- Completed 06-01 (dead imports and constant centralization)
 
-Progress: [████████████████] 100%
+Progress: [█████████████████░░] 94%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 16
+- Total plans completed: 17
 - Average duration: 4.2 min
 - Total execution time: 1.08 hours
 
@@ -57,6 +57,7 @@ _Updated after each plan completion_
 | Phase | Plans | Total  | Avg/Plan |
 | ----- | ----- | ------ | -------- |
 | 5     | 2     | 11 min | 5.5 min  |
+| 6     | 1     | 1 min  | 1 min    |
 
 ## Accumulated Context
 
@@ -109,6 +110,7 @@ Recent decisions affecting current work:
 - [Phase 05]: [05-01]: N_D_junction scaled proportionally with N_D_bulk to preserve graded profile shape in parametric sweep
 - [Phase 05]: [05-02]: Reference doping 8.5e13 added to N_D_BULK_VALUES for correct doping parametric figure
 - [Phase 05]: [05-02]: Minimal cached results pattern with RECOMPUTE flag for expensive sweep deferral
+- [Phase 06]: [06-01]: Module-level \_params = SiC4H_Parameters() instance for default parameter sourcing
 
 ### Pending Todos
 
@@ -124,5 +126,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-21
-Stopped at: Completed 05-02-PLAN.md (publication figures and notebook) -- ALL PLANS COMPLETE
+Stopped at: Completed 06-01-PLAN.md (dead imports and constant centralization)
 Resume file: None
