@@ -69,11 +69,13 @@ Plans:
 1. Simulated I-V curve reproduces dark current < 18 pA at -60V, rectification ratio ~ 1e5 at +/-2V, and series resistance ~ 3 kOhm
 2. Simulated C-V curve reproduces depletion width evolution from 1.7 um at 0V to 9.73 um at -30V at 1 kHz
 3. Quantified agreement metrics (R-squared, max deviation) between simulation and experimental data are computed and reported
-   **Plans**: TBD
+   **Plans**: 3 plans
 
 Plans:
 
-- [ ] 02-01: TBD
+- [ ] 02-01-PLAN.md -- Graded doping profile and drift-diffusion solver with SRH recombination
+- [ ] 02-02-PLAN.md -- I-V sweep, C-V analysis, validation framework, and plotting
+- [ ] 02-03-PLAN.md -- Validation notebook and human verification of results
 
 ### Phase 3: Charge Collection Efficiency
 
@@ -136,7 +138,7 @@ Phases execute in numeric order: 1 -> 1.1 -> 2 -> 3 -> 4 -> 5
 | ------------------------------------------------ | -------------- | ----------- | ---------- |
 | 1. Material Parameters and Device Electrostatics | 3/3            | Complete    | 2026-03-20 |
 | 1.1. Phase 1 Tech Debt Cleanup (INSERTED)        | 0/1            | Not started | -          |
-| 2. Electrical Characterization                   | 0/?            | Not started | -          |
+| 2. Electrical Characterization                   | 0/3            | Not started | -          |
 | 3. Charge Collection Efficiency                  | 0/?            | Not started | -          |
 | 4. FLASH Plasma Recombination                    | 0/?            | Not started | -          |
 | 5. Parametric Studies and Publication            | 0/?            | Not started | -          |
