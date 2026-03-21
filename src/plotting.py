@@ -670,6 +670,64 @@ def plot_cce_vs_epi(epi_data, ax=None):
     return ax
 
 
+def plot_cce_vs_dose_rate(flash_data, ax=None, label="DD + Auger"):
+    """Plot CCE vs dose rate for FLASH regime analysis.
+
+    Parameters
+    ----------
+    flash_data : dict
+        Output from cce_vs_dose_rate() with keys:
+        "dose_rates", "cce_values", "cce_no_auger_ref",
+        "V_bias", "epi_thickness_cm", "E_MeV".
+    ax : matplotlib.axes.Axes or None
+        Axes to plot on. If None, creates new figure.
+    label : str
+        Legend label for the data series.
+
+    Returns
+    -------
+    ax : matplotlib.axes.Axes
+    """
+    if ax is None:
+        fig, ax = plt.subplots()
+
+    dose_rates = np.asarray(flash_data["dose_rates"])
+    cce = np.asarray(flash_data["cce_values"])
+    cce_ref = flash_data["cce_no_auger_ref"]
+    V_bias = flash_data["V_bias"]
+    epi_um = flash_data["epi_thickness_cm"] * 1e4
+    E_MeV = flash_data["E_MeV"]
+
+    # CCE vs dose rate line
+    ax.plot(dose_rates, cce, "o-", linewidth=1.5, markersize=6, label=label)
+
+    # SRH-only reference line
+    ax.axhline(
+        y=cce_ref,
+        color="gray",
+        linestyle="--",
+        alpha=0.7,
+        linewidth=1.0,
+        label=f"SRH-only reference ({cce_ref:.4f})",
+    )
+
+    # Use log scale if range spans orders of magnitude
+    if len(dose_rates) > 1 and max(dose_rates) / min(dose_rates) > 50:
+        ax.set_xscale("log")
+
+    ax.set_xlabel("Dose Rate (Gy/s)")
+    ax.set_ylabel("Charge Collection Efficiency")
+    ax.set_ylim([0, 1.1])
+    ax.set_title(
+        f"CCE vs Dose Rate ({V_bias:.0f}V, {epi_um:.0f} $\\mu$m epi, "
+        f"{E_MeV} MeV protons)"
+    )
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+
+    return ax
+
+
 def save_figure(fig, filename, dpi=300):
     """Save figure to figures/ directory in both PNG and PDF formats.
 
