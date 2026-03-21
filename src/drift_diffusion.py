@@ -35,6 +35,7 @@ from devsim.python_packages.simple_dd import (
     CreateHoleCurrent,
 )
 import devsim.python_packages.simple_physics as simple_physics
+import numpy as np
 
 from src.device import create_sic_device
 from src.poisson import setup_poisson, solve_equilibrium
@@ -239,3 +240,110 @@ def create_dd_device(doping_profile="graded", **kwargs):
 
     device_info["dd_initialized"] = True
     return device_info
+
+
+def iv_sweep(
+    device_info,
+    V_range,
+    contact="anode",
+    V_step_forward=0.1,
+    V_step_reverse=0.5,
+):
+    """Sweep voltage and extract I-V curve from drift-diffusion solution.
+
+    Ramps the contact bias through V_range, solving the coupled DD equations
+    at each point and extracting the total contact current.
+
+    For convergence stability, voltages are applied incrementally from the
+    current bias state using small internal steps (V_step_forward for V>0,
+    V_step_reverse for V<0).
+
+    Parameters
+    ----------
+    device_info : dict
+        Device info dict with DD equations already set up (dd_initialized=True).
+    V_range : array_like
+        Array of voltages to sweep (V). Should be sorted.
+    contact : str
+        Contact at which to extract current ("anode" or "cathode").
+    V_step_forward : float
+        Maximum voltage step for forward bias ramping (V).
+    V_step_reverse : float
+        Maximum voltage step for reverse bias ramping (V).
+
+    Returns
+    -------
+    result : dict
+        Dictionary with:
+        - "voltages": numpy array of applied voltages (V)
+        - "currents": numpy array of currents (A/cm^2)
+    """
+    device = device_info["device_name"]
+    V_range = np.asarray(V_range, dtype=float)
+
+    voltages_out = []
+    currents_out = []
+
+    # Track current bias state
+    current_V = 0.0
+    bias_name = simple_physics.GetContactBiasName(contact)
+
+    for V_target in V_range:
+        # Determine step size based on direction
+        if V_target >= 0:
+            step = V_step_forward
+        else:
+            step = V_step_reverse
+
+        # Ramp from current_V to V_target in small steps
+        delta = V_target - current_V
+        if abs(delta) < 1e-12:
+            # Already at target, just extract current
+            pass
+        else:
+            n_steps = max(1, int(np.ceil(abs(delta) / step)))
+            V_intermediates = np.linspace(current_V, V_target, n_steps + 1)[1:]
+
+            for V_int in V_intermediates:
+                devsim.set_parameter(device=device, name=bias_name, value=V_int)
+                try:
+                    devsim.solve(
+                        type="dc",
+                        absolute_error=1e10,
+                        relative_error=1e-10,
+                        maximum_iterations=40,
+                    )
+                except devsim.error:
+                    # Retry with relaxed tolerances
+                    try:
+                        devsim.solve(
+                            type="dc",
+                            absolute_error=1e12,
+                            relative_error=1e-8,
+                            maximum_iterations=100,
+                        )
+                        logger.info(
+                            f"iv_sweep: converged at V={V_int:.3f}V with relaxed tolerances"
+                        )
+                    except devsim.error as e:
+                        logger.warning(
+                            f"iv_sweep: failed to converge at V={V_int:.3f}V: {e}"
+                        )
+                        # Return what we have so far
+                        return {
+                            "voltages": np.array(voltages_out),
+                            "currents": np.array(currents_out),
+                        }
+
+        # Extract current at the target voltage
+        I_total = extract_contact_current(device_info, contact=contact)
+        voltages_out.append(V_target)
+        currents_out.append(I_total)
+        current_V = V_target
+
+        logger.debug(f"iv_sweep: V={V_target:.3f}V, I={I_total:.4e} A/cm^2")
+
+    return {
+        "voltages": np.array(voltages_out),
+        "currents": np.array(currents_out),
+    }
