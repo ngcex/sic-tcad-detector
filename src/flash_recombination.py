@@ -22,6 +22,7 @@ All units CGS (cm, cm^-3, A/cm^2, V) per devsim convention.
 """
 
 import logging
+import uuid
 
 import devsim
 from devsim.python_packages.model_create import (
@@ -30,7 +31,8 @@ from devsim.python_packages.model_create import (
 )
 import numpy as np
 
-from src.charge_collection import add_generation_to_dd
+from src.charge_collection import add_generation_to_dd, compute_cce_from_dd
+from src.generation_profiles import proton_generation_profile
 
 logger = logging.getLogger(__name__)
 
@@ -231,3 +233,171 @@ def solve_with_continuation(device_info, generation_values, n_steps=5):
 
     logger.info(f"Continuation complete: converged at 100% generation rate")
     return True
+
+
+def cce_vs_dose_rate(
+    dose_rates_Gy_s,
+    V_bias=-30.0,
+    epi_thickness_cm=10e-4,
+    E_MeV=62,
+    n_continuation_steps=5,
+):
+    """Compute CCE vs dose rate across the FLASH range.
+
+    Sweeps dose rates (typically 20-230 Gy/s) at fixed reference conditions
+    to reveal whether Auger recombination degrades charge collection at
+    FLASH dose rates.
+
+    Parameters
+    ----------
+    dose_rates_Gy_s : array_like
+        Dose rates to sweep (Gy/s). Sorted ascending internally.
+    V_bias : float
+        Reverse bias voltage (V, negative). Default: -30.
+    epi_thickness_cm : float
+        Epitaxial layer thickness (cm). Default: 10 um.
+    E_MeV : float
+        Proton kinetic energy (MeV). Default: 62.
+    n_continuation_steps : int
+        Steps for generation-rate continuation ramp. Default: 5.
+
+    Returns
+    -------
+    result : dict
+        Dictionary with:
+        - "dose_rates": numpy array of dose rates (Gy/s)
+        - "cce_values": numpy array of CCE values
+        - "cce_no_auger_ref": float, CCE at lowest dose rate without Auger
+        - "V_bias": bias voltage used
+        - "epi_thickness_cm": epi thickness used
+        - "E_MeV": proton energy used
+    """
+    from src.drift_diffusion import create_dd_device, ramp_bias
+
+    dose_rates = np.asarray(dose_rates_Gy_s, dtype=float)
+    sorted_idx = np.argsort(dose_rates)
+    dose_rates_sorted = dose_rates[sorted_idx]
+
+    cce_sorted = np.zeros(len(dose_rates))
+
+    # --- Device with Auger ---
+    dev_id = uuid.uuid4().hex[:8]
+    device_info = create_dd_device(
+        device_name=f"flash_sweep_{dev_id}",
+        epi_thickness_cm=epi_thickness_cm,
+        doping_profile="graded",
+        N_D_junction=2.90e15,
+        N_D_bulk=8.50e13,
+        L_transition=1.0e-4,
+    )
+    device = device_info["device_name"]
+    region = device_info["region_name"]
+
+    try:
+        # Add Auger recombination
+        add_auger_recombination(device_info)
+
+        # Ramp to bias (cathode voltage is -V_bias for reverse bias)
+        cathode_V = -V_bias
+        ramp_bias(device_info, cathode_V, contact="cathode", V_step=0.5)
+
+        # Get mesh nodes
+        x_nodes = np.array(
+            devsim.get_node_model_values(device=device, region=region, name="x")
+        )
+        junction_pos = device_info["junction_pos"]
+
+        # Loop over dose rates (ascending for continuation stability)
+        for i, dose_rate in enumerate(dose_rates_sorted):
+            gen_values = proton_generation_profile(x_nodes, E_MeV, dose_rate)
+
+            # Zero generation in p+ substrate (x < junction_pos)
+            gen_values[x_nodes < junction_pos] = 0.0
+
+            converged = solve_with_continuation(
+                device_info, gen_values, n_steps=n_continuation_steps
+            )
+
+            if converged:
+                cce = compute_cce_from_dd(device_info, gen_values, contact="cathode")
+            else:
+                logger.warning(f"Continuation failed at dose_rate={dose_rate:.1f} Gy/s")
+                cce = np.nan
+
+            cce_sorted[i] = cce
+            logger.info(f"cce_vs_dose_rate: {dose_rate:.0f} Gy/s -> CCE={cce:.6f}")
+
+            # Reset generation to zero for next iteration
+            zero_gen = np.zeros_like(gen_values)
+            add_generation_to_dd(device_info, zero_gen)
+            devsim.solve(
+                type="dc",
+                absolute_error=1e10,
+                relative_error=1e-10,
+                maximum_iterations=40,
+            )
+
+    finally:
+        try:
+            devsim.delete_device(device=device)
+        except Exception:
+            pass
+
+    # --- No-Auger reference at lowest dose rate ---
+    dev_id2 = uuid.uuid4().hex[:8]
+    device_info2 = create_dd_device(
+        device_name=f"flash_noauger_{dev_id2}",
+        epi_thickness_cm=epi_thickness_cm,
+        doping_profile="graded",
+        N_D_junction=2.90e15,
+        N_D_bulk=8.50e13,
+        L_transition=1.0e-4,
+    )
+    device2 = device_info2["device_name"]
+    region2 = device_info2["region_name"]
+
+    try:
+        # No Auger -- just SRH
+        cathode_V = -V_bias
+        ramp_bias(device_info2, cathode_V, contact="cathode", V_step=0.5)
+
+        x_nodes2 = np.array(
+            devsim.get_node_model_values(device=device2, region=region2, name="x")
+        )
+        junction_pos2 = device_info2["junction_pos"]
+
+        lowest_rate = dose_rates_sorted[0]
+        gen_ref = proton_generation_profile(x_nodes2, E_MeV, lowest_rate)
+        gen_ref[x_nodes2 < junction_pos2] = 0.0
+
+        add_generation_to_dd(device_info2, gen_ref)
+        devsim.solve(
+            type="dc",
+            absolute_error=1e10,
+            relative_error=1e-10,
+            maximum_iterations=40,
+        )
+        cce_no_auger = compute_cce_from_dd(device_info2, gen_ref, contact="cathode")
+        logger.info(
+            f"No-Auger reference CCE at {lowest_rate:.0f} Gy/s: {cce_no_auger:.6f}"
+        )
+
+    finally:
+        try:
+            devsim.delete_device(device=device2)
+        except Exception:
+            pass
+
+    # Unsort back to original order
+    cce_original_order = np.zeros(len(dose_rates))
+    for i, idx in enumerate(sorted_idx):
+        cce_original_order[idx] = cce_sorted[i]
+
+    return {
+        "dose_rates": dose_rates,
+        "cce_values": cce_original_order,
+        "cce_no_auger_ref": float(cce_no_auger),
+        "V_bias": V_bias,
+        "epi_thickness_cm": epi_thickness_cm,
+        "E_MeV": E_MeV,
+    }
