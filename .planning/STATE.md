@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in-progress
-last_updated: "2026-03-21T10:08:19Z"
+last_updated: "2026-03-21T17:47:00Z"
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 8
-  completed_plans: 8
+  total_plans: 9
+  completed_plans: 9
 ---
 
 # Project State
@@ -23,9 +23,9 @@ See: .planning/PROJECT.md (updated 2026-03-20)
 ## Current Position
 
 Phase: 2 of 5 (Electrical Characterization) -- COMPLETE
-Plan: 4 of 4 in current phase (gap closure complete)
-Status: Phase 2 fully complete with calibrated doping. Ready for Phase 3.
-Last activity: 2026-03-21 -- Completed 02-04 (gap closure: doping calibration, checkpoint approved)
+Plan: 5 of 5 in current phase (gap closure complete)
+Status: Phase 2 fully complete with honest I-V validation documentation. Ready for Phase 3.
+Last activity: 2026-03-21 -- Completed 02-05 (gap closure: I-V validation honesty, ROADMAP/REQUIREMENTS updated)
 
 Progress: [████████░░] 80%
 
@@ -33,9 +33,9 @@ Progress: [████████░░] 80%
 
 **Velocity:**
 
-- Total plans completed: 8
-- Average duration: 4.5 min
-- Total execution time: 0.60 hours
+- Total plans completed: 9
+- Average duration: 4.2 min
+- Total execution time: 0.63 hours
 
 **By Phase:**
 
@@ -43,11 +43,11 @@ Progress: [████████░░] 80%
 | ----- | ----- | ------ | -------- |
 | 1     | 3     | 16 min | 5.3 min  |
 | 1.1   | 1     | 2 min  | 2 min    |
-| 2     | 4     | 21 min | 5.3 min  |
+| 2     | 5     | 24 min | 4.8 min  |
 
 **Recent Trend:**
 
-- Last 5 plans: 01.1-01 (2 min), 02-01 (4 min), 02-02 (4 min), 02-03 (5 min), 02-04 (8 min)
+- Last 5 plans: 02-01 (4 min), 02-02 (4 min), 02-03 (5 min), 02-04 (8 min), 02-05 (3 min)
 - Trend: Steady
 
 _Updated after each plan completion_
@@ -82,6 +82,9 @@ Recent decisions affecting current work:
 - [02-04]: DD solver required for bias-dependent W(V) -- Poisson-only insufficient under reverse bias
 - [02-04]: Dark current 6.71e-49 A/cm^2 is ideal SRH limit for SiC (n_i~5e-9), physically correct
 - [02-04]: Rectification ratio 6.25 at +/-2V accepted -- reflects SiC bandgap physics
+- [02-05]: ideal_srh_floor threshold at 10 orders below target for machine-readable physics limitation detection
+- [02-05]: dark_current_pass unchanged for backward compat; new dark_current_physically_meaningful field added
+- [02-05]: ELEC-01 and VAL-01 marked Partial to honestly reflect ideal-SRH limitation
 
 ### Pending Todos
 
@@ -97,5 +100,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-21
-Stopped at: Completed 02-04-PLAN.md (gap closure: doping calibration complete, Phase 2 done)
+Stopped at: Completed 02-05-PLAN.md (gap closure: I-V validation honesty, Phase 2 fully documented)
 Resume file: None
