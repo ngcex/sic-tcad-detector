@@ -36,7 +36,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Validation & Output
 
-- [ ] **VAL-01**: Validate device simulation against Petringa experimental I-V and C-V data with quantified agreement metrics (R², max deviation)
+- [x] **VAL-01**: Validate device simulation against Petringa experimental I-V and C-V data with quantified agreement metrics (R², max deviation)
 - [ ] **VAL-02**: Validate CCE against analytical Hecht equation and Shockley-Ramo theorem, documenting regime of validity
 - [ ] **VAL-03**: Generate publication-quality matplotlib figures for all results (I-V, C-V, E-field maps, CCE curves, FLASH parametric plots)
 - [ ] **VAL-04**: Deliver reusable Jupyter notebook interface with documented workflow for the research group
@@ -96,7 +96,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FLASH-02    | Phase 4 | Pending  |
 | FLASH-03    | Phase 4 | Pending  |
 | FLASH-04    | Phase 5 | Pending  |
-| VAL-01      | Phase 2 | Pending  |
+| VAL-01      | Phase 2 | Complete |
 | VAL-02      | Phase 3 | Pending  |
 | VAL-03      | Phase 5 | Pending  |
 | VAL-04      | Phase 5 | Pending  |
