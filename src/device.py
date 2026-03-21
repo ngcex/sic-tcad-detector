@@ -105,11 +105,15 @@ def create_sic_device(
     devsim.add_1d_mesh_line(mesh=mesh_name, pos=junction_pos, ps=1e-7)
 
     # Depletion region in n-side: fine spacing near junction, coarser in bulk
-    # First ~2 um from junction: fine (~10 nm)
-    devsim.add_1d_mesh_line(mesh=mesh_name, pos=junction_pos + 2e-4, ps=5e-6)
+    # Only add intermediate mesh points if they fall strictly within the epi layer
+    epi_mid1 = junction_pos + 2e-4  # ~2 um from junction
+    epi_mid2 = junction_pos + 5e-4  # ~5 um from junction
 
-    # Bulk n- epi: medium spacing (~50 nm = 5e-6 cm)
-    devsim.add_1d_mesh_line(mesh=mesh_name, pos=junction_pos + 5e-4, ps=5e-6)
+    if epi_mid1 < total_length - 1e-6:
+        devsim.add_1d_mesh_line(mesh=mesh_name, pos=epi_mid1, ps=5e-6)
+
+    if epi_mid2 < total_length - 1e-6:
+        devsim.add_1d_mesh_line(mesh=mesh_name, pos=epi_mid2, ps=5e-6)
 
     # Far end of epi: coarser spacing
     devsim.add_1d_mesh_line(mesh=mesh_name, pos=total_length, ps=1e-5, tag="bot")
