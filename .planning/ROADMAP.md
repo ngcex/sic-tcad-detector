@@ -66,10 +66,10 @@ Plans:
 **Requirements**: ELEC-01, ELEC-02, VAL-01
 **Success Criteria** (what must be TRUE):
 
-1. Simulated I-V curve reproduces dark current < 18 pA at -60V, rectification ratio ~ 1e5 at +/-2V, and series resistance ~ 3 kOhm
+1. Simulated I-V curve computed via drift-diffusion with SRH recombination. Ideal-SRH baseline produces dark current at theoretical floor (6.71e-49 A for n_i ~ 5e-9 cm^-3) and rectification ratio of 6.25. Experimental I-V matching (18 pA dark current, 1e5 rectification, 3 kOhm series resistance) requires surface leakage / trap-assisted tunneling physics, deferred to future work.
 2. Simulated C-V curve reproduces depletion width evolution from 1.7 um at 0V to 9.73 um at -30V at 1 kHz
 3. Quantified agreement metrics (R-squared, max deviation) between simulation and experimental data are computed and reported
-   **Plans**: 4 plans
+   **Plans**: 5 plans
 
 Plans:
 
@@ -77,6 +77,7 @@ Plans:
 - [x] 02-02-PLAN.md -- I-V sweep, C-V analysis, validation framework, and plotting
 - [x] 02-03-PLAN.md -- Validation notebook and human verification of results (calibration issues found, gap closure needed)
 - [x] 02-04-PLAN.md -- Gap closure: run graded doping calibration and update notebook with calibrated parameters
+- [x] 02-05-PLAN.md -- Gap closure: fix I-V validation reporting, update ROADMAP/REQUIREMENTS for ideal-SRH baseline
 
 ### Phase 3: Charge Collection Efficiency
 
@@ -139,7 +140,7 @@ Phases execute in numeric order: 1 -> 1.1 -> 2 -> 3 -> 4 -> 5
 | ------------------------------------------------ | -------------- | ----------- | ---------- |
 | 1. Material Parameters and Device Electrostatics | 3/3            | Complete    | 2026-03-20 |
 | 1.1. Phase 1 Tech Debt Cleanup (INSERTED)        | 0/1            | Not started | -          |
-| 2. Electrical Characterization                   | 4/4            | Complete    | 2026-03-21 |
+| 2. Electrical Characterization                   | 5/5            | Complete    | 2026-03-21 |
 | 3. Charge Collection Efficiency                  | 0/?            | Not started | -          |
 | 4. FLASH Plasma Recombination                    | 0/?            | Not started | -          |
 | 5. Parametric Studies and Publication            | 0/?            | Not started | -          |
