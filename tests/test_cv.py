@@ -93,3 +93,36 @@ class TestComputeCvFromDepletion:
             np.testing.assert_allclose(
                 result["one_over_C_squared"][i], expected, rtol=1e-12
             )
+
+
+@pytest.mark.slow
+class TestCvSweepIntegration:
+    """Integration test: cv_sweep with live devsim device."""
+
+    def test_cv_sweep_depletion_widths(self):
+        import devsim
+        from src.cv_analysis import cv_sweep
+        from src.drift_diffusion import create_dd_device
+
+        device_info = create_dd_device(
+            device_name="test_cv_sweep_int",
+            doping_profile="graded",
+            N_D_junction=2.90e15,
+            N_D_bulk=8.50e13,
+            L_transition=1.0e-4,
+        )
+        try:
+            result = cv_sweep(device_info, V_range=[0, -10, -30])
+            W = result["depletion_widths"]
+            C = result["capacitance"]
+
+            # Physics assertions
+            assert len(W) == 3
+            assert W[0] > 0  # finite depletion at 0V
+            assert W[1] > W[0]  # W increases with reverse bias
+            assert W[2] >= W[1]
+            assert C[0] > C[1] > C[2]  # C decreases with reverse bias
+            # W(0V) ~ 1.7 um within 20% tolerance
+            assert 1.0e-4 < W[0] < 3.0e-4
+        finally:
+            devsim.delete_device(device=device_info["device_name"])
