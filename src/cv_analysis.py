@@ -18,6 +18,9 @@ import logging
 
 import numpy as np
 
+import devsim
+import devsim.python_packages.simple_physics as simple_physics
+
 from src.poisson import ramp_voltage, extract_depletion_width_numerical
 
 logger = logging.getLogger(__name__)
@@ -108,16 +111,20 @@ def compute_cv_from_depletion(voltages, depletion_widths, eps_r=9.7, area=1.0):
 def cv_sweep(device_info, V_range, eps_r=9.7, area=1.0):
     """Sweep reverse bias and compute C-V from numerical depletion widths.
 
-    At each voltage, ramps bias using the Poisson/DD solver, extracts the
-    depletion width numerically from the E-field profile, and computes
+    At each voltage, ramps bias using the DD/Poisson solver, extracts the
+    depletion width numerically from the carrier profile, and computes
     capacitance via the parallel-plate approximation.
+
+    Reverse bias convention: negative V_range values mean reverse bias on
+    the diode. Internally, these are applied as positive cathode bias in
+    devsim (positive V on cathode = reverse bias for p+/n- diode).
 
     Parameters
     ----------
     device_info : dict
-        Device info dict (Poisson or DD equations must be set up).
+        Device info dict (DD equations must be set up via create_dd_device).
     V_range : array_like
-        Array of reverse bias voltages (V, should be <= 0).
+        Array of reverse bias voltages (V, should be <= 0 for reverse bias).
     eps_r : float
         Relative permittivity. Default 9.7.
     area : float
@@ -127,18 +134,20 @@ def cv_sweep(device_info, V_range, eps_r=9.7, area=1.0):
     -------
     result : dict
         Dictionary with:
-        - "voltages": numpy array of voltages (V)
+        - "voltages": numpy array of voltages (V), in conventional form
         - "depletion_widths": numpy array of W values (cm)
         - "capacitance": numpy array of C values (F or F/cm^2)
     """
     V_range = np.asarray(V_range, dtype=float)
+    device = device_info["device_name"]
+    bias_name = simple_physics.GetContactBiasName("cathode")
 
     depletion_widths = []
     solved_voltages = []
 
     # Extract W at 0V first (current equilibrium state)
     W0 = extract_depletion_width_numerical(device_info)
-    current_V = 0.0
+    current_V_cathode = 0.0
 
     for V_target in V_range:
         if abs(V_target) < 1e-12:
@@ -147,22 +156,52 @@ def cv_sweep(device_info, V_range, eps_r=9.7, area=1.0):
             solved_voltages.append(0.0)
             continue
 
-        # Ramp from current state to target
-        V_step = -0.5 if V_target < current_V else 0.5
-        ramp_results = ramp_voltage(
-            device_info,
-            contact_name="cathode",
-            V_start=current_V,
-            V_end=V_target,
-            V_step=V_step,
-        )
+        # Convert conventional reverse bias to cathode voltage
+        # Negative V_target (reverse bias) -> positive cathode voltage
+        V_cathode_target = -V_target
 
-        if ramp_results:
-            # Extract W from the final solved state
+        # Ramp cathode in 0.5V steps from current state
+        V_step = 0.5
+        if V_cathode_target < current_V_cathode:
+            V_step = -0.5
+
+        V = current_V_cathode + V_step
+        converged = True
+
+        if V_step > 0:
+            cond = lambda v: v <= V_cathode_target + 1e-10
+        else:
+            cond = lambda v: v >= V_cathode_target - 1e-10
+
+        while cond(V):
+            devsim.set_parameter(device=device, name=bias_name, value=V)
+            try:
+                devsim.solve(
+                    type="dc",
+                    absolute_error=1e10,
+                    relative_error=1e-10,
+                    maximum_iterations=40,
+                )
+            except devsim.error:
+                try:
+                    devsim.solve(
+                        type="dc",
+                        absolute_error=1e12,
+                        relative_error=1e-8,
+                        maximum_iterations=100,
+                    )
+                except devsim.error as e:
+                    logger.warning(f"cv_sweep: failed at V_cathode={V:.2f}V: {e}")
+                    converged = False
+                    break
+            V += V_step
+            V = round(V, 10)
+
+        if converged:
             W = extract_depletion_width_numerical(device_info)
             depletion_widths.append(W)
             solved_voltages.append(V_target)
-            current_V = V_target
+            current_V_cathode = V_cathode_target
         else:
             logger.warning(f"cv_sweep: no results at V={V_target:.2f}V")
 

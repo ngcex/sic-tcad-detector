@@ -315,10 +315,17 @@ def extract_depletion_width(device_info, V_applied=0.0):
 
 
 def extract_depletion_width_numerical(device_info):
-    """Extract depletion width from the numerical equilibrium solution.
+    """Extract depletion width from the numerical solution.
 
-    Uses the IntrinsicElectrons profile from the Poisson solver.
-    Only valid at equilibrium (0V). Under bias, use extract_depletion_width().
+    Compares the carrier concentration (IntrinsicElectrons or Electrons if
+    available from DD solver) against the local Donors profile to find
+    where the n-side becomes quasi-neutral. Works for both uniform and
+    graded doping profiles, and under bias.
+
+    For graded doping under reverse bias, the Poisson-only solver may create
+    a non-physical second depletion region near the cathode. This function
+    finds only the first depletion-to-neutral transition from the junction
+    side, ignoring any cathode-side artifacts.
 
     Parameters
     ----------
@@ -334,27 +341,42 @@ def extract_depletion_width_numerical(device_info):
     region = device_info["region_name"]
     junction_pos = device_info["junction_pos"]
     epi_thickness = device_info["epi_thickness_cm"]
-    N_D = device_info["N_D"]
 
     x_nodes = np.array(
         devsim.get_node_model_values(device=device, region=region, name="x")
     )
-    n_elec = np.array(
-        devsim.get_node_model_values(
-            device=device, region=region, name="IntrinsicElectrons"
+
+    # Prefer Electrons (DD solution) over IntrinsicElectrons (Poisson-only)
+    try:
+        n_elec = np.array(
+            devsim.get_node_model_values(device=device, region=region, name="Electrons")
         )
+    except Exception:
+        n_elec = np.array(
+            devsim.get_node_model_values(
+                device=device, region=region, name="IntrinsicElectrons"
+            )
+        )
+
+    # Get local donor concentration for position-dependent threshold
+    donors = np.array(
+        devsim.get_node_model_values(device=device, region=region, name="Donors")
     )
 
     n_mask = x_nodes >= junction_pos
     x_n = x_nodes[n_mask]
     n_n = n_elec[n_mask]
+    donors_n = donors[n_mask]
 
     if len(n_n) == 0:
         return 0.0
 
-    # Depletion edge: where n reaches 50% of N_D
-    threshold = 0.5 * N_D
-    above = n_n >= threshold
+    # Depletion edge: where n reaches 50% of local Donors (position-dependent)
+    # Use ratio n/Donors to handle graded doping correctly
+    ratio = np.where(donors_n > 0, n_n / donors_n, 0.0)
+
+    # Find first point where ratio >= 0.5 (junction-side depletion-to-neutral)
+    above = ratio >= 0.5
 
     if not np.any(above):
         return epi_thickness
@@ -364,9 +386,9 @@ def extract_depletion_width_numerical(device_info):
     # Interpolate
     if idx > 0:
         x0, x1 = x_n[idx - 1], x_n[idx]
-        n0, n1 = n_n[idx - 1], n_n[idx]
-        if n1 != n0:
-            frac = (threshold - n0) / (n1 - n0)
+        r0, r1 = ratio[idx - 1], ratio[idx]
+        if r1 != r0:
+            frac = (0.5 - r0) / (r1 - r0)
             edge = x0 + frac * (x1 - x0)
         else:
             edge = x_n[idx]
