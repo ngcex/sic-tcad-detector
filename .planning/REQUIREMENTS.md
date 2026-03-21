@@ -16,7 +16,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Electrical Characterization
 
-- [x] **ELEC-01**: Simulate I-V characteristic matching Petringa experimental data (dark current <18pA at -60V, rectification ratio ~10⁵ at ±2V, series resistance ~3kΩ)
+- [~] **ELEC-01**: Simulate I-V characteristic matching Petringa experimental data (dark current <18pA at -60V, rectification ratio ~10⁵ at ±2V, series resistance ~3kΩ). I-V infrastructure complete; ideal-SRH baseline documented; experimental match deferred
 - [x] **ELEC-02**: Simulate C-V characteristic matching experimental depletion width evolution (1.7μm@0V to 9.73μm@-30V, measured at 1kHz)
 - [x] **ELEC-03**: Calculate built-in potential from asymmetric doping (N_D~0.5-1×10¹⁴ cm⁻³ vs N_A~10¹⁹ cm⁻³)
 
@@ -36,7 +36,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Validation & Output
 
-- [x] **VAL-01**: Validate device simulation against Petringa experimental I-V and C-V data with quantified agreement metrics (R², max deviation)
+- [~] **VAL-01**: Validate device simulation against Petringa experimental I-V and C-V data with quantified agreement metrics (R², max deviation). C-V validated (R^2=0.998); I-V metrics computed but at ideal-SRH limit
 - [ ] **VAL-02**: Validate CCE against analytical Hecht equation and Shockley-Ramo theorem, documenting regime of validity
 - [ ] **VAL-03**: Generate publication-quality matplotlib figures for all results (I-V, C-V, E-field maps, CCE curves, FLASH parametric plots)
 - [ ] **VAL-04**: Deliver reusable Jupyter notebook interface with documented workflow for the research group
@@ -85,7 +85,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MAT-02      | Phase 1 | Complete |
 | MAT-03      | Phase 1 | Complete |
 | MAT-04      | Phase 1 | Partial  |
-| ELEC-01     | Phase 2 | Complete |
+| ELEC-01     | Phase 2 | Partial  |
 | ELEC-02     | Phase 2 | Complete |
 | ELEC-03     | Phase 1 | Complete |
 | CCE-01      | Phase 3 | Pending  |
@@ -96,7 +96,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FLASH-02    | Phase 4 | Pending  |
 | FLASH-03    | Phase 4 | Pending  |
 | FLASH-04    | Phase 5 | Pending  |
-| VAL-01      | Phase 2 | Complete |
+| VAL-01      | Phase 2 | Partial  |
 | VAL-02      | Phase 3 | Pending  |
 | VAL-03      | Phase 5 | Pending  |
 | VAL-04      | Phase 5 | Pending  |
