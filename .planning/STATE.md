@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-21T18:18:23.066Z"
+last_updated: "2026-03-21T18:23:39.000Z"
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 12
-  completed_plans: 10
+  completed_plans: 11
 ---
 
 # Project State
@@ -23,19 +23,19 @@ See: .planning/PROJECT.md (updated 2026-03-20)
 ## Current Position
 
 Phase: 3 of 5 (Charge Collection Efficiency)
-Plan: 1 of 3 in current phase (complete)
-Status: Plan 03-01 complete -- generation profiles and Hecht equation implemented with full test coverage.
-Last activity: 2026-03-21 -- Completed 03-01 (generation profiles, Hecht equation, CCE utilities)
+Plan: 2 of 3 in current phase (complete)
+Status: Plan 03-02 complete -- DD-based CCE computation with radiation generation, CCE vs bias matching experiment.
+Last activity: 2026-03-21 -- Completed 03-02 (DD-based CCE, radiation generation, Hecht comparison)
 
-Progress: [████████░░] 83%
+Progress: [█████████░] 92%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 10
+- Total plans completed: 11
 - Average duration: 4.1 min
-- Total execution time: 0.68 hours
+- Total execution time: 0.75 hours
 
 **By Phase:**
 
@@ -44,11 +44,11 @@ Progress: [████████░░] 83%
 | 1     | 3     | 16 min | 5.3 min  |
 | 1.1   | 1     | 2 min  | 2 min    |
 | 2     | 5     | 24 min | 4.8 min  |
-| 3     | 1     | 3 min  | 3.0 min  |
+| 3     | 2     | 7 min  | 3.5 min  |
 
 **Recent Trend:**
 
-- Last 5 plans: 02-02 (4 min), 02-03 (5 min), 02-04 (8 min), 02-05 (3 min), 03-01 (3 min)
+- Last 5 plans: 02-03 (5 min), 02-04 (8 min), 02-05 (3 min), 03-01 (3 min), 03-02 (4 min)
 - Trend: Steady
 
 _Updated after each plan completion_
@@ -89,6 +89,10 @@ Recent decisions affecting current work:
 - [03-01]: Alpha profile uses erfc roll-off at 0.8\*range for smooth DD solver compatibility
 - [03-01]: Proton profiles flat within detector for all therapeutic energies (range >> 10um)
 - [03-01]: Partial depletion Hecht uses average diffusion collection probability in neutral region
+- [03-02]: Bias-first-then-generation pattern for DD convergence stability
+- [03-02]: Generation zeroed in p+ substrate; radiation enters from cathode side
+- [03-02]: RadGenRate as data node model (CreateNodeModel + set_node_values), not expression
+- [03-02]: Effective N_D for Hecht W(V) uses geometric mean of graded doping endpoints
 
 ### Pending Todos
 
@@ -104,5 +108,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-21
-Stopped at: Completed 03-01-PLAN.md (generation profiles and Hecht equation)
+Stopped at: Completed 03-02-PLAN.md (DD-based CCE computation with radiation generation)
 Resume file: None

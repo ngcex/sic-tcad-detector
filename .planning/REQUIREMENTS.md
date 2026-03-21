@@ -22,7 +22,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Charge Collection
 
-- [ ] **CCE-01**: Calculate CCE vs reverse bias voltage (0 to -60V) matching experimental 100% CCE at V>-40V (from alpha particle data)
+- [x] **CCE-01**: Calculate CCE vs reverse bias voltage (0 to -60V) matching experimental 100% CCE at V>-40V (from alpha particle data)
 - [x] **CCE-02**: Compare CCE simulation with analytical Hecht equation and validate agreement in applicable regime
 - [ ] **CCE-03**: Perform parametric study of CCE vs epitaxial layer thickness (5-20 μm range) at fixed bias
 - [x] **CCE-04**: Model radiation generation profile from proton Bragg peak energy deposition (30, 70, 150 MeV configurations from Petringa experiments)
@@ -37,7 +37,7 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Validation & Output
 
 - [~] **VAL-01**: Validate device simulation against Petringa experimental I-V and C-V data with quantified agreement metrics (R², max deviation). C-V validated (R^2=0.998); I-V metrics computed but at ideal-SRH limit
-- [ ] **VAL-02**: Validate CCE against analytical Hecht equation and Shockley-Ramo theorem, documenting regime of validity
+- [x] **VAL-02**: Validate CCE against analytical Hecht equation and Shockley-Ramo theorem, documenting regime of validity
 - [ ] **VAL-03**: Generate publication-quality matplotlib figures for all results (I-V, C-V, E-field maps, CCE curves, FLASH parametric plots)
 - [ ] **VAL-04**: Deliver reusable Jupyter notebook interface with documented workflow for the research group
 
@@ -88,7 +88,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ELEC-01     | Phase 2 | Partial  |
 | ELEC-02     | Phase 2 | Complete |
 | ELEC-03     | Phase 1 | Complete |
-| CCE-01      | Phase 3 | Pending  |
+| CCE-01      | Phase 3 | Complete |
 | CCE-02      | Phase 3 | Complete |
 | CCE-03      | Phase 3 | Pending  |
 | CCE-04      | Phase 3 | Complete |
@@ -97,7 +97,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FLASH-03    | Phase 4 | Pending  |
 | FLASH-04    | Phase 5 | Pending  |
 | VAL-01      | Phase 2 | Partial  |
-| VAL-02      | Phase 3 | Pending  |
+| VAL-02      | Phase 3 | Complete |
 | VAL-03      | Phase 5 | Pending  |
 | VAL-04      | Phase 5 | Pending  |
 
