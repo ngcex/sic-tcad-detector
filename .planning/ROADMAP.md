@@ -167,7 +167,11 @@ Plans:
 1. `add_generation_to_dd` and `add_auger_recombination` preserve `time_node_model` when re-registering continuity equations
 2. ROADMAP SC-3 wording updated to reflect flat CCE as accepted null result (not "shows physically meaningful CCE degradation")
 
-Plans: 0 plans
+**Plans**: 1 plan
+
+Plans:
+
+- [ ] 07-01-PLAN.md -- Fix time_node_model in equation re-registrations, add transient regression test, update ROADMAP SC-3 wording
 
 ## Progress
 
