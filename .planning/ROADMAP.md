@@ -125,12 +125,12 @@ Plans:
 1. Full parametric study (CCE vs dose-rate for varying epi thickness, doping, and bias) runs end-to-end and produces a multi-dimensional parameter space exploration
 2. All figures (I-V, C-V, E-field maps, CCE curves, FLASH parametric plots) are publication-quality with LaTeX labels, consistent styling, and appropriate resolution
 3. Jupyter notebook interface provides a documented, reproducible workflow that the research group can use independently
-   **Plans**: TBD
+   **Plans**: 2 plans
 
 Plans:
 
-- [ ] 05-01: TBD
-- [ ] 05-02: TBD
+- [ ] 05-01-PLAN.md -- Parametric CCE sweep infrastructure: doping-parametrized cce_vs_dose_rate, parametric_cce_sweep wrapper, JSON caching, tests
+- [ ] 05-02-PLAN.md -- Publication-quality parametric figures, consolidated notebook, and human verification
 
 ## Progress
 
@@ -144,4 +144,4 @@ Phases execute in numeric order: 1 -> 1.1 -> 2 -> 3 -> 4 -> 5
 | 2. Electrical Characterization                   | 5/5            | Complete    | 2026-03-21 |
 | 3. Charge Collection Efficiency                  | 3/3            | Complete    | 2026-03-21 |
 | 4. FLASH Plasma Recombination                    | 2/2            | Complete    | 2026-03-21 |
-| 5. Parametric Studies and Publication            | 0/?            | Not started | -          |
+| 5. Parametric Studies and Publication            | 0/2            | Not started | -          |
