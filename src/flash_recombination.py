@@ -101,11 +101,14 @@ def add_auger_recombination(device_info):
         CreateNodeModelDerivative(device, region, "HoleGeneration", Gp, var)
 
     # --- Step 6: Re-register continuity equations with updated models ---
+    # CRITICAL: time_node_model must match original registration in
+    # setup_sic_drift_diffusion to preserve transient solve capability.
     devsim.equation(
         device=device,
         region=region,
         name="ElectronContinuityEquation",
         variable_name="Electrons",
+        time_node_model="NCharge",
         node_model="ElectronGeneration",
         edge_model="ElectronCurrent",
         variable_update="positive",
@@ -115,6 +118,7 @@ def add_auger_recombination(device_info):
         region=region,
         name="HoleContinuityEquation",
         variable_name="Holes",
+        time_node_model="PCharge",
         node_model="HoleGeneration",
         edge_model="HoleCurrent",
         variable_update="positive",

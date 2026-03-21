@@ -316,6 +316,78 @@ class TestSaveLoadParametricResults:
             os.unlink(tmp_path)
 
 
+class TestTransientCapabilityPreserved:
+    """Regression test: transient solve capability preserved after generation and Auger setup."""
+
+    @pytest.mark.slow
+    def test_transient_solve_after_generation_and_auger(self):
+        """Verify that a transient BDF1 step succeeds after add_generation_to_dd and add_auger_recombination.
+
+        If time_node_model were missing from the equation re-registrations,
+        the transient solve would fail or produce dt=0 because the charge
+        storage terms (NCharge, PCharge) would be dropped.
+        """
+        device_info = _make_dd_device("test_transient")
+        device = device_info["device_name"]
+        region = device_info["region_name"]
+
+        try:
+            # Ramp to -30V reverse bias
+            ramp_bias(device_info, 30.0, contact="cathode", V_step=0.5)
+
+            # Add generation with a simple proton profile
+            x_nodes = np.array(
+                devsim.get_node_model_values(device=device, region=region, name="x")
+            )
+            junction_pos = device_info["junction_pos"]
+            gen_values = proton_generation_profile(
+                x_nodes - junction_pos, E_MeV=62, dose_rate_Gy_s=100
+            )
+            gen_values[x_nodes < junction_pos] = 0.0
+
+            add_generation_to_dd(device_info, gen_values)
+
+            # Add Auger recombination
+            add_auger_recombination(device_info)
+
+            # DC solve first to establish consistent initial condition
+            devsim.solve(
+                type="dc",
+                absolute_error=1e10,
+                relative_error=1e-10,
+                maximum_iterations=60,
+            )
+
+            # transient_dc with tdelta=0 stores initial time data required by BDF1
+            devsim.solve(
+                type="transient_dc",
+                absolute_error=1e10,
+                relative_error=1e-10,
+                maximum_iterations=60,
+                tdelta=0,
+                charge_error=1e6,
+            )
+
+            # Attempt a single transient BDF1 step with relaxed tolerances.
+            # This is a regression test: we only care that it doesn't raise.
+            # If time_node_model were missing from re-registration, this would
+            # fail with "UNEXPECTED missing time data" or produce dt=0.
+            devsim.solve(
+                type="transient_bdf1",
+                absolute_error=1e6,
+                relative_error=1e-1,
+                charge_error=1e6,
+                tdelta=1e-9,
+                maximum_iterations=100,
+            )
+
+        finally:
+            try:
+                devsim.delete_device(device=device)
+            except Exception:
+                pass
+
+
 class TestParametricCceSweepStructure:
     """Test 8: Verify parametric_cce_sweep returns correct structure."""
 
