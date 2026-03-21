@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Electrical Characterization** - I-V and C-V simulation validated against Petringa experimental data
 - [x] **Phase 3: Charge Collection Efficiency** - CCE vs bias validated against alpha particle data and Hecht equation, with radiation generation profiles
 - [x] **Phase 4: FLASH Plasma Recombination** - Transient high-injection simulation producing CCE vs dose-rate across the FLASH regime
-- [ ] **Phase 5: Parametric Studies and Publication** - Full parametric sweeps and publication-quality deliverables for the research group
+- [x] **Phase 5: Parametric Studies and Publication** - Full parametric sweeps and publication-quality deliverables for the research group (completed 2026-03-21)
 
 ## Phase Details
 
@@ -129,19 +129,19 @@ Plans:
 
 Plans:
 
-- [ ] 05-01-PLAN.md -- Parametric CCE sweep infrastructure: doping-parametrized cce_vs_dose_rate, parametric_cce_sweep wrapper, JSON caching, tests
-- [ ] 05-02-PLAN.md -- Publication-quality parametric figures, consolidated notebook, and human verification
+- [x] 05-01-PLAN.md -- Parametric CCE sweep infrastructure: doping-parametrized cce_vs_dose_rate, parametric_cce_sweep wrapper, JSON caching, tests
+- [x] 05-02-PLAN.md -- Publication-quality parametric figures, consolidated notebook, and human verification
 
 ## Progress
 
 **Execution Order:**
 Phases execute in numeric order: 1 -> 1.1 -> 2 -> 3 -> 4 -> 5
 
-| Phase                                            | Plans Complete | Status      | Completed  |
-| ------------------------------------------------ | -------------- | ----------- | ---------- |
-| 1. Material Parameters and Device Electrostatics | 3/3            | Complete    | 2026-03-20 |
-| 1.1. Phase 1 Tech Debt Cleanup (INSERTED)        | 1/1            | Complete    | 2026-03-21 |
-| 2. Electrical Characterization                   | 5/5            | Complete    | 2026-03-21 |
-| 3. Charge Collection Efficiency                  | 3/3            | Complete    | 2026-03-21 |
-| 4. FLASH Plasma Recombination                    | 2/2            | Complete    | 2026-03-21 |
-| 5. Parametric Studies and Publication            | 0/2            | Not started | -          |
+| Phase                                            | Plans Complete | Status   | Completed  |
+| ------------------------------------------------ | -------------- | -------- | ---------- |
+| 1. Material Parameters and Device Electrostatics | 3/3            | Complete | 2026-03-20 |
+| 1.1. Phase 1 Tech Debt Cleanup (INSERTED)        | 1/1            | Complete | 2026-03-21 |
+| 2. Electrical Characterization                   | 5/5            | Complete | 2026-03-21 |
+| 3. Charge Collection Efficiency                  | 3/3            | Complete | 2026-03-21 |
+| 4. FLASH Plasma Recombination                    | 2/2            | Complete | 2026-03-21 |
+| 5. Parametric Studies and Publication            | 2/2            | Complete | 2026-03-21 |

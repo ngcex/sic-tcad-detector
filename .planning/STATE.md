@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: unknown
-last_updated: "2026-03-21T21:03:56.428Z"
+status: complete
+last_updated: "2026-03-21T21:12:00.000Z"
 progress:
   total_phases: 6
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 16
-  completed_plans: 15
+  completed_plans: 16
 ---
 
 # Project State
@@ -18,24 +18,24 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-20)
 
 **Core value:** Predict how CCE in 4H-SiC detectors degrades under FLASH dose rates, providing the first TCAD-based explanation of plasma recombination effects in SiC dosimeters.
-**Current focus:** Phase 5 -- Parametric Studies and Publication. Building multi-dimensional sweep infrastructure.
+**Current focus:** All phases complete. v1.0 milestone delivered.
 
 ## Current Position
 
 Phase: 5 of 5 (Parametric Studies and Publication)
-Plan: 1 of 2 in current phase (05-01 complete)
-Status: Parametric CCE sweep infrastructure complete. cce_vs_dose_rate parametrized with doping kwargs.
-Last activity: 2026-03-21 -- Completed 05-01 (parametric sweep infrastructure)
+Plan: 2 of 2 in current phase (05-02 complete)
+Status: All plans complete. Publication-quality parametric figures and notebook delivered.
+Last activity: 2026-03-21 -- Completed 05-02 (publication figures and notebook)
 
-Progress: [███████████████░] 94%
+Progress: [████████████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 14
-- Average duration: 4.1 min
-- Total execution time: 0.95 hours
+- Total plans completed: 16
+- Average duration: 4.2 min
+- Total execution time: 1.08 hours
 
 **By Phase:**
 
@@ -49,11 +49,14 @@ Progress: [███████████████░] 94%
 
 **Recent Trend:**
 
-- Last 5 plans: 03-01 (3 min), 03-02 (4 min), 03-03 (8 min), 04-01 (2 min), 04-02 (10 min)
+- Last 5 plans: 03-03 (8 min), 04-01 (2 min), 04-02 (10 min), 05-01 (3 min), 05-02 (8 min)
 - Trend: Steady
 
 _Updated after each plan completion_
-| Phase 05 P01 | 3 | 2 tasks | 2 files |
+
+| Phase | Plans | Total  | Avg/Plan |
+| ----- | ----- | ------ | -------- |
+| 5     | 2     | 11 min | 5.5 min  |
 
 ## Accumulated Context
 
@@ -104,6 +107,8 @@ Recent decisions affecting current work:
 - [04-02]: Null result (no CCE degradation) is valid scientific finding -- first SiC-specific FLASH TCAD prediction
 - [04-02]: No-Auger reference CCE at lowest dose rate for direct A/B comparison
 - [Phase 05]: [05-01]: N_D_junction scaled proportionally with N_D_bulk to preserve graded profile shape in parametric sweep
+- [Phase 05]: [05-02]: Reference doping 8.5e13 added to N_D_BULK_VALUES for correct doping parametric figure
+- [Phase 05]: [05-02]: Minimal cached results pattern with RECOMPUTE flag for expensive sweep deferral
 
 ### Pending Todos
 
@@ -119,5 +124,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-21
-Stopped at: Completed 05-01-PLAN.md (parametric CCE sweep infrastructure)
+Stopped at: Completed 05-02-PLAN.md (publication figures and notebook) -- ALL PLANS COMPLETE
 Resume file: None
