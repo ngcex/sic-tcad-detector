@@ -728,6 +728,193 @@ def plot_cce_vs_dose_rate(flash_data, ax=None, label="DD + Auger"):
     return ax
 
 
+def plot_parametric_epi(
+    results,
+    epi_values,
+    N_D_bulk_ref,
+    dose_rates_key="dose_rates",
+    cce_key="cce_values",
+    axes=None,
+):
+    """Plot CCE vs dose rate for varying epitaxial thickness (multi-panel by bias).
+
+    Creates a 1x3 subplot figure with one panel per bias voltage (-10, -30, -50V).
+    Each panel shows CCE vs dose-rate curves for each epi thickness.
+
+    Parameters
+    ----------
+    results : dict
+        Parametric sweep results keyed by (epi, N_D_bulk, V_bias) tuples.
+    epi_values : list of float
+        Epitaxial thicknesses to plot (cm).
+    N_D_bulk_ref : float
+        Reference bulk doping concentration (cm^-3) to hold fixed.
+    dose_rates_key : str
+        Key for dose rates in result dicts.
+    cce_key : str
+        Key for CCE values in result dicts.
+    axes : array of matplotlib.axes.Axes or None
+        If provided, plot on these axes (must have length 3).
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+    """
+    bias_voltages = [-10.0, -30.0, -50.0]
+    n_epi = len(epi_values)
+    colors = [plt.cm.viridis(i / max(n_epi - 1, 1)) for i in range(n_epi)]
+
+    if axes is not None:
+        fig = axes[0].get_figure()
+        axs = axes
+    else:
+        fig, axs = plt.subplots(1, 3, figsize=(14, 4.5), sharey=True)
+
+    for j, V in enumerate(bias_voltages):
+        ax = axs[j]
+        for i, epi in enumerate(epi_values):
+            key = (epi, N_D_bulk_ref, V)
+            val = results.get(key)
+            if val is None:
+                continue
+            dr = np.asarray(val[dose_rates_key])
+            cce = np.asarray(val[cce_key])
+            label = f"{epi * 1e4:.0f} $\\mu$m"
+            ax.plot(dr, cce, "o-", color=colors[i], markersize=4, label=label)
+        ax.set_xlabel("Dose Rate (Gy/s)")
+        ax.set_title(f"$V_{{bias}}$ = {V:.0f} V")
+        ax.grid(True, alpha=0.3)
+        if j == 0:
+            ax.set_ylabel("Charge Collection Efficiency")
+            ax.legend(title="Epi thickness", fontsize=8)
+
+    return fig
+
+
+def plot_parametric_doping(
+    results,
+    N_D_bulk_values,
+    epi_ref_cm,
+    dose_rates_key="dose_rates",
+    cce_key="cce_values",
+    axes=None,
+):
+    """Plot CCE vs dose rate for varying bulk doping (multi-panel by bias).
+
+    Creates a 1x3 subplot figure with one panel per bias voltage (-10, -30, -50V).
+    Each panel shows CCE vs dose-rate curves for each doping concentration.
+
+    Parameters
+    ----------
+    results : dict
+        Parametric sweep results keyed by (epi, N_D_bulk, V_bias) tuples.
+    N_D_bulk_values : list of float
+        Bulk doping concentrations to plot (cm^-3).
+    epi_ref_cm : float
+        Reference epitaxial thickness to hold fixed (cm).
+    dose_rates_key : str
+        Key for dose rates in result dicts.
+    cce_key : str
+        Key for CCE values in result dicts.
+    axes : array of matplotlib.axes.Axes or None
+        If provided, plot on these axes (must have length 3).
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+    """
+    bias_voltages = [-10.0, -30.0, -50.0]
+    n_dop = len(N_D_bulk_values)
+    colors = [plt.cm.plasma(i / max(n_dop - 1, 1)) for i in range(n_dop)]
+
+    if axes is not None:
+        fig = axes[0].get_figure()
+        axs = axes
+    else:
+        fig, axs = plt.subplots(1, 3, figsize=(14, 4.5), sharey=True)
+
+    for j, V in enumerate(bias_voltages):
+        ax = axs[j]
+        for i, N_D in enumerate(N_D_bulk_values):
+            key = (epi_ref_cm, N_D, V)
+            val = results.get(key)
+            if val is None:
+                continue
+            dr = np.asarray(val[dose_rates_key])
+            cce = np.asarray(val[cce_key])
+            label = f"$N_D$ = {N_D:.1e} cm$^{{-3}}$"
+            ax.plot(dr, cce, "o-", color=colors[i], markersize=4, label=label)
+        ax.set_xlabel("Dose Rate (Gy/s)")
+        ax.set_title(f"$V_{{bias}}$ = {V:.0f} V")
+        ax.grid(True, alpha=0.3)
+        if j == 0:
+            ax.set_ylabel("Charge Collection Efficiency")
+            ax.legend(title="Bulk doping", fontsize=8)
+
+    return fig
+
+
+def plot_parametric_bias(
+    results,
+    bias_voltages,
+    epi_ref_cm,
+    N_D_bulk_ref,
+    dose_rates_key="dose_rates",
+    cce_key="cce_values",
+    ax=None,
+):
+    """Plot CCE vs dose rate for varying bias voltage (single panel).
+
+    Creates a single panel figure showing CCE vs dose-rate for each bias
+    voltage at fixed epi thickness and doping.
+
+    Parameters
+    ----------
+    results : dict
+        Parametric sweep results keyed by (epi, N_D_bulk, V_bias) tuples.
+    bias_voltages : list of float
+        Bias voltages to plot (V, negative).
+    epi_ref_cm : float
+        Reference epitaxial thickness (cm).
+    N_D_bulk_ref : float
+        Reference bulk doping concentration (cm^-3).
+    dose_rates_key : str
+        Key for dose rates in result dicts.
+    cce_key : str
+        Key for CCE values in result dicts.
+    ax : matplotlib.axes.Axes or None
+        If provided, plot on this axes.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+    """
+    n_bias = len(bias_voltages)
+    colors = [plt.cm.coolwarm(i / max(n_bias - 1, 1)) for i in range(n_bias)]
+
+    if ax is not None:
+        fig = ax.get_figure()
+    else:
+        fig, ax = plt.subplots(figsize=(7, 5))
+
+    for i, V in enumerate(bias_voltages):
+        key = (epi_ref_cm, N_D_bulk_ref, V)
+        val = results.get(key)
+        if val is None:
+            continue
+        dr = np.asarray(val[dose_rates_key])
+        cce = np.asarray(val[cce_key])
+        label = f"$V_{{bias}}$ = {V:.0f} V"
+        ax.plot(dr, cce, "o-", color=colors[i], markersize=4, label=label)
+
+    ax.set_xlabel("Dose Rate (Gy/s)")
+    ax.set_ylabel("Charge Collection Efficiency")
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+
+    return fig
+
+
 def save_figure(fig, filename, dpi=300):
     """Save figure to figures/ directory in both PNG and PDF formats.
 
