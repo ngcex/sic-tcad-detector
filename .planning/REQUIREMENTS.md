@@ -31,7 +31,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [x] **FLASH-01**: Simulate transient carrier transport under high-injection conditions representative of FLASH dose rates (carrier densities up to ~10¹⁸ cm⁻³)
 - [x] **FLASH-02**: Implement plasma recombination model with SRH + Auger mechanisms using 4H-SiC-specific parameters
-- [ ] **FLASH-03**: Generate CCE vs dose-rate curve spanning the FLASH range (20 to 230 Gy/s) at reference conditions (-30V bias, 10μm epi, 62 MeV protons)
+- [x] **FLASH-03**: Generate CCE vs dose-rate curve spanning the FLASH range (20 to 230 Gy/s) at reference conditions (-30V bias, 10μm epi, 62 MeV protons)
 - [ ] **FLASH-04**: Complete parametric study: CCE vs dose-rate for varying epitaxial thickness (5, 10, 15, 20 μm), doping (5×10¹³ to 5×10¹⁴ cm⁻³), and bias voltage (-10, -30, -50V)
 
 ### Validation & Output
@@ -94,7 +94,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CCE-04      | Phase 3 | Complete |
 | FLASH-01    | Phase 4 | Complete |
 | FLASH-02    | Phase 4 | Complete |
-| FLASH-03    | Phase 4 | Pending  |
+| FLASH-03    | Phase 4 | Complete |
 | FLASH-04    | Phase 5 | Pending  |
 | VAL-01      | Phase 2 | Partial  |
 | VAL-02      | Phase 3 | Complete |
