@@ -328,7 +328,7 @@ def compute_cce_from_dd(device_info, generation_values, contact="cathode"):
     gen_vals = np.asarray(generation_values, dtype=float)
 
     # Total generated current density: Q * integral(G(x) dx) [A/cm^2 for 1D]
-    I_generated = Q * np.trapz(gen_vals, x_nodes)
+    I_generated = Q * np.trapezoid(gen_vals, x_nodes)
 
     # Collected current at contact
     I_collected = abs(extract_contact_current(device_info, contact))
@@ -429,7 +429,7 @@ def cce_vs_bias(
     gen_values[x_epi < 0] = 0.0
 
     Q = 1.602e-19
-    I_generated = Q * np.trapz(gen_values, x_nodes)
+    I_generated = Q * np.trapezoid(gen_values, x_nodes)
 
     cce_values = []
     I_collected_list = []
@@ -589,7 +589,7 @@ def cce_vs_epi_thickness(
             # Zero generation in p+ substrate
             gen_values[x_epi < 0] = 0.0
 
-            I_generated = Q * np.trapz(gen_values, x_nodes)
+            I_generated = Q * np.trapezoid(gen_values, x_nodes)
 
             # Ramp to bias (cathode voltage is -V_bias)
             cathode_V = -V_bias
