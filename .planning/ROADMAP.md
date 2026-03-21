@@ -73,9 +73,9 @@ Plans:
 
 Plans:
 
-- [ ] 02-01-PLAN.md -- Graded doping profile and drift-diffusion solver with SRH recombination
-- [ ] 02-02-PLAN.md -- I-V sweep, C-V analysis, validation framework, and plotting
-- [ ] 02-03-PLAN.md -- Validation notebook and human verification of results
+- [x] 02-01-PLAN.md -- Graded doping profile and drift-diffusion solver with SRH recombination
+- [x] 02-02-PLAN.md -- I-V sweep, C-V analysis, validation framework, and plotting
+- [x] 02-03-PLAN.md -- Validation notebook and human verification of results (calibration issues found, gap closure needed)
 
 ### Phase 3: Charge Collection Efficiency
 
@@ -134,11 +134,11 @@ Plans:
 **Execution Order:**
 Phases execute in numeric order: 1 -> 1.1 -> 2 -> 3 -> 4 -> 5
 
-| Phase                                            | Plans Complete | Status      | Completed  |
-| ------------------------------------------------ | -------------- | ----------- | ---------- |
-| 1. Material Parameters and Device Electrostatics | 3/3            | Complete    | 2026-03-20 |
-| 1.1. Phase 1 Tech Debt Cleanup (INSERTED)        | 0/1            | Not started | -          |
-| 2. Electrical Characterization                   | 2/3 | In Progress|  |
-| 3. Charge Collection Efficiency                  | 0/?            | Not started | -          |
-| 4. FLASH Plasma Recombination                    | 0/?            | Not started | -          |
-| 5. Parametric Studies and Publication            | 0/?            | Not started | -          |
+| Phase                                            | Plans Complete | Status                              | Completed  |
+| ------------------------------------------------ | -------------- | ----------------------------------- | ---------- |
+| 1. Material Parameters and Device Electrostatics | 3/3            | Complete                            | 2026-03-20 |
+| 1.1. Phase 1 Tech Debt Cleanup (INSERTED)        | 0/1            | Not started                         | -          |
+| 2. Electrical Characterization                   | 3/3            | Plans Complete (gap closure needed) | 2026-03-21 |
+| 3. Charge Collection Efficiency                  | 0/?            | Not started                         | -          |
+| 4. FLASH Plasma Recombination                    | 0/?            | Not started                         | -          |
+| 5. Parametric Studies and Publication            | 0/?            | Not started                         | -          |
