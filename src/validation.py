@@ -130,6 +130,17 @@ def validate_iv(iv_data, area=1.0):
     # Pass if within 2 orders of magnitude (simulation vs measurement tolerance)
     result["dark_current_pass"] = I_dark < EXPERIMENTAL_IV["dark_current_60V"] * 100
 
+    # Ideal-SRH floor detection
+    # For 4H-SiC with n_i ~ 5e-9 cm^-3, the ideal SRH generation current is
+    # ~1e-49 A -- far below any measurable dark current. Experimental dark
+    # currents are dominated by surface leakage and trap-assisted tunneling,
+    # which are not modeled here. If the simulated dark current is more than
+    # 10 orders of magnitude below the experimental target, it indicates the
+    # simulation is at the ideal-SRH floor, not a physically meaningful result.
+    target = EXPERIMENTAL_IV["dark_current_60V"]
+    result["ideal_srh_floor"] = I_dark > 0 and I_dark < target * 1e-10
+    result["dark_current_physically_meaningful"] = not result["ideal_srh_floor"]
+
     # Rectification ratio at +/- 2V
     idx_p2 = np.argmin(np.abs(V - 2.0))
     idx_m2 = np.argmin(np.abs(V - (-2.0)))
