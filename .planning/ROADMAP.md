@@ -138,7 +138,7 @@ Phases execute in numeric order: 1 -> 1.1 -> 2 -> 3 -> 4 -> 5
 | ------------------------------------------------ | -------------- | ----------- | ---------- |
 | 1. Material Parameters and Device Electrostatics | 3/3            | Complete    | 2026-03-20 |
 | 1.1. Phase 1 Tech Debt Cleanup (INSERTED)        | 0/1            | Not started | -          |
-| 2. Electrical Characterization                   | 0/3            | Not started | -          |
+| 2. Electrical Characterization                   | 2/3 | In Progress|  |
 | 3. Charge Collection Efficiency                  | 0/?            | Not started | -          |
 | 4. FLASH Plasma Recombination                    | 0/?            | Not started | -          |
 | 5. Parametric Studies and Publication            | 0/?            | Not started | -          |
