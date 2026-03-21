@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-21T17:54:43.173Z"
+last_updated: "2026-03-21T18:18:23.066Z"
 progress:
-  total_phases: 3
+  total_phases: 4
   completed_phases: 3
-  total_plans: 9
-  completed_plans: 9
+  total_plans: 12
+  completed_plans: 10
 ---
 
 # Project State
@@ -18,24 +18,24 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-20)
 
 **Core value:** Predict how CCE in 4H-SiC detectors degrades under FLASH dose rates, providing the first TCAD-based explanation of plasma recombination effects in SiC dosimeters.
-**Current focus:** Phase 2 complete -- ready for Phase 3 (Charge Collection Efficiency)
+**Current focus:** Phase 3 in progress -- Charge Collection Efficiency
 
 ## Current Position
 
-Phase: 2 of 5 (Electrical Characterization) -- COMPLETE
-Plan: 5 of 5 in current phase (gap closure complete)
-Status: Phase 2 fully complete with honest I-V validation documentation. Ready for Phase 3.
-Last activity: 2026-03-21 -- Completed 02-05 (gap closure: I-V validation honesty, ROADMAP/REQUIREMENTS updated)
+Phase: 3 of 5 (Charge Collection Efficiency)
+Plan: 1 of 3 in current phase (complete)
+Status: Plan 03-01 complete -- generation profiles and Hecht equation implemented with full test coverage.
+Last activity: 2026-03-21 -- Completed 03-01 (generation profiles, Hecht equation, CCE utilities)
 
-Progress: [████████░░] 80%
+Progress: [████████░░] 83%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 9
-- Average duration: 4.2 min
-- Total execution time: 0.63 hours
+- Total plans completed: 10
+- Average duration: 4.1 min
+- Total execution time: 0.68 hours
 
 **By Phase:**
 
@@ -44,10 +44,11 @@ Progress: [████████░░] 80%
 | 1     | 3     | 16 min | 5.3 min  |
 | 1.1   | 1     | 2 min  | 2 min    |
 | 2     | 5     | 24 min | 4.8 min  |
+| 3     | 1     | 3 min  | 3.0 min  |
 
 **Recent Trend:**
 
-- Last 5 plans: 02-01 (4 min), 02-02 (4 min), 02-03 (5 min), 02-04 (8 min), 02-05 (3 min)
+- Last 5 plans: 02-02 (4 min), 02-03 (5 min), 02-04 (8 min), 02-05 (3 min), 03-01 (3 min)
 - Trend: Steady
 
 _Updated after each plan completion_
@@ -85,6 +86,9 @@ Recent decisions affecting current work:
 - [02-05]: ideal_srh_floor threshold at 10 orders below target for machine-readable physics limitation detection
 - [02-05]: dark_current_pass unchanged for backward compat; new dark_current_physically_meaningful field added
 - [02-05]: ELEC-01 and VAL-01 marked Partial to honestly reflect ideal-SRH limitation
+- [03-01]: Alpha profile uses erfc roll-off at 0.8\*range for smooth DD solver compatibility
+- [03-01]: Proton profiles flat within detector for all therapeutic energies (range >> 10um)
+- [03-01]: Partial depletion Hecht uses average diffusion collection probability in neutral region
 
 ### Pending Todos
 
@@ -100,5 +104,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-21
-Stopped at: Completed 02-05-PLAN.md (gap closure: I-V validation honesty, Phase 2 fully documented)
+Stopped at: Completed 03-01-PLAN.md (generation profiles and Hecht equation)
 Resume file: None

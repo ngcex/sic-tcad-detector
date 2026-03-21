@@ -23,9 +23,9 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Charge Collection
 
 - [ ] **CCE-01**: Calculate CCE vs reverse bias voltage (0 to -60V) matching experimental 100% CCE at V>-40V (from alpha particle data)
-- [ ] **CCE-02**: Compare CCE simulation with analytical Hecht equation and validate agreement in applicable regime
+- [x] **CCE-02**: Compare CCE simulation with analytical Hecht equation and validate agreement in applicable regime
 - [ ] **CCE-03**: Perform parametric study of CCE vs epitaxial layer thickness (5-20 μm range) at fixed bias
-- [ ] **CCE-04**: Model radiation generation profile from proton Bragg peak energy deposition (30, 70, 150 MeV configurations from Petringa experiments)
+- [x] **CCE-04**: Model radiation generation profile from proton Bragg peak energy deposition (30, 70, 150 MeV configurations from Petringa experiments)
 
 ### FLASH Dynamics
 
@@ -89,9 +89,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ELEC-02     | Phase 2 | Complete |
 | ELEC-03     | Phase 1 | Complete |
 | CCE-01      | Phase 3 | Pending  |
-| CCE-02      | Phase 3 | Pending  |
+| CCE-02      | Phase 3 | Complete |
 | CCE-03      | Phase 3 | Pending  |
-| CCE-04      | Phase 3 | Pending  |
+| CCE-04      | Phase 3 | Complete |
 | FLASH-01    | Phase 4 | Pending  |
 | FLASH-02    | Phase 4 | Pending  |
 | FLASH-03    | Phase 4 | Pending  |
