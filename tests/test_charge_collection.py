@@ -5,13 +5,18 @@ Validates:
 - Vectorized operation and clipping
 - CCE from current ratio
 - Partial depletion extension
+- DD-based CCE with radiation generation (Plan 02)
 """
 
 import numpy as np
 import pytest
 
 from src.charge_collection import (
+    add_generation_to_dd,
+    cce_vs_bias,
+    compare_cce_hecht_vs_dd,
     compute_cce_from_current,
+    compute_cce_from_dd,
     hecht_cce,
     hecht_cce_partial_depletion,
 )
@@ -193,3 +198,159 @@ class TestHechtPartialDepletion:
         cce_pos = hecht_cce_partial_depletion(10.0, d_epi, W_func)
         cce_neg = hecht_cce_partial_depletion(-10.0, d_epi, W_func)
         assert abs(cce_pos - cce_neg) < 1e-15
+
+
+# ---------------------------------------------------------------------------
+# DD-based CCE tests (Plan 02)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.slow
+class TestAddGenerationCreatesCarriers:
+    """Verify that adding generation rate increases carrier concentrations."""
+
+    def test_add_generation_creates_carriers(self):
+        """Create DD device, add uniform generation, solve, verify
+        electron/hole concentrations increased vs equilibrium."""
+        import devsim
+
+        from src.drift_diffusion import create_dd_device
+
+        device_info = create_dd_device(
+            device_name="test_gen_carriers",
+            doping_profile="graded",
+            N_D_junction=2.90e15,
+            N_D_bulk=8.50e13,
+            L_transition=1.0e-4,
+        )
+        device = device_info["device_name"]
+        region = device_info["region_name"]
+
+        try:
+            # Record equilibrium carrier concentrations
+            n_eq = np.array(
+                devsim.get_node_model_values(
+                    device=device, region=region, name="Electrons"
+                )
+            )
+            p_eq = np.array(
+                devsim.get_node_model_values(device=device, region=region, name="Holes")
+            )
+
+            # Add uniform generation rate (low injection)
+            n_nodes = len(n_eq)
+            gen_values = np.full(n_nodes, 1e18)  # cm^-3 s^-1
+
+            add_generation_to_dd(device_info, gen_values)
+            devsim.solve(
+                type="dc",
+                absolute_error=1e10,
+                relative_error=1e-10,
+                maximum_iterations=40,
+            )
+
+            # Get carrier concentrations after generation
+            n_gen = np.array(
+                devsim.get_node_model_values(
+                    device=device, region=region, name="Electrons"
+                )
+            )
+            p_gen = np.array(
+                devsim.get_node_model_values(device=device, region=region, name="Holes")
+            )
+
+            # In the epi region, carriers should increase
+            junction_pos = device_info["junction_pos"]
+            x_nodes = np.array(
+                devsim.get_node_model_values(device=device, region=region, name="x")
+            )
+            epi_mask = x_nodes > junction_pos + 1e-5  # well into epi
+
+            # At least some nodes should have increased carrier density
+            # (generation creates excess carriers)
+            n_increase = np.sum(n_gen[epi_mask] > n_eq[epi_mask] * 1.01)
+            p_increase = np.sum(p_gen[epi_mask] > p_eq[epi_mask] * 1.01)
+
+            assert n_increase > 0, "Electrons should increase in epi with generation"
+            assert p_increase > 0, "Holes should increase in epi with generation"
+        finally:
+            try:
+                devsim.delete_device(device=device)
+            except Exception:
+                pass
+
+
+@pytest.mark.slow
+class TestCCEVsBias:
+    """Integration tests for CCE vs bias sweep."""
+
+    @pytest.fixture(scope="class")
+    def cce_sweep_result(self):
+        """Run CCE sweep once for all tests in this class."""
+        V = np.array([0.0, -5.0, -10.0, -20.0, -40.0, -60.0])
+        result = cce_vs_bias(V, epi_thickness_cm=10e-4)
+        return result
+
+    def test_cce_vs_bias_monotonic(self, cce_sweep_result):
+        """CCE increases with reverse bias (more depletion = more collection)."""
+        cce = cce_sweep_result["cce_values"]
+        # Check monotonicity (allow small numerical noise)
+        for i in range(1, len(cce)):
+            assert cce[i] >= cce[i - 1] - 0.01, (
+                f"CCE should be monotonically increasing: "
+                f"CCE[{i-1}]={cce[i-1]:.4f} > CCE[{i}]={cce[i]:.4f}"
+            )
+
+    def test_cce_reaches_unity_at_high_bias(self, cce_sweep_result):
+        """CCE > 0.95 at -40V (matches experimental alpha data)."""
+        V = cce_sweep_result["voltages"]
+        cce = cce_sweep_result["cce_values"]
+        idx_40 = np.argmin(np.abs(V - (-40.0)))
+        assert cce[idx_40] > 0.95, f"CCE at -40V should be >0.95, got {cce[idx_40]:.4f}"
+
+    def test_cce_zero_at_zero_bias_low(self, cce_sweep_result):
+        """CCE at 0V is significantly less than 1.0 (partial depletion)."""
+        V = cce_sweep_result["voltages"]
+        cce = cce_sweep_result["cce_values"]
+        idx_0 = np.argmin(np.abs(V))
+        assert (
+            cce[idx_0] < 0.95
+        ), f"CCE at 0V should be <0.95 (partial depletion), got {cce[idx_0]:.4f}"
+
+    def test_cce_sign_convention(self, cce_sweep_result):
+        """Contact current direction is physically correct."""
+        # At high reverse bias with generation, current should flow
+        # (collected current should be positive/non-zero)
+        I_coll = cce_sweep_result["I_collected"]
+        I_gen = cce_sweep_result["I_generated"]
+        # I_generated should be positive (creation of carriers)
+        assert I_gen > 0, f"I_generated should be positive, got {I_gen}"
+        # At high bias, collected current should be significant
+        assert (
+            I_coll[-1] > 0
+        ), f"I_collected at high bias should be positive, got {I_coll[-1]}"
+
+
+@pytest.mark.slow
+class TestCCEDDvsHecht:
+    """Test DD vs Hecht equation agreement."""
+
+    def test_cce_dd_vs_hecht_agreement(self):
+        """At high bias where Hecht assumptions are valid,
+        DD and Hecht CCE agree within 10%."""
+        V = np.array([-30.0, -40.0, -60.0])
+        result = compare_cce_hecht_vs_dd(V, epi_thickness_cm=10e-4)
+
+        cce_dd = result["cce_dd"]
+        cce_hecht = result["cce_hecht"]
+
+        # At high bias, both should be close to 1.0
+        # Allow 10% relative deviation
+        for i, v in enumerate(V):
+            if cce_hecht[i] > 0.5:  # only compare where Hecht is meaningful
+                deviation = abs(cce_dd[i] - cce_hecht[i])
+                assert deviation < 0.10, (
+                    f"DD vs Hecht deviation at {v}V = {deviation:.4f} "
+                    f"(DD={cce_dd[i]:.4f}, Hecht={cce_hecht[i]:.4f}), "
+                    f"expected <0.10"
+                )
