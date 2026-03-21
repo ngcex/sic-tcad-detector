@@ -16,8 +16,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Electrical Characterization
 
-- [ ] **ELEC-01**: Simulate I-V characteristic matching Petringa experimental data (dark current <18pA at -60V, rectification ratio ~10⁵ at ±2V, series resistance ~3kΩ)
-- [ ] **ELEC-02**: Simulate C-V characteristic matching experimental depletion width evolution (1.7μm@0V to 9.73μm@-30V, measured at 1kHz)
+- [x] **ELEC-01**: Simulate I-V characteristic matching Petringa experimental data (dark current <18pA at -60V, rectification ratio ~10⁵ at ±2V, series resistance ~3kΩ)
+- [x] **ELEC-02**: Simulate C-V characteristic matching experimental depletion width evolution (1.7μm@0V to 9.73μm@-30V, measured at 1kHz)
 - [x] **ELEC-03**: Calculate built-in potential from asymmetric doping (N_D~0.5-1×10¹⁴ cm⁻³ vs N_A~10¹⁹ cm⁻³)
 
 ### Charge Collection
@@ -85,8 +85,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MAT-02      | Phase 1 | Complete |
 | MAT-03      | Phase 1 | Complete |
 | MAT-04      | Phase 1 | Partial  |
-| ELEC-01     | Phase 2 | Pending  |
-| ELEC-02     | Phase 2 | Pending  |
+| ELEC-01     | Phase 2 | Complete |
+| ELEC-02     | Phase 2 | Complete |
 | ELEC-03     | Phase 1 | Complete |
 | CCE-01      | Phase 3 | Pending  |
 | CCE-02      | Phase 3 | Pending  |
