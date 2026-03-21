@@ -503,3 +503,91 @@ def cce_vs_bias(
         "I_collected": I_sorted,
         "I_generated": I_generated,
     }
+
+
+def compare_cce_hecht_vs_dd(V_range, epi_thickness_cm=10e-4, **kwargs):
+    """Compare DD-computed CCE with Hecht equation benchmark.
+
+    Runs both DD simulation and analytical Hecht equation for the same
+    voltage range, documenting agreement and divergence regimes.
+
+    Parameters
+    ----------
+    V_range : array_like
+        Array of voltages (V). Negative = reverse bias.
+    epi_thickness_cm : float
+        Epitaxial layer thickness (cm). Default: 10 um.
+    **kwargs
+        Additional keyword arguments passed to cce_vs_bias.
+
+    Returns
+    -------
+    result : dict
+        Dictionary with:
+        - "voltages": voltage array
+        - "cce_dd": DD-computed CCE values
+        - "cce_hecht": Hecht equation CCE (fully depleted approx)
+        - "cce_hecht_partial": partial-depletion Hecht CCE (if W_func available)
+        - "max_deviation": maximum |DD - Hecht| across all voltages
+        - "regime_notes": string documenting regime of validity
+
+    Notes
+    -----
+    Regime of validity:
+    - Hecht assumes uniform E-field (E = V/d), valid when fully depleted
+      with uniform doping.
+    - DD handles non-uniform E-field from graded doping, diffusion
+      collection, and partial depletion naturally.
+    - Expected agreement at high bias (>-30V) where field is nearly
+      uniform across the depleted region.
+    - Expected divergence at low bias where non-uniform field and
+      diffusion transport dominate.
+    """
+    V_range = np.asarray(V_range, dtype=float)
+
+    # DD-computed CCE
+    dd_result = cce_vs_bias(V_range, epi_thickness_cm=epi_thickness_cm, **kwargs)
+    cce_dd = dd_result["cce_values"]
+
+    # Hecht equation CCE (fully depleted approximation, d = epi thickness)
+    cce_hecht = hecht_cce(V_range, d=epi_thickness_cm)
+
+    # Partial depletion Hecht using a simple W(V) model
+    # W ~ sqrt(2 * eps * V / (q * N_D)) with calibrated N_D
+    # For graded doping, use an effective N_D ~ geometric mean
+    N_D_eff = np.sqrt(2.90e15 * 8.50e13)  # ~ 1.57e14
+    eps_sic = 9.66 * 8.854e-14  # F/cm
+    Q_val = 1.602e-19
+
+    def W_func(v):
+        v_abs = abs(v)
+        if v_abs < 1e-12:
+            return 0.0
+        # Add built-in potential (~2.7V for SiC p+n)
+        V_total = v_abs + 2.7
+        W = np.sqrt(2 * eps_sic * V_total / (Q_val * N_D_eff))
+        return min(W, epi_thickness_cm)
+
+    cce_hecht_partial = hecht_cce_partial_depletion(V_range, epi_thickness_cm, W_func)
+
+    # Compute maximum deviation
+    max_dev = float(np.max(np.abs(cce_dd - np.asarray(cce_hecht, dtype=float))))
+
+    # Regime notes
+    regime_notes = (
+        "Hecht equation assumes uniform E-field (E=V/d), valid for fully "
+        "depleted detectors with uniform doping. DD solver handles non-uniform "
+        "E-field from graded doping, diffusion collection, and partial depletion. "
+        "Agreement expected at high reverse bias (>30V) where field is nearly "
+        "uniform. Divergence expected at low bias where diffusion transport "
+        "and non-uniform field dominate."
+    )
+
+    return {
+        "voltages": V_range,
+        "cce_dd": cce_dd,
+        "cce_hecht": np.asarray(cce_hecht, dtype=float),
+        "cce_hecht_partial": np.asarray(cce_hecht_partial, dtype=float),
+        "max_deviation": max_dev,
+        "regime_notes": regime_notes,
+    }
