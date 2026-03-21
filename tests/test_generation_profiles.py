@@ -61,7 +61,7 @@ class TestAlphaGenerationProfile:
         """Integral of profile should equal total_energy / E_pair (total pairs)."""
         x = np.linspace(0, 30e-4, 10000)  # 0 to 30 um, fine grid
         G = alpha_generation_profile(x)
-        total_pairs = np.trapz(G, x)
+        total_pairs = np.trapezoid(G, x)
         expected_pairs = 5.486e6 / E_PAIR_SIC_EV
         # Allow 1% tolerance for numerical integration
         assert abs(total_pairs - expected_pairs) / expected_pairs < 0.01
@@ -104,7 +104,7 @@ class TestAlphaGenerationProfile:
         x = np.linspace(0, 30e-4, 5000)
         G1 = alpha_generation_profile(x, total_energy_eV=5.486e6)
         G2 = alpha_generation_profile(x, total_energy_eV=2.0e6)
-        ratio = np.trapz(G1, x) / np.trapz(G2, x)
+        ratio = np.trapezoid(G1, x) / np.trapezoid(G2, x)
         assert abs(ratio - 5.486e6 / 2.0e6) < 0.02
 
 
