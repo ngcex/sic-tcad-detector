@@ -507,7 +507,7 @@ def cce_vs_bias(
 
 def cce_vs_epi_thickness(
     epi_range_cm,
-    V_bias=-30.0,
+    V_bias=-3.0,
     alpha_range_cm=15e-4,
     generation_rate=1e18,
 ):
@@ -521,7 +521,9 @@ def cce_vs_epi_thickness(
     epi_range_cm : array_like
         Array of epi thicknesses to sweep (cm).
     V_bias : float
-        Fixed reverse bias voltage (V, negative). Default: -30V.
+        Fixed reverse bias voltage (V, negative). Default: -3V.
+        Use a low bias where partial depletion occurs for the larger
+        thicknesses to see the CCE-decreasing-with-thickness effect.
     alpha_range_cm : float
         Alpha particle range in SiC (cm). Default: 15 um.
     generation_rate : float
@@ -537,10 +539,11 @@ def cce_vs_epi_thickness(
 
     Notes
     -----
-    Expected physics: CCE decreases with epi thickness at fixed bias
+    Expected physics: CCE decreases with epi thickness at low bias
     because thicker epi is harder to fully deplete, and charge generated
     in the neutral (undepleted) region has incomplete collection via
-    diffusion only.
+    diffusion only. At high bias (>30V for this doping) all thicknesses
+    are fully depleted and CCE ~ 1.0.
     """
     from src.drift_diffusion import (
         create_dd_device,
