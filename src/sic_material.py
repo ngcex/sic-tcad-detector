@@ -77,11 +77,19 @@ class SiC4H_Parameters:
     E_D_hex: float = 0.050  # eV, nitrogen on hexagonal site (TU Wien)
     E_D_cub: float = 0.092  # eV, nitrogen on cubic site (TU Wien)
 
+    # --- Bulk material properties ---
+    rho: float = 3.21  # g/cm^3, density (Ioffe NSM Archive)
+    E_pair_eV: float = 8.4  # eV, electron-hole pair creation energy (4H-SiC)
+
 
 def compute_ni(T=300):
     """Compute intrinsic carrier concentration for 4H-SiC from first principles.
 
     Uses Varshni bandgap model and Boltzmann statistics for NC, NV.
+
+    Note: Not used in the v1.0 pipeline, which uses the fixed
+    n_i_300 = 5e-9 cm^-3 from SiC4H_Parameters. Temperature-dependent
+    n_i will be wired into the pipeline in v2 (ADV-02).
 
     Parameters
     ----------

@@ -21,7 +21,7 @@ import numpy as np
 import devsim
 import devsim.python_packages.simple_physics as simple_physics
 
-from src.poisson import ramp_voltage, extract_depletion_width_numerical
+from src.poisson import extract_depletion_width_numerical
 
 logger = logging.getLogger(__name__)
 
