@@ -469,6 +469,207 @@ def plot_cv_comparison(cv_sim, cv_exp=None, ax=None):
     return ax
 
 
+def plot_cce_vs_bias(cce_data, ax=None, label="DD Simulation"):
+    """Plot charge collection efficiency vs reverse bias voltage.
+
+    Parameters
+    ----------
+    cce_data : dict
+        Output from cce_vs_bias() with "voltages" and "cce_values" keys.
+    ax : matplotlib.axes.Axes or None
+        Axes to plot on. If None, creates new figure.
+    label : str
+        Legend label for the data series.
+
+    Returns
+    -------
+    ax : matplotlib.axes.Axes
+    """
+    if ax is None:
+        fig, ax = plt.subplots()
+
+    V = np.abs(np.asarray(cce_data["voltages"]))
+    cce = np.asarray(cce_data["cce_values"])
+
+    ax.plot(V, cce, "o-", linewidth=1.5, markersize=5, label=label)
+
+    # Reference lines
+    ax.axhline(y=1.0, color="gray", linestyle="--", alpha=0.5, linewidth=0.8)
+    ax.axvline(
+        x=40,
+        color="green",
+        linestyle="--",
+        alpha=0.5,
+        linewidth=0.8,
+    )
+    ax.annotate(
+        "Experimental: 100% CCE",
+        xy=(40, 1.02),
+        fontsize=9,
+        color="green",
+        ha="center",
+    )
+
+    ax.set_xlabel("|Reverse Bias| (V)")
+    ax.set_ylabel("Charge Collection Efficiency")
+    ax.set_ylim([0, 1.1])
+    ax.set_title("CCE vs Reverse Bias")
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+
+    return ax
+
+
+def plot_cce_comparison(comparison_data, ax=None):
+    """Plot DD vs Hecht CCE comparison on same axes.
+
+    Parameters
+    ----------
+    comparison_data : dict
+        Output from compare_cce_hecht_vs_dd() with keys:
+        "voltages", "cce_dd", "cce_hecht", "cce_hecht_partial",
+        "max_deviation", "regime_notes".
+    ax : matplotlib.axes.Axes or None
+        Axes to plot on. If None, creates new figure.
+
+    Returns
+    -------
+    ax : matplotlib.axes.Axes
+    """
+    if ax is None:
+        fig, ax = plt.subplots()
+
+    V = np.abs(np.asarray(comparison_data["voltages"]))
+    cce_dd = np.asarray(comparison_data["cce_dd"])
+    cce_hecht = np.asarray(comparison_data["cce_hecht"])
+    cce_partial = np.asarray(comparison_data["cce_hecht_partial"])
+
+    ax.plot(V, cce_dd, "b-o", linewidth=1.5, markersize=4, label="DD Simulation")
+    ax.plot(V, cce_hecht, "r--", linewidth=1.5, label="Hecht (full depletion)")
+    ax.plot(V, cce_partial, "g:", linewidth=1.5, label="Hecht (partial depletion)")
+
+    # Annotate max deviation
+    max_dev = comparison_data["max_deviation"]
+    ax.annotate(
+        f"Max |DD - Hecht|: {max_dev:.3f}",
+        xy=(0.98, 0.05),
+        xycoords="axes fraction",
+        ha="right",
+        fontsize=9,
+        bbox=dict(boxstyle="round,pad=0.3", facecolor="lightyellow", alpha=0.7),
+    )
+
+    # Regime note
+    ax.annotate(
+        "Agreement at high bias\nDivergence at low bias",
+        xy=(0.02, 0.50),
+        xycoords="axes fraction",
+        fontsize=8,
+        fontstyle="italic",
+        color="gray",
+    )
+
+    ax.set_xlabel("|Reverse Bias| (V)")
+    ax.set_ylabel("Charge Collection Efficiency")
+    ax.set_ylim([0, 1.1])
+    ax.set_title("CCE: DD Simulation vs Hecht Equation")
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+
+    return ax
+
+
+def plot_generation_profiles(x_cm, profiles_dict, ax=None):
+    """Plot multiple radiation generation profiles on same axes.
+
+    Parameters
+    ----------
+    x_cm : array_like
+        Depth positions (cm).
+    profiles_dict : dict
+        Dictionary mapping label to generation profile array.
+        e.g. {"Am-241 alpha": G_alpha, "70 MeV proton": G_proton}
+    ax : matplotlib.axes.Axes or None
+        Axes to plot on. If None, creates new figure.
+
+    Returns
+    -------
+    ax : matplotlib.axes.Axes
+    """
+    if ax is None:
+        fig, ax = plt.subplots()
+
+    x_um = np.asarray(x_cm) * 1e4  # cm -> um
+
+    # Determine if log scale needed (dynamic range > 100x)
+    all_vals = []
+    for vals in profiles_dict.values():
+        v = np.asarray(vals)
+        pos = v[v > 0]
+        if len(pos) > 0:
+            all_vals.extend([pos.min(), pos.max()])
+
+    use_log = False
+    if len(all_vals) >= 2:
+        use_log = max(all_vals) / min(all_vals) > 100
+
+    for label, profile in profiles_dict.items():
+        ax.plot(x_um, np.asarray(profile), linewidth=1.5, label=label)
+
+    if use_log:
+        ax.set_yscale("log")
+
+    ax.set_xlabel("Depth ($\\mu$m)")
+    ax.set_ylabel("Generation Rate (cm$^{-3}$ s$^{-1}$)")
+    ax.set_title("Radiation Generation Profiles in 4H-SiC")
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+
+    return ax
+
+
+def plot_cce_vs_epi(epi_data, ax=None):
+    """Plot CCE vs epitaxial layer thickness at fixed bias.
+
+    Parameters
+    ----------
+    epi_data : dict
+        Output from cce_vs_epi_thickness() with keys:
+        "epi_thicknesses", "cce_values", "V_bias".
+    ax : matplotlib.axes.Axes or None
+        Axes to plot on. If None, creates new figure.
+
+    Returns
+    -------
+    ax : matplotlib.axes.Axes
+    """
+    if ax is None:
+        fig, ax = plt.subplots()
+
+    epi_um = np.asarray(epi_data["epi_thicknesses"]) * 1e4  # cm -> um
+    cce = np.asarray(epi_data["cce_values"])
+    V_bias = epi_data["V_bias"]
+
+    ax.plot(epi_um, cce, "s-", linewidth=1.5, markersize=6, color="teal")
+
+    ax.annotate(
+        f"V$_{{bias}}$ = {V_bias:.0f} V",
+        xy=(0.95, 0.95),
+        xycoords="axes fraction",
+        ha="right",
+        va="top",
+        fontsize=10,
+        bbox=dict(boxstyle="round,pad=0.3", facecolor="lightcyan", alpha=0.7),
+    )
+
+    ax.set_xlabel("Epitaxial Layer Thickness ($\\mu$m)")
+    ax.set_ylabel("Charge Collection Efficiency")
+    ax.set_title("CCE vs Epi Thickness")
+    ax.grid(True, alpha=0.3)
+
+    return ax
+
+
 def save_figure(fig, filename, dpi=300):
     """Save figure to figures/ directory in both PNG and PDF formats.
 
