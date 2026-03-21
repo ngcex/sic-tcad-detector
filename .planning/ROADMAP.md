@@ -90,12 +90,13 @@ Plans:
 2. CCE simulation agrees with analytical Hecht equation in the applicable (low-injection) regime, with documented regime of validity
 3. CCE vs epitaxial thickness (5-20 um range) parametric study produces physically reasonable trends at fixed bias
 4. Radiation generation profiles for proton Bragg peak deposition (30, 70, 150 MeV) are implemented and produce correct spatial distributions
-   **Plans**: TBD
+   **Plans**: 3 plans
 
 Plans:
 
-- [ ] 03-01: TBD
-- [ ] 03-02: TBD
+- [ ] 03-01-PLAN.md -- Generation profiles (alpha, proton Bragg peak) and Hecht equation analytical benchmark
+- [ ] 03-02-PLAN.md -- Radiation generation in DD solver, CCE vs bias extraction, Hecht comparison
+- [ ] 03-03-PLAN.md -- CCE vs epi thickness parametric study, plotting, validation notebook
 
 ### Phase 4: FLASH Plasma Recombination
 
@@ -141,6 +142,6 @@ Phases execute in numeric order: 1 -> 1.1 -> 2 -> 3 -> 4 -> 5
 | 1. Material Parameters and Device Electrostatics | 3/3            | Complete    | 2026-03-20 |
 | 1.1. Phase 1 Tech Debt Cleanup (INSERTED)        | 0/1            | Not started | -          |
 | 2. Electrical Characterization                   | 5/5            | Complete    | 2026-03-21 |
-| 3. Charge Collection Efficiency                  | 0/?            | Not started | -          |
+| 3. Charge Collection Efficiency                  | 0/3            | Not started | -          |
 | 4. FLASH Plasma Recombination                    | 0/?            | Not started | -          |
 | 5. Parametric Studies and Publication            | 0/?            | Not started | -          |
