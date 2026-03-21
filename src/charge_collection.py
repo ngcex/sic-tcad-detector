@@ -505,6 +505,126 @@ def cce_vs_bias(
     }
 
 
+def cce_vs_epi_thickness(
+    epi_range_cm,
+    V_bias=-30.0,
+    alpha_range_cm=15e-4,
+    generation_rate=1e18,
+):
+    """Compute CCE vs epitaxial layer thickness at fixed reverse bias.
+
+    Sweeps epi thickness (e.g. 5-20 um) at a single bias voltage to study
+    how detector thickness affects charge collection.
+
+    Parameters
+    ----------
+    epi_range_cm : array_like
+        Array of epi thicknesses to sweep (cm).
+    V_bias : float
+        Fixed reverse bias voltage (V, negative). Default: -30V.
+    alpha_range_cm : float
+        Alpha particle range in SiC (cm). Default: 15 um.
+    generation_rate : float
+        Peak generation rate (cm^-3 s^-1). Default: 1e18.
+
+    Returns
+    -------
+    result : dict
+        Dictionary with:
+        - "epi_thicknesses": numpy array of epi thicknesses (cm)
+        - "cce_values": numpy array of CCE values
+        - "V_bias": the bias voltage used
+
+    Notes
+    -----
+    Expected physics: CCE decreases with epi thickness at fixed bias
+    because thicker epi is harder to fully deplete, and charge generated
+    in the neutral (undepleted) region has incomplete collection via
+    diffusion only.
+    """
+    from src.drift_diffusion import (
+        create_dd_device,
+        ramp_bias,
+        extract_contact_current,
+    )
+
+    epi_range_cm = np.asarray(epi_range_cm, dtype=float)
+    cce_values = np.zeros(len(epi_range_cm))
+
+    Q = 1.602e-19
+
+    for i, epi_thick in enumerate(epi_range_cm):
+        dev_id = uuid.uuid4().hex[:8]
+        dev_name = f"cce_epi_{dev_id}"
+
+        device_info = create_dd_device(
+            device_name=dev_name,
+            epi_thickness_cm=epi_thick,
+            doping_profile="graded",
+            N_D_junction=2.90e15,
+            N_D_bulk=8.50e13,
+            L_transition=1.0e-4,
+        )
+
+        device = device_info["device_name"]
+        region = device_info["region_name"]
+
+        try:
+            # Get mesh nodes
+            x_nodes = np.array(
+                devsim.get_node_model_values(device=device, region=region, name="x")
+            )
+
+            # Alpha generation profile relative to epi entrance
+            junction_pos = device_info["junction_pos"]
+            x_epi = x_nodes - junction_pos
+
+            gen_profile = alpha_generation_profile(x_epi, alpha_range_cm=alpha_range_cm)
+            max_profile = np.max(gen_profile)
+            if max_profile > 0:
+                gen_values = gen_profile * (generation_rate / max_profile)
+            else:
+                gen_values = np.zeros_like(x_nodes)
+
+            # Zero generation in p+ substrate
+            gen_values[x_epi < 0] = 0.0
+
+            I_generated = Q * np.trapz(gen_values, x_nodes)
+
+            # Ramp to bias (cathode voltage is -V_bias)
+            cathode_V = -V_bias
+            ramp_bias(device_info, cathode_V, contact="cathode", V_step=0.5)
+
+            # Add generation and solve
+            add_generation_to_dd(device_info, gen_values)
+            devsim.solve(
+                type="dc",
+                absolute_error=1e10,
+                relative_error=1e-10,
+                maximum_iterations=40,
+            )
+
+            # Extract CCE
+            cce = compute_cce_from_dd(device_info, gen_values, contact="cathode")
+            cce_values[i] = cce
+
+            logger.info(
+                f"cce_vs_epi: epi={epi_thick*1e4:.1f}um, V={V_bias:.0f}V, CCE={cce:.4f}"
+            )
+
+        finally:
+            try:
+                devsim.delete_device(device=device)
+            except Exception:
+                pass
+
+    return {
+        "epi_thicknesses": epi_range_cm,
+        "cce_values": cce_values,
+        "V_bias": V_bias,
+    }
+
+
 def compare_cce_hecht_vs_dd(V_range, epi_thickness_cm=10e-4, **kwargs):
     """Compare DD-computed CCE with Hecht equation benchmark.
 
