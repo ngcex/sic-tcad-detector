@@ -242,6 +242,79 @@ def create_dd_device(doping_profile="graded", **kwargs):
     return device_info
 
 
+def ramp_bias(device_info, V_target, contact="anode", V_step=0.5):
+    """Ramp contact bias to target voltage incrementally.
+
+    Similar to what iv_sweep does internally but without collecting I-V data.
+    Used to establish a bias point before adding generation (for convergence
+    stability).
+
+    Parameters
+    ----------
+    device_info : dict
+        Device info dict with DD equations already set up (dd_initialized=True).
+    V_target : float
+        Target voltage to ramp to (V). Negative = reverse bias for anode contact.
+    contact : str
+        Contact at which to apply bias ("anode" or "cathode").
+    V_step : float
+        Maximum voltage step for ramping (V).
+
+    Returns
+    -------
+    success : bool
+        True if ramping converged at all steps.
+
+    Raises
+    ------
+    RuntimeError
+        If ramping fails to converge even with relaxed tolerances.
+    """
+    device = device_info["device_name"]
+    bias_name = simple_physics.GetContactBiasName(contact)
+
+    # Get current bias value
+    try:
+        current_V = devsim.get_parameter(device=device, name=bias_name)
+    except devsim.error:
+        current_V = 0.0
+
+    delta = V_target - current_V
+    if abs(delta) < 1e-12:
+        return True
+
+    n_steps = max(1, int(np.ceil(abs(delta) / V_step)))
+    V_intermediates = np.linspace(current_V, V_target, n_steps + 1)[1:]
+
+    for V_int in V_intermediates:
+        devsim.set_parameter(device=device, name=bias_name, value=V_int)
+        try:
+            devsim.solve(
+                type="dc",
+                absolute_error=1e10,
+                relative_error=1e-10,
+                maximum_iterations=40,
+            )
+        except devsim.error:
+            try:
+                devsim.solve(
+                    type="dc",
+                    absolute_error=1e12,
+                    relative_error=1e-8,
+                    maximum_iterations=100,
+                )
+                logger.info(
+                    f"ramp_bias: converged at V={V_int:.3f}V with relaxed tolerances"
+                )
+            except devsim.error as e:
+                raise RuntimeError(
+                    f"ramp_bias: failed to converge at V={V_int:.3f}V: {e}"
+                )
+
+    logger.debug(f"ramp_bias: ramped {contact} to {V_target:.3f}V")
+    return True
+
+
 def iv_sweep(
     device_info,
     V_range,
