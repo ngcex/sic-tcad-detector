@@ -109,7 +109,7 @@ Plans:
 
 1. Transient carrier transport simulation runs under high-injection conditions (carrier densities up to ~1e18 cm-3) without solver divergence
 2. Plasma recombination model includes both SRH and Auger mechanisms with 4H-SiC-specific parameters
-3. CCE vs dose-rate curve spanning 20 to 230 Gy/s at reference conditions (-30V, 10 um epi, 62 MeV protons) shows physically meaningful trend (flat CCE confirms Auger is negligible — valid null result)
+3. CCE vs dose-rate curve spanning 20 to 230 Gy/s at reference conditions (-30V, 10 um epi, 62 MeV protons) produces flat CCE (~1.0) confirming Auger recombination is negligible at therapeutic FLASH dose rates — an accepted null result consistent with delta_n << Auger threshold (~1e16 cm^-3)
    **Plans**: 2 plans
 
 Plans:
