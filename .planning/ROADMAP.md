@@ -69,13 +69,14 @@ Plans:
 1. Simulated I-V curve reproduces dark current < 18 pA at -60V, rectification ratio ~ 1e5 at +/-2V, and series resistance ~ 3 kOhm
 2. Simulated C-V curve reproduces depletion width evolution from 1.7 um at 0V to 9.73 um at -30V at 1 kHz
 3. Quantified agreement metrics (R-squared, max deviation) between simulation and experimental data are computed and reported
-   **Plans**: 3 plans
+   **Plans**: 4 plans
 
 Plans:
 
 - [x] 02-01-PLAN.md -- Graded doping profile and drift-diffusion solver with SRH recombination
 - [x] 02-02-PLAN.md -- I-V sweep, C-V analysis, validation framework, and plotting
 - [x] 02-03-PLAN.md -- Validation notebook and human verification of results (calibration issues found, gap closure needed)
+- [ ] 02-04-PLAN.md -- Gap closure: run graded doping calibration and update notebook with calibrated parameters
 
 ### Phase 3: Charge Collection Efficiency
 
