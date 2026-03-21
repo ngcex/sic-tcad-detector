@@ -19,6 +19,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Charge Collection Efficiency** - CCE vs bias validated against alpha particle data and Hecht equation, with radiation generation profiles
 - [x] **Phase 4: FLASH Plasma Recombination** - Transient high-injection simulation producing CCE vs dose-rate across the FLASH regime
 - [x] **Phase 5: Parametric Studies and Publication** - Full parametric sweeps and publication-quality deliverables for the research group (completed 2026-03-21)
+- [ ] **Phase 6: Code Quality Cleanup** - Remove dead imports, centralize hardcoded constants, register test markers, add integration test, improve agreement metrics
+- [ ] **Phase 7: Solver Robustness** - Fix latent transient-solve bug, align ROADMAP wording with accepted null result
 
 ## Phase Details
 
@@ -132,10 +134,40 @@ Plans:
 - [x] 05-01-PLAN.md -- Parametric CCE sweep infrastructure: doping-parametrized cce_vs_dose_rate, parametric_cce_sweep wrapper, JSON caching, tests
 - [x] 05-02-PLAN.md -- Publication-quality parametric figures, consolidated notebook, and human verification
 
+### Phase 6: Code Quality Cleanup
+
+**Goal**: Clean up tech debt across Phases 1-4 — remove dead imports, centralize hardcoded constants, register test markers, add missing integration test, and improve agreement metrics
+**Depends on**: Phase 5
+**Requirements**: None (tech debt cleanup)
+**Gap Closure:** Closes tech debt items from v1.0 milestone audit
+**Success Criteria** (what must be TRUE):
+
+1. `cv_analysis.py` has no unused imports (dead `ramp_voltage` import removed)
+2. `charge_collection.py` and `generation_profiles.py` import SiC material constants from `SiC4H_Parameters` instead of hardcoding them
+3. `@pytest.mark.slow` is registered in `pytest.ini` — no `PytestUnknownMarkWarning`
+4. An automated `@pytest.mark.slow` integration test covers `cv_sweep` with a live devsim device
+5. `compare_cce_hecht_vs_dd` calls `compute_agreement_metrics` to report R² for Hecht comparison
+6. `compute_ni()` is documented as v2-only or wired into the pipeline
+
+Plans: 0 plans
+
+### Phase 7: Solver Robustness
+
+**Goal**: Fix latent transient-solve bug and align ROADMAP wording with accepted scientific findings
+**Depends on**: Phase 6
+**Requirements**: None (tech debt / documentation)
+**Gap Closure:** Closes tech debt items from v1.0 milestone audit
+**Success Criteria** (what must be TRUE):
+
+1. `add_generation_to_dd` and `add_auger_recombination` preserve `time_node_model` when re-registering continuity equations
+2. ROADMAP SC-3 wording updated to reflect flat CCE as accepted null result (not "shows physically meaningful CCE degradation")
+
+Plans: 0 plans
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 1.1 -> 2 -> 3 -> 4 -> 5
+Phases execute in numeric order: 1 -> 1.1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7
 
 | Phase                                            | Plans Complete | Status   | Completed  |
 | ------------------------------------------------ | -------------- | -------- | ---------- |
@@ -145,3 +177,5 @@ Phases execute in numeric order: 1 -> 1.1 -> 2 -> 3 -> 4 -> 5
 | 3. Charge Collection Efficiency                  | 3/3            | Complete | 2026-03-21 |
 | 4. FLASH Plasma Recombination                    | 2/2            | Complete | 2026-03-21 |
 | 5. Parametric Studies and Publication            | 2/2            | Complete | 2026-03-21 |
+| 6. Code Quality Cleanup                          | 0/0            | Pending  |            |
+| 7. Solver Robustness                             | 0/0            | Pending  |            |
