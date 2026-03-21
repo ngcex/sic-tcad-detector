@@ -108,12 +108,12 @@ Plans:
 1. Transient carrier transport simulation runs under high-injection conditions (carrier densities up to ~1e18 cm-3) without solver divergence
 2. Plasma recombination model includes both SRH and Auger mechanisms with 4H-SiC-specific parameters
 3. CCE vs dose-rate curve spanning 20 to 230 Gy/s at reference conditions (-30V, 10 um epi, 62 MeV protons) shows physically meaningful CCE degradation at high dose rates
-   **Plans**: TBD
+   **Plans**: 2 plans
 
 Plans:
 
-- [ ] 04-01: TBD
-- [ ] 04-02: TBD
+- [ ] 04-01-PLAN.md -- Auger recombination model, continuation solver, and integration tests
+- [ ] 04-02-PLAN.md -- CCE vs dose-rate sweep, plotting, and validation notebook
 
 ### Phase 5: Parametric Studies and Publication
 
