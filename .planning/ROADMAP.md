@@ -149,7 +149,12 @@ Plans:
 5. `compare_cce_hecht_vs_dd` calls `compute_agreement_metrics` to report R² for Hecht comparison
 6. `compute_ni()` is documented as v2-only or wired into the pipeline
 
-Plans: 0 plans
+**Plans**: 2 plans
+
+Plans:
+
+- [ ] 06-01-PLAN.md -- Remove dead imports, centralize hardcoded constants into SiC4H_Parameters, document compute_ni as v2-only
+- [ ] 06-02-PLAN.md -- Register pytest slow marker, add cv_sweep integration test, wire agreement metrics into Hecht comparison
 
 ### Phase 7: Solver Robustness
 
