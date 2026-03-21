@@ -20,8 +20,11 @@ from scipy.special import erfc
 # Module-level constants
 # ---------------------------------------------------------------------------
 
-RHO_SIC = 3.21  # g/cm^3, 4H-SiC density
-E_PAIR_SIC_EV = 8.4  # eV, electron-hole pair creation energy in 4H-SiC
+from src.sic_material import SiC4H_Parameters
+
+_params = SiC4H_Parameters()
+RHO_SIC = _params.rho  # g/cm^3, 4H-SiC density
+E_PAIR_SIC_EV = _params.E_pair_eV  # eV, electron-hole pair creation energy in 4H-SiC
 
 # NIST PSTAR CSDA ranges in water (mm)
 PROTON_RANGE_WATER_MM = {

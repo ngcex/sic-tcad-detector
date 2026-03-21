@@ -26,11 +26,21 @@ from devsim.python_packages.model_create import (
 import numpy as np
 
 from src.generation_profiles import alpha_generation_profile
+from src.sic_material import SiC4H_Parameters
+
+_params = SiC4H_Parameters()
 
 logger = logging.getLogger(__name__)
 
 
-def hecht_cce(V, d, mu_e=950.0, tau_e=1e-9, mu_p=125.0, tau_p=6e-7):
+def hecht_cce(
+    V,
+    d,
+    mu_e=_params.mu_n_max,
+    tau_e=_params.tau_n,
+    mu_p=_params.mu_p_max,
+    tau_p=_params.tau_p,
+):
     """Two-carrier Hecht equation for charge collection efficiency.
 
     Assumes uniform electric field E = |V|/d across the active region.
@@ -112,7 +122,14 @@ def compute_cce_from_current(I_collected, I_generated):
 
 
 def hecht_cce_partial_depletion(
-    V, d_epi, W_func, mu_e=950.0, tau_e=1e-9, mu_p=125.0, tau_p=6e-7, L_diff_p=7e-4
+    V,
+    d_epi,
+    W_func,
+    mu_e=_params.mu_n_max,
+    tau_e=_params.tau_n,
+    mu_p=_params.mu_p_max,
+    tau_p=_params.tau_p,
+    L_diff_p=7e-4,
 ):
     """Extended Hecht equation for partially-depleted detector.
 
@@ -696,6 +713,12 @@ def compare_cce_hecht_vs_dd(V_range, epi_thickness_cm=10e-4, **kwargs):
     # Compute maximum deviation
     max_dev = float(np.max(np.abs(cce_dd - np.asarray(cce_hecht, dtype=float))))
 
+    # Compute agreement metrics (R-squared, RMSE, relative errors)
+    from src.validation import compute_agreement_metrics
+
+    metrics_vs_hecht = compute_agreement_metrics(cce_dd, cce_hecht)
+    metrics_vs_partial = compute_agreement_metrics(cce_dd, cce_hecht_partial)
+
     # Regime notes
     regime_notes = (
         "Hecht equation assumes uniform E-field (E=V/d), valid for fully "
@@ -712,5 +735,7 @@ def compare_cce_hecht_vs_dd(V_range, epi_thickness_cm=10e-4, **kwargs):
         "cce_hecht": np.asarray(cce_hecht, dtype=float),
         "cce_hecht_partial": np.asarray(cce_hecht_partial, dtype=float),
         "max_deviation": max_dev,
+        "agreement_metrics_hecht": metrics_vs_hecht,
+        "agreement_metrics_partial": metrics_vs_partial,
         "regime_notes": regime_notes,
     }
