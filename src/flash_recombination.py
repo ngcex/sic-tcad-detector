@@ -21,6 +21,9 @@ This module provides:
 All units CGS (cm, cm^-3, A/cm^2, V) per devsim convention.
 """
 
+import ast
+import itertools
+import json
 import logging
 import uuid
 
@@ -241,6 +244,9 @@ def cce_vs_dose_rate(
     epi_thickness_cm=10e-4,
     E_MeV=62,
     n_continuation_steps=5,
+    N_D_junction=2.90e15,
+    N_D_bulk=8.50e13,
+    L_transition=1.0e-4,
 ):
     """Compute CCE vs dose rate across the FLASH range.
 
@@ -260,6 +266,12 @@ def cce_vs_dose_rate(
         Proton kinetic energy (MeV). Default: 62.
     n_continuation_steps : int
         Steps for generation-rate continuation ramp. Default: 5.
+    N_D_junction : float
+        Donor concentration at junction (cm^-3). Default: 2.90e15.
+    N_D_bulk : float
+        Donor concentration in bulk epi (cm^-3). Default: 8.50e13.
+    L_transition : float
+        Transition length for graded doping profile (cm). Default: 1.0e-4.
 
     Returns
     -------
@@ -271,6 +283,9 @@ def cce_vs_dose_rate(
         - "V_bias": bias voltage used
         - "epi_thickness_cm": epi thickness used
         - "E_MeV": proton energy used
+        - "N_D_junction": junction doping used
+        - "N_D_bulk": bulk doping used
+        - "L_transition": transition length used
     """
     from src.drift_diffusion import create_dd_device, ramp_bias
 
@@ -286,9 +301,9 @@ def cce_vs_dose_rate(
         device_name=f"flash_sweep_{dev_id}",
         epi_thickness_cm=epi_thickness_cm,
         doping_profile="graded",
-        N_D_junction=2.90e15,
-        N_D_bulk=8.50e13,
-        L_transition=1.0e-4,
+        N_D_junction=N_D_junction,
+        N_D_bulk=N_D_bulk,
+        L_transition=L_transition,
     )
     device = device_info["device_name"]
     region = device_info["region_name"]
@@ -349,9 +364,9 @@ def cce_vs_dose_rate(
         device_name=f"flash_noauger_{dev_id2}",
         epi_thickness_cm=epi_thickness_cm,
         doping_profile="graded",
-        N_D_junction=2.90e15,
-        N_D_bulk=8.50e13,
-        L_transition=1.0e-4,
+        N_D_junction=N_D_junction,
+        N_D_bulk=N_D_bulk,
+        L_transition=L_transition,
     )
     device2 = device_info2["device_name"]
     region2 = device_info2["region_name"]
@@ -400,4 +415,153 @@ def cce_vs_dose_rate(
         "V_bias": V_bias,
         "epi_thickness_cm": epi_thickness_cm,
         "E_MeV": E_MeV,
+        "N_D_junction": N_D_junction,
+        "N_D_bulk": N_D_bulk,
+        "L_transition": L_transition,
     }
+
+
+def parametric_cce_sweep(
+    dose_rates_Gy_s,
+    epi_thicknesses_cm=(5e-4, 10e-4, 15e-4, 20e-4),
+    N_D_bulk_values=(5e13, 1e14, 2e14, 5e14),
+    bias_voltages=(-10.0, -30.0, -50.0),
+    E_MeV=62,
+    N_D_junction_base=2.90e15,
+    N_D_bulk_base=8.50e13,
+    L_transition=1.0e-4,
+    n_continuation_steps=5,
+):
+    """Sweep CCE vs dose rate across epi thickness, doping, and bias combinations.
+
+    Iterates over all combinations of epi_thicknesses_cm, N_D_bulk_values, and
+    bias_voltages using itertools.product. For each N_D_bulk value, N_D_junction
+    is scaled proportionally to preserve the graded profile shape.
+
+    Parameters
+    ----------
+    dose_rates_Gy_s : array_like
+        Dose rates to sweep (Gy/s) for each combination.
+    epi_thicknesses_cm : tuple of float
+        Epitaxial layer thicknesses to sweep (cm).
+    N_D_bulk_values : tuple of float
+        Bulk doping concentrations to sweep (cm^-3).
+    bias_voltages : tuple of float
+        Reverse bias voltages to sweep (V, negative).
+    E_MeV : float
+        Proton kinetic energy (MeV). Default: 62.
+    N_D_junction_base : float
+        Base junction doping for proportional scaling (cm^-3).
+    N_D_bulk_base : float
+        Base bulk doping for proportional scaling (cm^-3).
+    L_transition : float
+        Transition length for graded doping profile (cm).
+    n_continuation_steps : int
+        Steps for generation-rate continuation ramp.
+
+    Returns
+    -------
+    results : dict
+        Dictionary keyed by (epi_thickness, N_D_bulk, V_bias) tuples.
+        Values are result dicts from cce_vs_dose_rate, or None on failure.
+    """
+    combinations = list(
+        itertools.product(epi_thicknesses_cm, N_D_bulk_values, bias_voltages)
+    )
+    total = len(combinations)
+    results = {}
+
+    for i, (epi, N_D_b, V) in enumerate(combinations, 1):
+        # Scale N_D_junction proportionally to preserve graded profile shape
+        N_D_j = N_D_junction_base * (N_D_b / N_D_bulk_base)
+
+        logger.info(
+            f"Parametric sweep {i}/{total}: "
+            f"epi={epi*1e4:.0f}um, N_D_bulk={N_D_b:.1e}, V={V}V"
+        )
+
+        try:
+            result = cce_vs_dose_rate(
+                dose_rates_Gy_s,
+                V_bias=V,
+                epi_thickness_cm=epi,
+                E_MeV=E_MeV,
+                N_D_junction=N_D_j,
+                N_D_bulk=N_D_b,
+                L_transition=L_transition,
+                n_continuation_steps=n_continuation_steps,
+            )
+            results[(epi, N_D_b, V)] = result
+        except Exception:
+            logger.warning(
+                f"Parametric sweep {i}/{total} FAILED: "
+                f"epi={epi*1e4:.0f}um, N_D_bulk={N_D_b:.1e}, V={V}V",
+                exc_info=True,
+            )
+            results[(epi, N_D_b, V)] = None
+
+    return results
+
+
+def save_parametric_results(results, path):
+    """Save parametric sweep results to JSON file.
+
+    Converts tuple keys to strings and numpy arrays to lists for
+    JSON serialization. Entries with None values (failed runs) are skipped.
+
+    Parameters
+    ----------
+    results : dict
+        Results dict from parametric_cce_sweep, keyed by tuples.
+    path : str or Path
+        Output JSON file path.
+    """
+    serializable = {}
+    for key, value in results.items():
+        if value is None:
+            continue
+        str_key = str(key)
+        entry = {}
+        for k, v in value.items():
+            if isinstance(v, np.ndarray):
+                entry[k] = v.tolist()
+            else:
+                entry[k] = v
+        serializable[str_key] = entry
+
+    with open(path, "w") as f:
+        json.dump(serializable, f, indent=2)
+
+    logger.info(f"Saved parametric results to {path} ({len(serializable)} entries)")
+
+
+def load_parametric_results(path):
+    """Load parametric sweep results from JSON file.
+
+    Reconstructs tuple keys from string representation and converts
+    list fields back to numpy arrays for dose_rates and cce_values.
+
+    Parameters
+    ----------
+    path : str or Path
+        Input JSON file path.
+
+    Returns
+    -------
+    results : dict
+        Dictionary keyed by (epi_thickness, N_D_bulk, V_bias) tuples.
+    """
+    with open(path, "r") as f:
+        data = json.load(f)
+
+    results = {}
+    for str_key, value in data.items():
+        key = ast.literal_eval(str_key)
+        # Convert list fields back to numpy arrays
+        for field in ("dose_rates", "cce_values"):
+            if field in value and isinstance(value[field], list):
+                value[field] = np.array(value[field])
+        results[key] = value
+
+    logger.info(f"Loaded parametric results from {path} ({len(results)} entries)")
+    return results
