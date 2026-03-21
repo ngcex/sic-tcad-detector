@@ -20,8 +20,8 @@ nb.cells.append(
         "epitaxial layer thickness, bulk doping concentration, and bias voltage "
         "for the FLASH SiC paper.\n"
         "\n"
-        "**Parameter space:** 4 epi thicknesses x 4 doping levels x 3 bias "
-        "voltages = 48 conditions, each swept over 6 dose rates (20-230 Gy/s).\n"
+        "**Parameter space:** 4 epi thicknesses x 5 doping levels x 3 bias "
+        "voltages = 60 conditions, each swept over 6 dose rates (20-230 Gy/s).\n"
         "\n"
         "**Scientific goal:** Determine whether any combination of detector "
         "design parameters leads to measurable CCE degradation under FLASH "
@@ -64,7 +64,7 @@ nb.cells.append(
     nbformat.v4.new_code_cell(
         "DOSE_RATES = np.array([20, 50, 100, 150, 200, 230], dtype=float)\n"
         "EPI_THICKNESSES = [5e-4, 10e-4, 15e-4, 20e-4]\n"
-        "N_D_BULK_VALUES = [5e13, 1e14, 2e14, 5e14]\n"
+        "N_D_BULK_VALUES = [5e13, 8.5e13, 1e14, 2e14, 5e14]\n"
         "BIAS_VOLTAGES = [-10.0, -30.0, -50.0]\n"
         "E_MEV = 62\n"
         "RECOMPUTE = False\n"
@@ -79,10 +79,10 @@ nb.cells.append(
         "\n"
         "The sweep explores all combinations of the parameters above:\n"
         "- **Epi thickness:** 5, 10, 15, 20 um\n"
-        "- **Bulk doping:** 5e13, 1e14, 2e14, 5e14 cm$^{-3}$\n"
+        "- **Bulk doping:** 5e13, 8.5e13, 1e14, 2e14, 5e14 cm$^{-3}$\n"
         "- **Bias voltage:** -10, -30, -50 V\n"
         "\n"
-        "Total: 4 x 4 x 3 = 48 parameter combinations, each swept over 6 dose rates."
+        "Total: 4 x 5 x 3 = 60 parameter combinations, each swept over 6 dose rates."
     )
 )
 
@@ -164,7 +164,7 @@ nb.cells.append(
         "This parametric study explores how detector design parameters affect "
         "charge collection under FLASH dose rates:\n"
         "\n"
-        "1. **Number of parameter combinations:** 48 (4 epi x 4 doping x 3 bias), "
+        "1. **Number of parameter combinations:** 60 (4 epi x 5 doping x 3 bias), "
         "each swept over 6 dose rates from 20 to 230 Gy/s.\n"
         "\n"
         "2. **CCE degradation:** The analysis below checks whether any condition "
