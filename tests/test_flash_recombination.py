@@ -16,7 +16,14 @@ import pytest
 
 from src.drift_diffusion import create_dd_device, ramp_bias
 from src.charge_collection import add_generation_to_dd, compute_cce_from_dd
-from src.flash_recombination import add_auger_recombination, solve_with_continuation
+from src.flash_recombination import (
+    add_auger_recombination,
+    cce_vs_dose_rate,
+    load_parametric_results,
+    parametric_cce_sweep,
+    save_parametric_results,
+    solve_with_continuation,
+)
 from src.generation_profiles import dose_rate_to_generation, proton_generation_profile
 from src.sic_material import SiC4H_Parameters
 
@@ -229,3 +236,103 @@ class TestAugerCoefficients:
                 devsim.delete_device(device=device)
             except Exception:
                 pass
+
+
+class TestCceVsDoseRateDopingParams:
+    """Test 6: Verify cce_vs_dose_rate accepts explicit doping parameters."""
+
+    def test_cce_vs_dose_rate_accepts_doping_params(self):
+        """Call cce_vs_dose_rate with explicit doping kwargs and verify return dict."""
+        result = cce_vs_dose_rate(
+            [100.0],
+            N_D_junction=2.90e15,
+            N_D_bulk=8.50e13,
+            L_transition=1.0e-4,
+        )
+        assert isinstance(result, dict)
+        for key in (
+            "dose_rates",
+            "cce_values",
+            "N_D_junction",
+            "N_D_bulk",
+            "L_transition",
+        ):
+            assert key in result, f"Missing key '{key}' in result dict"
+        assert result["N_D_junction"] == 2.90e15
+        assert result["N_D_bulk"] == 8.50e13
+        assert result["L_transition"] == 1.0e-4
+
+
+class TestSaveLoadParametricResults:
+    """Test 7: Verify save/load roundtrip for parametric results."""
+
+    def test_save_load_parametric_results_roundtrip(self):
+        """Save mock results, load back, verify keys and array types match."""
+        import tempfile
+        import os
+
+        mock_results = {
+            (10e-4, 8.5e13, -30.0): {
+                "dose_rates": np.array([20.0, 100.0]),
+                "cce_values": np.array([0.98, 0.97]),
+                "V_bias": -30.0,
+                "epi_thickness_cm": 10e-4,
+                "N_D_junction": 2.90e15,
+                "N_D_bulk": 8.5e13,
+            },
+            (5e-4, 1e14, -10.0): {
+                "dose_rates": np.array([50.0]),
+                "cce_values": np.array([0.95]),
+                "V_bias": -10.0,
+                "epi_thickness_cm": 5e-4,
+                "N_D_junction": 3.41e15,
+                "N_D_bulk": 1e14,
+            },
+        }
+
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+            tmp_path = f.name
+
+        try:
+            save_parametric_results(mock_results, tmp_path)
+            loaded = load_parametric_results(tmp_path)
+
+            assert set(loaded.keys()) == set(mock_results.keys())
+            for key in mock_results:
+                assert isinstance(loaded[key]["dose_rates"], np.ndarray)
+                assert isinstance(loaded[key]["cce_values"], np.ndarray)
+                np.testing.assert_allclose(
+                    loaded[key]["dose_rates"],
+                    mock_results[key]["dose_rates"],
+                )
+                np.testing.assert_allclose(
+                    loaded[key]["cce_values"],
+                    mock_results[key]["cce_values"],
+                )
+                assert loaded[key]["V_bias"] == pytest.approx(
+                    mock_results[key]["V_bias"]
+                )
+        finally:
+            os.unlink(tmp_path)
+
+
+class TestParametricCceSweepStructure:
+    """Test 8: Verify parametric_cce_sweep returns correct structure."""
+
+    def test_parametric_cce_sweep_structure(self):
+        """Minimal 1x1x1 sweep should produce one result keyed by parameter tuple."""
+        result = parametric_cce_sweep(
+            dose_rates_Gy_s=[100.0],
+            epi_thicknesses_cm=(10e-4,),
+            N_D_bulk_values=(8.50e13,),
+            bias_voltages=(-30.0,),
+        )
+        assert isinstance(result, dict)
+        assert len(result) == 1
+
+        key = (10e-4, 8.50e13, -30.0)
+        assert key in result
+        value = result[key]
+        assert value is not None
+        assert "dose_rates" in value
+        assert "cce_values" in value
