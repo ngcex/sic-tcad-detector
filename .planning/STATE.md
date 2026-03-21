@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: unknown
-last_updated: "2026-03-20T23:51:10.971Z"
+status: in-progress
+last_updated: "2026-03-21T08:40:02Z"
 progress:
-  total_phases: 2
+  total_phases: 5
   completed_phases: 2
-  total_plans: 4
-  completed_plans: 4
+  total_plans: 7
+  completed_plans: 5
 ---
 
 # Project State
@@ -18,24 +18,24 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-20)
 
 **Core value:** Predict how CCE in 4H-SiC detectors degrades under FLASH dose rates, providing the first TCAD-based explanation of plasma recombination effects in SiC dosimeters.
-**Current focus:** Phase 1.1 - Tech Debt Cleanup (COMPLETE)
+**Current focus:** Phase 2 - Electrical Characterization (IN PROGRESS)
 
 ## Current Position
 
-Phase: 1.1 of 5 (Tech Debt Cleanup) -- COMPLETE
-Plan: 1 of 1 in current phase (all plans complete)
-Status: Phase Complete
-Last activity: 2026-03-20 -- Completed 01.1-01 (dead imports, plot tests, analytical-W docstring)
+Phase: 2 of 5 (Electrical Characterization)
+Plan: 2 of 3 in current phase
+Status: In Progress
+Last activity: 2026-03-21 -- Completed 02-01 (graded doping + drift-diffusion solver)
 
-Progress: [███░░░░░░░] 25%
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 4
-- Average duration: 4.5 min
-- Total execution time: 0.30 hours
+- Total plans completed: 5
+- Average duration: 4.4 min
+- Total execution time: 0.37 hours
 
 **By Phase:**
 
@@ -43,10 +43,11 @@ Progress: [███░░░░░░░] 25%
 | ----- | ----- | ------ | -------- |
 | 1     | 3     | 16 min | 5.3 min  |
 | 1.1   | 1     | 2 min  | 2 min    |
+| 2     | 1     | 4 min  | 4 min    |
 
 **Recent Trend:**
 
-- Last 5 plans: 01-01 (5 min), 01-02 (8 min), 01-03 (3 min), 01.1-01 (2 min)
+- Last 5 plans: 01-01 (5 min), 01-02 (8 min), 01-03 (3 min), 01.1-01 (2 min), 02-01 (4 min)
 - Trend: Steady
 
 _Updated after each plan completion_
@@ -69,6 +70,9 @@ Recent decisions affecting current work:
 - [01-02]: Uniform N_D model limitation accepted -- W under reverse bias does not match experimental C-V; deferred to future phase
 - [01-03]: MAT-04 marked Partial -- bias-dependent W targets formally deferred to Phase 2 graded doping
 - [01-03]: Relaxed-bound test assertions replaced with honest limitation documentation
+- [02-01]: Equilibrium current threshold relaxed to 1e-10 A/cm^2 (numerical residual ~1e-14 is negligible)
+- [02-01]: Graded doping defaults: N_D_junction=1e15, N_D_bulk=5e13, L_transition=2e-4 cm
+- [02-01]: Ohmic contact assumption via CreateSiliconDriftDiffusionAtContact
 
 ### Pending Todos
 
@@ -82,6 +86,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-20
-Stopped at: Completed 01.1-01-PLAN.md (Phase 1.1 tech debt cleanup complete)
+Last session: 2026-03-21
+Stopped at: Completed 02-01-PLAN.md (graded doping + drift-diffusion solver)
 Resume file: None
