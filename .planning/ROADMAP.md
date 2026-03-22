@@ -19,8 +19,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Charge Collection Efficiency** - CCE vs bias validated against alpha particle data and Hecht equation, with radiation generation profiles
 - [x] **Phase 4: FLASH Plasma Recombination** - Transient high-injection simulation producing CCE vs dose-rate across the FLASH regime
 - [x] **Phase 5: Parametric Studies and Publication** - Full parametric sweeps and publication-quality deliverables for the research group (completed 2026-03-21)
-- [ ] **Phase 6: Code Quality Cleanup** - Remove dead imports, centralize hardcoded constants, register test markers, add integration test, improve agreement metrics
-- [ ] **Phase 7: Solver Robustness** - Fix latent transient-solve bug, align ROADMAP wording with accepted null result
+- [x] **Phase 6: Code Quality Cleanup** - Remove dead imports, centralize hardcoded constants, register test markers, add integration test, improve agreement metrics
+- [x] **Phase 7: Solver Robustness** - Fix latent transient-solve bug, align ROADMAP wording with accepted null result
 - [ ] **Phase 8: Audit Gap Closure** - Fix sparse parametric cache, add validation function tests, update ROADMAP tracking
 
 ## Phase Details
@@ -154,8 +154,8 @@ Plans:
 
 Plans:
 
-- [ ] 06-01-PLAN.md -- Remove dead imports, centralize hardcoded constants into SiC4H_Parameters, document compute_ni as v2-only
-- [ ] 06-02-PLAN.md -- Register pytest slow marker, add cv_sweep integration test, wire agreement metrics into Hecht comparison
+- [x] 06-01-PLAN.md -- Remove dead imports, centralize hardcoded constants into SiC4H_Parameters, document compute_ni as v2-only
+- [x] 06-02-PLAN.md -- Register pytest slow marker, add cv_sweep integration test, wire agreement metrics into Hecht comparison
 
 ### Phase 7: Solver Robustness
 
@@ -172,7 +172,7 @@ Plans:
 
 Plans:
 
-- [ ] 07-01-PLAN.md -- Fix time_node_model in equation re-registrations, add transient regression test, update ROADMAP SC-3 wording
+- [x] 07-01-PLAN.md -- Fix time_node_model in equation re-registrations, add transient regression test, update ROADMAP SC-3 wording
 
 ### Phase 8: Audit Gap Closure
 
@@ -205,6 +205,6 @@ Phases execute in numeric order: 1 -> 1.1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 3. Charge Collection Efficiency                  | 3/3            | Complete | 2026-03-21 |
 | 4. FLASH Plasma Recombination                    | 2/2            | Complete | 2026-03-21 |
 | 5. Parametric Studies and Publication            | 2/2            | Complete | 2026-03-21 |
-| 6. Code Quality Cleanup                          | 0/0            | Pending  |            |
-| 7. Solver Robustness                             | 0/0            | Pending  |            |
+| 6. Code Quality Cleanup                          | 2/2            | Complete | 2026-03-21 |
+| 7. Solver Robustness                             | 1/1            | Complete | 2026-03-21 |
 | 8. Audit Gap Closure                             | 0/0            | Pending  |            |
