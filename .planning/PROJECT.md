@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A Python-based TCAD simulation toolkit for modeling the electrical and charge-collection behavior of 4H-SiC p-n junction radiation detectors developed by the Petringa group at INFN-LNS Catania. The tool produces publication-quality results for paper contributions and is designed to be reusable by the group for future detector optimization studies.
+A Python-based TCAD simulation toolkit for modeling the electrical and charge-collection behavior of 4H-SiC p-n junction radiation detectors developed by the Petringa group at INFN-LNS Catania. Shipped v1.0 with complete device simulation (material parameters, I-V/C-V, CCE, FLASH parametric studies) and publication-quality Jupyter notebook interface.
 
 ## Core Value
 
@@ -12,17 +12,27 @@ Predict how charge collection efficiency (CCE) in the SiC detector degrades unde
 
 ### Validated
 
-(None yet — ship to validate)
+- ✓ 4H-SiC material parameters with incomplete ionization — v1.0
+- ✓ Electric field distribution and depletion width — v1.0
+- ✓ C-V characteristic matching experimental data (R²=0.998) — v1.0
+- ✓ Built-in potential from asymmetric doping — v1.0
+- ✓ CCE vs bias reaching 100% at V>-40V — v1.0
+- ✓ CCE validated against Hecht equation — v1.0
+- ✓ CCE vs epitaxial thickness parametric study — v1.0
+- ✓ Proton Bragg peak generation profiles (30, 70, 150 MeV) — v1.0
+- ✓ Transient high-injection simulation with SRH + Auger — v1.0
+- ✓ CCE vs dose-rate across FLASH range (20–230 Gy/s) — v1.0
+- ✓ Full parametric study (epi × doping × bias × dose-rate) — v1.0
+- ✓ Publication-quality figures — v1.0
+- ✓ Reusable Jupyter notebook interface — v1.0
 
 ### Active
 
-- [ ] FLASH plasma recombination simulation (CCE vs dose-rate, 20–230 Gy/s)
-- [ ] Parametric study: CCE vs epitaxial thickness, doping, bias voltage
-- [ ] Device electrical characterization (I-V, C-V) matching experimental data
-- [ ] Electric field distribution in the p-n junction
-- [ ] Depletion width vs doping/bias (analytical + numerical validation)
-- [ ] Build-up over-response analysis (field distribution near surface)
+- [ ] I-V characteristic matching experimental dark current (requires surface leakage / trap-assisted tunneling)
+- [ ] Build-up over-response analysis (2D field distribution near surface)
 - [ ] Azimuthal response simulation (3D CCE vs angle)
+- [ ] Anisotropic mobility model (c-axis vs a-axis)
+- [ ] Temperature-dependent simulation
 
 ### Out of Scope
 
@@ -30,8 +40,18 @@ Predict how charge collection efficiency (CCE) in the SiC detector degrades unde
 - Full 3D device fabrication process simulation — focus is on device physics
 - Commercial TCAD (Silvaco/Synopsys) — this project uses open-source tools only
 - Real-time clinical dosimetry software — this is a research simulation tool
+- GUI application — Jupyter notebooks sufficient for research group
 
 ## Context
+
+### Current State (v1.0 shipped)
+
+- ~8,000 LOC Python across `src/sic_detector/` package
+- Tech stack: Python 3, devsim, numpy/scipy/matplotlib, Jupyter notebooks
+- 5 validated Jupyter notebooks (material params, I-V/C-V, CCE, FLASH, parametric)
+- Calibrated graded doping: N_D_junction=2.90e15, N_D_bulk=8.50e13, L_transition=1.0e-4 cm
+- Key scientific finding: CCE flat at ~1.0 across 20–230 Gy/s (Auger negligible for SiC at FLASH dose rates)
+- I-V at ideal-SRH floor (6.71e-49 A) — experimental match needs surface physics not yet modeled
 
 ### Device Parameters (from group papers)
 
@@ -75,9 +95,9 @@ Key FLASH parameters from that paper:
 
 ### Open Problems for TCAD
 
-1. **FLASH plasma recombination** (PRIORITY): At extreme dose rates, dense e-h plasma along ion tracks may recombine before collection. No simulation exists for SiC.
-2. **Build-up over-response** (~2%): PDD curves show over-response before d_max, likely due to field distribution/edge effects near surface.
-3. **Azimuthal modulation** (~3%): Planar geometry causes angle-dependent CCE due to asymmetric electrode layout.
+1. **I-V experimental match** (v2): Surface leakage / trap-assisted tunneling physics needed to match 18 pA dark current
+2. **Build-up over-response** (~2%): PDD curves show over-response before d_max, likely due to 2D field distribution/edge effects near surface
+3. **Azimuthal modulation** (~3%): Planar geometry causes angle-dependent CCE due to asymmetric electrode layout
 
 ### Reference Papers
 
@@ -93,27 +113,29 @@ Key FLASH parameters from that paper:
 ### Technical Environment
 
 - **Language:** Python 3.x + Jupyter notebooks
-- **Simulation tools:** devsim (device simulator), fipy (PDE solver for plasma dynamics)
-- **User experience:** No prior experience with devsim or fipy — start from scratch
-- **Validation strategy:** First analytical (Hecht equation, Shockley-Ramo), then vs published experimental data
+- **Simulation tools:** devsim (device simulator)
+- **Validation strategy:** Analytical (Hecht equation, Shockley-Ramo) + published experimental data
 
 ## Constraints
 
-- **Tools**: Open-source only (devsim, fipy, numpy/scipy/matplotlib) — no commercial TCAD
+- **Tools**: Open-source only (devsim, numpy/scipy/matplotlib) — no commercial TCAD
 - **Data**: Device parameters extracted from published papers, no unpublished experimental data available
-- **Priority**: FLASH dose-rate problem first, then build-up, then azimuthal
 - **Output**: Publication-quality figures + reusable Python tool for the group
 
 ## Key Decisions
 
-| Decision                      | Rationale                                                                  | Outcome   |
-| ----------------------------- | -------------------------------------------------------------------------- | --------- |
-| Start with FLASH problem      | Highest novelty, no existing TCAD work on SiC under FLASH                  | — Pending |
-| Use devsim for device physics | Open-source, Python-native, proven for semiconductor simulation            | — Pending |
-| Use fipy for plasma dynamics  | PDE solver needed for time-dependent carrier transport at high injection   | — Pending |
-| Python + Jupyter              | Interactive analysis, publication-quality plots, group accessibility       | — Pending |
-| Parametric study scope        | CCE vs dose-rate × {epi thickness, doping, bias} — comprehensive for paper | — Pending |
+| Decision                             | Rationale                                                                          | Outcome                                                         |
+| ------------------------------------ | ---------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Start with FLASH problem             | Highest novelty, no existing TCAD work on SiC under FLASH                          | ✓ Good — produced first SiC-specific FLASH TCAD prediction      |
+| Use devsim for device physics        | Open-source, Python-native, proven for semiconductor simulation                    | ✓ Good — handled all physics including transient high-injection |
+| devsim-only (no fipy)                | devsim transient solver handled high-injection without needing separate PDE solver | ✓ Good — simplified architecture, one solver for everything     |
+| Python + Jupyter                     | Interactive analysis, publication-quality plots, group accessibility               | ✓ Good — 5 validated notebooks ready for group use              |
+| Parametric study scope               | CCE vs dose-rate × {epi thickness, doping, bias} — comprehensive for paper         | ✓ Good — complete parameter space exploration                   |
+| Graded epi doping                    | Uniform N_D fails to match C-V under reverse bias; graded profile needed           | ✓ Good — C-V R²=0.998 after calibration                         |
+| Clamped exponential Boltzmann        | SiC n_i~5e-9 causes overflow in standard exponential                               | ✓ Good — stable solver without accuracy loss                    |
+| Ideal-SRH I-V as accepted limitation | Surface leakage physics needed for experimental match, beyond v1 scope             | ⚠️ Revisit — needs surface physics for v2                       |
+| Flat CCE as null result              | Auger recombination negligible at FLASH dose rates (delta_n << threshold)          | ✓ Good — valid scientific finding                               |
 
 ---
 
-_Last updated: 2026-03-20 after initialization_
+_Last updated: 2026-03-22 after v1.0 milestone_

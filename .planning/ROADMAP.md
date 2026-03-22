@@ -1,210 +1,38 @@
 # Roadmap: SiC TCAD Simulator
 
-## Overview
+## Milestones
 
-This roadmap builds a validated TCAD simulation pipeline from the ground up: starting with 4H-SiC material parameters and electrostatics, layering on drift-diffusion transport for electrical characterization, adding charge collection efficiency modeling, tackling the novel FLASH plasma recombination problem, and culminating in parametric studies with publication-quality output. Each phase validates against experimental data or analytical benchmarks before the next phase builds on it, concentrating all novelty risk in Phase 4 where no prior SiC-specific TCAD work exists.
+- ✅ **v1.0 SiC TCAD Simulator MVP** — Phases 1-8 (shipped 2026-03-22)
 
 ## Phases
 
-**Phase Numbering:**
+<details>
+<summary>✅ v1.0 SiC TCAD Simulator MVP (Phases 1-8) — SHIPPED 2026-03-22</summary>
 
-- Integer phases (1, 2, 3): Planned milestone work
-- Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
+- [x] Phase 1: Material Parameters and Device Electrostatics (3/3 plans) — completed 2026-03-20
+- [x] Phase 1.1: Phase 1 Tech Debt Cleanup (1/1 plan) — completed 2026-03-21
+- [x] Phase 2: Electrical Characterization (5/5 plans) — completed 2026-03-21
+- [x] Phase 3: Charge Collection Efficiency (3/3 plans) — completed 2026-03-21
+- [x] Phase 4: FLASH Plasma Recombination (2/2 plans) — completed 2026-03-21
+- [x] Phase 5: Parametric Studies and Publication (2/2 plans) — completed 2026-03-21
+- [x] Phase 6: Code Quality Cleanup (2/2 plans) — completed 2026-03-21
+- [x] Phase 7: Solver Robustness (1/1 plan) — completed 2026-03-21
+- [x] Phase 8: Audit Gap Closure (1/1 plan) — completed 2026-03-22
 
-Decimal phases appear between their surrounding integers in numeric order.
+Full details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 
-- [x] **Phase 1: Material Parameters and Device Electrostatics** - 4H-SiC parameter module, Poisson solver, electric field and depletion width validated against analytical and experimental references
-- [x] **Phase 1.1: Phase 1 Tech Debt Cleanup** — INSERTED — Remove unused imports, test plotting utilities, document analytical W contract for Phase 2 handoff
-- [x] **Phase 2: Electrical Characterization** - I-V and C-V simulation validated against Petringa experimental data
-- [x] **Phase 3: Charge Collection Efficiency** - CCE vs bias validated against alpha particle data and Hecht equation, with radiation generation profiles
-- [x] **Phase 4: FLASH Plasma Recombination** - Transient high-injection simulation producing CCE vs dose-rate across the FLASH regime
-- [x] **Phase 5: Parametric Studies and Publication** - Full parametric sweeps and publication-quality deliverables for the research group (completed 2026-03-21)
-- [x] **Phase 6: Code Quality Cleanup** - Remove dead imports, centralize hardcoded constants, register test markers, add integration test, improve agreement metrics
-- [x] **Phase 7: Solver Robustness** - Fix latent transient-solve bug, align ROADMAP wording with accepted null result
-- [x] **Phase 8: Audit Gap Closure** - Fix sparse parametric cache, add validation function tests, update ROADMAP tracking
-
-## Phase Details
-
-### Phase 1: Material Parameters and Device Electrostatics
-
-**Goal**: Users can define a complete 4H-SiC device and compute validated electric field distributions and depletion widths
-**Depends on**: Nothing (first phase)
-**Requirements**: MAT-01, MAT-02, MAT-03, MAT-04, ELEC-03
-**Success Criteria** (what must be TRUE):
-
-1. Running the material module produces all required 4H-SiC parameters (bandgap, mobility, lifetime, ni, recombination coefficients) with values sourced from literature and documented citations
-2. Incomplete ionization of Al acceptors is modeled and produces 10-30% ionization at 300K consistent with literature
-3. Electric field distribution is computed across the p-n junction at multiple bias voltages (0 to -60V) and plotted as a 2D map vs depth
-4. Depletion width at 0V bias matches experimental C-V data (1.7 um) using calibrated N_D=1.07e15 cm^-3. Bias-dependent targets (9.5 um at -10V, 9.73 um at -30V) require a graded epi doping profile and are deferred to Phase 2.
-5. Built-in potential is correctly computed from the asymmetric doping profile (N_D ~ 0.5-1e14 vs N_A ~ 1e19)
-   **Plans**: 3 plans
-
-Plans:
-
-- [x] 01-01-PLAN.md -- Material parameters, incomplete ionization, and analytical electrostatics formulas with tests
-- [x] 01-02-PLAN.md -- devsim Poisson solver, E-field/depletion validation, plotting, and Jupyter notebook
-- [x] 01-03-PLAN.md -- Gap closure: descope bias-dependent W targets, update Vbi range, fix key_links
-
-### Phase 1.1: Phase 1 Tech Debt Cleanup (INSERTED)
-
-**Goal**: Clean up tech debt from Phase 1 before building on it — remove dead imports, add test coverage for plotting utilities, document analytical W contract for Phase 2 handoff
-**Depends on**: Phase 1
-**Requirements**: None (tech debt cleanup)
-**Gap Closure:** Closes tech debt items from v1.0 milestone audit
-**Success Criteria** (what must be TRUE):
-
-1. Notebook cell 1 contains only imports that are actually used in the notebook
-2. Plotting utilities (`plot_electric_field_multi`, `plot_doping_profile`, `save_figure`) have unit test coverage
-3. `poisson.extract_depletion_width` has explicit docstring or comment documenting that it returns analytically-derived W under bias (not numerically-solved W from Poisson field), so Phase 2 drift-diffusion code does not assume numerical extraction
-   **Plans**: 1 plan
-
-Plans:
-
-- [x] 01.1-01-PLAN.md -- Remove dead notebook imports, add plotting test coverage, document analytical-W contract
-
-### Phase 2: Electrical Characterization
-
-**Goal**: Users can simulate I-V and C-V characteristics that quantitatively match Petringa experimental measurements
-**Depends on**: Phase 1
-**Requirements**: ELEC-01, ELEC-02, VAL-01
-**Success Criteria** (what must be TRUE):
-
-1. Simulated I-V curve computed via drift-diffusion with SRH recombination. Ideal-SRH baseline produces dark current at theoretical floor (6.71e-49 A for n_i ~ 5e-9 cm^-3) and rectification ratio of 6.25. Experimental I-V matching (18 pA dark current, 1e5 rectification, 3 kOhm series resistance) requires surface leakage / trap-assisted tunneling physics, deferred to future work.
-2. Simulated C-V curve reproduces depletion width evolution from 1.7 um at 0V to 9.73 um at -30V at 1 kHz
-3. Quantified agreement metrics (R-squared, max deviation) between simulation and experimental data are computed and reported
-   **Plans**: 5 plans
-
-Plans:
-
-- [x] 02-01-PLAN.md -- Graded doping profile and drift-diffusion solver with SRH recombination
-- [x] 02-02-PLAN.md -- I-V sweep, C-V analysis, validation framework, and plotting
-- [x] 02-03-PLAN.md -- Validation notebook and human verification of results (calibration issues found, gap closure needed)
-- [x] 02-04-PLAN.md -- Gap closure: run graded doping calibration and update notebook with calibrated parameters
-- [x] 02-05-PLAN.md -- Gap closure: fix I-V validation reporting, update ROADMAP/REQUIREMENTS for ideal-SRH baseline
-
-### Phase 3: Charge Collection Efficiency
-
-**Goal**: Users can compute CCE vs bias voltage validated against alpha particle measurements and analytical theory
-**Depends on**: Phase 2
-**Requirements**: CCE-01, CCE-02, CCE-03, CCE-04, VAL-02
-**Success Criteria** (what must be TRUE):
-
-1. CCE vs reverse bias (0 to -60V) reaches 100% at V > -40V, matching experimental alpha particle data
-2. CCE simulation agrees with analytical Hecht equation in the applicable (low-injection) regime, with documented regime of validity
-3. CCE vs epitaxial thickness (5-20 um range) parametric study produces physically reasonable trends at fixed bias
-4. Radiation generation profiles for proton Bragg peak deposition (30, 70, 150 MeV) are implemented and produce correct spatial distributions
-   **Plans**: 3 plans
-
-Plans:
-
-- [x] 03-01-PLAN.md -- Generation profiles (alpha, proton Bragg peak) and Hecht equation analytical benchmark
-- [x] 03-02-PLAN.md -- Radiation generation in DD solver, CCE vs bias extraction, Hecht comparison
-- [x] 03-03-PLAN.md -- CCE vs epi thickness parametric study, plotting, validation notebook
-
-### Phase 4: FLASH Plasma Recombination
-
-**Goal**: Users can simulate how CCE degrades under FLASH dose rates due to plasma recombination in 4H-SiC
-**Depends on**: Phase 3
-**Requirements**: FLASH-01, FLASH-02, FLASH-03
-**Success Criteria** (what must be TRUE):
-
-1. Transient carrier transport simulation runs under high-injection conditions (carrier densities up to ~1e18 cm-3) without solver divergence
-2. Plasma recombination model includes both SRH and Auger mechanisms with 4H-SiC-specific parameters
-3. CCE vs dose-rate curve spanning 20 to 230 Gy/s at reference conditions (-30V, 10 um epi, 62 MeV protons) produces flat CCE (~1.0) confirming Auger recombination is negligible at therapeutic FLASH dose rates — an accepted null result consistent with delta_n << Auger threshold (~1e16 cm^-3)
-   **Plans**: 2 plans
-
-Plans:
-
-- [x] 04-01-PLAN.md -- Auger recombination model, continuation solver, and integration tests
-- [x] 04-02-PLAN.md -- CCE vs dose-rate sweep, plotting, and validation notebook
-
-### Phase 5: Parametric Studies and Publication
-
-**Goal**: Users have a complete, reusable toolkit producing publication-quality parametric results for the FLASH SiC paper
-**Depends on**: Phase 4
-**Requirements**: FLASH-04, VAL-03, VAL-04
-**Success Criteria** (what must be TRUE):
-
-1. Full parametric study (CCE vs dose-rate for varying epi thickness, doping, and bias) runs end-to-end and produces a multi-dimensional parameter space exploration
-2. All figures (I-V, C-V, E-field maps, CCE curves, FLASH parametric plots) are publication-quality with LaTeX labels, consistent styling, and appropriate resolution
-3. Jupyter notebook interface provides a documented, reproducible workflow that the research group can use independently
-   **Plans**: 2 plans
-
-Plans:
-
-- [x] 05-01-PLAN.md -- Parametric CCE sweep infrastructure: doping-parametrized cce_vs_dose_rate, parametric_cce_sweep wrapper, JSON caching, tests
-- [x] 05-02-PLAN.md -- Publication-quality parametric figures, consolidated notebook, and human verification
-
-### Phase 6: Code Quality Cleanup
-
-**Goal**: Clean up tech debt across Phases 1-4 — remove dead imports, centralize hardcoded constants, register test markers, add missing integration test, and improve agreement metrics
-**Depends on**: Phase 5
-**Requirements**: None (tech debt cleanup)
-**Gap Closure:** Closes tech debt items from v1.0 milestone audit
-**Success Criteria** (what must be TRUE):
-
-1. `cv_analysis.py` has no unused imports (dead `ramp_voltage` import removed)
-2. `charge_collection.py` and `generation_profiles.py` import SiC material constants from `SiC4H_Parameters` instead of hardcoding them
-3. `@pytest.mark.slow` is registered in `pytest.ini` — no `PytestUnknownMarkWarning`
-4. An automated `@pytest.mark.slow` integration test covers `cv_sweep` with a live devsim device
-5. `compare_cce_hecht_vs_dd` calls `compute_agreement_metrics` to report R² for Hecht comparison
-6. `compute_ni()` is documented as v2-only or wired into the pipeline
-
-**Plans**: 2 plans
-
-Plans:
-
-- [x] 06-01-PLAN.md -- Remove dead imports, centralize hardcoded constants into SiC4H_Parameters, document compute_ni as v2-only
-- [x] 06-02-PLAN.md -- Register pytest slow marker, add cv_sweep integration test, wire agreement metrics into Hecht comparison
-
-### Phase 7: Solver Robustness
-
-**Goal**: Fix latent transient-solve bug and align ROADMAP wording with accepted scientific findings
-**Depends on**: Phase 6
-**Requirements**: None (tech debt / documentation)
-**Gap Closure:** Closes tech debt items from v1.0 milestone audit
-**Success Criteria** (what must be TRUE):
-
-1. `add_generation_to_dd` and `add_auger_recombination` preserve `time_node_model` when re-registering continuity equations
-2. ROADMAP SC-3 wording updated to reflect flat CCE as accepted null result (not "shows physically meaningful CCE degradation")
-
-**Plans**: 1 plan
-
-Plans:
-
-- [x] 07-01-PLAN.md -- Fix time_node_model in equation re-registrations, add transient regression test, update ROADMAP SC-3 wording
-
-### Phase 8: Audit Gap Closure
-
-**Goal**: Close remaining gaps from v1.0 milestone audit not covered by Phases 6-7 — fix sparse parametric cache, add validation function test coverage, and correct ROADMAP tracking
-**Depends on**: Phase 7
-**Requirements**: None (audit gap closure)
-**Gap Closure:** Closes integration, flow, and tech debt gaps from v1.0 milestone audit
-**Success Criteria** (what must be TRUE):
-
-1. `parametric_results.json` contains a representative subset of conditions (or notebook 05 RECOMPUTE=False path handles sparse cache gracefully with a user-visible warning instead of silently rendering empty figures)
-2. `validate_iv` and `validate_cv` functions have automated test coverage in `test_validation.py`
-3. ROADMAP.md progress table shows Phase 6 and Phase 7 with correct plan counts and completion status (not 0/0 Pending after execution)
-
-**Plans**: 1 plan
-
-Plans:
-
-- [x] 08-01-PLAN.md -- Sparse cache warning, validate_iv/validate_cv tests, ROADMAP progress fix
+</details>
 
 ## Progress
 
-**Execution Order:**
-Phases execute in numeric order: 1 -> 1.1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
-
-| Phase                                            | Plans Complete | Status   | Completed  |
-| ------------------------------------------------ | -------------- | -------- | ---------- |
-| 1. Material Parameters and Device Electrostatics | 3/3            | Complete | 2026-03-20 |
-| 1.1. Phase 1 Tech Debt Cleanup (INSERTED)        | 1/1            | Complete | 2026-03-21 |
-| 2. Electrical Characterization                   | 5/5            | Complete | 2026-03-21 |
-| 3. Charge Collection Efficiency                  | 3/3            | Complete | 2026-03-21 |
-| 4. FLASH Plasma Recombination                    | 2/2            | Complete | 2026-03-21 |
-| 5. Parametric Studies and Publication            | 2/2            | Complete | 2026-03-21 |
-| 6. Code Quality Cleanup                          | 2/2            | Complete | 2026-03-21 |
-| 7. Solver Robustness                             | 1/1            | Complete | 2026-03-21 |
-| 8. Audit Gap Closure                             | 1/1            | Complete | 2026-03-22 |
+| Phase                           | Milestone | Plans Complete | Status   | Completed  |
+| ------------------------------- | --------- | -------------- | -------- | ---------- |
+| 1. Material Parameters          | v1.0      | 3/3            | Complete | 2026-03-20 |
+| 1.1. Tech Debt Cleanup          | v1.0      | 1/1            | Complete | 2026-03-21 |
+| 2. Electrical Characterization  | v1.0      | 5/5            | Complete | 2026-03-21 |
+| 3. Charge Collection Efficiency | v1.0      | 3/3            | Complete | 2026-03-21 |
+| 4. FLASH Plasma Recombination   | v1.0      | 2/2            | Complete | 2026-03-21 |
+| 5. Parametric Studies           | v1.0      | 2/2            | Complete | 2026-03-21 |
+| 6. Code Quality Cleanup         | v1.0      | 2/2            | Complete | 2026-03-21 |
+| 7. Solver Robustness            | v1.0      | 1/1            | Complete | 2026-03-21 |
+| 8. Audit Gap Closure            | v1.0      | 1/1            | Complete | 2026-03-22 |
