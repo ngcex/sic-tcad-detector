@@ -21,6 +21,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: Parametric Studies and Publication** - Full parametric sweeps and publication-quality deliverables for the research group (completed 2026-03-21)
 - [ ] **Phase 6: Code Quality Cleanup** - Remove dead imports, centralize hardcoded constants, register test markers, add integration test, improve agreement metrics
 - [ ] **Phase 7: Solver Robustness** - Fix latent transient-solve bug, align ROADMAP wording with accepted null result
+- [ ] **Phase 8: Audit Gap Closure** - Fix sparse parametric cache, add validation function tests, update ROADMAP tracking
 
 ## Phase Details
 
@@ -173,10 +174,28 @@ Plans:
 
 - [ ] 07-01-PLAN.md -- Fix time_node_model in equation re-registrations, add transient regression test, update ROADMAP SC-3 wording
 
+### Phase 8: Audit Gap Closure
+
+**Goal**: Close remaining gaps from v1.0 milestone audit not covered by Phases 6-7 — fix sparse parametric cache, add validation function test coverage, and correct ROADMAP tracking
+**Depends on**: Phase 7
+**Requirements**: None (audit gap closure)
+**Gap Closure:** Closes integration, flow, and tech debt gaps from v1.0 milestone audit
+**Success Criteria** (what must be TRUE):
+
+1. `parametric_results.json` contains a representative subset of conditions (or notebook 05 RECOMPUTE=False path handles sparse cache gracefully with a user-visible warning instead of silently rendering empty figures)
+2. `validate_iv` and `validate_cv` functions have automated test coverage in `test_validation.py`
+3. ROADMAP.md progress table shows Phase 6 and Phase 7 with correct plan counts and completion status (not 0/0 Pending after execution)
+
+**Plans**: 0 plans
+
+Plans:
+
+(none yet — run `/gsd:plan-phase 8`)
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 1.1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7
+Phases execute in numeric order: 1 -> 1.1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 
 | Phase                                            | Plans Complete | Status   | Completed  |
 | ------------------------------------------------ | -------------- | -------- | ---------- |
@@ -188,3 +207,4 @@ Phases execute in numeric order: 1 -> 1.1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7
 | 5. Parametric Studies and Publication            | 2/2            | Complete | 2026-03-21 |
 | 6. Code Quality Cleanup                          | 0/0            | Pending  |            |
 | 7. Solver Robustness                             | 0/0            | Pending  |            |
+| 8. Audit Gap Closure                             | 0/0            | Pending  |            |
