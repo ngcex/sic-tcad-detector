@@ -28,11 +28,15 @@ Predict how charge collection efficiency (CCE) in the SiC detector degrades unde
 
 ### Active
 
-- [ ] I-V characteristic matching experimental dark current (requires surface leakage / trap-assisted tunneling)
-- [ ] Build-up over-response analysis (2D field distribution near surface)
-- [ ] Azimuthal response simulation (3D CCE vs angle)
-- [ ] Anisotropic mobility model (c-axis vs a-axis)
-- [ ] Temperature-dependent simulation
+- [ ] Temperature-dependent material parameters and device simulation (bandgap, mobility, n_i, SRH lifetimes vs T)
+- [ ] Realistic dark current matching experimental 18 pA (surface recombination, trap-assisted tunneling, generation-recombination current)
+- [ ] True transient FLASH dynamics (μs-scale pulse simulation, plasma build-up/decay, inter-pulse memory effects)
+
+### Deferred (v2+)
+
+- Build-up over-response analysis (2D field distribution near surface)
+- Azimuthal response simulation (3D CCE vs angle)
+- Anisotropic mobility model (c-axis vs a-axis)
 
 ### Out of Scope
 
@@ -138,4 +142,16 @@ Key FLASH parameters from that paper:
 
 ---
 
-_Last updated: 2026-03-22 after v1.0 milestone_
+## Current Milestone: v1.1 Realistic Device Physics
+
+**Goal:** Make the simulator predict real device behavior (temperature, dark current, transient dynamics) so the group can evaluate and improve the current SiC detector design.
+
+**Target features:**
+
+- Temperature-dependent simulation (clinical range 30-40°C)
+- Realistic dark current matching experimental 18 pA
+- True transient FLASH pulse dynamics (intra-pulse, inter-pulse)
+
+---
+
+_Last updated: 2026-03-22 after v1.1 milestone start_
