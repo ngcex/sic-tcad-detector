@@ -18,14 +18,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-20)
 
 **Core value:** Predict how CCE in 4H-SiC detectors degrades under FLASH dose rates, providing the first TCAD-based explanation of plasma recombination effects in SiC dosimeters.
-**Current focus:** Phase 7 solver robustness complete.
+**Current focus:** Phase 8 audit gap closure complete. All v1.0 milestone work done.
 
 ## Current Position
 
-Phase: 7 of 7 (Solver Robustness)
-Plan: 1 of 1 in current phase (07-01 complete)
-Status: All Phase 7 plans complete. time_node_model fix, transient regression test, ROADMAP SC-3 update.
-Last activity: 2026-03-21 -- Completed 07-01 (time_node_model preservation and transient regression test)
+Phase: 8 of 8 (Audit Gap Closure)
+Plan: 1 of 1 in current phase (08-01 complete)
+Status: All Phase 8 plans complete. Sparse cache warning, validate_iv/validate_cv tests, ROADMAP progress fix.
+Last activity: 2026-03-22 -- Completed 08-01 (sparse cache warning, validation tests, ROADMAP progress)
 
 Progress: [████████████████████] 100%
 
@@ -33,7 +33,7 @@ Progress: [████████████████████] 100%
 
 **Velocity:**
 
-- Total plans completed: 19
+- Total plans completed: 20
 - Average duration: 4.2 min
 - Total execution time: 1.08 hours
 
@@ -59,6 +59,7 @@ _Updated after each plan completion_
 | 5     | 2     | 11 min | 5.5 min  |
 | 6     | 2     | 3 min  | 1.5 min  |
 | 7     | 1     | 3 min  | 3.0 min  |
+| 8     | 1     | 2 min  | 2.0 min  |
 
 ## Accumulated Context
 
@@ -114,6 +115,8 @@ Recent decisions affecting current work:
 - [Phase 06]: [06-01]: Module-level \_params = SiC4H_Parameters() instance for default parameter sourcing
 - [Phase 06]: [06-02]: Task 2 changes committed as part of concurrent 06-01 execution (no separate commit needed)
 - [Phase 07]: transient_dc with tdelta=0 required before BDF1 step to initialize devsim time data storage
+- [Phase 08]: warnings.warn for sparse parametric cache (not print) following Python warning conventions
+- [Phase 08]: == True/False for numpy bool assertions (np.True\_ fails identity check with 'is')
 
 ### Pending Todos
 
@@ -128,6 +131,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-21
-Stopped at: Completed 07-01-PLAN.md (time_node_model preservation and transient regression test) -- ALL PHASE 7 PLANS COMPLETE
+Last session: 2026-03-22
+Stopped at: Completed 08-01-PLAN.md (sparse cache warning, validation tests, ROADMAP progress) -- ALL PHASE 8 PLANS COMPLETE
 Resume file: None

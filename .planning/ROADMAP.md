@@ -21,7 +21,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: Parametric Studies and Publication** - Full parametric sweeps and publication-quality deliverables for the research group (completed 2026-03-21)
 - [x] **Phase 6: Code Quality Cleanup** - Remove dead imports, centralize hardcoded constants, register test markers, add integration test, improve agreement metrics
 - [x] **Phase 7: Solver Robustness** - Fix latent transient-solve bug, align ROADMAP wording with accepted null result
-- [ ] **Phase 8: Audit Gap Closure** - Fix sparse parametric cache, add validation function tests, update ROADMAP tracking
+- [x] **Phase 8: Audit Gap Closure** - Fix sparse parametric cache, add validation function tests, update ROADMAP tracking
 
 ## Phase Details
 
@@ -190,7 +190,7 @@ Plans:
 
 Plans:
 
-- [ ] 08-01-PLAN.md -- Sparse cache warning, validate_iv/validate_cv tests, ROADMAP progress fix
+- [x] 08-01-PLAN.md -- Sparse cache warning, validate_iv/validate_cv tests, ROADMAP progress fix
 
 ## Progress
 
@@ -207,4 +207,4 @@ Phases execute in numeric order: 1 -> 1.1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 5. Parametric Studies and Publication            | 2/2            | Complete | 2026-03-21 |
 | 6. Code Quality Cleanup                          | 2/2            | Complete | 2026-03-21 |
 | 7. Solver Robustness                             | 1/1            | Complete | 2026-03-21 |
-| 8. Audit Gap Closure                             | 0/0            | Pending  |            |
+| 8. Audit Gap Closure                             | 1/1            | Complete | 2026-03-22 |
