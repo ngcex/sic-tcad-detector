@@ -186,11 +186,11 @@ Plans:
 2. `validate_iv` and `validate_cv` functions have automated test coverage in `test_validation.py`
 3. ROADMAP.md progress table shows Phase 6 and Phase 7 with correct plan counts and completion status (not 0/0 Pending after execution)
 
-**Plans**: 0 plans
+**Plans**: 1 plan
 
 Plans:
 
-(none yet — run `/gsd:plan-phase 8`)
+- [ ] 08-01-PLAN.md -- Sparse cache warning, validate_iv/validate_cv tests, ROADMAP progress fix
 
 ## Progress
 
