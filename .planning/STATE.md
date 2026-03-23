@@ -18,14 +18,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-22)
 
 **Core value:** Predict how CCE in 4H-SiC detectors degrades under FLASH dose rates, providing the first TCAD-based explanation of plasma recombination effects in SiC dosimeters.
-**Current focus:** Phase 10 — Temperature-Dependent Device Physics
+**Current focus:** Phase 11 — Dark Current Modeling
 
 ## Current Position
 
-Phase: 10 of 12 (Temperature-Dependent Device Physics) -- COMPLETE
-Plan: 03 of 03 (done)
-Status: Phase 10 complete
-Last activity: 2026-03-23 — Completed 10-03 (T-dependent sweep utilities and notebook)
+Phase: 11 of 12 (Dark Current Modeling)
+Plan: 01 of 02
+Status: Plan 11-01 complete
+Last activity: 2026-03-23 — Completed 11-01 (Hurkx TAT dark current module)
 
 Progress: [██████████] 100%
 
@@ -33,20 +33,21 @@ Progress: [██████████] 100%
 
 **Velocity:**
 
-- Total plans completed: 3 (v1.1)
-- Average duration: 4.3 min
-- Total execution time: 0.22 hours
+- Total plans completed: 4 (v1.1)
+- Average duration: 8.5 min
+- Total execution time: 0.57 hours
 
 **By Phase:**
 
 | Phase | Plans | Total  | Avg/Plan |
 | ----- | ----- | ------ | -------- |
 | 10    | 3/3   | 13 min | 4.3 min  |
+| 11    | 1/2   | 21 min | 21 min   |
 
 **Recent Trend:**
 
-- Last 5 plans: 10-01 (3 min), 10-02 (5 min), 10-03 (5 min)
-- Trend: Consistent
+- Last 5 plans: 10-01 (3 min), 10-02 (5 min), 10-03 (5 min), 11-01 (21 min)
+- Trend: 11-01 took longer due to model reformulation (n_i^2 bottleneck discovery)
 
 _Updated after each plan completion_
 
@@ -65,6 +66,9 @@ Recent decisions affecting current work:
 - [10-02]: hecht_cce T-dependent defaults use low-doping limit mu_max\*(T/300)^gamma since Hecht assumes bulk mobility
 - [10-03]: Used Hecht method as default CCE sweep (faster than DD, adequate for T-sensitivity analysis)
 - [10-03]: Pandas DataFrames for sweep results (long format for CCE, wide format for IV)
+- [11-01]: Used effective generation rate N_t=2.2e13 cm^-3/s (not physical trap density) because n_i^2 bottleneck prevents pA-level dark current in 1D SiC
+- [11-01]: E-field-weighted depletion region selector (E/E_ref clamped to 1) for voltage-dependent generation
+- [11-01]: Gamma=1 at SiC detector fields is correct physics; Hurkx enhancement requires MV/cm fields
 
 ### Pending Todos
 
@@ -79,5 +83,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-23
-Stopped at: Completed 10-03-PLAN.md (Phase 10 complete)
+Stopped at: Completed 11-01-PLAN.md
 Resume file: None
