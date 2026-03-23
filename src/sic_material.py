@@ -62,6 +62,13 @@ class SiC4H_Parameters:
     tau_n: float = 1.0e-9  # s, electron lifetime in p-type (Ioffe NSM)
     tau_p: float = 6.0e-7  # s, hole lifetime in n-type (Ioffe NSM)
 
+    # --- Z1/2 center trap parameters (for Hurkx TAT dark current) ---
+    E_t: float = 0.65  # eV, trap level below Ec (Z1/2 center)
+    m_t: float = 0.25  # m0, tunneling effective mass
+    N_t: float = 1e12  # cm^-3, trap density (calibration parameter)
+    S_n: float = 1e3  # cm/s, electron surface recombination velocity
+    S_p: float = 1e3  # cm/s, hole surface recombination velocity
+
     # --- Auger recombination coefficients ---
     C_n: float = 5.0e-31  # cm^6/s, electron Auger (Ioffe NSM)
     C_p: float = 2.0e-31  # cm^6/s, hole Auger (Ioffe NSM)
