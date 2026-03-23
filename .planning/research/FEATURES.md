@@ -1,162 +1,243 @@
 # Feature Landscape
 
-**Domain:** TCAD simulation toolkit for 4H-SiC radiation detector characterization
-**Researched:** 2026-03-20
+**Domain:** v1.1 realistic device physics for 4H-SiC TCAD radiation detector simulator
+**Researched:** 2026-03-23
+**Scope:** NEW features only -- temperature-dependent simulation, realistic dark current, transient FLASH dynamics. Does not re-document v1.0 features (I-V, C-V, CCE, steady-state FLASH, parametric sweeps).
 
 ## Table Stakes
 
-Features that any TCAD-based detector paper must include. Missing any of these means the paper lacks foundational credibility. Reviewers will reject or request major revision.
+Features that a reviewer expects when a paper claims "realistic device simulation" or "temperature-dependent modeling." Missing any of these undermines credibility of the v1.1 claims.
 
-| Feature                                        | Why Expected                                                                                                                                                                                                                        | Complexity  | Notes                                                                                                                                                                                                                   |
-| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **I-V characteristic simulation**              | Every SiC detector paper shows forward and reverse I-V. Proves the device model is physically correct (rectification, leakage current). Without it, no reviewer trusts subsequent results.                                          | Medium      | Must match experimental data from Petringa photons paper (dark current < 18 pA, rectification ratio ~10^5). Requires Shockley diode equation + SRH recombination. Forward + reverse bias both needed.                   |
-| **C-V characteristic simulation**              | Standard for extracting doping profile and depletion width. The photons paper Fig. 6 shows C-V and 1/C^2 plots. Required to validate device geometry and doping parameters before any transport simulation.                         | Medium      | 1/C^2 vs V plot is the canonical format. Must reproduce full depletion voltage ~10 V and depletion width progression (1.7 um at 0V to 9.73 um at -30V). Small-signal AC analysis at ~1 MHz.                             |
-| **Electric field distribution**                | Spatial E-field profile across the p-n junction is the bridge between device structure and charge collection physics. Every TCAD paper shows this. Needed to explain where charge is collected and where it is not.                 | Low-Medium  | 1D cross-section plot: E-field vs depth at multiple bias voltages. Color map (2D) is a bonus. Must show triangular field in depletion region falling to zero at depletion edge.                                         |
-| **Depletion width vs bias voltage**            | Direct validation against analytical model W = sqrt(2*epsilon*V/(q\*N_D)). Proves the Poisson solver works correctly before trusting it for anything complex.                                                                       | Low         | Analytical curve overlay on numerical result. Simple to compute once C-V works.                                                                                                                                         |
-| **Charge Collection Efficiency (CCE) vs bias** | The central metric for any radiation detector paper. CCE = collected charge / generated charge. Must show CCE approaching 100% above full depletion. The Petringa microdosimetry paper reports CCE = 100% at V > -40V for alphas.   | Medium-High | Requires transient carrier transport simulation: generate e-h pairs, drift/diffuse, integrate induced current. Validate against alpha particle data first (well-understood, high LET, short range).                     |
-| **Hecht equation comparison**                  | The Hecht equation (CCE as function of mu\*tau and bias) is THE standard analytical benchmark for detector CCE. Every detector characterization paper compares numerical results to Hecht. Not including it is a red flag.          | Low         | CCE_Hecht = (mu*tau*V/d^2) * [1 - exp(-d^2/(mu*tau\*V))]. Overlay on numerical CCE curve. Deviation from Hecht at low bias (diffusion contribution) is expected and publishable.                                        |
-| **Shockley-Ramo theorem validation**           | Induced current calculation using weighting field is the standard theoretical framework. Paper must either use it explicitly or validate against it. Establishes that the transient simulation correctly computes signal formation. | Medium      | Weighting field for parallel-plate geometry is trivial (1/d). For the actual p-n junction, solve Laplace equation with unit voltage on collecting electrode. Compare integrated Ramo current to drift-diffusion result. |
-| **Publication-quality figures**                | Matplotlib/journal-standard plots with proper axis labels, units, font sizes, legends, and error indicators. Papers with poor figures get desk-rejected.                                                                            | Low         | Use matplotlib with LaTeX rendering. Consistent style across all figures. Physical Review / Medical Physics journal formatting. Two-column width figures (~3.4 inches) and single-column (~7 inches).                   |
-| **Doping profile specification**               | Clear documentation of the simulated device structure: layer thicknesses, doping concentrations, material parameters. Reproducibility requirement.                                                                                  | Low         | Table format in paper. N-type epi: 10 um, 0.5-1e14 cm^-3. P+ substrate: 350 um, ~1e19 cm^-3. All 4H-SiC material parameters (bandgap 3.26 eV, epsilon_r 9.7, etc.).                                                     |
-| **Material parameter table**                   | 4H-SiC has well-established but non-trivial parameters (anisotropic mobility, incomplete ionization at high doping). Must document what values are used and cite sources.                                                           | Low         | Electron/hole mobilities, lifetimes, saturation velocities, impact ionization coefficients. TCAD papers for 4H-SiC (e.g., Hatakeyama et al., Baliga) are standard references.                                           |
+| Feature                                     | Why Expected                                                                                                                                                                                                                    | Complexity  | Notes                                                                                                                                                                                                    |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **T-dependent bandgap E_g(T)**              | Varshni model is universal in TCAD. Any paper mentioning temperature must use it. Already partially coded in `compute_ni()` but not wired into device pipeline.                                                                 | Low         | Varshni params already in `SiC4H_Parameters`: E_g_0=3.265, alpha=6.5e-4, beta=1300. Just needs wiring.                                                                                                   |
+| **T-dependent n_i(T)**                      | Intrinsic carrier concentration drives all junction physics. n_i(300K)~5e-9 but n_i(310K) is ~3x larger due to exponential Eg/2kT sensitivity. Must be self-consistent with E_g(T).                                             | Low         | `compute_ni(T)` already exists but returns a float not wired into devsim. Need to set as device parameter at simulation start.                                                                           |
+| **T-dependent mobility mu(T)**              | Caughey-Thomas with T-exponents is the standard TCAD model. Phonon scattering increases with T, reducing mobility. Required for I-V and CCE accuracy at T != 300K.                                                              | Low-Medium  | mu_n_max(T) = 950*(T/300)^(-2.40), mu_p_max(T) = 125*(T/300)^(-2.15). TU Wien Ayalew Table 3.5. Need to parameterize existing Caughey-Thomas with T.                                                     |
+| **T-dependent NC(T), NV(T)**                | Density of states scales as T^(3/2). Feeds n_i(T) computation. Standard in every TCAD tool.                                                                                                                                     | Low         | NC(T) = NC_300*(T/300)^1.5, NV(T) = NV_300*(T/300)^1.5. Trivial.                                                                                                                                         |
+| **Dark current decomposition**              | Any paper claiming to match experimental I_dark must decompose contributions: bulk SRH generation, surface recombination, trap-assisted tunneling. Reviewers expect this breakdown to validate the dominant mechanism.          | Medium      | Current I_dark = 6.71e-49 A (bulk SRH only) vs experimental 18 pA. The ~40 orders of magnitude gap proves surface/TAT physics is essential, not optional.                                                |
+| **Reverse I-V matching experiment**         | The Petringa photons paper reports I_dark < 18 pA up to -60V. Reproducing this with physics-based models (not just fitting) validates the entire device model.                                                                  | Medium-High | Requires surface recombination + Hurkx TAT working together. The 18 pA target provides a clear pass/fail criterion.                                                                                      |
+| **Temperature coefficient of dark current** | Experimental value: (-0.079 +/- 0.005)%/C for SiC dosimeter sensitivity. A T-dependent model must reproduce the correct sign and approximate magnitude of I_dark(T) variation.                                                  | Medium      | Dominated by n_i(T) exponential increase but offset by mobility decrease. Net effect should match experimental trends from Lopez Paz 2024.                                                               |
+| **Transient current pulse I(t)**            | Any paper claiming transient simulation must show the current waveform vs time. Reviewers expect to see carrier drift, diffusion tail, and collection time. The TCT (Transient Current Technique) is the experimental analogue. | Medium      | devsim transient solver (BDF1/BDF2) already wired. Need to implement time-step loop, extract current at each step, plot I(t). Time resolution ~1 ns for SiC (transit time ~50 ps across 10 um at v_sat). |
+| **Intra-pulse carrier dynamics**            | During a FLASH pulse (10-200 ms), carriers build up toward steady state. Must show time-resolved n(x,t), p(x,t) during pulse. Without this, "transient" simulation is not transient.                                            | Medium-High | Requires stable time-stepping over 6+ orders of magnitude (ns to ms). Adaptive dt essential. devsim charge_error parameter controls this.                                                                |
+| **Validation against analytical limits**    | Low dose-rate transient must recover steady-state CCE. Zero-field limit must show full recombination. High-field limit must show full collection. These limiting cases validate the transient solver independently.             | Low-Medium  | Plot CCE_transient(dose_rate -> 0) vs CCE_steady_state. Should agree to <1%. This is a necessary sanity check.                                                                                           |
 
 ## Differentiators
 
-Features that distinguish this work from existing SiC TCAD papers. These are the novelty that justifies publication.
+Features that add scientific novelty beyond standard TCAD. These are what makes v1.1 publishable rather than merely incremental.
 
-| Feature                                                           | Value Proposition                                                                                                                                                                                                                                                                             | Complexity         | Notes                                                                                                                                                                                                                                                                                                                                         |
-| ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **FLASH plasma recombination model**                              | NO existing TCAD simulation of plasma recombination in SiC under FLASH dose rates (20-230 Gy/s). This is the primary novel contribution. Existing Boag-Wilson theory applies to ionization chambers, not solid-state detectors. Showing CCE degradation vs dose rate in SiC would be a first. | High               | Requires modeling dense e-h plasma along ion tracks, Coulombic recombination at high carrier densities, and competition between drift collection and plasma recombination. Time-dependent PDE: continuity equations with generation, recombination, drift, diffusion. FiPy or custom solver needed beyond devsim's steady-state capabilities. |
-| **CCE vs dose rate parametric study**                             | Quantitative prediction of when SiC detectors start losing CCE at ultra-high dose rates. The Petringa FLASH paper shows the dosimetry system but NOT SiC detector response. This fills that gap directly.                                                                                     | High               | Sweep dose rate from conventional (1 Gy/s) through FLASH regime (20-230 Gy/s) to extreme (>1000 Gy/s). Plot CCE vs dose rate at multiple bias voltages. Identify critical dose rate where CCE drops below 95%, 90%, etc.                                                                                                                      |
-| **Parametric optimization: CCE vs {epi thickness, doping, bias}** | Practical design guidance for next-generation SiC detectors optimized for FLASH. Goes beyond characterization to optimization, which is what detector groups actually need.                                                                                                                   | Medium             | 3D parameter sweep. ~5 epi thicknesses x ~5 doping levels x ~10 bias voltages = 250 simulations. Automated sweep with result aggregation. Contour plots of CCE in parameter space.                                                                                                                                                            |
-| **Time-resolved transient carrier transport**                     | Simulating the actual current pulse shape (not just integrated CCE) provides insight into carrier dynamics. Shows drift vs diffusion contributions, plasma screening timescales, and collection time constants.                                                                               | High               | Solve time-dependent drift-diffusion equations. Plot I(t) transients at different dose rates. Extract collection times. Compare to TCT-style measurements if available. Requires proper time-stepping (sub-ns resolution for carrier transit).                                                                                                |
-| **Columnar recombination in solid-state**                         | Adapting columnar (Jaffe) recombination theory from gas detectors to solid-state SiC. The physics is different (much higher mobility, shorter collection times, higher dielectric constant) but the framework is analogous. Novel theoretical contribution.                                   | High               | Jaffe theory adapted: solve diffusion equation for cylindrical carrier distribution around ion track, with drift in applied field and bimolecular recombination. Compare columnar model to uniform-plasma model to identify which regime dominates.                                                                                           |
-| **Build-up over-response analysis**                               | Explaining the ~2% over-response in PDD curves near the surface. Requires modeling field distribution and carrier generation near the p-n junction entrance. Minor but publishable finding.                                                                                                   | Medium             | Model non-uniform carrier generation profile (Bragg curve near surface), combined with spatially varying electric field. Show that field enhancement near junction causes preferential collection of surface-generated carriers.                                                                                                              |
-| **Azimuthal response simulation**                                 | Explaining ~3% angular modulation in CCE due to planar electrode geometry. Requires 2D or 3D field calculation showing asymmetric collection.                                                                                                                                                 | Medium-High        | Needs 2D minimum (cross-section perpendicular to beam). Show weighting field asymmetry causing angle-dependent CCE. Interesting but secondary to FLASH problem.                                                                                                                                                                               |
-| **Comparison with Boag-Wilson (adapted)**                         | Extending Boag-Wilson recombination theory (designed for ionization chambers) to solid-state detectors. Showing where it breaks down and what modifications are needed for SiC. Bridges medical physics and semiconductor physics communities.                                                | Medium             | Boag collection efficiency: f = 1/(1 + xi), where xi depends on dose rate, electrode spacing, and ion mobility. Adapt for semiconductor: replace ion mobility with carrier mobility, air gap with depletion width. Show improvement over naive Boag application.                                                                              |
-| **Open-source reproducibility**                                   | All commercial SiC TCAD papers use Silvaco or Synopsys (proprietary, expensive). An open-source Python toolkit (devsim + fipy) that reproduces key results enables reproducibility and accessibility. Reviewers increasingly value this.                                                      | Low (meta-feature) | Include code availability statement. Jupyter notebooks as supplementary material. This alone differentiates from 90%+ of TCAD papers in the field.                                                                                                                                                                                            |
+| Feature                                              | Value Proposition                                                                                                                                                                                                                                                                      | Complexity  | Notes                                                                                                                                                                                                                                             |
+| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **T-dependent SRH lifetimes tau(T)**                 | SRH lifetime in 4H-SiC is governed by the Z1/2 center (carbon vacancy at EC-0.65 eV). tau(T) is relatively flat below ~500K then thermally activated above. For the clinical range (303-313K), the effect is small but measurable. Including this is beyond standard 300K-only TCAD.   | Medium      | Model: tau(T) = tau_0 * [1 + C*exp(-E_a/kT)] where E_a ~ 0.1-0.3 eV relates to Z1/2 emission. tau_0 needs calibration against dark current. IEEE Access 2024 (10538275) reports power-law T dependence.                                           |
+| **Hurkx trap-assisted tunneling model**              | TAT via midgap traps is the dominant reverse leakage mechanism in SiC at room temperature (not band-to-band tunneling -- Eg too large). Implementing Hurkx as a field-enhanced SRH correction is the standard TCAD approach. Differentiates from ideal-SRH-only models.                | Medium-High | Klaassen approximation for Gamma(F). Key params: E_t = E_g/2 (midgap), m_t = 0.25*m_0 (from arXiv:2503.09016). F_crit = sqrt(24*m_t*E_t^3)/(q*hbar). Implemented as node model modifying existing USRH.                                           |
+| **Surface recombination velocity (SRV) at contacts** | SiO2-passivated 4H-SiC surfaces have SRV = 150-5000 cm/s depending on preparation. This is likely the dominant contributor to the 18 pA dark current, not bulk SRH. Implementing SRV as a contact boundary condition is non-trivial in devsim.                                         | Medium-High | Replace Ohmic carrier pinning at anode with SRH surface recombination flux: R_s = S*(n*p - n_i^2)/(n + p + 2\*n_i). S is the primary fitting parameter. Kimoto et al. JAP 127 (2020) provides reference values.                                   |
+| **Inter-pulse memory effects**                       | After a FLASH pulse ends, residual carriers decay via SRH/Auger over ~100 ns to ~10 us. If the next pulse arrives before full decay, the starting carrier density is elevated, reducing CCE for subsequent pulses. No TCAD study has quantified this for SiC.                          | High        | Requires multi-pulse simulation: pulse ON -> pulse OFF -> (inter-pulse gap) -> pulse ON. Sweep inter-pulse gap from 1 us to 100 ms. Plot CCE(pulse_number) to show memory effect. Key FLASH physics insight.                                      |
+| **Plasma build-up time constant**                    | During a pulse, carriers accumulate from zero toward a steady-state density set by generation-recombination balance. The characteristic time to reach steady state depends on tau_SRH, dose rate, and electric field. Extracting this timescale is novel.                              | Medium      | From transient n(t) during pulse, fit n(t) = n_ss \* (1 - exp(-t/tau_buildup)). Plot tau_buildup vs dose rate. Compare to tau_SRH. At low dose rates, tau_buildup ~ tau_SRH. At high dose rates (Auger-limited), tau_buildup shortens.            |
+| **Carrier sweep-out dynamics**                       | After pulse OFF, the E-field sweeps collected carriers out while residual carriers recombine. The competition between drift sweep-out and recombination determines the "afterglow" current. Time-resolved I(t) after pulse-off is experimentally measurable via fast electronics.      | Medium      | Plot I(t) after pulse-off. Extract sweep-out time constant. Compare to transit time d/v_sat ~ 50 ps and tau_SRH. The ratio determines whether the detector is "transit-time limited" or "recombination limited".                                  |
+| **CCE per pulse in multi-pulse train**               | FLASH delivers dose in multiple pulses. Real CCE is per-pulse, not time-averaged. If inter-pulse memory is significant, CCE degrades pulse-by-pulse until reaching a new steady state. This pulse-resolved CCE is what the experimental SiC dosimeter actually measures.               | High        | Simulate N=10+ pulse train. Extract CCE for each pulse. Plot CCE(n) for pulse number n. This directly maps to the pulse-resolved measurement configuration used by Lopez Paz et al. 2024 (linear up to 11 Gy/pulse, <3% deviation up to 4 MGy/s). |
+| **T-dependent CCE**                                  | Temperature affects mobility (reduces drift velocity), lifetimes (changes recombination), and n_i (changes equilibrium). Net effect on CCE at clinical temperatures (30-40C) is small but experimentally relevant for dosimetric accuracy. No published SiC TCAD study combines T+CCE. | Medium      | Run CCE vs bias at T = 300, 303, 306, 310, 313 K. The (-0.079%/C) temperature coefficient from experiment should emerge from the simulation naturally if physics is correct.                                                                      |
 
 ## Anti-Features
 
-Features to explicitly NOT build. Scope boundaries that keep the project focused and completable.
+Features to explicitly NOT build in v1.1. These are tempting scope expansions that would delay delivery without adding to the core scientific contribution.
 
-| Anti-Feature                                | Why Avoid                                                                                                                                                                                                       | What to Do Instead                                                                                                                             |
-| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Monte Carlo particle transport**          | Geant4 handles this; the Petringa group already has MC expertise. Duplicating it adds massive complexity with no novelty. Particle-matter interaction is a separate problem from device-level charge transport. | Use SRIM/Geant4 LET data as input to the TCAD simulation. Accept energy deposition profiles as given boundary conditions.                      |
-| **3D process simulation**                   | Fabrication process modeling (implantation profiles, oxidation, etc.) is irrelevant here. The device structure is known from published papers. Process TCAD is a completely different domain.                   | Define device geometry directly from published parameters. No need to simulate how the device was made.                                        |
-| **Commercial TCAD compatibility**           | Making the tool interoperate with Silvaco/Synopsys formats adds complexity for zero scientific value. Different file formats, mesh conventions, etc.                                                            | Self-contained Python ecosystem. Export results as standard CSV/HDF5 for analysis.                                                             |
-| **GUI / interactive device editor**         | A graphical interface for defining device structures is months of work with no paper contribution. The audience is researchers comfortable with Python scripts.                                                 | Python API and Jupyter notebooks. Device structure defined in code (reproducible, version-controllable).                                       |
-| **Noise simulation (1/f, shot, thermal)**   | Important for real detector design but irrelevant for the FLASH plasma recombination problem. Noise is a small-signal phenomenon; FLASH is large-signal.                                                        | Mention noise floor in device characterization section but do not simulate it. Reference experimental values from Petringa papers.             |
-| **Radiation damage / defect evolution**     | Modeling how neutron/proton irradiation creates defects over time is a separate research program. The Vienna/CERN groups (arXiv:2407.16710, 2407.11776) are already doing this for 4H-SiC.                      | Assume pristine (unirradiated) device. Focus on instantaneous plasma recombination at high dose rate, not cumulative damage.                   |
-| **Temperature dependence modeling**         | While 4H-SiC has excellent high-T performance, temperature effects are orthogonal to the FLASH dose-rate problem. Adds parameter space without novelty.                                                         | Run all simulations at 300 K (room temperature). Note temperature as a future study direction.                                                 |
-| **Full 3D device simulation**               | 3D mesh generation and solving is 10-100x more expensive computationally. The planar p-n junction is well-approximated by 1D (depth direction) for most characterization and 2D for angular response.           | 1D for I-V, C-V, E-field, CCE, plasma recombination. 2D only for azimuthal response (if pursued). Explicitly state dimensionality assumptions. |
-| **Real-time dosimetry / clinical workflow** | This is a research simulation tool, not a clinical instrument. Clinical software has regulatory requirements (FDA, CE marking) that are completely out of scope.                                                | Output is simulation data and publication figures. No clinical decision support.                                                               |
+| Anti-Feature                                    | Why Avoid                                                                                                                                                                                                                               | What to Do Instead                                                                                                                |
+| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| **Coupled thermal simulation (self-heating)**   | Clinical T range is 30-40C; self-heating from radiation is negligible (< 0.01 K). SiC thermal conductivity (3-5 W/cm-K) makes thermal runaway impossible. Coupling heat equation to DD adds solver complexity for zero physics insight. | Parameterize T as a fixed input. Run separate simulations at discrete T values.                                                   |
+| **Multi-level trap model**                      | Some SiC papers model Z1/2, EH6/7, and additional deep levels separately. For the 18 pA dark current match, a single effective midgap trap captures 90%+ of the physics. Multi-trap adds fitting parameters without unique insight.     | Single midgap trap (E_t = E_g/2) for Hurkx TAT. Effective tau_SRH calibrated to experiment. Note multi-trap as future refinement. |
+| **Band-to-band tunneling (BTBT)**               | BTBT requires E-fields > 3 MV/cm to be significant in 4H-SiC (Eg = 3.26 eV). Max field in this device at -60V is ~0.1 MV/cm. BTBT is irrelevant.                                                                                        | Do not implement. Note in paper that BTBT is negligible for this field range.                                                     |
+| **Non-local tunneling model**                   | Local Hurkx is sufficient for uniform junctions. Non-local models (WKB path integrals) are needed for heterostructures or very thin barriers. This is a simple p-n junction -- local model is appropriate.                              | Use local Hurkx (node model). Note non-local as unnecessary for this geometry.                                                    |
+| **Noise simulation (1/f, shot, thermal)**       | Noise is small-signal; FLASH is large-signal. Dark current noise floor is irrelevant to CCE degradation at MGy/s dose rates.                                                                                                            | Report dark current value. Do not simulate noise spectrum.                                                                        |
+| **2D/3D field effects during pulse**            | Edge effects and non-uniform carrier generation add 2D complexity. The 1D model captures the dominant physics (field along depth direction). Edge effects contribute ~2% (build-up over-response).                                      | Stay 1D. Note edge effects as v2 item.                                                                                            |
+| **Radiation damage evolution**                  | Cumulative damage (sensitivity drift after 100 kGy) is a separate physics problem from instantaneous pulse dynamics. CERN RD50 groups are working on this.                                                                              | Assume pristine device. Cite Lopez Paz 2024: sensitivity reduction < 2% after 100 kGy.                                            |
+| **Readout electronics simulation (RC circuit)** | Experimental SiC systems use RC shaping circuits. Simulating the electronics chain is outside device physics scope.                                                                                                                     | Report raw detector current I(t). Leave electronics integration to experimentalists.                                              |
 
 ## Feature Dependencies
 
 ```
-Material Parameters (4H-SiC)
+Existing v1.0 Foundation
+  |
+  +---> Poisson + DD solver (working)
+  |     |
+  |     +---> SRH recombination (working)
+  |     |
+  |     +---> Auger recombination (working)
+  |     |
+  |     +---> Steady-state FLASH (working)
+  |
+  +---> sic_material.py params (300K only)
   |
   v
-Doping Profile + Device Geometry
-  |
-  v
-Poisson Equation Solver (electrostatics)
-  |
-  +---> I-V Simulation (steady-state drift-diffusion)
-  |       |
-  |       +---> I-V validation against experiment
-  |
-  +---> C-V Simulation (small-signal AC)
-  |       |
-  |       +---> Depletion width extraction
-  |       +---> 1/C^2 plot, doping profile validation
-  |
-  +---> Electric Field Distribution
-          |
-          +---> Depletion width vs bias (analytical comparison)
-          |
-          +---> Weighting Field (Shockley-Ramo)
-                  |
-                  v
-            Transient Carrier Transport
-              |
-              +---> CCE vs bias (alpha particles first)
-              |       |
-              |       +---> Hecht equation comparison
-              |       +---> CCE = 100% at V > -40V validation
-              |
-              +---> Current pulse shape I(t)
-              |
-              +---> [DIFFERENTIATOR] Plasma recombination model
-                      |
-                      +---> CCE vs dose rate
-                      |       |
-                      |       +---> Parametric sweep: CCE vs {epi, doping, bias, dose_rate}
-                      |
-                      +---> Boag-Wilson comparison (adapted)
-                      |
-                      +---> Columnar recombination model
-                      |
-                      +---> [SECONDARY] Build-up over-response
-                      |
-                      +---> [SECONDARY] Azimuthal response (needs 2D)
+v1.1 Feature Groups (three semi-independent branches)
+
+[Branch 1: Temperature Dependence]
+  sic_material.py: T-dependent functions
+    |
+    +---> E_g(T) via Varshni  ----+
+    |                              |
+    +---> NC(T), NV(T) ~ T^1.5 --+--> n_i(T) = sqrt(NC*NV)*exp(-Eg/2kT)
+    |                              |
+    +---> mu_n(T), mu_p(T)         |
+    |     Caughey-Thomas with      |
+    |     T-exponents              |
+    |                              |
+    +---> tau_SRH(T)               |
+          Z1/2 center model        |
+                                   |
+    device.py: wire T into --------+
+    create_sic_device()
+      |
+      v
+    T-dependent I-V, C-V, CCE
+      |
+      v
+    Temperature coefficient validation (-0.079%/C)
+
+[Branch 2: Realistic Dark Current]
+  Hurkx TAT model (new module)
+    |
+    +---> Field enhancement Gamma(F)
+    |     Klaassen approximation
+    |     REQUIRES: ElectricField from Poisson (existing)
+    |
+    +---> Modified USRH with Gamma
+          REQUIRES: existing SRH model in drift_diffusion.py
+    |
+    v
+  Surface recombination (new module)
+    |
+    +---> SRV contact equation
+    |     REQUIRES: custom contact_equation replacing Ohmic pinning
+    |     REQUIRES: n_i(T) from Branch 1
+    |
+    v
+  Dark current orchestrator
+    |
+    +---> I_dark = I_bulk_SRH + I_surface + I_TAT
+    |     REQUIRES: T-dependent n_i from Branch 1
+    |     FIT TARGET: 18 pA at -30V, 300K
+    |
+    v
+  Validation: I_dark(V) and I_dark(T)
+
+[Branch 3: Transient FLASH Dynamics]
+  Transient solver loop (new module)
+    |
+    +---> Pulse ON: generation rate active
+    |     REQUIRES: existing gen profiles from generation_profiles.py
+    |     REQUIRES: devsim transient_bdf1/bdf2 (already wired)
+    |
+    +---> Pulse OFF: generation zeroed, carrier decay
+    |
+    +---> I(t) extraction at each time step
+    |
+    v
+  Single-pulse analysis
+    |
+    +---> Intra-pulse carrier build-up n(t)
+    +---> Post-pulse sweep-out I(t)
+    +---> CCE = integral(I(t)) / Q_generated
+    |
+    v
+  Multi-pulse train
+    |
+    +---> Inter-pulse memory: CCE(pulse_number)
+    |     REQUIRES: single-pulse working
+    |
+    +---> Steady-state CCE vs dose rate (validates against v1.0)
+    |     REQUIRES: low-dose-rate limit matches existing steady-state result
+    |
+    v
+  Parametric studies
+    |
+    +---> CCE_transient vs dose rate
+    +---> CCE_transient vs T (connects Branch 1 + Branch 3)
+    +---> Pulse structure optimization (gap, duration, DPP)
 ```
 
-Key dependency chain: You cannot do CCE until E-field works. You cannot do plasma recombination until CCE works at low dose rate. The entire differentiating contribution (FLASH effects) sits at the top of a dependency pyramid.
+**Key dependency insight:** Branches 1 and 2 share a critical coupling: surface recombination and TAT both depend on n_i(T). Branch 3 is mostly independent but needs Branch 1 for T-dependent transient studies. The v1.0 steady-state FLASH result serves as the validation anchor for Branch 3 (transient CCE at long times must converge to steady-state CCE).
+
+**Cross-branch validation:** The CCE temperature coefficient emerges from Branch 1 + Branch 3 combined: run transient FLASH at multiple temperatures and extract sensitivity(T). This is the highest-value combined result.
 
 ## MVP Recommendation
 
-**Prioritize (Phase 1 - Foundation):**
+**Prioritize (Phase 1 -- Temperature Foundation + Dark Current Physics):**
 
-1. Material parameters + device geometry definition
-2. Poisson solver: E-field distribution
-3. I-V simulation with experimental validation
-4. C-V simulation with depletion width extraction
-5. Analytical benchmarks (depletion width formula, built-in potential)
+1. T-dependent material parameters: E_g(T), n_i(T), mu(T), NC/NV(T) in `sic_material.py`
+2. Wire T into `create_sic_device()` and `setup_sic_drift_diffusion()`
+3. T-dependent I-V validation (I_dark should increase with T)
+4. Hurkx TAT node model (field-enhanced SRH)
+5. Surface recombination contact equation with SRV
+6. Calibrate {tau_SRH, S, m_t} to match 18 pA dark current
+7. Dark current decomposition plot: I_bulk + I_surface + I_TAT vs V
 
-**Prioritize (Phase 2 - Core CCE):**
+**Prioritize (Phase 2 -- Transient FLASH Dynamics):**
 
-1. Transient carrier transport (drift-diffusion)
-2. CCE vs bias voltage for alpha particles
-3. Hecht equation comparison
-4. Shockley-Ramo weighting field validation
-5. Publication-quality figure generation
+1. Single-pulse transient: I(t) during and after pulse
+2. CCE from time-integrated current
+3. Validate: transient CCE at low dose rate matches v1.0 steady-state
+4. Multi-pulse train: CCE(pulse_number) for N=10 pulses
+5. Inter-pulse gap sweep: CCE vs gap duration
+6. Carrier build-up/decay time constants
 
-**Prioritize (Phase 3 - Novel Contribution):**
+**Prioritize (Phase 3 -- Combined Analysis + Publication Figures):**
 
-1. Plasma recombination model at high carrier density
-2. CCE vs dose rate (FLASH regime)
-3. Parametric study: CCE vs {epi thickness, doping, bias} at multiple dose rates
-4. Adapted Boag-Wilson comparison
+1. T-dependent CCE: CCE vs bias at T = 300-313K
+2. Temperature coefficient extraction and validation (-0.079%/C)
+3. Combined parametric: CCE vs {dose_rate, T, bias, pulse_structure}
+4. Publication-quality transient waveform figures
+5. Comparison table: transient CCE vs steady-state CCE across parameter space
 
-**Defer:**
+**Defer to v2:**
 
-- Build-up over-response: Lower novelty, can be separate short communication
-- Azimuthal response: Needs 2D/3D, significant additional complexity
-- Columnar recombination theory: High complexity, could be separate theoretical paper
-- Time-resolved I(t) pulse shapes: Nice-to-have, not required for CCE paper
+- Build-up over-response (2D effects, lower novelty)
+- Azimuthal response (needs 2D/3D mesh)
+- Multi-trap dark current model (diminishing returns over single midgap)
+- Coupled thermal simulation (T range too narrow to matter)
 
 ## Complexity Budget
 
-| Phase                          | Features                          | Estimated Complexity                                             | Confidence |
-| ------------------------------ | --------------------------------- | ---------------------------------------------------------------- | ---------- |
-| Foundation (I-V, C-V, E-field) | 5 table stakes                    | Medium -- well-established physics, clear validation targets     | HIGH       |
-| Core CCE                       | 4 table stakes + 1 differentiator | Medium-High -- transient simulation is the step-up in difficulty | MEDIUM     |
-| FLASH Novelty                  | 3-4 differentiators               | High -- no prior work to follow, novel physics modeling          | MEDIUM-LOW |
+| Phase                      | Features                                                        | Estimated Complexity                                                                                   | Confidence |
+| -------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------- |
+| Temperature + Dark Current | T-dependent params, Hurkx TAT, SRV, calibration                 | Medium-High -- new devsim equation patterns (contact_equation, modified USRH), fitting loop            | MEDIUM     |
+| Transient FLASH            | Single-pulse I(t), multi-pulse train, inter-pulse memory        | High -- time-stepping stability over 6 orders of magnitude, adaptive dt, convergence at high injection | MEDIUM-LOW |
+| Combined Analysis          | T-dependent transients, parametric studies, publication figures | Medium -- uses existing pieces, mainly orchestration and visualization                                 | HIGH       |
 
-The critical risk is Phase 3: the plasma recombination model has no published SiC precedent to validate against. Validation strategy must rely on (a) limiting cases (low dose rate -> standard CCE, zero field -> full recombination), (b) qualitative agreement with ionization chamber recombination physics, and (c) internal consistency of parametric trends.
+**Critical risks:**
+
+1. **Dark current fitting (Phase 1):** Three free parameters (tau_SRH, S, m_t) with one target (18 pA). Risk of non-unique fit. Mitigate by constraining each to literature ranges and decomposing I-V shape (SRV dominates at low bias, TAT at high bias).
+
+2. **Transient convergence (Phase 2):** devsim transient solver at high carrier injection (FLASH dose rates) may require very small initial time steps and careful ramp-up. The v1.0 steady-state FLASH study already showed convergence challenges at high generation rates. Transient adds time-stepping instability risk.
+
+3. **Inter-pulse timescale gap (Phase 2):** Pulse duration (~10-200 ms) vs carrier dynamics (~ns-us) creates a 6-order timescale gap. Must use adaptive time-stepping to avoid either (a) millions of small steps or (b) missing the physics. The TR-BDF2 composite method in devsim handles stiff problems but needs careful gamma parameter tuning.
+
+## Validation Targets
+
+| Feature                      | Validation Method                                          | Pass Criterion                                     | Source                   |
+| ---------------------------- | ---------------------------------------------------------- | -------------------------------------------------- | ------------------------ |
+| T-dependent n_i              | Compare to Ioffe NSM Archive values                        | Within 10% at 300-400K                             | Ioffe NSM                |
+| T-dependent mobility         | Compare to TU Wien Ayalew Table 3.5                        | Within 5% at 300K, correct T-exponent sign         | Ayalew thesis            |
+| Dark current magnitude       | Match Petringa experimental value                          | I_dark = 18 pA (+/- factor 2) at -30V, 300K        | Photons paper p.6        |
+| Dark current vs voltage      | I_dark(V) shape matches experiment                         | Monotonic increase, plateau above full depletion   | Photons paper Fig. 6     |
+| T coefficient of sensitivity | Compare to Lopez Paz 2024                                  | (-0.079 +/- 0.005)%/C                              | Lopez Paz, Med Phys 2024 |
+| Transient CCE low-dose limit | Converge to v1.0 steady-state CCE                          | Agreement within 1%                                | Internal consistency     |
+| Transient CCE high-dose      | CCE flat at ~1.0 across 20-230 Gy/s (Auger negligible)     | Consistent with v1.0 null result                   | v1.0 finding             |
+| SiC dose-rate linearity      | Linear up to 11 Gy/pulse, <3% deviation up to 4 MGy/s      | Consistent with Lopez Paz 2024 experimental        | Lopez Paz, Med Phys 2024 |
+| Pulse-resolved operation     | Detector tracks pulse structure including irregular pulses | Qualitative agreement with experimental capability | Lopez Paz 2024           |
 
 ## Sources
 
-- [TCAD Simulations of Radiation Damage in 4H-SiC (arXiv 2407.16710)](https://arxiv.org/html/2407.16710v1) -- I-V, C-V, E-field as standard TCAD outputs (HIGH confidence)
-- [TCAD modeling of radiation-induced defects in 4H-SiC diodes (arXiv 2407.11776)](https://arxiv.org/html/2407.11776v1) -- CCE, I-V, C-V validation methodology (HIGH confidence)
-- [Accurate TCAD Simulation Model for 4H-SiC Alpha-Particle Detectors (IEEE 2024)](https://ieeexplore.ieee.org/abstract/document/10772267) -- CCE via heavy-ion TCAD, Ramo theorem usage (HIGH confidence)
-- [Silicon Carbide Sensors in Radiotherapy Dosimetry: Review (Frontiers 2025)](https://www.frontiersin.org/journals/sensors/articles/10.3389/fsens.2025.1622153/full) -- SiC detector capabilities, FLASH challenges (HIGH confidence)
-- [Effects of Non-Uniform Electric Field on CCE: Deviation from Hecht Formula (JAP 2025)](https://ui.adsabs.harvard.edu/abs/2025JAP...138b4502K/abstract) -- Hecht equation limitations, non-uniform field CCE (MEDIUM confidence)
-- [SiC Diodes for Proton UHDR Dosimetry (Lopez Paz 2025)](https://aapm.onlinelibrary.wiley.com/doi/10.1002/mp.17986) -- SiC dose-rate linearity up to 4 MGy/s (MEDIUM confidence)
-- [First Characterization of SiC Detectors with UHDR Electron Beams (MDPI 2023)](https://www.mdpi.com/2076-3417/13/5/2986) -- SiC FLASH experimental context (MEDIUM confidence)
-- [Dosimetric Saturation Effect Study at UHDR (2024)](https://www.sciencedirect.com/science/article/abs/pii/S0969806X24008363) -- Recombination modeling approaches for FLASH (MEDIUM confidence)
-- [TCAD Simulation of TPA-TCT Measurements (MDPI Sensors 2024)](https://www.mdpi.com/1424-8220/24/24/8032) -- Transient current technique simulation methodology (MEDIUM confidence)
-- [TCAD Parameters for 4H-SiC: A Review (ResearchGate 2024)](https://www.researchgate.net/publication/384769379_TCAD_Parameters_for_4H-SiC_A_Review) -- Material parameter compilation (MEDIUM confidence)
-- Petringa group papers (SiC_Photons_MedicalPhysics, Microdosimetry.pdf, Flash.pdf) -- Experimental validation targets (HIGH confidence, primary data source)
+- Petringa group papers (SiC_Photons_MedicalPhysics, Microdosimetry.pdf, Flash.pdf) -- experimental validation targets (HIGH confidence)
+- [TU Wien Ayalew thesis, Table 3.5](https://www.iue.tuwien.ac.at/phd/ayalew/node65.html) -- Caughey-Thomas T-dependent mobility parameters for 4H-SiC (HIGH confidence)
+- [Silicon Carbide Sensors in Radiotherapy Dosimetry: Review (Frontiers 2025)](https://www.frontiersin.org/journals/sensors/articles/10.3389/fsens.2025.1622153/full) -- SiC detector FLASH challenges, thermal stability (HIGH confidence)
+- [State-of-the-art SiC diode dosimeters for UHDR (Lopez Paz 2024)](https://pubmed.ncbi.nlm.nih.gov/38530300/) -- 11 Gy/pulse linearity, 4 MGy/s, -0.079%/C temperature coefficient, <2% sensitivity drift after 100 kGy (HIGH confidence)
+- [Carrier Lifetime vs Temperature in 4H-SiC (IEEE Access 2024)](https://ieeexplore.ieee.org/document/10538275) -- power-law tau(T) dependence, Arrhenius damage coefficient (MEDIUM confidence)
+- [Hurkx TAT model original paper (IEEE TED 1992)](https://www.semanticscholar.org/paper/A-new-recombination-model-for-device-simulation-Hurkx-Klaassen/4e0ad76a1a7d0e1b4db5f1e48bc05a6f16614337) -- field-enhanced SRH formulation (HIGH confidence)
+- [4H-SiC TAT with m_t = 0.25\*m_0 (arXiv:2503.09016)](https://arxiv.org/pdf/2503.09016) -- tunneling effective mass for SiC (MEDIUM confidence)
+- [Kimoto et al., SRV for 4H-SiC (JAP 2020)](https://pubs.aip.org/aip/jap/article/127/19/195702/153502/) -- surface recombination velocity 150-5000 cm/s (MEDIUM confidence)
+- [Multi-Level TAT for SiC-JBS Reverse Leakage (Scientific.Net)](https://www.scientific.net/MSF.924.601) -- Z1/2 and EH6/7 trap levels, field-dependent TAT (MEDIUM confidence)
+- [Modified TCAD approach for 4H-SiC JBS diodes (ScienceDirect 2025)](https://www.sciencedirect.com/science/article/abs/pii/S0026271425002896) -- electron trapping at EC-0.19, EC-0.65, EC-1.65 eV levels (MEDIUM confidence)
+- [Carrier lifetime modulation in SiC PiN (Discover Nano 2023)](https://link.springer.com/article/10.1186/s11671-023-03905-6) -- Z1/2 center lifetime control, pulsed operation physics (MEDIUM confidence)
+- [First Characterization SiC Detectors UHDR Electron Beams (MDPI 2023)](https://www.mdpi.com/2076-3417/13/5/2986) -- SiC FLASH experimental context (MEDIUM confidence)
+- [RASER: Simulation of radiation damage in SiC detectors (arXiv 2025)](https://arxiv.org/html/2504.20463) -- transient current simulation methodology, SRH trapping time (MEDIUM confidence)
+- [DEVSIM: A TCAD Semiconductor Device Simulator](https://www.researchgate.net/publication/358631134_DEVSIM_A_TCAD_Semiconductor_Device_Simulator) -- transient solver capabilities (HIGH confidence)
+- [TCAD Parameters for 4H-SiC: A Review (Burin, CERN RD50)](https://jburin.web.cern.ch/pdfs/4HSiC_review.pdf) -- comprehensive parameter survey (MEDIUM confidence, PDF unreadable)

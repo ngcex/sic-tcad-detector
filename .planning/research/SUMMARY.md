@@ -1,193 +1,194 @@
 # Project Research Summary
 
-**Project:** SiC TCAD Simulator (Petringa Group)
-**Domain:** Open-source TCAD simulation of 4H-SiC p-n junction radiation detectors under FLASH conditions
-**Researched:** 2026-03-20
-**Confidence:** MEDIUM
+**Project:** Petringa SiC TCAD Simulator v1.1 -- Realistic Device Physics
+**Domain:** 1D 4H-SiC semiconductor device simulation for radiation detector dosimetry
+**Researched:** 2026-03-23
+**Confidence:** MEDIUM-HIGH
 
 ## Executive Summary
 
-This project builds a Python-based TCAD simulation toolkit for characterizing 4H-SiC radiation detectors, culminating in the first published prediction of plasma recombination effects under FLASH radiotherapy dose rates (20-230 Gy/s). The expert approach for this domain is a layered pipeline: define device structure and material parameters, solve Poisson and drift-diffusion equations for electrical characterization (I-V, C-V), validate against experimental data from the Petringa group's published measurements, then extend to transient carrier dynamics under high-injection conditions. The core simulation engine is devsim, the only viable open-source Python TCAD solver, which has been validated for 4H-SiC PIN structures by CERN RD50 collaborators.
+The v1.1 milestone extends the validated 1D 4H-SiC TCAD simulator with three capabilities: temperature-dependent material parameters (303-313K clinical range), realistic dark current modeling (matching the experimental 18 pA), and transient FLASH pulse dynamics (10-200 ms pulses at 20-230 Gy/s). The existing v1.0 stack (devsim 2.10.0, numpy, scipy, matplotlib, lmfit) is entirely sufficient -- no new packages are needed. All new work is physics modeling code: extending `sic_material.py` with T-dependent functions, creating new modules for surface physics and transient simulation, and wiring these into the existing drift-diffusion pipeline. The architecture is additive: three new modules (`temperature.py`, `surface_physics.py`, `transient.py`) plug into the existing `device.py` -> `drift_diffusion.py` -> `charge_collection.py` flow without restructuring it.
 
-The recommended approach is to build incrementally from validated foundations. Phase 1 establishes 4H-SiC material parameters and basic device electrostatics; Phase 2 adds drift-diffusion transport for I-V and C-V characterization with experimental validation; Phase 3 introduces charge collection efficiency (CCE) modeling validated against the Hecht equation and alpha particle data; Phase 4 tackles the novel FLASH plasma recombination problem; and Phase 5 produces parametric studies and publication figures. The entire foundation (Phases 1-3) uses well-documented semiconductor physics with clear experimental validation targets, so risk is concentrated in Phase 4, where no prior SiC-specific work exists to follow.
+The recommended approach is a four-phase build: (1) temperature-dependent parameters as foundation, (2) dark current physics (TAT + surface recombination), (3) transient FLASH dynamics, (4) combined analysis and publication figures. This ordering is driven by hard dependencies -- surface recombination and TAT both require T-dependent n_i(T), and transient simulation benefits from having all steady-state physics stabilized first. The v1.0 steady-state FLASH result serves as the critical validation anchor for transient work (transient CCE at long times must converge to the DC steady-state solution).
 
-The dominant risks are: (1) 4H-SiC's extremely low intrinsic carrier concentration (ni ~ 5e-9 cm-3, nineteen orders of magnitude below silicon) causing numerical solver divergence if tolerances and initial guesses are not carefully tuned; (2) using silicon-derived parameters or models that silently produce wrong results for wide-bandgap SiC; and (3) misapplying standard analytical validation tools (Hecht equation, Boag-Wilson theory) to the high-injection FLASH regime where their assumptions break down. All three are mitigated by the validation-first development pattern: every numerical result is checked against an analytical reference or experimental measurement before building on it.
+Three risks dominate. First, the dark current modeling: the experimental 18 pA cannot be explained by any n_i-proportional mechanism because SiC's n_i (~5e-9 cm^-3) makes all such currents negligibly small (~1e-25 A). The 1D model must rely on field-enhanced generation (trap-assisted tunneling) with effective fitting parameters, and the fit may not be physically unique. Second, transient solver stability across a 6-order timescale gap (ns carrier dynamics vs ms pulse durations) requires user-implemented adaptive time-stepping since devsim has no built-in adaptive dt. Third, threading temperature through the codebase risks silently breaking the validated 300K baseline -- the `compute_ni(300)` function returns ~6.5e-9 vs the calibrated constant 5e-9, requiring explicit reconciliation before use.
 
 ## Key Findings
 
 ### Recommended Stack
 
-The stack centers on devsim 2.10.0, the only open-source Python TCAD simulator capable of solving Poisson and drift-diffusion equations on unstructured meshes with Scharfetter-Gummel discretization. It supports DC, transient (BDF1/BDF2), and small-signal AC simulation modes. Mesh generation uses gmsh 4.15.1 directly (not pygmsh) with MSH v2.2 format export -- the only mesh format devsim supports. The scientific Python stack (numpy, scipy, matplotlib, pandas, jupyter) provides computation, visualization, and interactive analysis.
+No new packages. The entire v1.1 feature set runs on the existing devsim 2.10.0 + scipy + numpy + matplotlib stack. devsim natively supports transient simulation (BDF1/BDF2/TR-BDF2 integrators), custom node models for TAT, and custom contact equations for surface recombination. The existing `time_node_model` registrations in `setup_sic_drift_diffusion()` already make the DD equations transient-capable -- calling `solve(type="transient_bdf1")` instead of `solve(type="dc")` is sufficient.
 
-**Core technologies:**
+**Core technologies (unchanged from v1.0):**
 
-- **devsim 2.10.0:** Semiconductor device simulation (Poisson + drift-diffusion) -- only viable open-source Python TCAD solver, proven for 4H-SiC
-- **gmsh 4.15.1:** Mesh generation -- directly supported by devsim, Python API for programmatic mesh control
-- **scipy.integrate.solve_ivp:** Stiff ODE solver (BDF, Radau) -- for simplified transient carrier dynamics models
-- **Custom sic_physics.py module:** 4H-SiC material parameters -- devsim ships with silicon defaults that MUST be replaced
-
-**Critical stack decision:** FiPy is NOT recommended as a core dependency. devsim already solves drift-diffusion equations; adding FiPy creates redundant solvers. FiPy should only be introduced if devsim's transient mode cannot handle the FLASH high-injection regime, and even then as an optional bridge module.
+- **devsim 2.10.0:** Drift-diffusion solver with transient BDF1/BDF2 already wired via `time_node_model` -- no equation changes needed
+- **scipy/numpy:** Parameter fitting (curve_fit/minimize), ODE validation (solve_ivp for simplified transient cross-checks)
+- **lmfit:** Constrained parameter fitting for dark current calibration (tau_SRH, S, m_t against 18 pA target)
 
 ### Expected Features
 
 **Must have (table stakes):**
 
-- I-V characteristic simulation (forward + reverse, validated against ~18 pA dark current)
-- C-V characteristic and 1/C^2 plots (validated against depletion width 1.7 um at 0V, 9.73 um at -30V)
-- Electric field distribution across the p-n junction at multiple bias voltages
-- Depletion width vs bias with analytical overlay
-- Charge Collection Efficiency vs bias (validated: CCE = 100% at V > -40V for alphas)
-- Hecht equation comparison for CCE
-- Shockley-Ramo weighting field validation
-- Publication-quality figures with LaTeX rendering
-- Doping profile and material parameter documentation
+- T-dependent bandgap E_g(T), n_i(T), mobility mu(T), NC/NV(T) -- Varshni + Caughey-Thomas with 4H-SiC exponents from Ayalew thesis
+- Dark current decomposition: bulk SRH + surface + TAT contributions identified and plotted separately
+- Reverse I-V matching 18 pA experimental value at -60V with physics-based models
+- Temperature coefficient of sensitivity matching experimental -0.079 +/- 0.005 %/C
+- Transient current pulse I(t) with intra-pulse carrier build-up dynamics
+- Validation against analytical limits (transient CCE converges to v1.0 steady-state CCE at low dose rate)
 
-**Should have (differentiators -- the novel contribution):**
+**Should have (differentiators -- publishable novelty):**
 
-- FLASH plasma recombination model (NO existing TCAD simulation of this for SiC)
-- CCE vs dose rate parametric study across FLASH regime (20-230 Gy/s)
-- Parametric optimization: CCE vs {epi thickness, doping, bias} at multiple dose rates
-- Adapted Boag-Wilson comparison for solid-state detectors
-- Open-source reproducibility (Jupyter notebooks as supplementary material)
+- Hurkx trap-assisted tunneling as field-enhanced SRH -- dominant dark current mechanism in SiC
+- Surface recombination velocity at contacts -- SRV-based boundary condition replacing Ohmic pinning
+- Inter-pulse memory effects in multi-pulse FLASH trains -- no published SiC TCAD study exists
+- Plasma build-up and sweep-out time constants extracted from transient simulations
+- T-dependent CCE reproducing the -0.079%/C coefficient from combined T + transient physics
+- CCE per pulse in multi-pulse trains showing pulse-resolved dosimetric response
 
 **Defer (v2+):**
 
-- Build-up over-response analysis (lower novelty, separate short communication)
-- Azimuthal response simulation (requires 2D/3D, significant added complexity)
-- Columnar (Jaffe) recombination theory (high complexity, separate theoretical paper)
-- Time-resolved I(t) pulse shapes (nice-to-have, not required for CCE paper)
+- Coupled thermal simulation (clinical T range 30-40C too narrow; SiC thermal conductivity 3-5 W/cm-K prevents self-heating)
+- Multi-level trap model (single midgap trap captures 90%+ of physics; multi-trap adds 15+ unconstrained parameters)
+- Band-to-band tunneling (max field ~0.1 MV/cm, far below the ~3 MV/cm threshold for SiC BTBT)
+- 2D/3D effects, noise simulation, radiation damage evolution, readout electronics modeling
 
 ### Architecture Approach
 
-A layered Python package (`petringa/`) with Jupyter notebooks as user-facing entry points. The package is organized into six modules following a strict data pipeline: `materials/` (parameter database) feeds `device/` (geometry, mesh, contacts), which feeds `physics/` (equation setup), which feeds `solvers/` (equilibrium, bias sweep, transient), which feeds `analysis/` (extraction, plotting) and `validation/` (analytical benchmarks). The devsim global state is wrapped in explicit pipeline functions to maintain auditability. Start 1D for all physics development; add 2D only for azimuthal response.
+The v1.1 architecture adds three new modules to the existing linear pipeline without restructuring it. Temperature becomes a parameter threaded through all material computations via a `TemperatureDependentParams` frozen dataclass stored in `device_info["tdep"]`. Surface physics attaches at the contact boundary layer using devsim's `contact_equation()` API, following the proven pattern from the existing Auger implementation in `flash_recombination.py`. Transient solving wraps devsim's built-in BDF integrators with a Python-side adaptive time-stepping loop.
 
 **Major components:**
 
-1. **materials/** -- Single source of truth for 4H-SiC parameters (bandgap, mobility, lifetime, ni); frozen dataclass pattern
-2. **device/** -- Device structure definition: layer stack, doping profiles, mesh generation (devsim built-in for 1D, gmsh for 2D)
-3. **physics/** -- Equation registration on devsim device: Poisson, drift-diffusion, SRH/Auger recombination, mobility models
-4. **solvers/** -- Solve orchestration: equilibrium, bias sweeps, transient BDF; optional FiPy bridge for FLASH plasma
-5. **analysis/** -- Post-processing: E-field extraction, CCE computation, I-V/C-V curves, publication figure generation
-6. **validation/** -- Analytical benchmarks: Hecht equation, Shockley-Ramo theorem, textbook p-n junction formulas
+1. **`temperature.py`** (NEW) -- Single source of truth for all T-dependent parameters; returns frozen dataclass with E_g, n_i, NC, NV, mu_n, mu_p, tau_n, tau_p, V_t at any T
+2. **`surface_physics.py`** (NEW) -- Surface SRH recombination at contacts via `contact_equation()` + field-enhanced generation (TAT) in depletion region via modified USRH node model
+3. **`transient.py`** (NEW) -- Pulse ON/OFF time-stepping loop with adaptive dt, CCE extraction per pulse, multi-pulse train orchestration
+4. **`device.py`** (MODIFY) -- Wire T-dependent params from `temperature.py` instead of hardcoded 300K constants; store `tdep` in `device_info`
+5. **`drift_diffusion.py`** (MINOR) -- Parameterize n1/p1 with T-dependent n_i; no equation changes
+
+**Key architectural patterns:**
+
+- Parameter threading via `device_info["tdep"]` dict prevents T-inconsistency between modules
+- Contact equation modification follows the proven Auger pattern: CreateNodeModel -> CreateNodeModelDerivative -> re-register equation
+- All new physics is additive and toggleable: disabled by default, v1.0 behavior preserved when off
+- Device recreated at each T for parametric sweeps (simplest approach, avoids mutable state)
 
 ### Critical Pitfalls
 
-1. **Incomplete ionization of 4H-SiC dopants** -- Nitrogen donors (52-92 meV) and aluminum acceptors (191 meV) are NOT fully ionized at 300K unlike silicon. Implement Fermi-Dirac occupation with actual ionization energies; validate against experimental C-V depletion widths.
-2. **Wrong or inconsistent material parameters** -- Literature mixes 4H-SiC, 6H-SiC, and 3C-SiC values freely. Build a single authoritative parameter file sourced from the CERN review (arXiv:2410.06798) with every value cited.
-3. **Numerical divergence from extremely low ni** -- ni ~ 5e-9 cm-3 creates Jacobian condition numbers of 10^30+. Use Slotboom variable transformation, small voltage ramping steps (0.1V), and appropriate absolute error tolerances.
-4. **Misapplying Hecht equation to FLASH conditions** -- Hecht assumes uniform field and small-signal injection, both violated under FLASH. Use Hecht ONLY for low-dose-rate validation; develop self-consistent field model for FLASH.
-5. **Coarse mesh in carrier generation region** -- Carrier generation profiles have features on 100 nm scale. Use graded mesh with 10-50 nm minimum element size; perform mesh convergence study (CCE change < 1% at 2x refinement).
+1. **Scattered 300K constants (Critical)** -- n_i, mu, tau hardcoded at 300K in 6+ locations across `device.py`, `charge_collection.py`, `sic_material.py`. Missing any one produces silent physics errors. Prevention: centralize all T-dependent computation in `temperature.py`, full codebase audit of every `params.n_i_300` / `params.mu_n_max` usage, verify bit-identical results at T=300K.
+
+2. **Surface recombination cannot explain 18 pA (Critical)** -- At n_i=5e-9, surface SRH gives ~1e-25 A -- 16 orders of magnitude below the 18 pA target. No physically reasonable SRV bridges this gap. Prevention: use field-enhanced generation (TAT) as the primary dark current mechanism. Do the quantitative math BEFORE implementing any dark current model.
+
+3. **TAT complexity explosion (Critical)** -- Full multi-trap Hurkx model has 15-20 fitting parameters for a single I-V curve -- massively underconstrained. Prevention: start with simplest 2-parameter field-dependent generation (prefactor G0 + field scale E0). Add complexity only if I-V shape demands it. Ensure all Jacobian derivatives are analytically correct.
+
+4. **Breaking validated 300K baseline (Critical)** -- `compute_ni(300)` returns ~6.5e-9 vs calibrated 5e-9 (30% discrepancy from different DOS masses). Switching silently changes all equilibrium results. Prevention: extract golden reference values BEFORE code changes, build `test_300K_regression()`, reconcile DOS masses to reproduce 5e-9 or re-validate.
+
+5. **Transient timestep across 6-order timescale gap (Moderate)** -- ns carrier dynamics vs ms pulse durations with no built-in adaptive stepping. Prevention: implement adaptive dt in Python driver (start at 0.1 ns, increase 1.5x when Newton converges in <10 iterations, halve when >30). Use BDF1 at pulse on/off discontinuities, BDF2 during quasi-steady.
 
 ## Implications for Roadmap
 
-Based on research, suggested phase structure:
+Based on combined research findings, suggested phase structure:
 
-### Phase 1: Material Parameters and Device Electrostatics
+### Phase 1: Temperature Foundation
 
-**Rationale:** Everything depends on correct 4H-SiC parameters and a working Poisson solver. The entire simulation stack is built on this foundation. All three critical pitfalls (incomplete ionization, wrong parameters, numerical divergence) must be addressed here.
-**Delivers:** Validated sic_4h.py material module, 1D mesh with graded refinement, Poisson equilibrium solution, electric field distribution, depletion width vs bias with analytical comparison.
-**Addresses:** Material parameter table, doping profile specification, electric field distribution, depletion width vs bias (4 table stakes).
-**Avoids:** Pitfalls 1-3 (incomplete ionization, wrong parameters, numerical divergence) and unit confusion (CGS vs SI).
+**Rationale:** Every other v1.1 feature depends on T-dependent parameters being available. This is a pure computation module with no solver changes -- low risk, immediately testable against published literature tables. Must come first because both dark current (Phase 2) and transient (Phase 3) need n_i(T), mu(T), tau(T).
+**Delivers:** `temperature.py` module with `compute_material_params(T, N_D)` returning all T-dependent quantities; modified `device.py` wiring T into the pipeline; modified `sic_material.py` with T-exponent constants; T-dependent I-V and C-V demonstrating expected shifts; `test_300K_regression()` ensuring no baseline breakage.
+**Addresses:** T-dependent E_g, n_i, mu, NC/NV (all table stakes); foundation for temperature coefficient.
+**Avoids:** Pitfall 1 (scattered 300K constants) via centralized computation; Pitfall 2 (wrong T-exponents) by using verified 4H-SiC Ayalew values (gamma_n=-2.40, gamma_p=-2.15); Pitfall 15 (n_i mismatch) by reconciling `compute_ni` with calibrated 5e-9; Pitfall 3 (regression) by extracting golden values first.
+**Estimated scope:** ~300 LOC new + ~150 LOC modifications. Low-medium complexity.
 
-### Phase 2: Drift-Diffusion and Electrical Characterization
+### Phase 2: Dark Current Physics
 
-**Rationale:** Adds carrier transport to the validated Poisson foundation. This is the first comparison with real experimental data (Petringa group I-V and C-V measurements). Must validate before any CCE work.
-**Delivers:** I-V curves (forward + reverse), C-V curves and 1/C^2 plots, validated against experimental data (dark current < 18 pA, rectification ratio ~10^5, depletion widths).
-**Addresses:** I-V simulation, C-V simulation (2 table stakes).
-**Avoids:** Pitfall 1 (incomplete ionization verified by C-V match).
+**Rationale:** Depends on T-dependent n_i from Phase 1. The 40-order-of-magnitude gap between bulk SRH prediction (6.7e-49 A) and experiment (18 pA) is the central physics problem. Must be solved before transient work to have a complete, credible device model for publication.
+**Delivers:** `surface_physics.py` with field-enhanced generation (TAT, Klaassen approximation) and surface recombination contact equations; dark current calibration matching 18 pA at -60V; decomposition plot showing I_bulk + I_surface + I_TAT vs voltage; I_dark(T) validation.
+**Addresses:** Reverse I-V matching experiment (table stakes); dark current decomposition (table stakes); Hurkx TAT (differentiator); SRV at contacts (differentiator).
+**Avoids:** Pitfall 4 (surface recombination too weak) by leading with TAT as primary mechanism; Pitfall 5 (TAT complexity) by starting with 2-parameter model; Pitfall 8 (contact vs region model confusion) by implementing surface physics at contact level only and verifying spatial localization.
+**Estimated scope:** ~300 LOC new. Medium-high complexity -- custom devsim contact_equation patterns with analytical Jacobian derivatives.
 
-### Phase 3: Charge Collection Efficiency
+### Phase 3: Transient FLASH Dynamics
 
-**Rationale:** Requires working drift-diffusion from Phase 2. CCE is the central metric for any detector paper and the prerequisite for the novel FLASH work. Must validate at normal dose rates before attempting high-injection physics.
-**Delivers:** CCE vs bias for alpha particles (validated: 100% at V > -40V), Hecht equation comparison, Shockley-Ramo weighting field validation, current pulse integration.
-**Addresses:** CCE vs bias, Hecht equation comparison, Shockley-Ramo validation (3 table stakes).
-**Avoids:** Pitfall 4 (Hecht used only for low-dose-rate validation where it is valid), Pitfall 5 (mesh convergence study gating production runs).
+**Rationale:** Depends on working DD pipeline from Phases 1-2. Most complex new feature -- benefits from having all steady-state physics stabilized. The v1.0 steady-state FLASH result provides the validation anchor (transient CCE at t >> tau_SRH must match DC CCE). This is the highest-novelty phase.
+**Delivers:** `transient.py` with single-pulse I(t) waveforms, multi-pulse train simulation (N=10+), inter-pulse memory quantification, adaptive time-stepping; transient CCE extraction per pulse; plasma build-up and sweep-out time constant extraction; validation against v1.0 steady-state at low dose rate.
+**Addresses:** Transient I(t) waveform (table stakes); intra-pulse dynamics (table stakes); inter-pulse memory (differentiator); plasma build-up time constants (differentiator); carrier sweep-out dynamics (differentiator).
+**Avoids:** Pitfall 6 (timestep selection) via adaptive dt with convergence monitoring; Pitfall 13 (initial condition discontinuity) via mandatory DC init + transient_dc; Pitfall 14 (charge conservation drift) via per-step conservation accounting.
+**Estimated scope:** ~400 LOC new. High complexity -- stiff multi-scale time-stepping over 6 orders of magnitude.
 
-### Phase 4: FLASH Plasma Recombination
+### Phase 4: Combined Analysis and Publication Figures
 
-**Rationale:** This is the novel research contribution that justifies publication. It sits at the top of the dependency pyramid and requires all prior phases as validated foundation. Try devsim transient mode first; add FiPy bridge only if convergence fails at high injection.
-**Delivers:** Plasma recombination model, CCE vs dose rate across FLASH regime, adapted Boag-Wilson comparison, identification of critical dose rate for CCE degradation.
-**Addresses:** FLASH plasma recombination model, CCE vs dose rate, Boag-Wilson comparison (3 differentiators).
-**Avoids:** Pitfall 4 (self-consistent field model, not Hecht), Pitfall 6 (implicit time-stepping with adaptive dt for multi-timescale plasma dynamics).
-
-### Phase 5: Parametric Studies and Publication
-
-**Rationale:** Uses the complete validated toolkit to produce paper results. Parametric sweeps require the full simulation pipeline to be stable and automated. Sensitivity analysis addresses reviewer concerns about parameter uncertainty.
-**Delivers:** CCE vs {epi thickness, doping, bias, dose_rate} parameter space, sensitivity/uncertainty analysis, publication-quality figures, reproducible Jupyter notebooks.
-**Addresses:** Parametric optimization, open-source reproducibility (2 differentiators), publication-quality figures (1 table stake).
-**Avoids:** Publication pitfalls (missing assumptions table, no sensitivity analysis, comparing simulation to wrong experimental conditions).
-
-### Phase 6 (if needed): 2D Effects
-
-**Rationale:** Only needed for azimuthal response and build-up over-response, which are secondary findings. 2D adds gmsh mesh complexity and 10-100x solve time. Only pursue if time permits after the core FLASH paper.
-**Delivers:** 2D cross-section simulation, azimuthal CCE modulation (~3%), build-up over-response analysis.
-**Addresses:** Azimuthal response, build-up over-response (2 deferred differentiators).
+**Rationale:** All physics modules must be complete and individually validated before parametric studies combining T + transient + dark current. This phase is orchestration and visualization, not new physics.
+**Delivers:** T-dependent CCE vs bias at T = 300, 303, 306, 310, 313 K; temperature coefficient extraction and validation against -0.079%/C; combined parametric sweeps (CCE vs dose_rate, T, bias, pulse structure); publication-quality transient waveform figures; comparison table of transient vs steady-state CCE across full parameter space.
+**Addresses:** T-dependent CCE (differentiator); temperature coefficient validation (table stakes); CCE per pulse in multi-pulse train (differentiator); pulse structure optimization (differentiator).
+**Avoids:** No new pitfalls -- uses validated pieces from earlier phases.
+**Estimated scope:** 2-3 Jupyter notebooks. Medium complexity (orchestration and visualization).
 
 ### Phase Ordering Rationale
 
-- Phases 1-3 follow a strict dependency chain: material parameters feed Poisson, Poisson feeds drift-diffusion, drift-diffusion feeds CCE. Skipping or reordering any phase produces unvalidated results.
-- Phases 1-3 use well-established semiconductor physics with clear experimental validation targets from the Petringa group's published data. Risk is low and progress is measurable.
-- Phase 4 concentrates all novelty risk in a single phase with clear entry criteria (all prior phases validated). If Phase 4 proves infeasible, Phases 1-3 still produce a publishable characterization toolkit.
-- The devsim-first, FiPy-optional approach in Phase 4 avoids premature complexity. The architecture cleanly supports adding FiPy later via the PlasmaSimulator bridge class.
-- Phase 5 is separated from Phase 4 because parametric sweeps require automation infrastructure and the publication pipeline is a distinct effort from physics modeling.
+- **Hard dependency chain:** Phase 1 (T-params) feeds Phase 2 (dark current needs n_i(T)) and Phase 3 (transient needs T-dependent material properties). Phase 4 integrates all three.
+- **Validation anchoring:** Each phase has an unambiguous pass/fail criterion: Phase 1 matches Ayalew/Ioffe tables and preserves v1.0 baseline; Phase 2 matches 18 pA at -60V; Phase 3 converges to v1.0 steady-state at low dose rate; Phase 4 reproduces -0.079%/C.
+- **Risk front-loading:** The hardest physics question (can a 1D model match 18 pA with physical parameters?) lands in Phase 2, early enough to pivot strategy if TAT alone is insufficient.
+- **Regression safety:** Phase 1 mandates golden value extraction and regression test creation before any physics changes touch the codebase.
+- **Scientific narrative:** The phase ordering mirrors the paper narrative -- establish T-dependent model, validate against dark current, predict novel transient behavior, combine for complete dosimetric characterization.
 
 ### Research Flags
 
 Phases likely needing deeper research during planning:
 
-- **Phase 4 (FLASH Plasma Recombination):** No prior SiC-specific work exists. Must research: Auger recombination coefficients for 4H-SiC at high injection, appropriate carrier generation rates for 62 MeV protons at FLASH dose rates, devsim transient solver limits for high-injection regime, and whether FiPy bridge is actually needed.
-- **Phase 3 (CCE):** Transient simulation setup in devsim needs API-level research. The generation profile (converting Geant4/SRIM energy deposition to e-h pair generation rate) requires careful unit handling.
+- **Phase 2 (Dark Current):** The quantitative analysis proves surface SRH is 16 orders of magnitude too weak. TAT implementation in devsim requires custom Jacobian derivatives with no built-in support, no examples, and sparse forum discussion. The Klaassen approximation for Gamma(F) needs numerical validation. Key decision: fit to 18 pA with effective parameters, or attempt full physical decomposition (which may require accepting that perimeter leakage is unmodellable in 1D)?
+- **Phase 3 (Transient):** Adaptive time-stepping strategy needs empirical validation -- devsim's Python-level time loop has no precedent for FLASH-duration (200 ms) pulses. Need to determine whether TR-BDF2 composite method is necessary or if BDF1 alone suffices for the generation on/off discontinuity. Computational cost estimate (30s/pulse) is unverified.
 
 Phases with standard patterns (skip research-phase):
 
-- **Phase 1 (Material Parameters + Electrostatics):** Well-documented in CERN review paper and devsim diode examples. Follow the devsim diode example, replacing silicon parameters with 4H-SiC.
-- **Phase 2 (I-V/C-V):** Standard TCAD workflow documented in multiple papers. devsim bias sweep examples provide direct templates.
-- **Phase 5 (Parametric Studies):** Standard Python automation (loops + pandas). No domain-specific research needed.
+- **Phase 1 (Temperature):** Varshni, Caughey-Thomas T-scaling, and DOS T^1.5 are textbook models with well-documented 4H-SiC parameters from the Ayalew thesis. The implementation is parameter wiring into an existing pipeline.
+- **Phase 4 (Combined Analysis):** Pure orchestration of validated components using existing parametric sweep patterns from v1.0. No new physics or solver patterns needed.
 
 ## Confidence Assessment
 
-| Area         | Confidence | Notes                                                                                                                                                          |
-| ------------ | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Stack        | HIGH       | devsim is verified as the only viable option; gmsh integration confirmed; all packages have pre-built wheels                                                   |
-| Features     | HIGH       | Table stakes derived from multiple published TCAD papers; differentiators clearly scoped against literature gaps                                               |
-| Architecture | HIGH       | Layered pipeline follows devsim's own design; build order validated by dependency analysis                                                                     |
-| Pitfalls     | MEDIUM     | Physics pitfalls well-documented in CERN review; numerical pitfalls partially verified against devsim docs; FLASH-specific pitfalls are informed extrapolation |
+| Area         | Confidence  | Notes                                                                                                                                                                                                                                 |
+| ------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Stack        | HIGH        | No new packages needed; all devsim transient capabilities verified from installed examples (tran_diode.py, transient_rc.py) and documentation                                                                                         |
+| Features     | HIGH        | Feature set derived from experimental validation targets in Petringa papers and Lopez Paz 2024; clear quantitative pass/fail criteria for every feature                                                                               |
+| Architecture | HIGH        | Additive design following existing proven patterns (Auger implementation as template); devsim transient API confirmed from source code                                                                                                |
+| Pitfalls     | MEDIUM-HIGH | Codebase-specific pitfalls verified against actual source (line-level references); physics pitfalls confirmed by quantitative estimates (surface SRH math); TAT fitting risk is real but bounded by the 2-parameter starting approach |
 
-**Overall confidence:** MEDIUM -- high confidence in foundation (Phases 1-3), medium-low confidence in FLASH modeling approach (Phase 4) due to absence of prior work.
+**Overall confidence:** MEDIUM-HIGH
+
+The stack, features, and architecture are well-characterized with high-quality sources. The main uncertainties are: (1) whether a 1D model can physically reproduce 18 pA dark current with meaningful (not purely curve-fitting) parameters, and (2) whether devsim's transient solver handles the FLASH timescale gap (ns to ms) without prohibitive computational cost or convergence failure at high injection.
 
 ### Gaps to Address
 
-- **Auger recombination coefficients for 4H-SiC:** Literature values are sparse and uncertain. Need to identify best available values during Phase 4 planning. This directly affects FLASH CCE predictions.
-- **devsim transient solver performance at high injection:** Unknown whether devsim's Newton solver converges when carrier densities exceed doping by orders of magnitude. Must be tested empirically in early Phase 4.
-- **FiPy necessity determination:** The architecture supports both devsim-only and devsim+FiPy paths. The decision point is early Phase 4 -- if devsim transient works, skip FiPy entirely.
-- **Experimental validation for FLASH regime:** No SiC detector measurements exist at FLASH dose rates. The paper must be framed as a prediction, not a validation. This is a framing gap, not a technical gap.
-- **Incomplete ionization model implementation:** The CERN review notes that even commercial tools handle this poorly for SiC. The specific implementation approach in devsim (custom node model vs modified doping) needs investigation during Phase 1 planning.
+- **n_i(300K) discrepancy:** `compute_ni(300)` returns ~6.5e-9 vs calibrated 5e-9. Must reconcile (adjust DOS effective masses to reproduce 5e-9, or accept new value and fully re-validate all v1.0 results). This is a Phase 1 blocker -- resolve before any T-dependent work.
+- **Dark current mechanism ambiguity:** The 18 pA could be perimeter leakage (inherently 2D, unmodellable in 1D), TAT through Z1/2 centers (1D-capable), or measurement artifact (cable/probe leakage). If TAT with physical parameters cannot match 18 pA, strategy must shift to effective parameters with documented limitations.
+- **SRH lifetime T-dependence model:** Literature is contradictory for 4H-SiC -- the Z1/2 center shows sample-dependent tau(T) behavior. For the 303-313K clinical range, the effect is <5% regardless of model choice. Recommend: keep tau constant for v1.1, document the assumption.
+- **Donor incomplete ionization:** N donors at E_C - 0.05/0.09 eV are ~85% ionized at 300K but not modeled (full ionization assumed). Effect is <3% in clinical range. Add `ionized_donor_concentration()` for completeness but do not iterate self-consistently.
+- **Transient computational cost:** Estimated ~30s per pulse, ~5 min for 10-pulse train at one dose rate. Acceptable but unverified. If convergence requires smaller dt than estimated, cost could increase 10x, making parametric sweeps over dose rate and T expensive.
 
 ## Sources
 
 ### Primary (HIGH confidence)
 
-- [devsim documentation and examples](https://devsim.net/) -- solver capabilities, mesh format, diode examples, CGS units
-- [devsim GitHub](https://github.com/devsim/devsim) -- API reference, simple_physics.py silicon defaults
-- [TCAD Parameters for 4H-SiC: A Review (Burin et al., arXiv:2410.06798)](https://arxiv.org/abs/2410.06798) -- authoritative parameter compilation, convergence pitfalls
-- [TCAD Simulations of Radiation Damage in 4H-SiC (arXiv:2407.16710)](https://arxiv.org/html/2407.16710v1) -- I-V, C-V, E-field TCAD methodology
-- [gmsh documentation](https://gmsh.info/) -- mesh generation API, MSH format
-- [Limitations of the Hecht Equation (DTIC)](https://apps.dtic.mil/sti/tr/pdf/ADA451645.pdf) -- Hecht failure modes under high injection
-- Petringa group papers (SiC_Photons_MedicalPhysics, Microdosimetry.pdf, Flash.pdf) -- experimental validation targets
+- devsim 2.10.0 installed examples (`tran_diode.py`, `transient_rc.py`, `simple_physics.py`) -- transient solver patterns, contact equation API, time_node_model usage
+- devsim documentation (devsim.net/solver.html, devsim.net/CommandReference.html, devsim.net/models.html) -- solve types, tdelta/charge_error parameters, custom equation API
+- TU Wien Ayalew thesis, Table 3.5 -- 4H-SiC Caughey-Thomas T-dependent parameters: gamma_n=-2.40, gamma_p=-2.15, beta=-0.5
+- Petringa group papers (SiC_Photons_MedicalPhysics, Microdosimetry.pdf, Flash.pdf) -- experimental validation targets (18 pA dark current, CCE, C-V)
+- Lopez Paz et al., Med Phys 2024 -- 11 Gy/pulse linearity, -0.079%/C temperature coefficient, <2% sensitivity drift after 100 kGy, 4 MGy/s capability
+- Hurkx et al., IEEE TED 39(2), 1992 -- original field-enhanced SRH (TAT) model formulation
+- TU Wien Schleich thesis -- TAT current implementation for SiC TCAD
 
 ### Secondary (MEDIUM confidence)
 
-- [IHEP 4H-SiC simulation with DEVSIM (CERN RD50)](https://indico.cern.ch/event/1132520/contributions/5149103/) -- SiC PIN validation in devsim
-- [Accurate TCAD Simulation Model for 4H-SiC Alpha-Particle Detectors (IEEE 2024)](https://ieeexplore.ieee.org/abstract/document/10772267) -- CCE methodology
-- [Silicon Carbide Sensors in Radiotherapy Dosimetry (Frontiers 2025)](https://www.frontiersin.org/journals/sensors/articles/10.3389/fsens.2025.1622153/full) -- FLASH challenges for SiC
-- [FiPy semiconductor simulation issue #746](https://github.com/usnistgov/fipy/issues/746) -- FiPy coefficient handling limitation
-- [Surface recombination velocities for 4H-SiC (ScienceDirect 2023)](https://www.sciencedirect.com/science/article/pii/S136980012300673X) -- SRV values
+- Kimoto et al., J. Appl. Phys. 127, 195702 (2020) -- SRV for SiO2-passivated 4H-SiC Si-face: 150-5000 cm/s
+- arXiv:2503.09016 (2025) -- 4H-SiC TAT tunneling effective mass m_t = 0.25\*m_0
+- Burin et al., CERN RD50 (2024) -- comprehensive 4H-SiC TCAD parameter survey
+- IEEE Access 2024 (10538275) -- carrier lifetime vs T in 4H-SiC, power-law dependence
+- Frontiers in Sensors 2025 (1622153) -- SiC detector FLASH challenges review
+- Hatakeyama et al., Materials Science Forum (2013) -- alternative 4H-SiC mobility T-exponents
+- Rakheja et al., Semicond. Sci. Technol. (2023) -- SRV vs carrier concentration
+- devsim Forum -- surface recombination implementation discussion (sparse)
 
 ### Tertiary (LOW confidence)
 
-- [TCAD Central Software listing](https://tcadcentral.com/Software.html) -- ecosystem overview, used for alternative evaluation only
+- SRH lifetime T-scaling model (tau ~ T^1.5 phonon-assisted) -- generic semiconductor model, not SiC-specific validated
+- Auger coefficient T-dependence for 4H-SiC -- poorly characterized in literature, assumed negligible for v1.1
 
 ---
 
-_Research completed: 2026-03-20_
+_Research completed: 2026-03-23_
 _Ready for roadmap: yes_
