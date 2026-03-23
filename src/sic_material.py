@@ -23,7 +23,7 @@ class SiC4H_Parameters:
 
     # --- Bandgap ---
     E_g: float = 3.26  # eV at 300K, Ioffe NSM Archive
-    E_g_0: float = 3.265  # eV at 0K, Varshni extrapolation
+    E_g_0: float = 3.2965625  # eV at 0K, calibrated so Varshni gives E_g=3.26 at 300K
     E_g_alpha: float = 6.5e-4  # eV/K, Varshni parameter (Ioffe NSM)
     E_g_beta: float = 1300.0  # K, Varshni parameter (Ioffe NSM)
 
@@ -76,6 +76,11 @@ class SiC4H_Parameters:
     # --- N donor ionization energies ---
     E_D_hex: float = 0.050  # eV, nitrogen on hexagonal site (TU Wien)
     E_D_cub: float = 0.092  # eV, nitrogen on cubic site (TU Wien)
+
+    # --- Temperature scaling exponents ---
+    gamma_n: float = -2.40  # electron mobility T exponent (Ayalew)
+    gamma_p: float = -2.15  # hole mobility T exponent (Ayalew)
+    alpha_tau: float = 1.72  # SRH lifetime T exponent (Ayalew Z1/2 center)
 
     # --- Bulk material properties ---
     rho: float = 3.21  # g/cm^3, density (Ioffe NSM Archive)
@@ -165,3 +170,182 @@ def mobility_caughey_thomas(N_total, carrier="electron"):
 
     mu = mu_min + (mu_max - mu_min) / (1.0 + (N_total / N_ref) ** alpha)
     return mu
+
+
+def bandgap(T, params=None):
+    """Temperature-dependent bandgap using Varshni equation.
+
+    E_g(T) = E_g(0) - alpha * T^2 / (T + beta)
+
+    Parameters
+    ----------
+    T : float
+        Temperature in Kelvin.
+    params : SiC4H_Parameters, optional
+        Material parameters. Defaults to SiC4H_Parameters().
+
+    Returns
+    -------
+    float
+        Bandgap energy in eV.
+
+    References
+    ----------
+    Ioffe NSM Archive, Varshni equation for 4H-SiC.
+    """
+    if params is None:
+        params = SiC4H_Parameters()
+    return params.E_g_0 - params.E_g_alpha * T**2 / (T + params.E_g_beta)
+
+
+def intrinsic_concentration(T, params=None):
+    """Temperature-dependent intrinsic carrier concentration with calibration.
+
+    Uses calibration factor approach to anchor n_i(300K) = params.n_i_300:
+        n_i(T) = n_i_300 * compute_ni(T) / compute_ni(300)
+
+    Also returns NC(T), NV(T), E_g(T) from first-principles calculation.
+
+    Parameters
+    ----------
+    T : float
+        Temperature in Kelvin.
+    params : SiC4H_Parameters, optional
+        Material parameters. Defaults to SiC4H_Parameters().
+
+    Returns
+    -------
+    n_i : float
+        Calibrated intrinsic carrier concentration (cm^-3).
+    NC : float
+        Effective density of states in conduction band (cm^-3).
+    NV : float
+        Effective density of states in valence band (cm^-3).
+    E_g : float
+        Bandgap at temperature T (eV).
+
+    References
+    ----------
+    Ioffe NSM Archive, TU Wien Ayalew thesis.
+    """
+    if params is None:
+        params = SiC4H_Parameters()
+
+    ni_T, NC_T, NV_T, Eg_T = compute_ni(T)
+    ni_300, _, _, _ = compute_ni(300)
+
+    n_i_calibrated = params.n_i_300 * ni_T / ni_300
+    return n_i_calibrated, NC_T, NV_T, Eg_T
+
+
+def mobility_caughey_thomas_T(N_total, T, carrier="electron", params=None):
+    """Doping- and temperature-dependent mobility using Caughey-Thomas model.
+
+    Extends the 300K Caughey-Thomas model with temperature scaling on mu_max:
+        mu_max(T) = mu_max(300) * (T/300)^gamma
+
+    mu_min stays constant (weakly T-dependent in practice).
+    At T=300, returns identical values to mobility_caughey_thomas().
+
+    Parameters
+    ----------
+    N_total : float
+        Total doping concentration (cm^-3).
+    T : float
+        Temperature in Kelvin.
+    carrier : str
+        'electron' or 'hole'.
+    params : SiC4H_Parameters, optional
+        Material parameters. Defaults to SiC4H_Parameters().
+
+    Returns
+    -------
+    float
+        Mobility (cm^2/Vs).
+
+    References
+    ----------
+    TU Wien Ayalew thesis, Table 3.5 and Eq. 3.30.
+    """
+    if params is None:
+        params = SiC4H_Parameters()
+
+    if carrier == "electron":
+        mu_max_300 = params.mu_n_max
+        mu_min = params.mu_n_min
+        N_ref = params.N_ref_n
+        alpha = params.alpha_n
+        gamma = params.gamma_n
+    elif carrier == "hole":
+        mu_max_300 = params.mu_p_max
+        mu_min = params.mu_p_min
+        N_ref = params.N_ref_p
+        alpha = params.alpha_p
+        gamma = params.gamma_p
+    else:
+        raise ValueError(f"carrier must be 'electron' or 'hole', got '{carrier}'")
+
+    mu_max = mu_max_300 * (T / 300.0) ** gamma
+    mu = mu_min + (mu_max - mu_min) / (1.0 + (N_total / N_ref) ** alpha)
+    return mu
+
+
+def effective_dos(T, params=None):
+    """Temperature-dependent effective density of states.
+
+    Wraps compute_ni() to extract NC(T) and NV(T), which scale as T^(3/2).
+
+    Parameters
+    ----------
+    T : float
+        Temperature in Kelvin.
+    params : SiC4H_Parameters, optional
+        Material parameters (unused, kept for API consistency).
+
+    Returns
+    -------
+    NC : float
+        Effective density of states in conduction band (cm^-3).
+    NV : float
+        Effective density of states in valence band (cm^-3).
+    """
+    _, NC, NV, _ = compute_ni(T)
+    return NC, NV
+
+
+def srh_lifetime(T, carrier="electron", params=None):
+    """Temperature-dependent SRH recombination lifetime.
+
+    Power-law scaling: tau(T) = tau_300 * (T/300)^alpha_tau
+
+    At T=300 returns exactly params.tau_n or params.tau_p.
+
+    Parameters
+    ----------
+    T : float
+        Temperature in Kelvin.
+    carrier : str
+        'electron' or 'hole'.
+    params : SiC4H_Parameters, optional
+        Material parameters. Defaults to SiC4H_Parameters().
+
+    Returns
+    -------
+    float
+        SRH lifetime in seconds.
+
+    References
+    ----------
+    TU Wien Ayalew thesis, Z1/2 center temperature dependence.
+    """
+    if params is None:
+        params = SiC4H_Parameters()
+
+    if carrier == "electron":
+        tau_300 = params.tau_n
+    elif carrier == "hole":
+        tau_300 = params.tau_p
+    else:
+        raise ValueError(f"carrier must be 'electron' or 'hole', got '{carrier}'")
+
+    return tau_300 * (T / 300.0) ** params.alpha_tau
