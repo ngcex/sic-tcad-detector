@@ -1,0 +1,106 @@
+# Requirements: SiC TCAD Simulator
+
+**Defined:** 2026-03-23
+**Core Value:** Predict how CCE in 4H-SiC detectors degrades under FLASH dose rates, providing the first TCAD-based explanation of plasma recombination effects in SiC dosimeters
+
+## v1.1 Requirements
+
+Requirements for milestone v1.1: Realistic Device Physics. Each maps to roadmap phases.
+
+### Temperature Dependence
+
+- [ ] **TEMP-01**: Simulator computes T-dependent bandgap E_g(T) via Varshni equation for 4H-SiC
+- [ ] **TEMP-02**: Simulator computes T-dependent intrinsic carrier concentration n_i(T) with resolved discrepancy vs validated 5e-9 constant
+- [ ] **TEMP-03**: Simulator computes T-dependent mobility mu_n(T), mu_p(T) via Caughey-Thomas with SiC-specific exponents (gamma_n=-2.40, gamma_p=-2.15)
+- [ ] **TEMP-04**: Simulator computes T-dependent effective DOS (NC, NV) as functions of T
+- [ ] **TEMP-05**: Simulator computes T-dependent SRH lifetimes tau_n(T), tau_p(T)
+- [ ] **TEMP-06**: All existing simulations reproduce v1.0 validated results at T=300K (regression test)
+- [ ] **TEMP-07**: User can run I-V, C-V, CCE simulations at any temperature in 280-350K range
+- [ ] **TEMP-08**: User can sweep temperature across clinical range (303-313K) and extract temperature coefficient
+
+### Dark Current
+
+- [ ] **DARK-01**: Simulator implements Hurkx trap-assisted tunneling model with Z1/2 center parameters (E_t = E_c - 0.65 eV, m_t ~ 0.25 m_0)
+- [ ] **DARK-02**: Simulator implements surface recombination velocity boundary condition at contacts
+- [ ] **DARK-03**: Simulated reverse dark current matches experimental ~18 pA within order of magnitude at -30V
+- [ ] **DARK-04**: User can visualize separate TAT vs SRV contributions to total dark current vs voltage
+- [ ] **DARK-05**: User can study dark current sensitivity to design parameters (epi thickness, doping, SRV)
+
+### Transient FLASH
+
+- [ ] **TRAN-01**: Simulator implements adaptive time-stepping for transient drift-diffusion with generation pulse
+- [ ] **TRAN-02**: User can simulate single FLASH pulse (us rise, ms duration) and extract time-resolved current
+- [ ] **TRAN-03**: User can simulate multi-pulse train and observe inter-pulse carrier dynamics
+- [ ] **TRAN-04**: Transient CCE converges to v1.0 steady-state result at long times (validation)
+- [ ] **TRAN-05**: User can compare transient vs steady-state CCE across dose-rate range
+
+### Notebooks
+
+- [ ] **NOTE-01**: Jupyter notebook for T-dependent device characterization (I-V, C-V, CCE vs T)
+- [ ] **NOTE-02**: Jupyter notebook for dark current analysis (TAT + SRV fitting, sensitivity)
+- [ ] **NOTE-03**: Jupyter notebook for transient FLASH dynamics (single-pulse, multi-pulse, comparison)
+
+## v2 Requirements
+
+Deferred to future release. Tracked but not in current roadmap.
+
+### 2D/3D Effects
+
+- **GEOM-01**: 2D device simulation with guard ring and edge termination
+- **GEOM-02**: Build-up over-response analysis from 2D field distribution near surface
+- **GEOM-03**: Azimuthal response simulation from planar geometry asymmetry
+
+### Advanced Models
+
+- **ADV-01**: Anisotropic mobility model (c-axis vs a-axis)
+- **ADV-02**: Radiation damage modeling (displacement damage, defect introduction)
+- **ADV-03**: Noise analysis (shot noise, 1/f noise from traps)
+
+## Out of Scope
+
+| Feature                    | Reason                                                              |
+| -------------------------- | ------------------------------------------------------------------- |
+| 2D/3D geometry             | Major architectural change; v1.1 focuses on 1D physics improvements |
+| Perimeter leakage current  | Inherently 2D effect; fitted SRV will absorb this contribution      |
+| Monte Carlo transport      | Handled separately by group (Geant4)                                |
+| Commercial TCAD comparison | Open-source only project                                            |
+| GUI application            | Jupyter notebooks sufficient for research group                     |
+
+## Traceability
+
+Which phases cover which requirements. Updated during roadmap creation.
+
+| Requirement | Phase | Status  |
+| ----------- | ----- | ------- |
+| TEMP-01     | —     | Pending |
+| TEMP-02     | —     | Pending |
+| TEMP-03     | —     | Pending |
+| TEMP-04     | —     | Pending |
+| TEMP-05     | —     | Pending |
+| TEMP-06     | —     | Pending |
+| TEMP-07     | —     | Pending |
+| TEMP-08     | —     | Pending |
+| DARK-01     | —     | Pending |
+| DARK-02     | —     | Pending |
+| DARK-03     | —     | Pending |
+| DARK-04     | —     | Pending |
+| DARK-05     | —     | Pending |
+| TRAN-01     | —     | Pending |
+| TRAN-02     | —     | Pending |
+| TRAN-03     | —     | Pending |
+| TRAN-04     | —     | Pending |
+| TRAN-05     | —     | Pending |
+| NOTE-01     | —     | Pending |
+| NOTE-02     | —     | Pending |
+| NOTE-03     | —     | Pending |
+
+**Coverage:**
+
+- v1.1 requirements: 21 total
+- Mapped to phases: 0
+- Unmapped: 21
+
+---
+
+_Requirements defined: 2026-03-23_
+_Last updated: 2026-03-23 after initial definition_
