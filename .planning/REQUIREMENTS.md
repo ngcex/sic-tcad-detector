@@ -23,8 +23,8 @@ Requirements for milestone v1.1: Realistic Device Physics. Each maps to roadmap 
 - [x] **DARK-01**: Simulator implements Hurkx trap-assisted tunneling model with Z1/2 center parameters (E_t = E_c - 0.65 eV, m_t ~ 0.25 m_0)
 - [x] **DARK-02**: Simulator implements surface recombination velocity boundary condition at contacts
 - [x] **DARK-03**: Simulated reverse dark current matches experimental ~18 pA within order of magnitude at -30V
-- [ ] **DARK-04**: User can visualize separate TAT vs SRV contributions to total dark current vs voltage
-- [ ] **DARK-05**: User can study dark current sensitivity to design parameters (epi thickness, doping, SRV)
+- [x] **DARK-04**: User can visualize separate TAT vs SRV contributions to total dark current vs voltage
+- [x] **DARK-05**: User can study dark current sensitivity to design parameters (epi thickness, doping, SRV)
 
 ### Transient FLASH
 
@@ -37,7 +37,7 @@ Requirements for milestone v1.1: Realistic Device Physics. Each maps to roadmap 
 ### Notebooks
 
 - [x] **NOTE-01**: Jupyter notebook for T-dependent device characterization (I-V, C-V, CCE vs T)
-- [ ] **NOTE-02**: Jupyter notebook for dark current analysis (TAT + SRV fitting, sensitivity)
+- [x] **NOTE-02**: Jupyter notebook for dark current analysis (TAT + SRV fitting, sensitivity)
 - [ ] **NOTE-03**: Jupyter notebook for transient FLASH dynamics (single-pulse, multi-pulse, comparison)
 
 ## v2 Requirements
@@ -81,15 +81,15 @@ Deferred to future release. Tracked but not in current roadmap.
 | DARK-01     | Phase 11 | Complete |
 | DARK-02     | Phase 11 | Complete |
 | DARK-03     | Phase 11 | Complete |
-| DARK-04     | Phase 11 | Pending |
-| DARK-05     | Phase 11 | Pending |
+| DARK-04     | Phase 11 | Complete |
+| DARK-05     | Phase 11 | Complete |
 | TRAN-01     | Phase 12 | Pending |
 | TRAN-02     | Phase 12 | Pending |
 | TRAN-03     | Phase 12 | Pending |
 | TRAN-04     | Phase 12 | Pending |
 | TRAN-05     | Phase 12 | Pending |
 | NOTE-01     | Phase 10 | Complete |
-| NOTE-02     | Phase 11 | Pending |
+| NOTE-02     | Phase 11 | Complete |
 | NOTE-03     | Phase 12 | Pending |
 
 **Coverage:**

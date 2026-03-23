@@ -29,7 +29,7 @@ Full details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 **Milestone Goal:** Make the simulator predict real device behavior (temperature dependence, dark current, transient dynamics) so the group can evaluate and improve the current SiC detector design.
 
 - [x] **Phase 10: Temperature-Dependent Device Physics** — Thread temperature through all material parameters and device simulations, validated against v1.0 baseline at 300K (completed 2026-03-23)
-- [ ] **Phase 11: Dark Current Modeling** — Implement trap-assisted tunneling and surface recombination to match experimental 18 pA dark current
+- [x] **Phase 11: Dark Current Modeling** — Implement trap-assisted tunneling and surface recombination to match experimental 18 pA dark current (completed 2026-03-23)
 - [ ] **Phase 12: Transient FLASH Dynamics** — Simulate real-time pulse dynamics with adaptive time-stepping, capturing intra-pulse and inter-pulse carrier behavior
 
 ## Phase Details
@@ -67,7 +67,7 @@ Plans:
 3. User can vary design parameters (epi thickness, doping, surface recombination velocity) and observe their effect on dark current magnitude and composition
 4. A Jupyter notebook guides the user through dark current analysis, calibration, and sensitivity studies with publication-quality figures
 
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 
@@ -105,5 +105,5 @@ Plans:
 | 7. Solver Robustness                     | v1.0      | 1/1            | Complete    | 2026-03-21 |
 | 8. Audit Gap Closure                     | v1.0      | 1/1            | Complete    | 2026-03-22 |
 | 10. Temperature-Dependent Device Physics | v1.1      | 3/3            | Complete    | 2026-03-23 |
-| 11. Dark Current Modeling                | 1/2 | In Progress|  | -          |
+| 11. Dark Current Modeling                | 2/2 | Complete   | 2026-03-23 | -          |
 | 12. Transient FLASH Dynamics             | v1.1      | 0/?            | Not started | -          |
