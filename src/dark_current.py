@@ -1,16 +1,21 @@
 """Hurkx trap-assisted tunneling and surface recombination dark current models.
 
-Implements field-enhanced generation through Z1/2 deep levels in 4H-SiC,
-plus surface recombination velocity at contacts. These mechanisms produce
-realistic dark current magnitudes (~pA), bridging the 37-order gap between
-SRH-only predictions and experimental measurements.
+Implements effective dark current generation for 4H-SiC detectors, combining:
+1. Modified SRH recombination with Z1/2 deep-level n1/p1 (not midgap)
+2. Effective depletion-region generation calibrated via N_t parameter
+3. Hurkx field-enhancement factor Gamma for voltage dependence
+4. Surface recombination velocity at contacts
 
-Physical basis:
-    - Hurkx TAT: Field enhancement of SRH generation via phonon-assisted
-      tunneling through the triangular barrier at trap sites. The Z1/2
-      center (Ec - 0.65 eV) is the dominant deep level in 4H-SiC.
-    - SRV: Surface recombination at passivated contact interfaces adds
-      a boundary current contribution.
+Physical context:
+    Standard midgap SRH in 4H-SiC produces ~1e-49 A dark current because
+    n_i ~ 5e-9 cm^-3. Real dark current (~18 pA at -30V) arises from multiple
+    mechanisms including perimeter leakage (2D), surface states, and
+    trap-assisted tunneling that cannot be fully captured in 1D.
+
+    This module uses an effective generation rate G_eff = N_t (cm^-3 s^-1)
+    applied in the depletion region, where N_t is calibrated to match
+    experimental dark current. The E-field-dependent Gamma factor provides
+    voltage-dependent scaling. Default N_t = 1e12 cm^-3 s^-1 targets ~18 pA.
 
 All units CGS (cm, cm^-3, A/cm^2, V) per devsim convention.
 
@@ -45,12 +50,16 @@ _K_B_EV = 8.617e-5  # eV/K
 
 
 def setup_tat_model(device_info, E_t=None, m_t=None, N_t=None):
-    """Add Hurkx trap-assisted tunneling generation to drift-diffusion equations.
+    """Add TAT-based dark current generation to drift-diffusion equations.
 
-    Replaces the existing SRH-only ElectronGeneration/HoleGeneration node models
-    with TAT-enhanced versions. The field-enhancement factor Gamma increases the
-    effective emission rate at high electric fields, dramatically boosting
-    generation in the depletion region under reverse bias.
+    Replaces the existing SRH-only ElectronGeneration/HoleGeneration with
+    a combined model:
+    1. SRH recombination with Z1/2 trap-level n1/p1 (physical)
+    2. Effective generation rate G_eff = N_t * Gamma in depletion region
+
+    The N_t parameter (cm^-3 s^-1) is the primary calibration knob. It
+    represents the effective volumetric generation rate from all dark
+    current mechanisms (TAT, perimeter leakage, surface states).
 
     Parameters
     ----------
@@ -62,8 +71,8 @@ def setup_tat_model(device_info, E_t=None, m_t=None, N_t=None):
     m_t : float, optional
         Tunneling effective mass in units of m0. Default from params.m_t.
     N_t : float, optional
-        Trap density (cm^-3). Default from params.N_t. Currently unused in
-        generation rate (absorbed into SRH lifetimes) but stored for reference.
+        Effective generation rate (cm^-3 s^-1). Default from params.N_t.
+        Primary calibration parameter. Default 1e12 targets ~8 pA at -30V.
     """
     device = device_info["device_name"]
     region = device_info["region_name"]
@@ -81,73 +90,79 @@ def setup_tat_model(device_info, E_t=None, m_t=None, N_t=None):
     n_i = device_info["n_i"]
     E_g = device_info["E_g"]
 
-    # Store TAT parameters on device for later extraction
+    # Store TAT parameters
     devsim.set_parameter(device=device, region=region, name="E_t", value=E_t)
     devsim.set_parameter(device=device, region=region, name="m_t", value=m_t)
     devsim.set_parameter(device=device, region=region, name="N_t", value=N_t)
 
-    # --- Step 1: Create node-averaged electric field ---
-    # ElectricField is an edge model: (Potential@n0 - Potential@n1) * EdgeInverseLength
-    # We need it at nodes for the SRH-like generation rate.
-    # Use devsim's edge_average_model to project edge values to nodes.
-    # We compute |E| and clamp to minimum 1e3 V/cm to avoid division by zero.
+    # --- Step 1: Node-averaged electric field ---
     _compute_node_efield(device, region)
 
-    # --- Step 2: Compute Kt parameter (dimensionless) ---
-    # Kt = (4/3) * sqrt(2*m_t*m0) * (E_t*q)^(3/2) / (q * hbar * |E|)
-    # All in SI: E_t in J, m in kg, E in V/m, hbar in J*s
-    # Note: E_field_node is in V/cm from devsim, convert to V/m (* 100)
+    # --- Step 2: Kt and Gamma from Hurkx model ---
     m_tunnel_kg = m_t * _M0_SI
     E_t_J = E_t * _Q_SI
 
-    # Precompute the numerator constant (SI)
-    # numerator = (4/3) * sqrt(2 * m_tunnel_kg) * E_t_J^(3/2)
-    numerator = (4.0 / 3.0) * np.sqrt(2.0 * m_tunnel_kg) * E_t_J**1.5
-    # denominator = q * hbar * |E_SI|
-    # So Kt = numerator / (q * hbar * E_field_SI)
-    # E_field_SI = E_field_node * 100  (V/cm -> V/m)
-    # Kt = numerator / (q * hbar * E_field_node * 100)
-    denom_const = _Q_SI * _HBAR_SI * 100.0  # q * hbar * (cm->m factor)
+    Kt_numerator = (4.0 / 3.0) * np.sqrt(2.0 * m_tunnel_kg) * E_t_J**1.5
+    Kt_denom_const = _Q_SI * _HBAR_SI * 100.0
 
-    Kt_expr = f"{numerator} / ({denom_const} * E_field_node)"
+    Kt_expr = f"{Kt_numerator} / ({Kt_denom_const} * E_field_node)"
     CreateNodeModel(device, region, "Kt_TAT", Kt_expr)
 
-    # --- Step 3: Compute Gamma field-enhancement factors ---
-    # Schenk approximation:
-    #   Kt < 4 (high field): Gamma = sqrt(pi)/(2*Kt) * exp(1/(4*Kt^2))
-    #   Kt >= 4 (low field): Gamma = 1 (no enhancement)
-    # We compute numerically to handle the piecewise nature cleanly.
     _compute_gamma_factors(device, region)
 
-    # --- Step 4: Create TAT generation rate ---
-    # Trap level: E_t below Ec, so distance from midgap = E_g/2 - E_t
-    E_t_from_midgap = E_g / 2.0 - E_t  # eV (positive if trap above midgap)
-
-    # n1 = n_i * exp(E_t_from_midgap / kT), p1 = n_i * exp(-E_t_from_midgap / kT)
+    # --- Step 3: Trap-level n1, p1 for Z1/2 ---
+    E_t_from_midgap = E_g / 2.0 - E_t
     n1_tat = n_i * np.exp(E_t_from_midgap / kT_eV)
     p1_tat = n_i * np.exp(-E_t_from_midgap / kT_eV)
 
-    # Store as region parameters
     devsim.set_parameter(device=device, region=region, name="n1_tat", value=n1_tat)
     devsim.set_parameter(device=device, region=region, name="p1_tat", value=p1_tat)
 
     ni2 = n_i**2
 
-    # U_TAT = (n*p - ni^2) / (taup*(n + n1_tat*Gamma_n) + taun*(p + p1_tat*Gamma_p))
+    # --- Step 4: Effective dark current generation ---
+    # The total recombination/generation rate has two parts:
+    #
+    # Part A: SRH with Z1/2 trap level (replaces midgap SRH)
+    #   U_SRH = (np - ni^2) / (taup*(n+n1) + taun*(p+p1))
+    #   where n1, p1 are for Z1/2 trap (not midgap n_i)
+    #
+    # Part B: Effective generation (always negative = generation)
+    #   G_eff = -N_t * Gamma * f_depl
+    #   where f_depl identifies the depletion region using E-field:
+    #   f_depl = E_field_node / E_ref, clamped to [0, 1]
+    #   This gives ~1 in depletion, ~0 in quasi-neutral regions.
+    #
+    # The contact current from devsim captures the net effect of both.
+
+    # Reference field for depletion identification
+    # Built-in field at junction is ~70 kV/cm; use half as reference
+    E_ref = 3.5e4  # V/cm
+
+    # Store G0_TAT = N_t as generation rate parameter
+    devsim.set_parameter(device=device, region=region, name="G0_TAT", value=N_t)
+    devsim.set_parameter(device=device, region=region, name="E_ref_TAT", value=E_ref)
+
+    # Standard SRH with Z1/2 trap level (for component decomposition)
+    U_SRH_tat = (
+        f"(Electrons * Holes - {ni2}) / "
+        f"(taup * (Electrons + {n1_tat}) + taun * (Holes + {p1_tat}))"
+    )
+    CreateNodeModel(device, region, "U_SRH_only", U_SRH_tat)
+
+    # Full generation model: SRH_trap + effective generation
+    # f_depl = min(E_field_node / E_ref, 1.0) — larger in high-field depletion region
+    # G_eff = -N_t * Gamma_n * f_depl (negative = net generation)
+    # U_TAT = U_SRH_tat + G_eff
     U_TAT = (
         f"(Electrons * Holes - {ni2}) / "
-        f"(taup * (Electrons + n1_tat * Gamma_n) + taun * (Holes + p1_tat * Gamma_p))"
+        f"(taup * (Electrons + n1_tat * Gamma_n) + "
+        f"taun * (Holes + p1_tat * Gamma_p)) - "
+        f"G0_TAT * Gamma_n * min(E_field_node / E_ref_TAT, 1.0)"
     )
     CreateNodeModel(device, region, "U_TAT", U_TAT)
     for var in ("Electrons", "Holes"):
         CreateNodeModelDerivative(device, region, "U_TAT", U_TAT, var)
-
-    # Also store standard SRH (no field enhancement) for component decomposition
-    U_SRH_only = (
-        f"(Electrons * Holes - {ni2}) / "
-        f"(taup * (Electrons + {n1_tat}) + taun * (Holes + {p1_tat}))"
-    )
-    CreateNodeModel(device, region, "U_SRH_only", U_SRH_only)
 
     # --- Step 5: Replace generation models ---
     Gn_TAT = "-ElectronCharge * U_TAT"
@@ -160,7 +175,7 @@ def setup_tat_model(device_info, E_t=None, m_t=None, N_t=None):
 
     device_info["tat_initialized"] = True
     logger.info(
-        f"TAT model setup: E_t={E_t} eV, m_t={m_t} m0, N_t={N_t:.1e} cm^-3, "
+        f"TAT model setup: E_t={E_t} eV, m_t={m_t} m0, N_t={N_t:.1e} cm^-3/s, "
         f"n1_tat={n1_tat:.2e}, p1_tat={p1_tat:.2e}"
     )
 
@@ -168,10 +183,10 @@ def setup_tat_model(device_info, E_t=None, m_t=None, N_t=None):
 def _compute_node_efield(device, region):
     """Average absolute edge electric field to nodes.
 
-    Uses devsim's element_from_edge_model to get edge data at nodes,
-    then computes the arithmetic mean and clamps to minimum 1e3 V/cm.
+    Computes the arithmetic mean of adjacent edge |E| values for each node.
+    Boundary nodes use the single adjacent edge. Result clamped to minimum
+    1e3 V/cm to avoid division by zero in Kt computation.
     """
-    # Get edge electric field values and node positions
     E_edge = np.array(
         devsim.get_edge_model_values(device=device, region=region, name="ElectricField")
     )
@@ -181,12 +196,9 @@ def _compute_node_efield(device, region):
     n_nodes = len(node_x)
     n_edges = len(E_edge)
 
-    # Average absolute E-field from adjacent edges to each node
     E_node = np.zeros(n_nodes)
     abs_E = np.abs(E_edge)
 
-    # Interior nodes: average of left and right edges
-    # Edge i connects node i to node i+1 (1D mesh, sorted)
     for i in range(n_nodes):
         if i == 0:
             E_node[i] = abs_E[0]
@@ -195,10 +207,8 @@ def _compute_node_efield(device, region):
         else:
             E_node[i] = 0.5 * (abs_E[i - 1] + abs_E[i])
 
-    # Clamp minimum to 1e3 V/cm to avoid division by zero in Kt
     E_node = np.maximum(E_node, 1e3)
 
-    # Set as node model values
     devsim.node_model(device=device, region=region, name="E_field_node", equation="1e3")
     devsim.set_node_values(
         device=device, region=region, name="E_field_node", values=E_node.tolist()
@@ -223,13 +233,11 @@ def _compute_gamma_factors(device, region):
 
     if np.any(high_field):
         Kt_hf = Kt[high_field]
-        # Clamp Kt to avoid overflow: exp(1/(4*Kt^2)) can overflow for very small Kt
         Kt_hf = np.maximum(Kt_hf, 0.05)
         Gamma[high_field] = (np.sqrt(np.pi) / (2.0 * Kt_hf)) * np.exp(
             1.0 / (4.0 * Kt_hf**2)
         )
 
-    # Set as node model values
     devsim.node_model(device=device, region=region, name="Gamma_n", equation="1.0")
     devsim.set_node_values(
         device=device, region=region, name="Gamma_n", values=Gamma.tolist()
@@ -243,10 +251,9 @@ def _compute_gamma_factors(device, region):
 def setup_surface_recombination(device_info, S_n=None, S_p=None, contact="cathode"):
     """Add surface recombination current at a contact.
 
-    Adds a contact node model for SRV-driven recombination:
-        J_SRV = q * S_eff * (n*p - n_i^2) / (n + p + 2*n_i)
-
-    where S_eff = S_n * S_p / (S_n + S_p) * 2 for equal S_n, S_p.
+    Computes SRV current density at the contact and stores it for extraction.
+    The ohmic contact BC in devsim already enforces equilibrium carriers;
+    the SRV model provides an additional analytical current component.
 
     Parameters
     ----------
@@ -270,13 +277,9 @@ def setup_surface_recombination(device_info, S_n=None, S_p=None, contact="cathod
 
     ni2 = n_i**2
 
-    # Store SRV parameters
     devsim.set_parameter(device=device, name=f"S_n_{contact}", value=S_n)
     devsim.set_parameter(device=device, name=f"S_p_{contact}", value=S_p)
 
-    # SRV current density at contact node:
-    # J_SRV = q * (n*p - ni^2) / ((n + ni)/S_p + (p + ni)/S_n)
-    # This form properly accounts for different S_n and S_p.
     srv_model = (
         f"ElectronCharge * (Electrons * Holes - {ni2}) / "
         f"((Electrons + {n_i}) / {S_p} + (Holes + {n_i}) / {S_n})"
@@ -287,32 +290,19 @@ def setup_surface_recombination(device_info, S_n=None, S_p=None, contact="cathod
         device=device, contact=contact, name=model_name, equation=srv_model
     )
 
-    # Derivatives for Newton convergence
     for var in ("Electrons", "Holes"):
         deriv_name = f"{model_name}:{var}"
-        # Use devsim's automatic differentiation via contact_node_model
         devsim.contact_node_model(
             device=device,
             contact=contact,
             name=deriv_name,
-            equation=(
-                f"simplify({devsim.symdiff(device=device, expr=srv_model, variable=var)})"
-                if False
-                else "0"
-            ),  # Numerical Jacobian will handle convergence
+            equation="0",
         )
 
-    # Add SRV to the electron continuity contact equation
-    # The existing contact equation enforces Dirichlet BCs (n = n_eq).
-    # We add the SRV term as a node_model contribution.
-    # Actually, for ohmic contacts, the Dirichlet BC dominates.
-    # The SRV contribution is captured indirectly through the total current extraction.
-    # We store the model for explicit extraction in extract_dark_current_components.
-
     device_info["srv_initialized"] = True
-    device_info[f"srv_contact"] = contact
-    device_info[f"srv_S_n"] = S_n
-    device_info[f"srv_S_p"] = S_p
+    device_info["srv_contact"] = contact
+    device_info["srv_S_n"] = S_n
+    device_info["srv_S_p"] = S_p
     logger.info(
         f"Surface recombination setup at {contact}: S_n={S_n:.1e}, S_p={S_p:.1e} cm/s"
     )
@@ -334,18 +324,15 @@ def extract_dark_current_components(device_info, area=0.05):
     -------
     dict
         Dictionary with keys: J_total, J_SRH, J_TAT, J_SRV,
-        I_total, I_SRH, I_TAT, I_SRV (current densities and absolute currents).
+        I_total, I_SRH, I_TAT, I_SRV.
     """
     device = device_info["device_name"]
     region = device_info["region_name"]
 
-    # Total current from contact
     J_total = extract_contact_current(device_info, contact="cathode")
 
-    # Get node positions for numerical integration
     x = np.array(devsim.get_node_model_values(device=device, region=region, name="x"))
 
-    # Integrate U_SRH_only over the device for bulk SRH component
     q = _Q_SI
     if device_info.get("tat_initialized", False):
         U_SRH_only = np.array(
@@ -356,15 +343,12 @@ def extract_dark_current_components(device_info, area=0.05):
         U_TAT = np.array(
             devsim.get_node_model_values(device=device, region=region, name="U_TAT")
         )
-        # Integrate using trapezoidal rule: J = q * integral(U, dx)
         J_SRH = q * np.trapz(U_SRH_only, x)
         J_TAT_bulk = q * np.trapz(U_TAT - U_SRH_only, x)
     else:
-        # No TAT model, all current is SRH
         J_SRH = J_total
         J_TAT_bulk = 0.0
 
-    # SRV component
     J_SRV = 0.0
     if device_info.get("srv_initialized", False):
         contact = device_info.get("srv_contact", "cathode")
@@ -372,7 +356,6 @@ def extract_dark_current_components(device_info, area=0.05):
         S_p = device_info.get("srv_S_p", 0.0)
         n_i = device_info["n_i"]
 
-        # Get carrier concentrations at the contact node
         n_vals = np.array(
             devsim.get_node_model_values(device=device, region=region, name="Electrons")
         )
@@ -380,7 +363,6 @@ def extract_dark_current_components(device_info, area=0.05):
             devsim.get_node_model_values(device=device, region=region, name="Holes")
         )
 
-        # Contact node is last node for cathode, first for anode
         if contact == "cathode":
             n_c, p_c = n_vals[-1], p_vals[-1]
         else:
@@ -403,10 +385,7 @@ def extract_dark_current_components(device_info, area=0.05):
 
 
 def dark_current_sweep(device_info, V_range, area=0.05, V_step=0.5):
-    """Sweep reverse voltage and extract dark current components at each point.
-
-    Ramps bias incrementally for convergence stability, updating TAT Gamma
-    factors at each voltage step to capture field-dependent enhancement.
+    """Sweep reverse voltage and extract dark current components.
 
     Parameters
     ----------
@@ -445,14 +424,12 @@ def dark_current_sweep(device_info, V_range, area=0.05, V_step=0.5):
 
     bias_name = simple_physics.GetContactBiasName("anode")
 
-    # Track current bias
     try:
         current_V = devsim.get_parameter(device=device, name=bias_name)
     except devsim.error:
         current_V = 0.0
 
     for V_target in V_range:
-        # Ramp incrementally
         delta = V_target - current_V
         if abs(delta) > 1e-12:
             n_steps = max(1, int(np.ceil(abs(delta) / V_step)))
@@ -460,7 +437,6 @@ def dark_current_sweep(device_info, V_range, area=0.05, V_step=0.5):
 
             for V_int in V_intermediates:
                 devsim.set_parameter(device=device, name=bias_name, value=V_int)
-                # Update E-field and Gamma before solve for better convergence
                 _compute_node_efield(device, region)
                 _compute_gamma_factors(device, region)
                 try:
@@ -482,18 +458,15 @@ def dark_current_sweep(device_info, V_range, area=0.05, V_step=0.5):
                         logger.warning(
                             f"dark_current_sweep: failed at V={V_int:.3f}V: {e}"
                         )
-                        # Return partial results
                         for key in results:
                             results[key] = np.array(results[key])
                         return results
 
             current_V = V_target
 
-        # Final E-field and Gamma update at target voltage
         _compute_node_efield(device, region)
         _compute_gamma_factors(device, region)
 
-        # Extract components
         components = extract_dark_current_components(device_info, area=area)
         results["voltages"].append(V_target)
         for key in (
@@ -517,22 +490,18 @@ def dark_current_sweep(device_info, V_range, area=0.05, V_step=0.5):
 def create_dark_current_device(T=300, N_t=None, S_n=None, S_p=None, **kwargs):
     """Convenience function to create a DD device with TAT and SRV models.
 
-    Creates a drift-diffusion device, then adds Hurkx TAT generation and
-    surface recombination. Returns the augmented device_info dict.
-
     Parameters
     ----------
     T : float
         Temperature (K).
     N_t : float, optional
-        Trap density (cm^-3). Default from SiC4H_Parameters.
+        Effective generation rate (cm^-3 s^-1). Default from SiC4H_Parameters.
     S_n : float, optional
         Electron surface recombination velocity (cm/s).
     S_p : float, optional
         Hole surface recombination velocity (cm/s).
     **kwargs
-        Additional arguments passed to create_dd_device() (e.g.,
-        device_name, epi_thickness_cm, doping_profile, etc.).
+        Additional arguments passed to create_dd_device().
 
     Returns
     -------
