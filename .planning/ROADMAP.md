@@ -99,6 +99,6 @@ Plans:
 | 6. Code Quality Cleanup                  | v1.0      | 2/2            | Complete    | 2026-03-21 |
 | 7. Solver Robustness                     | v1.0      | 1/1            | Complete    | 2026-03-21 |
 | 8. Audit Gap Closure                     | v1.0      | 1/1            | Complete    | 2026-03-22 |
-| 10. Temperature-Dependent Device Physics | 3/3 | Complete   | 2026-03-23 | -          |
+| 10. Temperature-Dependent Device Physics | 3/3 | Complete    | 2026-03-23 | -          |
 | 11. Dark Current Modeling                | v1.1      | 0/?            | Not started | -          |
 | 12. Transient FLASH Dynamics             | v1.1      | 0/?            | Not started | -          |
