@@ -274,3 +274,64 @@ class TestSRHLifetime:
         """Invalid carrier type should raise ValueError."""
         with pytest.raises(ValueError):
             srh_lifetime(300, "neutron")
+
+
+# ===================================================================
+# Regression tests: v1.0 parity at T=300K (Phase 10, Plan 02)
+# ===================================================================
+
+import uuid
+
+devsim = pytest.importorskip("devsim")
+
+
+class TestRegressionT300K:
+    """Verify T=300K device parameters are bit-for-bit identical to v1.0."""
+
+    def test_device_ni_at_300k(self):
+        """create_sic_device(T=300) must produce n_i == 5e-9 (v1.0 value)."""
+        from src.device import create_sic_device
+
+        dev = create_sic_device(device_name=f"reg300_ni_{uuid.uuid4().hex[:6]}", T=300)
+        assert dev["n_i"] == pytest.approx(5e-9, rel=1e-10)
+
+    def test_device_mobility_at_300k(self):
+        """create_sic_device(T=300) must produce identical mu_n, mu_p to v1.0."""
+        from src.device import create_sic_device
+
+        dev = create_sic_device(device_name=f"reg300_mu_{uuid.uuid4().hex[:6]}", T=300)
+        # v1.0 uses mobility_caughey_thomas(N_D) with N_D=1.07e15
+        mu_n_v1 = mobility_caughey_thomas(1.07e15, "electron")
+        mu_p_v1 = mobility_caughey_thomas(1e19, "hole")
+        assert dev["mu_n"] == pytest.approx(mu_n_v1, rel=1e-10)
+        assert dev["mu_p"] == pytest.approx(mu_p_v1, rel=1e-10)
+
+
+class TestTemperaturePhysics:
+    """Verify correct T-dependence direction at non-300K temperatures."""
+
+    def test_device_350k_higher_ni(self):
+        """n_i at T=350K must be greater than 5e-9."""
+        from src.device import create_sic_device
+
+        dev = create_sic_device(device_name=f"tphys350_{uuid.uuid4().hex[:6]}", T=350)
+        assert dev["n_i"] > 5e-9
+
+    def test_device_350k_lower_mobility(self):
+        """mu_n at T=350K must be less than mu_n at T=300K."""
+        from src.device import create_sic_device
+
+        dev300 = create_sic_device(
+            device_name=f"tphys300a_{uuid.uuid4().hex[:6]}", T=300
+        )
+        dev350 = create_sic_device(
+            device_name=f"tphys350a_{uuid.uuid4().hex[:6]}", T=350
+        )
+        assert dev350["mu_n"] < dev300["mu_n"]
+
+    def test_device_280k_lower_ni(self):
+        """n_i at T=280K must be less than 5e-9."""
+        from src.device import create_sic_device
+
+        dev = create_sic_device(device_name=f"tphys280_{uuid.uuid4().hex[:6]}", T=280)
+        assert dev["n_i"] < 5e-9

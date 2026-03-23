@@ -234,3 +234,31 @@ class TestVoltageSweep:
 
         # E_max should increase with reverse bias
         assert results["E_max"][-1] > results["E_max"][0]
+
+
+# ===================================================================
+# Regression tests: V_bi parity at T=300K (Phase 10, Plan 02)
+# ===================================================================
+
+
+class TestVbiRegression:
+    """Verify V_bi at T=300K matches v1.0 exactly."""
+
+    def test_vbi_at_300k_regression(self):
+        """built_in_potential with n_i from intrinsic_concentration(300) must
+        match built_in_potential with params.n_i_300 = 5e-9."""
+        from src.analytical import built_in_potential
+        from src.sic_material import SiC4H_Parameters, intrinsic_concentration
+
+        params = SiC4H_Parameters()
+        n_i_T = intrinsic_concentration(300, params)[0]
+
+        # n_i_T must be exactly params.n_i_300 by calibration construction
+        assert n_i_T == pytest.approx(params.n_i_300, rel=1e-10)
+
+        # V_bi computed both ways must be identical
+        N_A_ionized = 1e18  # representative value
+        N_D = 1.07e15
+        V_bi_v1 = built_in_potential(N_A_ionized, N_D, params.n_i_300)
+        V_bi_T = built_in_potential(N_A_ionized, N_D, n_i_T)
+        assert V_bi_T == pytest.approx(V_bi_v1, rel=1e-10)
