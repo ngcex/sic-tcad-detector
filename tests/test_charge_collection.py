@@ -354,3 +354,49 @@ class TestCCEDDvsHecht:
                     f"(DD={cce_dd[i]:.4f}, Hecht={cce_hecht[i]:.4f}), "
                     f"expected <0.10"
                 )
+
+
+# ===================================================================
+# Regression tests: T=300K parity (Phase 10, Plan 02)
+# ===================================================================
+
+
+class TestHechtCCE300KRegression:
+    """Verify hecht_cce at T=300K produces identical results to v1.0."""
+
+    def test_hecht_cce_300k_regression(self):
+        """hecht_cce(V=30, d=9.5e-4, T=300) must match the v1.0 result
+        computed with explicit 300K default parameter values."""
+        from src.sic_material import SiC4H_Parameters
+
+        params = SiC4H_Parameters()
+        # v1.0 call: hecht_cce(30, 9.5e-4) used _params defaults
+        cce_explicit = hecht_cce(
+            30,
+            9.5e-4,
+            mu_e=params.mu_n_max,
+            tau_e=params.tau_n,
+            mu_p=params.mu_p_max,
+            tau_p=params.tau_p,
+        )
+        # New call with T=300 (should resolve to same defaults)
+        cce_T300 = hecht_cce(30, 9.5e-4, T=300)
+        assert cce_T300 == pytest.approx(float(cce_explicit), rel=1e-10)
+
+    def test_hecht_cce_explicit_params_unchanged(self):
+        """Passing explicit mu_e, tau_e etc. bypasses T-dependent defaults."""
+        # Use very low mobility/lifetime to get CCE well below 1
+        cce = hecht_cce(
+            5,
+            9.5e-4,
+            mu_e=10.0,
+            tau_e=1e-11,
+            mu_p=5.0,
+            tau_p=1e-11,
+        )
+        # Should use the explicit values, producing low CCE
+        assert 0.0 < float(cce) < 0.5
+
+        # Verify it differs from the default-T call (which gives ~1.0)
+        cce_default = hecht_cce(5, 9.5e-4, T=300)
+        assert float(cce) != pytest.approx(float(cce_default), rel=0.01)
