@@ -65,7 +65,7 @@ class SiC4H_Parameters:
     # --- Z1/2 center trap parameters (for Hurkx TAT dark current) ---
     E_t: float = 0.65  # eV, trap level below Ec (Z1/2 center)
     m_t: float = 0.25  # m0, tunneling effective mass
-    N_t: float = 1e12  # cm^-3, trap density (calibration parameter)
+    N_t: float = 2.2e13  # cm^-3/s, eff. generation rate (calibrated ~18 pA at -30V)
     S_n: float = 1e3  # cm/s, electron surface recombination velocity
     S_p: float = 1e3  # cm/s, hole surface recombination velocity
 
