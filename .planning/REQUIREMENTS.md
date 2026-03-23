@@ -20,9 +20,9 @@ Requirements for milestone v1.1: Realistic Device Physics. Each maps to roadmap 
 
 ### Dark Current
 
-- [ ] **DARK-01**: Simulator implements Hurkx trap-assisted tunneling model with Z1/2 center parameters (E_t = E_c - 0.65 eV, m_t ~ 0.25 m_0)
-- [ ] **DARK-02**: Simulator implements surface recombination velocity boundary condition at contacts
-- [ ] **DARK-03**: Simulated reverse dark current matches experimental ~18 pA within order of magnitude at -30V
+- [x] **DARK-01**: Simulator implements Hurkx trap-assisted tunneling model with Z1/2 center parameters (E_t = E_c - 0.65 eV, m_t ~ 0.25 m_0)
+- [x] **DARK-02**: Simulator implements surface recombination velocity boundary condition at contacts
+- [x] **DARK-03**: Simulated reverse dark current matches experimental ~18 pA within order of magnitude at -30V
 - [ ] **DARK-04**: User can visualize separate TAT vs SRV contributions to total dark current vs voltage
 - [ ] **DARK-05**: User can study dark current sensitivity to design parameters (epi thickness, doping, SRV)
 
@@ -78,9 +78,9 @@ Deferred to future release. Tracked but not in current roadmap.
 | TEMP-06     | Phase 10 | Complete |
 | TEMP-07     | Phase 10 | Complete |
 | TEMP-08     | Phase 10 | Complete |
-| DARK-01     | Phase 11 | Pending |
-| DARK-02     | Phase 11 | Pending |
-| DARK-03     | Phase 11 | Pending |
+| DARK-01     | Phase 11 | Complete |
+| DARK-02     | Phase 11 | Complete |
+| DARK-03     | Phase 11 | Complete |
 | DARK-04     | Phase 11 | Pending |
 | DARK-05     | Phase 11 | Pending |
 | TRAN-01     | Phase 12 | Pending |
