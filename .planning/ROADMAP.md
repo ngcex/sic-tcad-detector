@@ -105,5 +105,5 @@ Plans:
 | 7. Solver Robustness                     | v1.0      | 1/1            | Complete    | 2026-03-21 |
 | 8. Audit Gap Closure                     | v1.0      | 1/1            | Complete    | 2026-03-22 |
 | 10. Temperature-Dependent Device Physics | v1.1      | 3/3            | Complete    | 2026-03-23 |
-| 11. Dark Current Modeling                | 2/2 | Complete   | 2026-03-23 | -          |
+| 11. Dark Current Modeling                | 2/2 | Complete    | 2026-03-23 | -          |
 | 12. Transient FLASH Dynamics             | v1.1      | 0/?            | Not started | -          |
