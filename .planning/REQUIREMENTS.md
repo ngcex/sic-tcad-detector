@@ -68,39 +68,37 @@ Deferred to future release. Tracked but not in current roadmap.
 
 ## Traceability
 
-Which phases cover which requirements. Updated during roadmap creation.
-
-| Requirement | Phase | Status  |
-| ----------- | ----- | ------- |
-| TEMP-01     | —     | Pending |
-| TEMP-02     | —     | Pending |
-| TEMP-03     | —     | Pending |
-| TEMP-04     | —     | Pending |
-| TEMP-05     | —     | Pending |
-| TEMP-06     | —     | Pending |
-| TEMP-07     | —     | Pending |
-| TEMP-08     | —     | Pending |
-| DARK-01     | —     | Pending |
-| DARK-02     | —     | Pending |
-| DARK-03     | —     | Pending |
-| DARK-04     | —     | Pending |
-| DARK-05     | —     | Pending |
-| TRAN-01     | —     | Pending |
-| TRAN-02     | —     | Pending |
-| TRAN-03     | —     | Pending |
-| TRAN-04     | —     | Pending |
-| TRAN-05     | —     | Pending |
-| NOTE-01     | —     | Pending |
-| NOTE-02     | —     | Pending |
-| NOTE-03     | —     | Pending |
+| Requirement | Phase    | Status  |
+| ----------- | -------- | ------- |
+| TEMP-01     | Phase 10 | Pending |
+| TEMP-02     | Phase 10 | Pending |
+| TEMP-03     | Phase 10 | Pending |
+| TEMP-04     | Phase 10 | Pending |
+| TEMP-05     | Phase 10 | Pending |
+| TEMP-06     | Phase 10 | Pending |
+| TEMP-07     | Phase 10 | Pending |
+| TEMP-08     | Phase 10 | Pending |
+| DARK-01     | Phase 11 | Pending |
+| DARK-02     | Phase 11 | Pending |
+| DARK-03     | Phase 11 | Pending |
+| DARK-04     | Phase 11 | Pending |
+| DARK-05     | Phase 11 | Pending |
+| TRAN-01     | Phase 12 | Pending |
+| TRAN-02     | Phase 12 | Pending |
+| TRAN-03     | Phase 12 | Pending |
+| TRAN-04     | Phase 12 | Pending |
+| TRAN-05     | Phase 12 | Pending |
+| NOTE-01     | Phase 10 | Pending |
+| NOTE-02     | Phase 11 | Pending |
+| NOTE-03     | Phase 12 | Pending |
 
 **Coverage:**
 
 - v1.1 requirements: 21 total
-- Mapped to phases: 0
-- Unmapped: 21
+- Mapped to phases: 21
+- Unmapped: 0
 
 ---
 
 _Requirements defined: 2026-03-23_
-_Last updated: 2026-03-23 after initial definition_
+_Last updated: 2026-03-23 after roadmap creation_
