@@ -39,6 +39,7 @@ from src.analytical import (
     built_in_potential,
     depletion_width as analytical_depletion_width,
 )
+from src.sic_material import intrinsic_concentration
 
 logger = logging.getLogger(__name__)
 
@@ -307,7 +308,10 @@ def extract_depletion_width(device_info, V_applied=0.0):
     N_D = device_info["N_D"]
     epi_thickness = device_info["epi_thickness_cm"]
 
-    V_bi = built_in_potential(N_A_ionized, N_D, params.n_i_300)
+    # Use T-dependent n_i for V_bi calculation
+    T = device_info.get("T", 300)
+    n_i_T = intrinsic_concentration(T, params)[0]
+    V_bi = built_in_potential(N_A_ionized, N_D, n_i_T)
     W = analytical_depletion_width(
         V_bi, V_applied, N_D, eps_r=params.eps_r, epi_thickness=epi_thickness
     )

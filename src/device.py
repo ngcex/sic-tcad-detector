@@ -18,7 +18,13 @@ import devsim
 import numpy as np
 import scipy.optimize
 
-from src.sic_material import SiC4H_Parameters, mobility_caughey_thomas
+from src.sic_material import (
+    SiC4H_Parameters,
+    mobility_caughey_thomas,
+    intrinsic_concentration,
+    mobility_caughey_thomas_T,
+    srh_lifetime,
+)
 from src.incomplete_ionization import ionized_acceptor_concentration
 
 logger = logging.getLogger(__name__)
@@ -147,11 +153,13 @@ def create_sic_device(
         name="ElectronCharge",
         value=Q,
     )
+    # T-dependent intrinsic concentration (calibrated: n_i(300) == 5e-9 exactly)
+    n_i_T, NC_T, NV_T, E_g_T = intrinsic_concentration(T, params)
     devsim.set_parameter(
         device=device_name,
         region=region_name,
         name="n_i",
-        value=params.n_i_300,
+        value=n_i_T,
     )
     devsim.set_parameter(
         device=device_name,
@@ -172,9 +180,9 @@ def create_sic_device(
         value=V_t,
     )
 
-    # Doping-dependent mobility
-    mu_n = mobility_caughey_thomas(N_D, carrier="electron")
-    mu_p = mobility_caughey_thomas(N_A, carrier="hole")
+    # Doping- and temperature-dependent mobility
+    mu_n = mobility_caughey_thomas_T(N_D, T, "electron", params)
+    mu_p = mobility_caughey_thomas_T(N_A, T, "hole", params)
     devsim.set_parameter(
         device=device_name,
         region=region_name,
@@ -188,30 +196,30 @@ def create_sic_device(
         value=mu_p,
     )
 
-    # SRH parameters (for potential later use)
+    # SRH parameters — T-dependent trap concentrations and lifetimes
     devsim.set_parameter(
         device=device_name,
         region=region_name,
         name="n1",
-        value=params.n_i_300,
+        value=n_i_T,
     )
     devsim.set_parameter(
         device=device_name,
         region=region_name,
         name="p1",
-        value=params.n_i_300,
+        value=n_i_T,
     )
     devsim.set_parameter(
         device=device_name,
         region=region_name,
         name="taun",
-        value=params.tau_n,
+        value=srh_lifetime(T, "electron", params),
     )
     devsim.set_parameter(
         device=device_name,
         region=region_name,
         name="taup",
-        value=params.tau_p,
+        value=srh_lifetime(T, "hole", params),
     )
 
     # --- Set doping profile ---
@@ -258,6 +266,8 @@ def create_sic_device(
         "N_A": N_A,
         "N_A_ionized": N_A_ionized,
         "T": T,
+        "n_i": n_i_T,
+        "E_g": E_g_T,
         "params": params,
         "mu_n": mu_n,
         "mu_p": mu_p,

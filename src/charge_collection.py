@@ -26,20 +26,27 @@ from devsim.python_packages.model_create import (
 import numpy as np
 
 from src.generation_profiles import alpha_generation_profile
-from src.sic_material import SiC4H_Parameters
-
-_params = SiC4H_Parameters()
+from src.sic_material import (
+    SiC4H_Parameters,
+    mobility_caughey_thomas_T,
+    srh_lifetime,
+)
 
 logger = logging.getLogger(__name__)
+
+# Sentinel for detecting when caller did not pass explicit values
+_UNSET = object()
 
 
 def hecht_cce(
     V,
     d,
-    mu_e=_params.mu_n_max,
-    tau_e=_params.tau_n,
-    mu_p=_params.mu_p_max,
-    tau_p=_params.tau_p,
+    mu_e=_UNSET,
+    tau_e=_UNSET,
+    mu_p=_UNSET,
+    tau_p=_UNSET,
+    T=300,
+    params=None,
 ):
     """Two-carrier Hecht equation for charge collection efficiency.
 
@@ -52,14 +59,19 @@ def hecht_cce(
         Applied voltage (V). Uses absolute value for reverse bias.
     d : float
         Active region thickness (cm), typically depletion width.
-    mu_e : float
-        Electron mobility (cm^2/Vs). Default: 950 (4H-SiC low doping).
-    tau_e : float
-        Electron SRH lifetime (s). Default: 1e-9 (4H-SiC).
-    mu_p : float
-        Hole mobility (cm^2/Vs). Default: 125 (4H-SiC low doping).
-    tau_p : float
-        Hole SRH lifetime (s). Default: 6e-7 (4H-SiC).
+    mu_e : float or None
+        Electron mobility (cm^2/Vs). If not provided, computed from T.
+    tau_e : float or None
+        Electron SRH lifetime (s). If not provided, computed from T.
+    mu_p : float or None
+        Hole mobility (cm^2/Vs). If not provided, computed from T.
+    tau_p : float or None
+        Hole SRH lifetime (s). If not provided, computed from T.
+    T : float
+        Temperature (K). Default 300. Used to compute defaults when
+        mu_e/tau_e/mu_p/tau_p are not explicitly provided.
+    params : SiC4H_Parameters, optional
+        Material parameters. Defaults to SiC4H_Parameters().
 
     Returns
     -------
@@ -75,6 +87,30 @@ def hecht_cce(
 
     For 4H-SiC at V=40V, d=10um: lambda_e ~ 380 um >> d, so CCE -> 1.0.
     """
+    if params is None:
+        params = SiC4H_Parameters()
+
+    # Use T-dependent defaults when caller doesn't pass explicit values
+    if mu_e is _UNSET:
+        mu_e = mobility_caughey_thomas_T(params.N_ref_n * 0.001, T, "electron", params)
+        # Low-doping limit: use very low N to get mu_max(T)
+        # More precisely, use the mu_n_max formula directly
+        mu_e = (
+            params.mu_n_max * (T / 300.0) ** params.gamma_n
+            if T != 300
+            else params.mu_n_max
+        )
+    if tau_e is _UNSET:
+        tau_e = srh_lifetime(T, "electron", params)
+    if mu_p is _UNSET:
+        mu_p = (
+            params.mu_p_max * (T / 300.0) ** params.gamma_p
+            if T != 300
+            else params.mu_p_max
+        )
+    if tau_p is _UNSET:
+        tau_p = srh_lifetime(T, "hole", params)
+
     V = np.abs(np.asarray(V, dtype=float))
     d = float(d)
 
@@ -125,11 +161,13 @@ def hecht_cce_partial_depletion(
     V,
     d_epi,
     W_func,
-    mu_e=_params.mu_n_max,
-    tau_e=_params.tau_n,
-    mu_p=_params.mu_p_max,
-    tau_p=_params.tau_p,
+    mu_e=_UNSET,
+    tau_e=_UNSET,
+    mu_p=_UNSET,
+    tau_p=_UNSET,
     L_diff_p=7e-4,
+    T=300,
+    params=None,
 ):
     """Extended Hecht equation for partially-depleted detector.
 
@@ -172,6 +210,25 @@ def hecht_cce_partial_depletion(
       in the neutral region (from W to d_epi)
     - This is an approximation; the numerical DD solver is more accurate
     """
+    if params is None:
+        params = SiC4H_Parameters()
+    if mu_e is _UNSET:
+        mu_e = (
+            params.mu_n_max * (T / 300.0) ** params.gamma_n
+            if T != 300
+            else params.mu_n_max
+        )
+    if tau_e is _UNSET:
+        tau_e = srh_lifetime(T, "electron", params)
+    if mu_p is _UNSET:
+        mu_p = (
+            params.mu_p_max * (T / 300.0) ** params.gamma_p
+            if T != 300
+            else params.mu_p_max
+        )
+    if tau_p is _UNSET:
+        tau_p = srh_lifetime(T, "hole", params)
+
     V_arr = np.atleast_1d(np.abs(np.asarray(V, dtype=float)))
     cce_vals = np.zeros_like(V_arr)
 
