@@ -67,7 +67,12 @@ Plans:
 3. User can vary design parameters (epi thickness, doping, surface recombination velocity) and observe their effect on dark current magnitude and composition
 4. A Jupyter notebook guides the user through dark current analysis, calibration, and sensitivity studies with publication-quality figures
 
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+
+- [ ] 11-01-PLAN.md — Hurkx TAT model, surface recombination, dark current module with calibration tests
+- [ ] 11-02-PLAN.md — Dark current decomposition visualization, sensitivity sweeps, and notebook 07
 
 ### Phase 12: Transient FLASH Dynamics
 
@@ -99,6 +104,6 @@ Plans:
 | 6. Code Quality Cleanup                  | v1.0      | 2/2            | Complete    | 2026-03-21 |
 | 7. Solver Robustness                     | v1.0      | 1/1            | Complete    | 2026-03-21 |
 | 8. Audit Gap Closure                     | v1.0      | 1/1            | Complete    | 2026-03-22 |
-| 10. Temperature-Dependent Device Physics | 3/3 | Complete    | 2026-03-23 | -          |
-| 11. Dark Current Modeling                | v1.1      | 0/?            | Not started | -          |
+| 10. Temperature-Dependent Device Physics | v1.1      | 3/3            | Complete    | 2026-03-23 |
+| 11. Dark Current Modeling                | v1.1      | 0/2            | Not started | -          |
 | 12. Transient FLASH Dynamics             | v1.1      | 0/?            | Not started | -          |
