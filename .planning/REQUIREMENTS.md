@@ -14,8 +14,8 @@ Requirements for milestone v1.1: Realistic Device Physics. Each maps to roadmap 
 - [x] **TEMP-03**: Simulator computes T-dependent mobility mu_n(T), mu_p(T) via Caughey-Thomas with SiC-specific exponents (gamma_n=-2.40, gamma_p=-2.15)
 - [x] **TEMP-04**: Simulator computes T-dependent effective DOS (NC, NV) as functions of T
 - [x] **TEMP-05**: Simulator computes T-dependent SRH lifetimes tau_n(T), tau_p(T)
-- [ ] **TEMP-06**: All existing simulations reproduce v1.0 validated results at T=300K (regression test)
-- [ ] **TEMP-07**: User can run I-V, C-V, CCE simulations at any temperature in 280-350K range
+- [x] **TEMP-06**: All existing simulations reproduce v1.0 validated results at T=300K (regression test)
+- [x] **TEMP-07**: User can run I-V, C-V, CCE simulations at any temperature in 280-350K range
 - [ ] **TEMP-08**: User can sweep temperature across clinical range (303-313K) and extract temperature coefficient
 
 ### Dark Current
@@ -75,8 +75,8 @@ Deferred to future release. Tracked but not in current roadmap.
 | TEMP-03     | Phase 10 | Complete |
 | TEMP-04     | Phase 10 | Complete |
 | TEMP-05     | Phase 10 | Complete |
-| TEMP-06     | Phase 10 | Pending |
-| TEMP-07     | Phase 10 | Pending |
+| TEMP-06     | Phase 10 | Complete |
+| TEMP-07     | Phase 10 | Complete |
 | TEMP-08     | Phase 10 | Pending |
 | DARK-01     | Phase 11 | Pending |
 | DARK-02     | Phase 11 | Pending |
