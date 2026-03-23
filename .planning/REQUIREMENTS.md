@@ -16,7 +16,7 @@ Requirements for milestone v1.1: Realistic Device Physics. Each maps to roadmap 
 - [x] **TEMP-05**: Simulator computes T-dependent SRH lifetimes tau_n(T), tau_p(T)
 - [x] **TEMP-06**: All existing simulations reproduce v1.0 validated results at T=300K (regression test)
 - [x] **TEMP-07**: User can run I-V, C-V, CCE simulations at any temperature in 280-350K range
-- [ ] **TEMP-08**: User can sweep temperature across clinical range (303-313K) and extract temperature coefficient
+- [x] **TEMP-08**: User can sweep temperature across clinical range (303-313K) and extract temperature coefficient
 
 ### Dark Current
 
@@ -36,7 +36,7 @@ Requirements for milestone v1.1: Realistic Device Physics. Each maps to roadmap 
 
 ### Notebooks
 
-- [ ] **NOTE-01**: Jupyter notebook for T-dependent device characterization (I-V, C-V, CCE vs T)
+- [x] **NOTE-01**: Jupyter notebook for T-dependent device characterization (I-V, C-V, CCE vs T)
 - [ ] **NOTE-02**: Jupyter notebook for dark current analysis (TAT + SRV fitting, sensitivity)
 - [ ] **NOTE-03**: Jupyter notebook for transient FLASH dynamics (single-pulse, multi-pulse, comparison)
 
@@ -77,7 +77,7 @@ Deferred to future release. Tracked but not in current roadmap.
 | TEMP-05     | Phase 10 | Complete |
 | TEMP-06     | Phase 10 | Complete |
 | TEMP-07     | Phase 10 | Complete |
-| TEMP-08     | Phase 10 | Pending |
+| TEMP-08     | Phase 10 | Complete |
 | DARK-01     | Phase 11 | Pending |
 | DARK-02     | Phase 11 | Pending |
 | DARK-03     | Phase 11 | Pending |
@@ -88,7 +88,7 @@ Deferred to future release. Tracked but not in current roadmap.
 | TRAN-03     | Phase 12 | Pending |
 | TRAN-04     | Phase 12 | Pending |
 | TRAN-05     | Phase 12 | Pending |
-| NOTE-01     | Phase 10 | Pending |
+| NOTE-01     | Phase 10 | Complete |
 | NOTE-02     | Phase 11 | Pending |
 | NOTE-03     | Phase 12 | Pending |
 
