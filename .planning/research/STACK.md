@@ -1,195 +1,350 @@
 # Technology Stack
 
-**Project:** SiC TCAD Simulator (Petringa Group)
-**Researched:** 2026-03-20
-**Focus:** Open-source TCAD simulation of 4H-SiC p-n junction radiation detectors
+**Project:** SiC TCAD Simulator v1.1 -- Realistic Device Physics
+**Researched:** 2026-03-22
+**Scope:** Stack ADDITIONS for temperature-dependent simulation, realistic dark current, and transient FLASH dynamics. Does NOT repeat v1.0 stack (devsim, numpy, scipy, matplotlib, jupyter, pandas, gmsh, lmfit).
 
-## Recommended Stack
+## What Changes from v1.0
 
-### Core Simulation Engine
+**No new Python packages are needed.** The entire v1.1 feature set is achievable with the existing stack (devsim 2.10.0 + scipy + numpy). The work is physics modeling code that runs on top of devsim's existing capabilities.
 
-| Technology | Version | Purpose                                                                     | Why                                                                                                                                                                                                                                                                      | Confidence |
-| ---------- | ------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- |
-| devsim     | 2.10.0  | Semiconductor device simulation (drift-diffusion, I-V, C-V, electric field) | Only viable open-source Python TCAD simulator. Proven for 4H-SiC PIN detectors (IHEP/CERN RD50 workshop). Solves Poisson + continuity equations via finite volume. Supports DC, transient, and small-signal AC. Custom PDE support for extending beyond built-in models. | HIGH       |
-| Python     | >=3.9   | Runtime                                                                     | Required by devsim 2.10.0. Use 3.11 or 3.12 for best performance/compatibility with scientific stack.                                                                                                                                                                    | HIGH       |
+| v1.1 Feature                      | Stack Impact                                                      | New Package? |
+| --------------------------------- | ----------------------------------------------------------------- | ------------ |
+| Temperature-dependent parameters  | Extend `sic_material.py` with T-dependent functions               | NO           |
+| Surface recombination at contacts | Custom `contact_equation()` models in devsim                      | NO           |
+| Trap-assisted tunneling (Hurkx)   | Custom node model extending USRH in devsim                        | NO           |
+| Generation-recombination current  | Already modeled by SRH in depletion region; needs T-dependent n_i | NO           |
+| Transient FLASH pulse dynamics    | devsim `transient_bdf1`/`transient_bdf2` solver                   | NO           |
+| Inter-pulse memory effects        | devsim transient time-stepping loop                               | NO           |
 
-**Key devsim capabilities verified:**
+## Existing Stack Capabilities Required (Verified)
 
-- 1D, 2D, and 3D simulation on triangular/tetrahedral meshes
-- User-defined PDEs via `devsim.custom_equation()` and `devsim.register_function()`
-- Scharfetter-Gummel discretization for drift-diffusion
-- DC, transient, small-signal AC, impedance field method
-- Gmsh mesh import (MSH v2.2 format)
-- Built-in 1D and 2D mesh generators
-- Apache 2.0 license
+### devsim 2.10.0 -- Transient Solver
 
-**Critical note:** devsim's `simple_physics.py` module hardcodes silicon parameters (n_i=1e10, epsilon_r=11.1, mu_n=400, mu_p=200). For 4H-SiC simulation, you MUST create a custom `sic_physics.py` module with 4H-SiC material parameters. This is the single most important early task.
+**Confidence: HIGH** (verified from installed `tran_diode.py` and `transient_rc.py` examples in `.venv/devsim_data/`)
 
-### Mesh Generation
+devsim natively supports transient simulation with three time integration methods:
 
-| Technology | Version | Purpose                                   | Why                                                                                                                                                                                       | Confidence |
-| ---------- | ------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| gmsh       | 4.15.1  | 2D/3D mesh generation for device geometry | Directly supported by devsim via `create_gmsh_mesh()`. Python API for programmatic mesh creation. Required for 2D p-n junction cross-section meshes with graded refinement near junction. | HIGH       |
+| Solve Type       | Method            | Order | Use Case                                                         |
+| ---------------- | ----------------- | ----- | ---------------------------------------------------------------- |
+| `transient_dc`   | DC initialization | --    | Establish initial steady state before transient                  |
+| `transient_bdf1` | Backward Euler    | 1st   | First step after bias change (L-stable, handles discontinuities) |
+| `transient_bdf2` | BDF2              | 2nd   | Subsequent steps (higher accuracy, A-stable)                     |
+| `transient_tr`   | Trapezoidal       | 2nd   | Alternative to BDF2 (A-stable but not L-stable)                  |
 
-**Do NOT use pygmsh.** While pygmsh wraps gmsh, it adds abstraction without value for this use case. Use gmsh's Python API directly -- it is well-documented and gives full control over physical groups needed by devsim.
+**Key parameters for `devsim.solve()` transient calls:**
 
-**Mesh format requirement:** Export as MSH v2.2 ASCII (`-format msh2` flag or `gmsh.option.setNumber("Mesh.MshFileVersion", 2.2)`). devsim does not support MSH v4.
+```python
+devsim.solve(
+    type="transient_bdf1",      # or transient_bdf2, transient_tr
+    absolute_error=1e10,        # Newton convergence
+    relative_error=1e-10,
+    maximum_iterations=30,
+    tdelta=1e-9,                # time step (seconds)
+    charge_error=1e-2,          # relative charge conservation error
+)
+```
 
-### PDE Solver for Plasma Dynamics
+**TR-BDF2 composite method** (recommended for FLASH pulse simulation -- L-stable, 2nd order):
 
-| Technology                | Version        | Purpose                                                      | Why                                                                                                                                                                                                                                                                                              | Confidence |
-| ------------------------- | -------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- |
-| scipy.integrate.solve_ivp | (scipy >=1.11) | Time-dependent carrier transport / plasma recombination ODEs | FLASH plasma recombination requires solving time-dependent carrier generation-recombination-transport equations. solve_ivp provides stiff ODE solvers (BDF, Radau) essential for semiconductor carrier dynamics with vastly different electron/hole timescales. Prefer over odeint (legacy API). | MEDIUM     |
-| devsim (transient mode)   | 2.10.0         | Full drift-diffusion transient simulation                    | devsim supports transient simulation natively. For the FLASH problem, start with devsim transient mode before resorting to external PDE solvers. This may be sufficient without FiPy.                                                                                                            | MEDIUM     |
+```python
+gamma = 2 - math.sqrt(2.0)  # ~0.2929
+# Step 1: TR sub-step
+devsim.solve(type="transient_tr", tdelta=dt, gamma=gamma, charge_error=1e-2, ...)
+# Step 2: BDF2 sub-step
+devsim.solve(type="transient_bdf2", tdelta=dt, gamma=gamma, charge_error=1e-2, ...)
+```
 
-**Revised recommendation on FiPy:** The PROJECT.md lists FiPy for plasma dynamics, but I recommend against it as the primary tool. Reasoning:
+**Transient workflow pattern** (from `tran_diode.py`):
 
-1. devsim already solves the drift-diffusion equations in transient mode -- adding FiPy creates two independent solvers that must be kept consistent
-2. FiPy (v4.0.2, Feb 2026) is a general-purpose PDE solver not optimized for semiconductor physics -- you would need to re-implement Scharfetter-Gummel discretization, contact boundary conditions, and recombination models that devsim already provides
-3. The FLASH plasma recombination problem is better approached as: (a) devsim transient simulation with high-injection carrier generation source terms, or (b) scipy.integrate.solve_ivp for simplified 1D analytical models (Hecht equation extensions)
-4. FiPy has complex dependency management (PySparse, Trilinos, or PETSc backends) that adds installation friction
+```python
+# 1. DC solve to establish bias point
+devsim.solve(type="dc", ...)
 
-**When FiPy IS appropriate:** If you need to solve coupled PDEs that devsim cannot handle (e.g., thermal transport coupled to electrical, or custom physics beyond drift-diffusion), FiPy becomes useful as a supplementary tool. Keep it as an optional dependency, not core stack.
+# 2. Initialize transient state
+devsim.solve(type="transient_dc", ...)
 
-### Scientific Computing Foundation
+# 3. Change bias/generation (the transient stimulus)
+devsim.set_parameter(device=dev, name=bias_name, value=new_value)
 
-| Library    | Version | Purpose                                                     | Why                                                                                                                                         | Confidence |
-| ---------- | ------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| numpy      | >=1.24  | Array operations, linear algebra                            | Foundation of all scientific Python. Used by devsim for data exchange.                                                                      | HIGH       |
-| scipy      | >=1.11  | ODE solvers, optimization, special functions, interpolation | solve_ivp for transient carrier dynamics. optimize.curve_fit for fitting to experimental data. special functions for Fermi-Dirac integrals. | HIGH       |
-| matplotlib | >=3.7   | Publication-quality figures                                 | Standard for physics publications. Supports LaTeX rendering for proper axis labels.                                                         | HIGH       |
-| jupyter    | >=1.0   | Interactive analysis notebooks                              | Group accessibility requirement. Parametric studies with inline plots.                                                                      | HIGH       |
-| pandas     | >=2.0   | Data management for parametric sweeps                       | Organizing simulation results across parameter space (doping, bias, thickness, dose-rate). Export to CSV for sharing.                       | HIGH       |
+# 4. Time-step loop
+t = 0
+while t < t_total:
+    devsim.solve(type="transient_bdf1", tdelta=dt, charge_error=1e-2, ...)
+    # Extract carriers, current at this time step
+    t += dt
+```
 
-### Validation and Analysis
+**Critical note:** The existing `time_node_model` parameters (`NCharge`, `PCharge`) are already registered in `setup_sic_drift_diffusion()` (lines 139-168 of `drift_diffusion.py`), which means the transient solver is already wired up. No equation changes needed -- just call `solve(type="transient_bdf1", ...)` instead of `solve(type="dc", ...)`.
 
-| Library | Version | Purpose                                  | When to Use                                                                                                                                                  | Confidence |
-| ------- | ------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- |
-| lmfit   | >=1.2   | Model fitting with parameter constraints | Fitting I-V curves, C-V data, CCE vs voltage to extract material parameters. Better than raw scipy.optimize for constrained physics fits.                    | MEDIUM     |
-| h5py    | >=3.9   | HDF5 data storage                        | Storing large simulation datasets (field distributions, transient waveforms). Not needed initially -- use when datasets grow beyond CSV practicality.        | LOW        |
-| pyvista | >=0.42  | 3D visualization of mesh and field data  | Visualizing 2D/3D device structures, electric field distributions, carrier density maps. Optional but valuable for publication figures of 2D cross-sections. | LOW        |
+### devsim 2.10.0 -- Contact Equations for Surface Recombination
 
-### 4H-SiC Material Parameters (Custom Module)
+**Confidence: HIGH** (verified from `simple_physics.py` source and devsim documentation)
 
-No existing library provides 4H-SiC parameters for devsim. You must build a `sic_physics.py` module defining:
+The current code uses `CreateSiliconDriftDiffusionAtContact()` which **pins carriers to equilibrium values** at contacts (Ohmic contact boundary condition). This is correct for the cathode (metal contact) but prevents surface recombination modeling.
 
-| Parameter                             | Value               | Source                      | Notes                                                                        |
-| ------------------------------------- | ------------------- | --------------------------- | ---------------------------------------------------------------------------- |
-| Bandgap (E_g)                         | 3.26 eV             | Petringa Photons paper p.2  | Temperature-dependent: E_g(T) = 3.26 - alpha\*T^2/(T+beta)                   |
-| Dielectric constant (epsilon_r)       | 9.7                 | Petringa Photons paper p.6  | Anisotropic in reality; use 9.7 for perpendicular to c-axis                  |
-| Intrinsic carrier concentration (n_i) | ~5e-9 cm^-3 at 300K | Literature (wide bandgap)   | Extremely low due to 3.26 eV bandgap. NOT 1e10 like silicon.                 |
-| Electron mobility (mu_n)              | ~900 cm^2/V-s       | Literature                  | Perpendicular to c-axis at low doping. Doping-dependent.                     |
-| Hole mobility (mu_p)                  | ~120 cm^2/V-s       | Literature                  | Much lower than electron mobility                                            |
-| e-h pair creation energy              | 8.4 eV              | Petringa Microdosimetry p.5 | For charge generation from radiation                                         |
-| Electron saturation velocity          | ~2e7 cm/s           | Literature                  | Higher than silicon                                                          |
-| SRH lifetimes (tau_n, tau_p)          | ~100-1000 ns        | Varies with defect density  | Critical for recombination modeling. Calibrate to experimental dark current. |
-| Breakdown field                       | ~2.2 MV/cm          | Literature                  | Much higher than silicon (~0.3 MV/cm)                                        |
+To add surface recombination velocity (SRV) at a contact, replace the Ohmic carrier pinning with a flux boundary condition:
 
-## Alternatives Considered
+```python
+# Surface recombination rate: R_s = S * (n*p - n_i^2) / (n + p + 2*n_i)
+# where S is surface recombination velocity (cm/s)
+# This is the SRH surface recombination model
 
-| Category           | Recommended              | Alternative       | Why Not                                                                                                                                                                                                                                             |
-| ------------------ | ------------------------ | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Device simulator   | devsim                   | Charon (Sandia)   | C++ only, no Python API, complex build from source, designed for HPC clusters. Overkill for this project.                                                                                                                                           |
-| Device simulator   | devsim                   | Genius TCAD Open  | Last updated ~2017, effectively abandoned. Limited material model support.                                                                                                                                                                          |
-| Device simulator   | devsim                   | SyNumSeS          | 1D only (Van Roosbroeck system). Cannot do 2D cross-section simulations needed for edge effects and azimuthal response. Educational tool, not research-grade.                                                                                       |
-| Detector simulator | devsim (custom)          | RASER v4.1.0      | RASER simulates signal formation in detectors (Shockley-Ramo weighting field) but is oriented toward silicon detectors and signal waveform analysis. It uses devsim internally. Consider referencing RASER's approach but build custom SiC physics. |
-| PDE solver         | devsim transient + scipy | FiPy v4.0.2       | Redundant with devsim's capabilities for drift-diffusion. Complex dependency chain. Only add if thermal coupling or custom PDEs beyond drift-diffusion are needed.                                                                                  |
-| Mesh generator     | gmsh (direct API)        | pygmsh            | Unnecessary abstraction layer. gmsh Python API is already Pythonic and well-documented.                                                                                                                                                             |
-| Mesh generator     | gmsh                     | Triangle / TetGen | Lower-level, no Python API as clean, no physical group support needed by devsim.                                                                                                                                                                    |
+# Use contact_equation with node_current_model for surface flux
+devsim.contact_equation(
+    device=device, contact="anode",
+    name="ElectronContinuityEquation",
+    node_model=contact_electrons_name,     # Ohmic pinning
+    node_current_model="surface_e_flux",   # ADD: surface recombination flux
+    edge_current_model="ElectronCurrent",
+)
+```
+
+**Implementation approach:** For the 1D device, surface recombination enters as an additional current term at the anode contact (SiO2-passivated surface in the real device). The `ContactSurfaceArea` and `NodeVolume` built-in models handle the geometric scaling.
+
+### devsim 2.10.0 -- Custom Node Models for Hurkx TAT
+
+**Confidence: HIGH** (verified -- project already uses `CreateNodeModel` and `CreateNodeModelDerivative` extensively)
+
+The Hurkx trap-assisted tunneling model is implemented as a field enhancement factor on the SRH lifetimes. The model modifies the existing USRH expression:
+
+```
+USRH_TAT = (n*p - n_i^2) / (taup/Gamma_p * (n + n1) + taun/Gamma_n * (p + p1))
+```
+
+where Gamma_n and Gamma_p are field enhancement factors:
+
+```
+Gamma = integral of exp(u - u^(3/2) * K) du from 0 to infinity
+K = (4/3) * sqrt(2 * m_t * (E_t)^3) / (q * hbar * F)
+```
+
+This is purely a node model modification -- no new devsim capabilities needed. The existing `CreateNodeModel` / `CreateNodeModelDerivative` pattern (already used for `UAuger`, `USRH`) handles this. The field magnitude `F` is already computed as `abs(ElectricField)` from the Poisson equation.
+
+### scipy.optimize -- Parameter Fitting
+
+**Confidence: HIGH** (already in stack, already used for `calibrate_graded_doping`)
+
+`scipy.optimize.curve_fit` or `scipy.optimize.minimize` for fitting:
+
+- SRH lifetime tau_n, tau_p to match 18 pA dark current
+- Surface recombination velocity S to experimental data
+- Hurkx effective tunneling mass m_t as calibration parameter
+
+No new fitting library needed. The existing `lmfit` (already in v1.0 stack) is also available for constrained fits.
+
+## Temperature-Dependent Material Parameters (No New Libraries)
+
+All T-dependent physics goes into extending the existing `sic_material.py` module and `create_sic_device()` function. No external parameter database exists for 4H-SiC in Python -- parameters come from literature.
+
+### Parameters That Need T-Dependence
+
+| Parameter             | T-Dependent Model                                         | Source                       | Confidence |
+| --------------------- | --------------------------------------------------------- | ---------------------------- | ---------- |
+| Bandgap E_g(T)        | Varshni: E_g(0) - alpha\*T^2/(T+beta)                     | Already in `compute_ni()`    | HIGH       |
+| n_i(T)                | sqrt(NC*NV)*exp(-E_g/2kT)                                 | Already in `compute_ni()`    | HIGH       |
+| NC(T), NV(T)          | proportional to T^(3/2)                                   | Already in `compute_ni()`    | HIGH       |
+| mu_n_max(T)           | 950 \* (T/300)^(-2.40)                                    | TU Wien Ayalew Table 3.5     | HIGH       |
+| mu_p_max(T)           | 125 \* (T/300)^(-2.15)                                    | TU Wien Ayalew Table 3.5     | HIGH       |
+| mu_n_min(T)           | 40 \* (T/300)^(-0.5)                                      | TU Wien Ayalew Table 3.5     | MEDIUM     |
+| mu_p_min(T)           | 15.9 \* (T/300)^(-0.5)                                    | TU Wien Ayalew Table 3.5     | MEDIUM     |
+| tau_SRH(T)            | tau_0 \* (T/300)^alpha_tau                                | Needs literature calibration | LOW        |
+| Incomplete ionization | Already T-dependent in `ionized_acceptor_concentration()` | Existing code                | HIGH       |
+
+**Varshni parameters for 4H-SiC** (already coded in `sic_material.py`):
+
+- E_g(0) = 3.265 eV
+- alpha = 6.5e-4 eV/K
+- beta = 1300 K
+
+**Caughey-Thomas T-dependent exponents** (TU Wien Ayalew thesis, Table 3.5):
+
+- Electrons: gamma_mu = -2.40 (mu_max temperature exponent), beta_mu = -0.5 (mu_min exponent)
+- Holes: gamma_mu = -2.15 (mu_max temperature exponent), beta_mu = -0.5 (mu_min exponent)
+
+**Key insight:** `compute_ni(T)` already exists but is not wired into the device pipeline. The `create_sic_device()` function currently uses the fixed `params.n_i_300 = 5e-9`. Wiring T-dependence means calling `compute_ni(T)` and passing the result as the `n_i` parameter. Similarly, mobility_caughey_thomas needs a `T` argument.
+
+## Dark Current Model Components (No New Libraries)
+
+Matching the experimental 18 pA dark current requires three physics contributions, all implementable as devsim node/contact models:
+
+### 1. Generation-Recombination Current (Depletion Region SRH)
+
+**Already modeled** by the existing USRH in the depletion region. The current v1.0 prediction (6.71e-49 A) is too low because:
+
+- n_i for 4H-SiC is ~5e-9 cm^-3, making bulk SRH negligible
+- The real dark current is dominated by surface and trap-assisted mechanisms
+
+With T-dependent n_i, the G-R current will increase but still remain far below 18 pA. This is expected -- the gap must be filled by surface recombination and TAT.
+
+### 2. Surface Recombination Current
+
+**Implementation: custom contact equation with SRV parameter**
+
+Literature values for 4H-SiC SiO2-passivated surface:
+
+- S_n = 150-5000 cm/s (Si-face, CMP, SiO2 passivated)
+- S_p = 150-5000 cm/s
+- S_interface (epi/substrate) = ~5e5 cm/s
+
+Source: Kimoto et al., J. Appl. Phys. 127, 195702 (2020); Rakheja et al., Semicond. Sci. Technol. (2023).
+
+**Confidence: MEDIUM** -- SRV values vary widely with surface preparation; will need to calibrate S to match 18 pA.
+
+### 3. Trap-Assisted Tunneling (Hurkx Model)
+
+**Implementation: modified USRH node model with field enhancement**
+
+The Hurkx model adds a field enhancement factor Gamma to the SRH lifetimes. For 4H-SiC:
+
+- Trap energy E_t = E_g/2 = 1.63 eV (midgap, standard assumption)
+- Tunneling effective mass m_t = 0.25 \* m_0 (standard for SiC, same as Si)
+- One additional fitting parameter vs standard SRH
+
+**Confidence: MEDIUM** -- Hurkx model is well-established in TCAD but has been noted as lacking microscopic physics detail. For our purpose (matching 18 pA), it provides adequate phenomenological description.
+
+**Critical:** The Hurkx field enhancement integral has no closed-form solution. Use the Klaassen approximation:
+
+```
+Gamma(F) approx = 1 + Delta_Gamma
+Delta_Gamma = (2*sqrt(3)*pi * F_crit / F) * exp(-(F_crit/F)^2)  for F > 0
+F_crit = sqrt(24 * m_t * (E_t)^3) / (q * hbar)
+```
+
+This is computable as a devsim node model expression using the existing `ElectricField` edge model.
+
+## Transient FLASH Dynamics (No New Libraries)
+
+### What Needs to Change from v1.0
+
+The v1.0 FLASH study used **steady-state DC solves** with a constant generation rate to approximate the FLASH condition. This misses:
+
+1. **Intra-pulse dynamics**: Carrier build-up during the ~10-200 ms pulse
+2. **Carrier decay**: Recombination/sweep-out after pulse ends
+3. **Inter-pulse memory**: Residual carriers from previous pulse affecting next pulse
+
+### Implementation Using Existing devsim Transient Solver
+
+```python
+# Pseudo-code for FLASH pulse simulation
+# Uses existing devsim transient solve capabilities
+
+# 1. Establish bias point (DC)
+ramp_bias(device_info, V_bias)
+
+# 2. Initialize transient
+devsim.solve(type="transient_dc", ...)
+
+# 3. Pulse ON: apply generation rate, time-step through pulse
+add_generation_to_dd(device_info, gen_values)
+t = 0
+while t < pulse_duration:
+    devsim.solve(type="transient_bdf1", tdelta=dt_pulse, charge_error=1e-2, ...)
+    record_state(t)  # carriers, current, CCE
+    t += dt_pulse
+
+# 4. Pulse OFF: zero generation, time-step through decay
+add_generation_to_dd(device_info, np.zeros_like(gen_values))
+while t < pulse_duration + decay_time:
+    devsim.solve(type="transient_bdf1", tdelta=dt_decay, ...)
+    record_state(t)
+    t += dt_decay
+
+# 5. Repeat for inter-pulse study
+```
+
+**Time scale analysis for adaptive stepping:**
+
+- Dielectric relaxation time: tau_d = eps / (q _ mu_n _ n) ~ 1e-12 s (too fast, handled by drift-diffusion implicitly)
+- SRH lifetime: tau_SRH ~ 1-1000 ns (sets minimum resolved timescale)
+- Transit time across 10 um epi: t_tr = d / v_sat ~ 10e-4 / 2e7 ~ 50 ps
+- Pulse duration: 10-200 ms (macroscopic)
+
+**Recommended time stepping:** Start with dt = 1 ns (resolve SRH dynamics), increase to dt = 1 us after initial transient settles, use adaptive stepping based on charge_error.
+
+### scipy.integrate.solve_ivp (Existing in Stack)
+
+**Use case:** Simplified 0D/1D analytical transient models for validation before running full devsim transient simulations.
+
+```python
+from scipy.integrate import solve_ivp
+
+def carrier_dynamics(t, y, G, tau_srh, tau_auger_coeff):
+    n = y[0]
+    dndt = G - n/tau_srh - tau_auger_coeff * n**3
+    return [dndt]
+
+sol = solve_ivp(carrier_dynamics, [0, t_pulse], [n0],
+                method='BDF', args=(G, tau, C_aug))
+```
+
+This provides an independent check on devsim transient results.
+
+## What NOT to Add
+
+| Tempting Addition                    | Why NOT                                                    | What to Do Instead                              |
+| ------------------------------------ | ---------------------------------------------------------- | ----------------------------------------------- |
+| FiPy for thermal coupling            | T range is 30-40 C (clinical); isothermal assumption valid | Parameterize T as input, no coupled thermal PDE |
+| COMSOL/Sentaurus                     | Out of scope (open-source constraint)                      | devsim handles all needed physics               |
+| mpmath for arbitrary precision       | n_i overflow already handled by clamped exponentials       | Existing approach works                         |
+| pyvista/vtk for 3D viz               | 1D device, matplotlib sufficient                           | Use matplotlib                                  |
+| h5py for data storage                | Transient data fits in numpy arrays/JSON                   | Use existing save_parametric_results pattern    |
+| External SiC parameter database      | No Python package exists; parameters come from papers      | Extend sic_material.py manually                 |
+| Separate ODE solver for TAT integral | Klaassen approximation is analytical                       | Use devsim node model expression                |
 
 ## Installation
 
+**No changes to v1.0 installation.** All v1.1 work is pure Python modeling code on top of existing dependencies.
+
 ```bash
-# Create virtual environment (recommended: Python 3.11 or 3.12)
-python3 -m venv .venv
-source .venv/bin/activate
-
-# Core simulation stack
-pip install devsim==2.10.0
-pip install gmsh==4.15.1
-
-# Scientific computing
-pip install numpy scipy matplotlib jupyter pandas
-
-# Analysis tools (install as needed)
-pip install lmfit
-
-# Optional visualization
-pip install pyvista
-
-# Optional: FiPy (only if thermal/custom PDE coupling needed later)
-# pip install fipy
+# v1.0 stack is sufficient -- no new packages
+uv pip install devsim==2.10.0 numpy scipy matplotlib jupyter pandas lmfit gmsh==4.15.1
 ```
 
-**Installation notes:**
+## Integration Points with Existing Code
 
-- devsim 2.10.0 ships pre-built wheels for macOS arm64, Linux x86_64/aarch64, Windows x64
-- gmsh 4.15.1 ships pre-built wheels for all major platforms
-- No compilation required for the core stack
-- On macOS arm64 (Apple Silicon), both devsim and gmsh have native arm64 wheels -- no Rosetta needed
-- devsim bundles its own BLAS/LAPACK; no external math library installation required
+### Files to Modify
 
-## Version Pinning Strategy
+| Existing File                                      | Change Needed                                                                      | Why                                            |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------- |
+| `sic_material.py`                                  | Add T-dependent functions for mobility, tau_SRH                                    | Wire T into Caughey-Thomas, add T-exponents    |
+| `device.py` `create_sic_device()`                  | Call `compute_ni(T)` instead of using fixed `n_i_300`; pass T-dependent mobilities | Enable T-dependent simulation                  |
+| `drift_diffusion.py` `setup_sic_drift_diffusion()` | Add Hurkx-enhanced USRH model option                                               | Replace midgap SRH with field-enhanced version |
+| `drift_diffusion.py` contact equations             | Replace `CreateSiliconDriftDiffusionAtContact` with custom SiC version             | Enable surface recombination at anode          |
 
-```
-# requirements.txt
-devsim==2.10.0
-gmsh==4.15.1
-numpy>=1.24,<2.0
-scipy>=1.11
-matplotlib>=3.7
-jupyter>=1.0
-pandas>=2.0
-lmfit>=1.2
-```
+### New Files to Create
 
-Pin devsim and gmsh exactly (simulation reproducibility). Allow minor version ranges for scientific Python stack (security updates, bug fixes).
+| New File                       | Purpose                                                                    |
+| ------------------------------ | -------------------------------------------------------------------------- |
+| `src/surface_recombination.py` | SRV-based contact equations, replaces Ohmic pinning at specified contacts  |
+| `src/hurkx_tat.py`             | Hurkx field-enhanced SRH model, Klaassen approximation for Gamma(F)        |
+| `src/transient_flash.py`       | Transient pulse simulation loop, adaptive time stepping, result recording  |
+| `src/dark_current.py`          | Orchestrator: combines T-dep params + surface + TAT to predict I_dark(V,T) |
 
-**numpy 2.0 warning:** numpy 2.0 introduced breaking ABI changes. devsim 2.10.0 was released Oct 2025 and should be compatible with numpy 2.x, but verify on first install. If issues arise, pin `numpy<2.0`.
+## Key Literature Sources for Parameter Values
 
-## Key Workflow
-
-```
-[gmsh Python API] --> [MSH v2.2 mesh file] --> [devsim create_gmsh_mesh()]
-                                                        |
-                                                        v
-                                              [devsim: define regions,
-                                               contacts, doping profiles]
-                                                        |
-                                                        v
-                                              [sic_physics.py: set 4H-SiC
-                                               material parameters, models]
-                                                        |
-                                                        v
-                                              [devsim: solve Poisson +
-                                               drift-diffusion equations]
-                                                        |
-                                                        v
-                                              [Extract I-V, C-V, E-field,
-                                               carrier distributions]
-                                                        |
-                                                        v
-                                              [matplotlib: publication plots]
-                                                        |
-                                                        v
-                                              [scipy/lmfit: fit to experimental
-                                               data, validate models]
-```
+| Topic                          | Source                                            | What It Provides                           |
+| ------------------------------ | ------------------------------------------------- | ------------------------------------------ |
+| T-dependent mobility           | TU Wien Ayalew thesis, Table 3.5                  | Caughey-Thomas T-exponents for 4H-SiC      |
+| Surface recombination velocity | Kimoto et al., J. Appl. Phys. 127, 195702 (2020)  | SRV vs T for 4H-SiC Si-face                |
+| Hurkx TAT model                | Hurkx et al., IEEE TED 39(2), 1992                | Original model formulation                 |
+| 4H-SiC TAT parameters          | arxiv:2503.09016 (2025)                           | m_t = 0.25 m_0 for SiC                     |
+| SRH lifetime vs T              | Kimoto & Cooper, "Fundamentals of SiC Technology" | tau(T) relationships                       |
+| Bandgap, n_i                   | Ioffe NSM Archive + existing `sic_material.py`    | Already implemented                        |
+| TCAD parameter review          | Burin et al. (2024), CERN RD50                    | Comprehensive 4H-SiC TCAD parameter survey |
 
 ## Sources
 
-- [devsim PyPI](https://pypi.org/project/devsim/) - v2.10.0, Oct 2025 -- HIGH confidence
-- [devsim GitHub](https://github.com/devsim/devsim) - Features, examples, license -- HIGH confidence
-- [devsim Manual](https://devsim.net/index.html) - v2.10.0 documentation -- HIGH confidence
-- [devsim Meshing docs](https://devsim.net/meshing.html) - Mesh format requirements -- HIGH confidence
-- [devsim simple_physics.py](https://github.com/devsim/devsim/blob/main/python_packages/simple_physics.py) - Silicon parameter defaults -- HIGH confidence
-- [IHEP 4H-SiC simulation with DEVSIM](https://indico.cern.ch/event/1132520/contributions/5149103/) - CERN RD50 workshop, SiC PIN validation -- MEDIUM confidence (PDF unreadable, metadata confirmed)
-- [Frontiers: Time Resolution of 4H-SiC PIN Detector](https://www.frontiersin.org/journals/physics/articles/10.3389/fphy.2022.718071/full) - RASER framework for SiC detectors -- MEDIUM confidence
-- [FiPy PyPI](https://pypi.org/project/FiPy/) - v4.0.2, Feb 2026 -- HIGH confidence
-- [FiPy NIST](https://pages.nist.gov/fipy/en/latest/index.html) - Official documentation -- HIGH confidence
-- [gmsh PyPI](https://pypi.org/project/gmsh/) - v4.15.1, Feb 2026 -- HIGH confidence
-- [gmsh Official](https://gmsh.info/) - Documentation and API reference -- HIGH confidence
-- [SyNumSeS](https://github.com/pabele/synumses) - 1D semiconductor simulator, educational -- MEDIUM confidence
-- [RASER PyPI](https://pypi.org/project/raser/) - v4.1.0, radiation detector simulation -- MEDIUM confidence
-- [TCAD Central Software listing](https://tcadcentral.com/Software.html) - Ecosystem overview -- LOW confidence
-- [SciPy solve_ivp docs](https://docs.scipy.org/doc/scipy/reference/generated/scipy.integrate.solve_ivp.html) - ODE solver reference -- HIGH confidence
+- [devsim transient_rc.py](file://.venv/devsim_data/testing/transient_rc.py) -- transient solver usage pattern with BDF1, BDF2, TR-BDF methods -- HIGH confidence
+- [devsim tran_diode.py](file://.venv/devsim_data/examples/diode/tran_diode.py) -- transient diode example with time-step loop -- HIGH confidence
+- [devsim simple_physics.py](file://.venv/lib/python3.13/site-packages/devsim/python_packages/simple_physics.py) -- contact equation patterns, carrier pinning -- HIGH confidence
+- [devsim solver docs](https://devsim.net/solver.html) -- transient solve types and parameters -- HIGH confidence
+- [devsim models docs](https://devsim.net/models.html) -- custom equation, contact_equation, interface_equation API -- HIGH confidence
+- [devsim command reference](https://devsim.net/CommandReference.html) -- solve() parameter listing (tdelta, charge_error, gamma) -- HIGH confidence
+- [TU Wien Ayalew thesis, 3.3.1](https://www.iue.tuwien.ac.at/phd/ayalew/node65.html) -- Caughey-Thomas T-dependent parameters for 4H-SiC -- HIGH confidence
+- [Kimoto et al., SRV for 4H-SiC](https://pubs.aip.org/aip/jap/article/127/19/195702/153502/) -- surface recombination velocities vs T -- MEDIUM confidence
+- [Rakheja et al., SRV 4H-SiC](https://www.sciencedirect.com/science/article/pii/S136980012300673X) -- SRV vs carrier concentration -- MEDIUM confidence
+- [Hurkx TAT model](https://www.semanticscholar.org/paper/A-new-recombination-model-for-device-simulation-Hurkx-Klaassen/4e0ad76a1a7d0e1b4db5f1e48bc05a6f16614337) -- original field-enhanced SRH paper -- HIGH confidence
+- [arxiv:2503.09016](https://arxiv.org/pdf/2503.09016) -- 4H-SiC TAT with m_t = 0.25 m_0 -- MEDIUM confidence
+- [Burin TCAD 4H-SiC review (CERN)](https://indico.cern.ch/event/1476607/contributions/6218703/) -- comprehensive parameter survey -- MEDIUM confidence (PDF not readable, metadata confirmed)
+- [Ideal 4H-SiC pn junction](https://www.sciencedirect.com/science/article/abs/pii/S0921510700006024) -- G-R current with n=2 ideality factor, J_0 values -- MEDIUM confidence

@@ -1,339 +1,375 @@
-# Pitfalls Research
+# Domain Pitfalls
 
-**Domain:** TCAD simulation of 4H-SiC radiation detectors under FLASH conditions
-**Researched:** 2026-03-20
-**Confidence:** MEDIUM (domain-specific physics pitfalls well-documented in literature; open-source tooling pitfalls partially verified)
+**Domain:** Adding temperature dependence, surface physics, and transient dynamics to a validated 1D 4H-SiC TCAD simulator (v1.1 milestone)
+**Researched:** 2026-03-23
+**Confidence:** HIGH for codebase-specific pitfalls (verified against actual source), MEDIUM for physics model pitfalls (literature-sourced)
 
 ## Critical Pitfalls
 
-### Pitfall 1: Ignoring Incomplete Ionization of Dopants at Room Temperature
+Mistakes that cause rewrites, silent physics errors, or loss of validated results.
 
-**What goes wrong:**
-4H-SiC has deep donor and acceptor levels (nitrogen donor ~50-90 meV below conduction band for hexagonal/cubic sites; aluminum acceptor ~190 meV above valence band). At 300 K, a significant fraction of dopants remain un-ionized. Using fully-ionized doping (as is standard in Si simulations) overestimates the free carrier concentration by 10-40% depending on doping level, leading to incorrect depletion width, built-in potential, and C-V characteristics.
+### Pitfall 1: Hardcoded 300K Parameters Scattered Throughout the Codebase
 
-**Why it happens:**
-Most TCAD tutorials and examples assume silicon, where ionization is essentially complete at RT. The Petringa device has N_D = 0.5-1 x 10^14 cm^-3 in the epi layer, where incomplete ionization has a modest but non-negligible effect. However, the p+ substrate at N_A ~ 10^19 cm^-3 has severe incomplete ionization for aluminum acceptors. Existing TCAD tools (including commercial ones) have poor incomplete ionization models for SiC -- the CERN review paper (Burin et al., arXiv:2410.06798) documents that "the INCOMPLETE physical model available in ATLAS is unsuitable for simulating dynamic characteristics."
+**What goes wrong:** The existing codebase has T=300K baked into multiple locations that are easy to miss when threading temperature through. `SiC4H_Parameters` stores `n_i_300`, `NC_300`, `NV_300`, `mu_n_max`, `mu_p_max` as fixed 300K constants. `device.py` uses `params.n_i_300` directly when setting the devsim `n_i` region parameter and sets `params.tau_n`/`params.tau_p` as fixed SRH lifetimes. The `charge_collection.py` module instantiates `_params = SiC4H_Parameters()` at module level and uses fixed 300K mobilities as function defaults (e.g., `mu_e=_params.mu_n_max` in the Hecht equation). The clamped Boltzmann formulation in `poisson.py` uses `V_t` computed once at device creation.
 
-**How to avoid:**
+If you change T in `create_sic_device()` without updating every downstream consumer, you get a device where some physics runs at the new T and some silently remains at 300K.
 
-- Implement the Fermi-Dirac occupation with the actual ionization energies for nitrogen (hexagonal: 52.1 meV, cubic: 91.8 meV) and aluminum (191 meV) rather than using Boltzmann statistics with full ionization.
-- For the epi layer at 10^14 cm^-3, nitrogen ionization is ~85-95% at RT -- still worth including for accurate C-V matching.
-- For the p+ substrate at 10^19 cm^-3, aluminum ionization fraction drops to ~10-30% at RT due to the deep acceptor level plus bandgap narrowing effects. This drastically affects the built-in potential.
-- Validate against the group's experimental C-V data (depletion width 1.7 um at 0V, 9.5 um at -10V) as the ground truth.
+**Why it happens:** The v1.0 code was correctly designed for single-temperature operation. Temperature was a parameter passed to `create_sic_device()` but never exercised at non-300K values. The `compute_ni(T)` function exists in `sic_material.py` but is explicitly documented as "Not used in the v1.0 pipeline."
 
-**Warning signs:**
+**Consequences:** Silent physics errors. The simulator appears to work at T!=300K but produces wrong results because n_i, mobility, SRH lifetimes, or Hecht equation benchmarks use stale 300K values. These errors are subtle -- the simulator converges fine, and results look plausible but are quantitatively wrong. Worst case: you validate against 300K data, conclude T-dependence works, but the T-dependent models were never actually active.
 
-- Simulated C-V curve shifted relative to experimental data
-- Depletion width at 0V does not match the measured 1.7 um
-- Built-in potential Vbi calculated as ~3.0 V (full ionization) vs correct ~2.5-2.7 V (with incomplete ionization)
-- Dark current orders of magnitude off from measured < 18 pA
+**Prevention:**
 
-**Phase to address:**
-Phase 1 (Device Electrical Characterization). Must be correct before any CCE or FLASH simulation.
+1. Create a `compute_all_parameters(T, N_D)` function that returns ALL T-dependent quantities: n_i(T), NC(T), NV(T), mu_n(T, N_D), mu_p(T, N_A), E_g(T), tau_n(T), tau_p(T), V_t(T). Wire this into `create_sic_device()`.
+2. Audit every usage of `params.n_i_300`, `params.NC_300`, `params.NV_300`, `params.mu_n_max`, `params.mu_p_max`, `params.tau_n`, `params.tau_p`. Specific locations to fix:
+   - `device.py` line 153: `value=params.n_i_300` -- must become T-dependent
+   - `device.py` lines 196-199: `n1=params.n_i_300`, `p1=params.n_i_300` -- must track n_i(T)
+   - `device.py` lines 176-177: `mobility_caughey_thomas(N_D)` -- must accept T
+   - `charge_collection.py` line 31: `_params = SiC4H_Parameters()` -- module-level instantiation bakes in 300K at import time
+   - `charge_collection.py` lines 37-42: Hecht equation defaults use fixed 300K mobilities
+3. After implementing, run the full test suite at T=300K and verify results are BIT-IDENTICAL to v1.0 output. Any deviation means you broke the parameter threading.
 
----
-
-### Pitfall 2: Using Wrong or Inconsistent Material Parameters for 4H-SiC
-
-**What goes wrong:**
-The literature contains "a rich set of often diverging values based on a variety of calculation and measurement methods, and sometimes old values or those determined for other kinds of silicon carbide (3C-SiC, 6H-SiC) are commonly used" (Burin et al., 2024). Using mobility values from 6H-SiC, or bandgap values from 3C-SiC, or mixing parameters from different polytypes produces internally inconsistent simulations that cannot be validated.
-
-**Why it happens:**
-Copy-pasting parameters from random papers or TCAD default material files. Many online resources mix SiC polytypes without clearly labeling them. The devsim framework has no built-in SiC material database -- every parameter must be manually specified.
-
-**How to avoid:**
-
-- Build a single authoritative parameter file for 4H-SiC at 300K, sourced from the CERN review (arXiv:2410.06798) which systematically catalogs recommended values.
-- Key parameters that MUST be 4H-SiC specific:
-  - Bandgap: 3.26 eV (matches Petringa papers)
-  - Electron mobility: ~950 cm^2/Vs (c-axis), ~1020 cm^2/Vs (perpendicular) at low doping
-  - Hole mobility: ~115 cm^2/Vs (c-axis), ~95 cm^2/Vs (perpendicular) -- note holes are MORE anisotropic than electrons
-  - Dielectric constant: 9.66 (perpendicular to c-axis), 10.03 (parallel) -- use 9.7 isotropic for 1D as in Petringa papers
-  - Intrinsic carrier concentration: ~5 x 10^-9 cm^-3 at 300K (extremely low, orders of magnitude below Si)
-  - Electron-hole pair creation energy: 8.4 eV (from microdosimetry paper)
-- Document every parameter's source and polytype in the code.
-
-**Warning signs:**
-
-- ni values suspiciously high (anything above 10^-6 cm^-3 at 300K is wrong for 4H-SiC)
-- Mobility values that do not distinguish between c-axis and perpendicular directions
-- Bandgap != 3.26 eV at 300K
-- Using Si values "as approximation" for anything
-
-**Phase to address:**
-Phase 1. Create a validated 4H-SiC material parameter module as the very first deliverable.
+**Detection:** Run at T=300K and T=310K. If C-V, CCE, and I-V results are identical, T-dependence is not wired in. For SiC in the 300-313K clinical range, n_i changes by roughly an order of magnitude per 10K (because E_g/kT is so large at 3.26 eV), so even small T changes must produce measurable shifts.
 
 ---
 
-### Pitfall 3: Numerical Divergence from Extremely Low Intrinsic Carrier Concentration
+### Pitfall 2: Using Silicon Temperature Exponents for 4H-SiC Mobility
 
-**What goes wrong:**
-4H-SiC has ni ~ 5 x 10^-9 cm^-3 at 300K (compared to Si at ~1.5 x 10^10 cm^-3 -- a 19-order-of-magnitude difference). This creates extreme ratios in the drift-diffusion equations. Standard Newton solver tolerances calibrated for Si simulations fail catastrophically: either the solver diverges, or it converges to a numerically wrong solution because floating-point precision is exhausted.
+**What goes wrong:** Applying Si-derived temperature exponents for mobility to 4H-SiC. The physics is different and the existing `mobility_caughey_thomas()` function has no T-dependence at all -- it returns constant values regardless of T.
 
-**Why it happens:**
-The drift-diffusion equations contain terms like n\*p = ni^2 ~ 10^-17 cm^-6, while doping concentrations are 10^14-10^19 cm^-3. This creates condition numbers of 10^30+ in the Jacobian matrix. Default solver tolerances (relative error ~10^-10) are insufficient. The CERN review explicitly notes that "the wide bandgap leads to very low intrinsic charge carrier densities, usually requiring much higher numeric accuracy than default settings."
+The correct 4H-SiC temperature-dependent Caughey-Thomas model (TU Wien Ayalew thesis, Table 3.5):
 
-**How to avoid:**
+- mu_max(T) = mu_max(300K) \* (T/300)^gamma, where gamma_n = -2.40 (electrons), gamma_p = -2.15 (holes)
+- mu_min(T) = mu_min(300K) \* (T/300)^beta, where beta = -0.5 for both carriers
 
-- Use the Slotboom variable transformation: define quasi-Fermi potentials rather than carrier concentrations directly. The Scharfetter-Gummel discretization in devsim handles this, but the initial guess must use quasi-Fermi level formulation.
-- Set absolute_error tolerance to accommodate the actual carrier concentration scale (for devsim, the diode example uses absolute_error=1e10 for drift-diffusion, which seems counterintuitive but works because it is measuring total equation residual, not per-node error).
-- Use voltage ramping in small steps (0.1V or smaller) rather than jumping to the target bias.
-- Start from the equilibrium (Poisson-only) solution before turning on carrier transport.
-- Mesh must be fine enough at the junction: devsim examples use 1e-9 cm spacing at the junction vs 1e-7 cm at contacts.
+For Si, the gamma exponents are different (-2.42 for electrons, -2.20 for holes in the Arora model). The difference for holes (gamma_p = -2.15 vs -2.20) matters less than getting the model right from the start.
 
-**Warning signs:**
+More importantly: several published SiC TCAD papers use gamma values from the wrong polytype (6H-SiC has gamma_n = -2.70, quite different from 4H-SiC's -2.40). This polytype confusion is well-documented in the literature.
 
-- Newton solver fails to converge within 30 iterations
-- Solver converges but carrier concentrations go negative
-- Current is many orders of magnitude wrong
-- Solution changes dramatically with small tolerance changes
+**Why it happens:** Most TCAD examples and online resources are Si-centric. The current `mobility_caughey_thomas()` function already uses correct 4H-SiC values at 300K but simply has no T parameter. Adding T-dependence by searching "Caughey-Thomas temperature model" will return Si exponents.
 
-**Phase to address:**
-Phase 1 (initial device setup). This is a day-one problem -- the very first simulation attempt will hit this.
+**Consequences:** At T=313K (40C clinical): mu_n should decrease by ~3% relative to 300K. Using Si exponents gives ~3.1% -- small difference. But using 6H-SiC exponents gives ~4% decrease. The error compounds through drift-diffusion current, transit time, and CCE computation.
 
----
+**Prevention:**
 
-### Pitfall 4: Applying Hecht Equation for FLASH Plasma Recombination Validation
+1. Use ONLY the TU Wien Ayalew thesis values (already cited in `sic_material.py`):
+   - gamma_n = -2.40, gamma_p = -2.15 (mu_max exponents)
+   - beta_n = beta_p = -0.5 (mu_min exponents)
+2. Add these as constants to `SiC4H_Parameters`:
+   ```python
+   gamma_mu_n: float = -2.40
+   gamma_mu_p: float = -2.15
+   beta_mu: float = -0.5
+   ```
+3. Extend `mobility_caughey_thomas()` to accept T:
+   ```python
+   def mobility_caughey_thomas(N_total, carrier="electron", T=300):
+       mu_max_T = mu_max_300 * (T/300)**gamma
+       mu_min_T = mu_min_300 * (T/300)**beta
+       ...
+   ```
 
-**What goes wrong:**
-The Hecht equation assumes: (1) uniform electric field, (2) small-signal injection (generated carriers do not perturb the field), (3) single-carrier or independent two-carrier transport. Under FLASH conditions (20-230 Gy/s), the generated carrier density can be high enough to screen the internal electric field (plasma effect), violating all three assumptions simultaneously. Using Hecht as the analytical benchmark for FLASH CCE predictions will give false validation.
-
-**Why it happens:**
-Hecht is the standard analytical tool for CCE in radiation detectors and is correct at normal dose rates. The temptation is to use it as the "ground truth" for all conditions. Research shows that "charge collection efficiency drops significantly below the Hecht value as injection ratio increases" and "the CCE under non-uniform electric field deteriorates compared to the Hecht prediction."
-
-**How to avoid:**
-
-- Use Hecht equation ONLY for low-dose-rate validation (where it is valid) as a Phase 1 sanity check.
-- For FLASH conditions, the correct analytical framework is a modified drift-diffusion model that includes:
-  - Carrier-density-dependent electric field (self-consistent Poisson)
-  - Ambipolar transport in high-injection regions
-  - Auger recombination (which dominates at high carrier densities, scaling as n^3)
-- The Boag-Wilson model (used in the FLASH paper for ion chambers) also breaks down above ~20 mGy/pulse -- do not borrow it for solid-state detectors.
-- Validate FLASH simulation by: (a) checking that low-dose-rate limit recovers Hecht/100% CCE, (b) comparing qualitative dose-rate dependence against published ion chamber recombination trends, (c) checking that the plasma decay timescale is physically reasonable (~ns for Auger at high injection in SiC).
-
-**Warning signs:**
-
-- CCE simulation shows no dose-rate dependence at FLASH rates
-- CCE remains at 100% even at 230 Gy/s (this would mean no plasma effect -- possible but must be physically justified)
-- Plasma decay time shorter than dielectric relaxation time (unphysical)
-- Electric field inside the plasma region has unreasonable values
-
-**Phase to address:**
-Phase 2 (FLASH simulation). Critical to get the validation framework right before interpreting results.
+**Detection:** Verify mu_n(300K, 1e14) = 949 cm^2/Vs (should match v1.0). Verify mu_n(400K, 1e14) ~ 655 cm^2/Vs (decreases ~31%). If mu_n(400K) is within 5% of mu_n(300K), the T-dependence is not working.
 
 ---
 
-### Pitfall 5: Coarse Mesh in the Carrier Generation Region
+### Pitfall 3: Breaking the Validated 300K Baseline (Regression)
 
-**What goes wrong:**
-For 62 MeV protons, the energy deposition profile (Bragg curve) has steep gradients, and the generated carrier density profile has sharp spatial features (track structure). If the mesh is too coarse in the generation region, the solver either: (a) smears out the carrier density, underestimating peak concentrations and thus underestimating recombination, or (b) produces oscillatory/non-physical solutions from under-resolved gradients.
+**What goes wrong:** Adding new physics (temperature models, surface terms, transient capability) inadvertently changes the 300K steady-state results that are currently validated (C-V R^2=0.998, CCE=100% at V>-40V, flat CCE across FLASH dose rates). Common ways this breaks:
 
-**Why it happens:**
-A uniform mesh fine enough everywhere is computationally prohibitive for 2D/3D. Users tend to make the mesh "fine enough" based on the depletion width scale (~10 um) but ignore that the carrier generation profile has features on the ~100 nm to ~1 um scale, especially near the surface and at the Bragg peak.
+1. Replacing fixed `n_i_300 = 5e-9` with `compute_ni(300)` which returns a slightly different value. Current `compute_ni(300)` returns ~6.5e-9 (verified by reading the code: it uses m_e=0.77*m0, m_h=1.0*m0, M_c=3, Varshni with the same parameters). The 30% discrepancy from the literature value of 5e-9 would shift all I-V and C-V results.
+2. Adding surface recombination boundary conditions that are active even at 300K, changing the I-V dark current from the validated ideal-SRH floor.
+3. Modifying `ElectronGeneration`/`HoleGeneration` model expressions to include new terms, changing the devsim equation registration.
+4. Changing the mesh to accommodate surface physics or transient resolution.
 
-**How to avoid:**
+**Why it happens:** The v1.0 results depend on exact numerical values and model registrations. The code has no automated regression tests -- validation is done manually via 5 Jupyter notebooks.
 
-- Use adaptive or graded mesh with minimum element size of ~10-50 nm in the carrier generation region.
-- For the 1D case (which is the starting point): the 10 um epitaxial layer should have at least 200-500 mesh points, with refinement near the surface (where the p-n junction is) and near the edge of the depletion region.
-- Perform a mesh convergence study: run the same simulation at 1x, 2x, and 4x mesh density and verify that CCE changes by less than 1%.
-- For transient simulations, mesh and time step are coupled -- finer mesh requires smaller time steps (CFL-like condition for explicit schemes; less strict but still relevant for implicit).
+**Consequences:** Loss of the validated baseline. You can no longer claim R^2=0.998 for C-V or flat CCE across FLASH dose rates. You may not know whether deviations come from new physics or from accidentally changed old physics.
 
-**Warning signs:**
+**Prevention:**
 
-- CCE changes by more than 2% when doubling mesh density
-- Carrier concentration profiles show staircase artifacts
-- Negative carrier concentrations at sharp gradients
-- Solver requires many more iterations than expected
+1. **Before ANY code changes**, extract golden reference values from v1.0 notebooks and store them:
+   - C-V capacitances at V = 0, -10, -30V
+   - I-V dark current at V = -30, -60V
+   - CCE at V = -10, -30, -40V for alpha particles
+   - CCE vs dose rate at 20, 100, 230 Gy/s
+2. Implement a `test_300K_regression()` function that creates a device at T=300K with v1.0 parameters and verifies results match golden values within tolerance.
+3. New physics must be **additive and toggleable**: all new models off by default, explicitly enabled via parameters. When all new physics is disabled, results MUST match v1.0.
+4. The `compute_ni(300)` discrepancy (6.5e-9 vs 5e-9) must be resolved BEFORE using it: either calibrate the DOS masses to reproduce 5e-9, or accept the new value and re-validate. Do NOT silently switch.
 
-**Phase to address:**
-Phase 1 (mesh setup) and Phase 2 (transient simulation). Mesh convergence study should be a gate before any production runs.
-
----
-
-### Pitfall 6: Wrong Time-Stepping for Transient Plasma Dynamics
-
-**What goes wrong:**
-Plasma recombination at FLASH dose rates involves multiple timescales: dielectric relaxation (~fs in depleted SiC), carrier transit (~ns), SRH recombination (~us), and Auger recombination at high injection (~ps-ns). Using a single fixed time step either: misses fast dynamics (too large) or wastes computation on slow phases (too small). Worse, explicit time stepping with dt > dielectric relaxation time produces numerically unstable plasma evolution.
-
-**Why it happens:**
-The plasma problem spans ~6 orders of magnitude in timescale. Users unfamiliar with stiff ODE/PDE systems choose time steps based on the "interesting" physics timescale (ns) and miss the fast relaxation modes that constrain stability.
-
-**How to avoid:**
-
-- Use implicit time integration (backward Euler or BDF2) for the coupled Poisson-drift-diffusion system. devsim supports transient simulation with implicit methods.
-- Start with very small time steps (~0.1 ps) during initial carrier injection, then increase adaptively as the carrier distribution smooths.
-- If using fipy for the plasma dynamics component, use its built-in implicit solvers (not explicit forward Euler).
-- Monitor the Courant number and the ratio dt/tau_dielectric -- both should indicate stability.
-- For the Petringa device at -30V bias: transit time ~ W/v_sat ~ 10 um / (2x10^7 cm/s) ~ 50 ps, so the relevant collection timescale is ~50-100 ps.
-
-**Warning signs:**
-
-- Solution oscillates in time (carrier density alternates between high and low values)
-- Total charge is not conserved (generation + recombination does not balance collection at contacts)
-- Solver requires progressively more Newton iterations per time step
-- Unphysical negative carrier concentrations appear at certain time steps
-
-**Phase to address:**
-Phase 2 (transient FLASH simulation). Time-stepping strategy must be designed before running production simulations.
+**Detection:** Run the 300K C-V simulation after every code change. If R^2 drops below 0.995 or CCE changes by more than 0.1%, something broke.
 
 ---
 
-### Pitfall 7: Neglecting Surface Recombination at SiC/SiO2 Interface
+### Pitfall 4: Surface Recombination Cannot Explain 18 pA Dark Current in 1D
 
-**What goes wrong:**
-The Petringa device has SiO2 passivation on the edges and the 4H-SiC/SiO2 interface has notoriously high interface trap density (Dit ~ 10^11-10^13 cm^-2 eV^-1) and surface recombination velocity (SRV) ranging from 10^3 to 10^5 cm/s depending on passivation quality. Ignoring surface recombination or using Si-like SRV values (10-100 cm/s) will overestimate CCE, especially for carriers generated near the surface.
+**What goes wrong:** The goal is to match the experimental 18 pA dark current. The natural approach is to add surface recombination. But a quantitative check shows surface SRH generation cannot produce 18 pA:
 
-**Why it happens:**
-The SiC/SiO2 interface is the Achilles heel of SiC technology. Literature values are scattered and depend on excitation level, passivation process, and crystal face. Users either ignore surface effects entirely (1D simulation with no surfaces) or use a single literature value without considering the dependence on carrier injection level. Research shows "an increase in SRV with increasing excited carrier concentration, irrespective of crystal faces and passivation."
+Surface generation current: J_surf = q _ n_i _ S
 
-**How to avoid:**
+- At 300K with n_i = 5e-9 cm^-3 and S = 1000 cm/s (typical SiO2-passivated SiC):
+- J_surf = 1.6e-19 _ 5e-9 _ 1000 = 8e-25 A/cm^2
+- For 4 mm^2 area: I_surf = 3.2e-25 A -- 16 orders of magnitude below 18 pA
 
-- For the 1D vertical simulation through the p-n junction, surface recombination does not directly appear (it is a 2D/3D effect). However, it affects the build-up over-response problem.
-- When extending to 2D, use SRV = 10^4 cm/s as a starting estimate for the SiC/SiO2 interface (middle of reported range).
-- Treat SRV as a fitting parameter and report the sensitivity of CCE to SRV in the publication.
-- For the FLASH problem specifically: at high injection, the SRV may increase, further reducing CCE. This is a secondary effect but should be noted.
+Space-charge-region generation: J_gen = q _ n_i _ W / (2 \* tau_eff)
 
-**Warning signs:**
+- With W = 10e-4 cm, tau_eff = max(tau_n, tau_p) = 6e-7 s:
+- J_gen = 1.6e-19 _ 5e-9 _ 10e-4 / (2 \* 6e-7) = 6.7e-28 A/cm^2
+- Also negligibly small
 
-- 2D/3D simulation shows no CCE dependence on device lateral dimensions
-- Build-up over-response cannot be reproduced without surface effects
-- Edge CCE is identical to center CCE (should not be, due to surface recombination)
+The experimental 18 pA over 4 mm^2 = 4.5e-9 A/cm^2. This is ~19 orders of magnitude above the intrinsic SRH generation. The dark current CANNOT be explained by any bulk or surface SRH mechanism at 300K with n_i = 5e-9.
 
-**Phase to address:**
-Phase 3 (build-up over-response analysis) and Phase 4 (azimuthal response). Not critical for Phase 2 if staying in 1D.
+**Why it happens:** SiC's extremely low n_i makes all n_i-proportional currents negligible. The experimental dark current must come from non-n_i mechanisms: perimeter/edge leakage (2D/3D geometry effect), trap-assisted tunneling (field-enhanced generation through deep levels), or measurement artifacts (cable leakage, probe station noise).
+
+**Consequences:** If you spend time implementing a sophisticated surface recombination model to match 18 pA, you will fail. No physically reasonable SRV value can bridge 16 orders of magnitude. You will end up using unphysically large SRV values that have no physical meaning.
+
+**Prevention:**
+
+1. Accept that matching 18 pA in a 1D simulator requires an **effective generation mechanism**, not a physical surface recombination model.
+2. The most likely physical mechanisms for 18 pA are:
+   - Perimeter leakage: current flows along the SiO2/SiC interface around the device perimeter. This is proportional to perimeter, not area. For a 2x2 mm device, perimeter/area = 8mm/4mm^2 = 2 cm^-1. This is inherently a 2D effect.
+   - Trap-assisted tunneling (TAT) through the Z1/2 center (E_C - 0.65 eV): field-enhanced generation in the depletion region. This CAN be modeled in 1D as a field-dependent generation rate.
+   - Generation-recombination through deep levels with temperature-activated capture cross-sections.
+3. For the 1D model, implement TAT as the primary dark current mechanism. Use the Hurkx model or a simplified field-enhanced generation rate. The Z1/2 trap level at E_C - 0.65 eV is well-documented for 4H-SiC.
+4. Treat the TAT parameters (trap density, tunneling mass) as fitting parameters to match 18 pA, and document this clearly.
+
+**Detection:** Before implementing ANY dark current model, compute the theoretical maximum current from each mechanism at the relevant n_i value. If the mechanism cannot produce current within 3 orders of magnitude of the target, it is not the dominant mechanism.
 
 ---
 
-## Technical Debt Patterns
+### Pitfall 5: Trap-Assisted Tunneling Model Complexity Explosion
 
-| Shortcut                          | Immediate Benefit                        | Long-term Cost                                                                       | When Acceptable                                                                   |
-| --------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
-| Hardcoded material parameters     | Fast prototyping                         | Every parameter change requires editing multiple files; easy to have inconsistencies | Never -- build the parameter module on day 1                                      |
-| Uniform mesh                      | Simple to generate                       | Wastes memory or misses physics; cannot do convergence studies easily                | Only for initial "does it run" tests                                              |
-| Skipping incomplete ionization    | Avoids complex Fermi integral evaluation | Wrong doping profile, wrong depletion width, wrong everything downstream             | Only for rough order-of-magnitude exploration                                     |
-| Using Si recombination parameters | More tutorials available                 | Wrong recombination rates by orders of magnitude                                     | Never                                                                             |
-| 1D-only simulation                | 10x faster development                   | Cannot capture surface effects, angular dependence, or edge effects                  | Acceptable for FLASH dose-rate study (Phase 2) as the dominant effect is vertical |
-| Fixed time step                   | Simpler code                             | Either too slow or unstable; cannot span the required timescale range                | Only for initial testing with known stable range                                  |
+**What goes wrong:** 4H-SiC has multiple well-known defect levels that contribute to TAT:
 
-## Integration Gotchas
+- Z1/2 center at E_C - 0.65 eV (carbon vacancy, dominant in n-type epi, density ~10^12-10^14 cm^-3)
+- EH6/7 at E_C - 1.55 eV
+- Shallow N donors at E_C - 0.05 eV and E_C - 0.09 eV
+- Interface traps at SiC/SiO2 with continuous Dit distribution
 
-| Integration                | Common Mistake                                                                         | Correct Approach                                                                                                                                                                                                             |
-| -------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| devsim mesh setup          | Using uniform mesh or meshes from Si examples without refinement at junction           | Use graded mesh: ~1 nm spacing at junction, ~100 nm spacing in bulk, verified by convergence study                                                                                                                           |
-| devsim + Python units      | Assuming SI units (meters); devsim uses CGS (centimeters)                              | All lengths in cm, all concentrations in cm^-3, all currents in A, voltages in V. The Poisson equation uses epsilon in units of F/cm. Convert ALL inputs to CGS.                                                             |
-| fipy semiconductor PDEs    | Using FaceVariable for coefficients in ConvectionTerm/DiffusionTerm                    | fipy rejects FaceVariable coefficients (GitHub issue #746). Use CellVariable and let fipy interpolate to faces.                                                                                                              |
-| fipy + devsim coupling     | Running both on the same mesh, passing data between them                               | Define a clear interface: devsim solves steady-state device physics; fipy (or a custom transient solver) handles time-dependent carrier dynamics. Use a shared mesh definition and explicit data transfer at each time step. |
-| Geant4 generation profiles | Using raw Geant4 energy deposition as carrier generation rate without converting units | Convert MeV/cm to electron-hole pairs using W_SiC = 8.4 eV/pair. Account for the dose-to-generation-rate conversion: G = (dose_rate _ density) / (W_SiC _ q). Beware eV vs J units.                                          |
-| Convergence tolerance      | Using default tolerances from Si examples                                              | Wide bandgap requires tighter relative tolerance (~1e-12 or better) and appropriate absolute tolerance scaling. Test that tightening tolerance by 10x does not change the answer.                                            |
+Recent research (2024-2025) shows that choosing wrong trap combinations either underestimates or overestimates reverse I-V by orders of magnitude. The full Hurkx TAT model has 5+ free parameters per trap level. With 3-4 trap levels, that is 15-20 parameters to fit against a single I-V curve -- massively under-constrained.
 
-## Performance Traps
+**Why it happens:** The natural instinct is to be physically complete: include all known trap levels, implement full phonon-assisted tunneling with WKB approximation, add field-enhanced emission. But devsim has no built-in TAT model -- everything must be implemented from scratch using custom equation strings, and each additional mechanism multiplies the Jacobian complexity and convergence difficulty.
 
-| Trap                                     | Symptoms                                                   | Prevention                                                                                | When It Breaks                   |
-| ---------------------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------- | -------------------------------- |
-| 2D mesh too fine everywhere              | Single simulation takes hours; parameter sweeps infeasible | Use graded mesh; start with 1D for physics validation                                     | > 50k nodes in 2D with transient |
-| Parametric sweep without warm-starting   | Each bias point starts from scratch; 50x slowdown          | Use previous solution as initial guess for next parameter value                           | Any sweep > 10 points            |
-| Full Poisson-DD solve at every time step | Transient simulation takes days                            | Check if decoupled or semi-implicit scheme is sufficient for the physics regime           | > 1000 time steps with 2D mesh   |
-| Storing full solution at every time step | Memory exhaustion                                          | Store only at selected output times; compute derived quantities (CCE, current) on the fly | > 10000 time steps               |
+**Consequences:** Weeks spent implementing a multi-trap TAT model that either (a) does not converge because the Jacobian derivatives are wrong or incomplete, (b) converges but has too many free parameters to provide meaningful fits, or (c) matches 18 pA but only because of parameter overfitting, not physics.
 
-## "Looks Done But Isn't" Checklist
+**Prevention:**
 
-- [ ] **I-V curve:** Matches experimental rectification ratio ~10^5 at +/- 2V? Check BOTH forward and reverse. A good forward bias fit with wrong reverse current means recombination/generation model is wrong.
-- [ ] **C-V curve:** Depletion width matches 1.7 um at 0V, 9.5 um at -10V, 9.73 um at -30V? If not, doping profile or built-in potential is wrong.
-- [ ] **Dark current:** Below 18 pA at -60V? If not, generation-recombination current model needs attention.
-- [ ] **CCE at low dose rate:** 100% at V > -40V for alphas (per microdosimetry paper)? If not, collection model has a bug before even considering FLASH effects.
-- [ ] **Mesh convergence:** CCE changes < 1% when mesh is doubled? Must be checked for EVERY new physics configuration.
-- [ ] **Charge conservation:** Total collected charge + total recombined charge = total generated charge? Check at every time step in transient simulation.
-- [ ] **Parameter units:** All in CGS (cm, cm^-3, F/cm, V, A)? Mixed units is the single most common source of orders-of-magnitude errors.
-- [ ] **Carrier concentration positivity:** n > 0 and p > 0 everywhere at all times? Negative carriers = numerical artifact.
-- [ ] **Electric field at contacts:** Reasonable values (not diverging to infinity)? Contact boundary conditions may be wrong.
-- [ ] **Sensitivity analysis:** Key results reported with variation against +/- 20% changes in uncertain parameters (SRV, lifetime, mobility)?
+1. Start with the **simplest possible model**: a single effective generation rate in the depletion region proportional to exp(E/E0), where E is the local electric field and E0 is a fitting parameter. This captures the essential field-enhancement of TAT without the full Hurkx complexity.
+2. The model has exactly 2 fitting parameters: G0 (prefactor) and E0 (field scale). Fit these to match 18 pA at -60V and the voltage dependence of the dark current.
+3. Only add complexity (specific trap levels, proper WKB tunneling) if the simple model fails to reproduce the I-V shape across the full 0 to -60V range.
+4. All Jacobian derivatives must be analytically correct for Newton convergence. For a field-dependent generation rate, this means derivatives w.r.t. Potential (through the E-field), Electrons, and Holes.
 
-## Recovery Strategies
+**Detection:** If the Newton solver for the dark current simulation takes > 100 iterations or fails to converge, suspect missing or incorrect Jacobian derivatives. Verify by comparing analytical derivatives against numerical finite-difference derivatives.
 
-| Pitfall                                | Recovery Cost | Recovery Steps                                                                                                     |
-| -------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Wrong material parameters              | LOW           | Replace parameter file; re-run. No structural changes needed if parameter module is well-isolated.                 |
-| Incomplete ionization ignored          | MEDIUM        | Add ionization model to Poisson equation; re-validate I-V/C-V. May require re-tuning other parameters.             |
-| Mesh too coarse (discovered late)      | MEDIUM        | Re-mesh and re-run. If results were published/shared, must re-validate all conclusions.                            |
-| Wrong units in devsim                  | LOW-MEDIUM    | Fix unit conversion; re-run. Typically caught early by order-of-magnitude sanity checks.                           |
-| Hecht used for FLASH validation        | HIGH          | Must re-derive the validation framework from scratch. May invalidate early FLASH results and delay publication.    |
-| fipy coefficient type error            | LOW           | Refactor to use CellVariable; small code change.                                                                   |
-| Time stepping too coarse for transient | MEDIUM        | Implement adaptive stepping; re-run transient simulations. May reveal that earlier "converged" results were wrong. |
+---
 
-## Pitfall-to-Phase Mapping
+## Moderate Pitfalls
 
-| Pitfall                         | Prevention Phase                 | Verification                                                                          |
-| ------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------- |
-| Incomplete ionization           | Phase 1: Device Characterization | C-V depletion width matches experiment within 5%                                      |
-| Wrong material parameters       | Phase 1: Material Module         | Parameter file reviewed against CERN review paper; all values have source citations   |
-| Numerical divergence (low ni)   | Phase 1: First Simulation        | Newton solver converges in < 20 iterations for equilibrium                            |
-| Hecht misuse for FLASH          | Phase 2: FLASH Simulation        | Low-dose-rate limit recovers Hecht; high-dose-rate uses self-consistent field         |
-| Coarse mesh                     | Phase 1: Mesh Setup              | Mesh convergence study shows < 1% CCE change at 2x refinement                         |
-| Wrong time stepping             | Phase 2: Transient Simulation    | Charge conservation holds to < 0.1% at every time step                                |
-| Surface recombination neglected | Phase 3: Build-up Analysis       | 2D results show physically reasonable lateral CCE variation                           |
-| Missing uncertainty analysis    | Phase 5: Publication Prep        | All key results reported with sensitivity to top-3 uncertain parameters               |
-| Unit confusion (CGS vs SI)      | Phase 1: Code Setup              | Dimensional analysis checklist passed; currents match order-of-magnitude expectations |
-| Anisotropic mobility ignored    | Phase 4: Azimuthal Response      | 3D simulation uses direction-dependent mobility tensor                                |
+### Pitfall 6: Transient Timestep Selection for Multi-Scale Dynamics
 
-## Publication-Specific Pitfalls
+**What goes wrong:** The FLASH pulse dynamics span 6 orders of magnitude in timescale:
 
-### Pitfall: Not Stating Simulation Assumptions Explicitly
+- Dielectric relaxation: tau_d ~ epsilon/(q*mu_n*N_D) ~ 7 ns (bulk epi at N_D=8.5e13)
+- Carrier transit: t_tr ~ W/(mu\*E) ~ 35 ps (electrons at 30 kV/cm)
+- SRH recombination: tau_p = 600 ns
+- Beam pulse duration: 10-200 ms
 
-**What goes wrong:**
-Reviewers reject the paper or (worse) readers cannot reproduce results because the paper says "we simulated the SiC detector" without specifying which mobility model, which recombination mechanisms, whether incomplete ionization was included, what boundary conditions were used, or what the mesh resolution was.
+devsim supports BDF1, BDF2, and TRBDF transient methods but has NO built-in adaptive timestepping. The user must implement timestep control in the Python driver loop. Using a single fixed timestep either misses fast dynamics (too large) or makes ms-scale simulations impossibly slow (too small).
 
-**How to avoid:**
+**Why it happens:** Users unfamiliar with stiff PDE systems set tdelta based on the "interesting" physics timescale and miss the fast modes. BDF1 is L-stable (will not oscillate with large dt) but only first-order accurate, introducing numerical diffusion that smears carrier dynamics. BDF2 is second-order but can oscillate with timesteps larger than ~5x the fastest mode.
 
-- Create a "Simulation Parameters" table in the paper listing every model and parameter used.
-- State explicitly: mobility model (Caughey-Thomas with anisotropy or isotropic?), recombination (SRH + Auger + radiative?), ionization (complete or Fermi-Dirac with specified ionization energies?), boundary conditions (ohmic contacts? Schottky? What contact recombination velocity?).
-- Report mesh density and confirm convergence.
-- State devsim/fipy versions used.
+**Prevention:**
 
-**Phase to address:** Phase 5 (Publication preparation).
+1. Implement adaptive timestepping in the Python driver: start with tdelta ~ 0.1 ns, increase by factor 1.5 when convergence is easy (< 10 Newton iterations), decrease by factor 2 when convergence is hard (> 30 iterations).
+2. Use BDF2 for accuracy, with TRBDF for the first step from DC initial condition.
+3. For the FLASH problem: consider whether true transient simulation is actually needed. The v1.0 quasi-static approach (DC solve at each dose rate) was successful. True transient adds value only for: (a) intra-pulse onset dynamics (first ~100 ns), (b) inter-pulse carrier decay, (c) plasma buildup over multiple pulses.
+4. Monitor charge_error (devsim parameter) at each timestep. If it exceeds tolerance, the timestep is too large.
 
-### Pitfall: Comparing Simulation to Wrong Experimental Conditions
+**Detection:** Run at tdelta and tdelta/2. If CCE or current changes by > 1%, the timestep is too large. Total charge conservation (generated - recombined - collected = stored) should balance within 0.1%.
 
-**What goes wrong:**
-The FLASH paper characterizes the dosimetry SYSTEM (Faraday cup + SEM + DGIC) -- NOT the SiC detector under FLASH. Comparing TCAD SiC simulation directly to the FLASH paper's dose-rate measurements is comparing apples to oranges. The SiC detector has NOT been measured at FLASH rates.
+---
 
-**How to avoid:**
+### Pitfall 7: Incomplete Ionization Not Updated with Temperature
 
-- Clearly state in the paper that the FLASH plasma recombination effect in SiC is a PREDICTION, not a fit to existing data.
-- Validate the simulation against what IS measured: I-V, C-V, CCE at normal dose rates.
-- Use the FLASH paper's beam parameters (62 MeV, 20-230 Gy/s) as INPUT to the simulation, not as validation data for the SiC response.
-- Frame the paper as "first TCAD prediction of plasma recombination in SiC dosimeters" -- the value is the prediction, not the validation.
+**What goes wrong:** `device.py` computes `N_A_ionized = ionized_acceptor_concentration(N_A, T)` at device creation and uses it as a fixed doping value. For donors in the n-epi, the code assumes FULL ionization (`N_D` is used directly, never passed through an ionization model). When T changes:
 
-**Phase to address:** Phase 2 (FLASH simulation framing) and Phase 5 (paper writing).
+For nitrogen donors in the n-type epi (most critical for device behavior):
 
-### Pitfall: Missing Sensitivity/Uncertainty Analysis
+- E_D(hex) = 50 meV: ~85% ionized at 300K, ~82% at 313K (clinical range)
+- E_D(cub) = 92 meV: ~55% ionized at 300K, ~52% at 313K
 
-**What goes wrong:**
-Paper reports "CCE drops to 85% at 200 Gy/s" without stating how sensitive this is to uncertain inputs (carrier lifetime, SRV, Auger coefficient). Reviewers question whether the result is robust or an artifact of parameter choice.
+The bulk epi doping N_D_bulk = 8.5e13 is low enough that freeze-out effects are modest at clinical temperatures. But N_D_junction = 2.9e15 has higher ionization (closer to Mott transition) so the graded profile shape subtly changes with T.
 
-**How to avoid:**
+For aluminum acceptors in p+ substrate:
 
-- Identify the top 3-5 uncertain parameters: bulk carrier lifetime (tau_SRH), Auger coefficients, surface recombination velocity, exact doping concentration, generation profile.
-- Run the FLASH simulation at +/- 30% of each parameter and report the CCE variation.
-- Present results as "CCE = 85% +/- 7% (dominated by uncertainty in Auger coefficient)" rather than a single number.
-- Include a tornado plot showing parameter sensitivity ranking.
+- E_A = 220 meV: ~10% ionized at 300K, ~11% at 313K
+- N_A = 1e19 means even 10% gives 1e18 -- still degenerately doped. Change is marginal.
 
-**Phase to address:** Phase 5 (publication preparation), but the parametric sweep infrastructure should be built in Phase 2.
+**Why it happens:** Incomplete ionization is a self-consistent problem (ionized fraction depends on Fermi level). The v1.0 code solves it once at device creation. For T-sweeps, the device must be recreated at each T anyway (because devsim parameters are set at creation), so incomplete ionization naturally gets the new T.
+
+**Prevention:**
+
+1. For clinical range (303-313K), the change in N_D ionization is < 3%. Pre-computing at each T and treating as fixed is acceptable.
+2. Add a `ionized_donor_concentration(N_D, T)` function (currently only acceptors are modeled) for completeness, even if the effect is small.
+3. Do NOT implement self-consistent incomplete ionization inside the devsim solve loop for this milestone -- it adds complexity for < 3% effect.
+
+**Detection:** Compute ionized donor fraction at N_D = 8.5e13 and N_D = 2.9e15 for T=300K and T=313K. If the fractional change is < 2%, safe to treat as parametric (recompute at each T, don't iterate).
+
+---
+
+### Pitfall 8: Devsim Contact Equations for Surface Physics in 1D
+
+**What goes wrong:** The existing code uses `simple_physics.CreateSiliconDriftDiffusionAtContact()` for Ohmic contact boundary conditions. Adding surface recombination requires modifying contact equations to include a surface recombination current term. In devsim, contact equations use a different API (`contact_node_model`, `contact_equation`) than region equations (`node_model`, `equation`).
+
+If you accidentally implement surface recombination as a region node_model instead of a contact_node_model, it gets applied at EVERY mesh node, producing completely wrong results -- effectively adding recombination everywhere in the bulk.
+
+**Why it happens:** devsim documentation for custom contact equations is sparse. The `simple_physics` module handles Ohmic contacts but does not include surface recombination. The distinction between contact and region models is not obvious from the API.
+
+**Consequences:** If applied as a region model, SRH+surface recombination rate increases everywhere, drastically reducing carrier concentrations and producing unphysically low CCE. The error may look like "the surface recombination velocity is too high" when the real problem is that it is being applied in the wrong place.
+
+**Prevention:**
+
+1. In a 1D simulation, "surface" means the contact nodes only (x=0 for anode, x=L for cathode). Surface recombination must be added via `devsim.contact_equation()` as an additional `contact_node_model`.
+2. Implement and test at one contact at a time. After adding surface recombination at the anode, verify that carrier concentrations change ONLY near x=0, not in the bulk.
+3. Study the devsim diode examples for how contact equations are structured before writing custom ones.
+4. Given Pitfall 4 (surface recombination alone cannot explain 18 pA), this is lower priority than implementing field-enhanced generation.
+
+**Detection:** After adding any surface term, plot n(x) and p(x) across the entire device. The effect should be localized to within a few diffusion lengths of the contact. If carrier concentrations change uniformly across the device, the model is applied in the wrong scope.
+
+---
+
+### Pitfall 9: SRH Lifetime Temperature Dependence Model for SiC
+
+**What goes wrong:** The current code uses fixed SRH lifetimes: tau_n = 1e-9 s, tau_p = 6e-7 s. These are 300K values. The temperature dependence of SRH lifetime in SiC is NOT a simple power law like Si. The dominant recombination center in 4H-SiC (Z1/2 center, carbon vacancy) has:
+
+- Capture cross-section sigma_n(T) that can be either thermally activated or weakly T-dependent depending on the charge state
+- The SRH lifetime tau = 1/(sigma _ v_th _ N_t) where v_th ~ T^(1/2) (thermal velocity)
+
+If the capture cross-section is T-independent, tau ~ T^(-1/2) (lifetime DECREASES with T, opposite to some Si models). If the capture cross-section is thermally activated (sigma ~ exp(-E_b/kT)), lifetime can increase or decrease depending on the barrier E_b.
+
+**Why it happens:** Users apply the Si approximation tau_SRH ~ T^(+1/2) or tau_SRH = constant. For the Z1/2 center in SiC, the experimental data (IEEE Access 2023) shows lifetime increases with T in some samples but decreases in others, depending on the dominant defect.
+
+**Consequences:** Wrong T-dependence of recombination rate affects transient carrier decay, steady-state CCE at different temperatures, and the predicted temperature coefficient of dark current.
+
+**Prevention:**
+
+1. For the clinical range (303-313K, only 13K span), the SRH lifetime change is < 5% regardless of which model is used. Keeping tau constant is acceptable for v1.1.
+2. If extending beyond clinical range later, parameterize tau(T) using the thermal velocity scaling: tau(T) = tau_300 \* sqrt(300/T) as the baseline model. This assumes T-independent capture cross-section, which is the simplest defensible assumption.
+3. Document the assumption clearly: "SRH lifetimes assumed T-independent for the 303-313K range studied."
+
+**Detection:** Run CCE at T=300K and T=313K with constant lifetime and with tau(T) ~ T^(-1/2). If results differ by < 0.5%, the T-dependence of lifetime is negligible for this application.
+
+---
+
+### Pitfall 10: Mobility Set Once at Device Creation, Not Updated
+
+**What goes wrong:** `device.py` computes mobility via `mobility_caughey_thomas(N_D)` at device creation and sets it as a scalar region parameter (`mu_n`, `mu_p`). This means:
+
+1. Mobility is position-independent (uses a single N_D, not the graded profile)
+2. Mobility is not updated if T changes after device creation
+3. For transient simulations, mobility cannot vary with local conditions
+
+For the graded doping profile (N_D from 2.9e15 at junction to 8.5e13 in bulk), the mobility variation is modest at 300K: mu_n(2.9e15) ~ 935 vs mu_n(8.5e13) ~ 949, a ~1.5% difference. But at T!=300K, the doping-dependent part and T-dependent part compound.
+
+**Why it happens:** devsim allows both scalar parameters and node models for mobility. The current code uses a scalar parameter because it was simpler and the position variation was small. The `simple_dd.CreateElectronCurrent(device, region, "mu_n")` function references `mu_n` by name and works with either a parameter or a node model.
+
+**Prevention:**
+
+1. For T-dependent parametric sweeps: recreate the device at each T with updated mobility. This is the simplest approach and requires no structural code changes.
+2. For position-dependent mobility: create `mu_n` as a node model using the local Donors value. This is a one-line change:
+   ```python
+   CreateNodeModel(device, region, "mu_n",
+       f"{mu_min_T} + ({mu_max_T} - {mu_min_T}) / (1 + (Donors / {N_ref})^{alpha})")
+   ```
+3. Do NOT add high-field mobility saturation (v_sat model) unless E-fields exceed 100 kV/cm. At -60V across 10 um, E_max ~ 60 kV/cm -- below saturation for SiC.
+
+**Detection:** At 300K, the error from using a single mobility value is < 2%. Monitor this: if the epi doping gradient steepens or bias increases, position-dependent mobility becomes more important.
+
+---
+
+## Minor Pitfalls
+
+### Pitfall 11: SRH n1/p1 Parameters Not Updated with Temperature
+
+**What goes wrong:** The existing code sets `n1 = n_i` and `p1 = n_i` in `device.py` (midgap trap assumption). When T changes, n1 and p1 should update to n_i(T). Currently these are set once at device creation using `params.n_i_300`. If n_i is updated to a T-dependent value in the region parameter but n1/p1 are not, the SRH rate formula becomes inconsistent.
+
+**Prevention:** When updating n_i to n_i(T), also update n1 and p1 to match. For midgap traps, n1 = p1 = n_i is correct at any T. If switching to non-midgap traps (e.g., Z1/2 at E_C - 0.65 eV), compute n1 = n_i _ exp((E_trap - E_i)/kT) and p1 = n_i _ exp((E_i - E_trap)/kT).
+
+---
+
+### Pitfall 12: Auger Coefficients Temperature Dependence
+
+**What goes wrong:** Current Auger coefficients (C_n=5e-31, C_p=2e-31 cm^6/s) are 300K values. Auger coefficients in SiC are poorly characterized as a function of T.
+
+**Prevention:** Keep Auger coefficients constant for v1.1. The v1.0 finding was that Auger is negligible at FLASH dose rates (CCE is flat across 20-230 Gy/s), so even a 2x change in Auger coefficient has no practical impact. Document as assumption.
+
+---
+
+### Pitfall 13: Transient Initial Condition Discontinuity
+
+**What goes wrong:** When switching from DC to transient mode, the initial condition must be a self-consistent DC solution. If you start transient simulation from a non-converged state, the first BDF step sees a large residual and diverges. devsim provides `set_initial_condition()` but the documentation is minimal.
+
+**Prevention:**
+
+1. Always run a full DC solve to convergence before starting any transient simulation.
+2. Use `type="transient_dc"` for the first solve to establish the time-derivative state vectors.
+3. Start with small tdelta (0.1 \* dielectric_relaxation_time ~ 0.7 ns) for the first few steps, then increase.
+
+---
+
+### Pitfall 14: Charge Conservation Drift in Long Transient Simulations
+
+**What goes wrong:** Over thousands of transient timesteps, numerical errors accumulate. Without monitoring, the total charge drifts, and CCE computed from integrated current becomes unreliable. This is especially dangerous for FLASH simulations where you care about the ratio of collected to generated charge.
+
+**Prevention:**
+
+1. After each transient step, compute total electron and hole charge via integration over the mesh.
+2. Track: charge_generated(t) - charge_recombined(t) - charge_collected(t) should equal delta_stored_charge(t).
+3. If imbalance exceeds 1%, reduce timestep or tighten convergence (reduce `charge_error` parameter in devsim solve).
+
+---
+
+### Pitfall 15: compute_ni(300) Disagrees with Literature n_i_300
+
+**What goes wrong:** The `compute_ni(T)` function in `sic_material.py` uses specific values for DOS effective masses (m_e=0.77*m0, m_h=1.0*m0) and M_c=3 to compute NC, NV, and then n_i. At 300K, this may return a value different from the literature value `n_i_300 = 5e-9` stored as a constant. Different sources report n_i(300K) for 4H-SiC ranging from 5e-9 to 1.6e-8 cm^-3 depending on which DOS effective masses are used.
+
+If `compute_ni(300)` returns 6.5e-9 while the validated code uses 5e-9, switching to the computed value changes ALL equilibrium carrier concentrations, built-in potential, and dark current by ~30%.
+
+**Prevention:**
+
+1. Before switching to `compute_ni(T)`, verify its 300K output against the literature value.
+2. If they disagree, adjust the DOS masses to reproduce the accepted n_i(300K) = 5e-9. This is standard practice in TCAD -- the DOS masses are effective parameters.
+3. Alternatively, use the Varshni-based E_g(T) with the constraint that n_i(300K) = 5e-9 to determine an effective NC\*NV product, then use the T-scaling (NC ~ T^1.5, NV ~ T^1.5) for other temperatures.
+
+---
+
+## Phase-Specific Warnings
+
+| Phase Topic                      | Likely Pitfall                                                                                        | Mitigation                                                                                  |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Temperature-dependent parameters | Pitfall 1 (scattered 300K constants), Pitfall 2 (Si/6H-SiC exponents), Pitfall 15 (n_i mismatch)      | Full codebase audit, use 4H-SiC Ayalew values, reconcile compute_ni with n_i_300            |
+| Regression testing               | Pitfall 3 (breaking 300K baseline)                                                                    | Extract golden values FIRST, build regression test, make new physics toggleable             |
+| Dark current / surface physics   | Pitfall 4 (surface recombination too weak), Pitfall 5 (TAT complexity), Pitfall 8 (contact equations) | Do the math first -- surface SRH cannot explain 18 pA; use simple field-enhanced generation |
+| Transient FLASH dynamics         | Pitfall 6 (timestep), Pitfall 13 (initial conditions), Pitfall 14 (charge conservation)               | Adaptive timestepping in Python, DC init, conservation monitoring                           |
+| Incomplete ionization            | Pitfall 7 (T coupling)                                                                                | Pre-compute at target T, skip self-consistent for clinical range                            |
+| Mobility update                  | Pitfall 10 (fixed mobility)                                                                           | Recreate device at each T for parametric sweeps                                             |
+| SRH model                        | Pitfall 9 (lifetime T-dependence), Pitfall 11 (n1/p1)                                                 | Keep constant for clinical range, update n1=p1=n_i(T)                                       |
 
 ## Sources
 
-- [TCAD Parameters for 4H-SiC: A Review (Burin et al., 2024)](https://arxiv.org/abs/2410.06798) -- comprehensive parameter review, pitfalls in parameter selection -- HIGH confidence
-- [TCAD Simulations of Radiation Damage in 4H-SiC (Burin et al., 2024)](https://arxiv.org/html/2407.16710v1) -- convergence issues with incomplete ionization, mesh refinement -- HIGH confidence
-- [Improving TCAD simulation of 4H-SiC particle detectors (CERN, 2023)](https://indico.cern.ch/event/1270076/contributions/5450202/attachments/2669644/4627419/Improving%20TCAD%20simulation%20of%204H-SiC%20particle%20detectors.pdf) -- practical simulation tips, convergence -- MEDIUM confidence
-- [Limitations of the Hecht Equation (DTIC report)](https://apps.dtic.mil/sti/tr/pdf/ADA451645.pdf) -- Hecht equation failure modes under high injection -- HIGH confidence
-- [Origin of hole mobility anisotropy in 4H-SiC (J. Appl. Phys., 2024)](https://pubs.aip.org/aip/jap/article/135/7/075704/3265791/Origin-of-hole-mobility-anisotropy-in-4H-SiC) -- anisotropic mobility values -- HIGH confidence
-- [Surface recombination velocities for 4H-SiC (ScienceDirect, 2023)](https://www.sciencedirect.com/science/article/pii/S136980012300673X) -- SRV dependence on injection level -- MEDIUM confidence
-- [DEVSIM Manual and Examples](https://devsim.net/examples_diode.html) -- units (CGS), convergence parameters, voltage ramping -- HIGH confidence
-- [FiPy semiconductor simulation issue #746](https://github.com/usnistgov/fipy/issues/746) -- FaceVariable coefficient rejection -- MEDIUM confidence
-- [Boag theory limitations at FLASH dose rates (PMC, 2020)](https://pmc.ncbi.nlm.nih.gov/articles/PMC7612000/) -- Boag model failure above ~20 mGy/pulse -- HIGH confidence
-- [Simulation of SiC radiation detector degradation (Chinese Physics B, 2019)](https://cpb.iphy.ac.cn/article/2019/1969/cpb_28_1_010701.html) -- CCE simulation validation challenges -- MEDIUM confidence
-- [Accurate TCAD Simulation Model for 4H-SiC Alpha-Particle Detectors (IEEE, 2024)](https://ieeexplore.ieee.org/abstract/document/10772267) -- detector simulation best practices -- MEDIUM confidence
+- [TU Wien Ayalew thesis - Low-Field Carrier Mobility](https://www.iue.tuwien.ac.at/phd/ayalew/node65.html) -- 4H-SiC Caughey-Thomas parameters: gamma_n=-2.40, gamma_p=-2.15, beta=-0.5. HIGH confidence.
+- [TU Wien Ayalew thesis - Incomplete Ionization](https://www.iue.tuwien.ac.at/phd/ayalew/node75.html) -- ionization model for N donors and Al acceptors. HIGH confidence.
+- [TCAD models of T and doping dependence in 4H-SiC (Potbhare et al.)](https://www.researchgate.net/publication/259510798) -- validated TCAD T-dependent mobility and bandgap models. MEDIUM confidence.
+- [TCAD modeling of radiation-induced defects in 4H-SiC (2024)](https://arxiv.org/html/2407.11776v1) -- TAT modeling pitfalls, Z1/2 center, wrong trap selection effects. MEDIUM confidence.
+- [Surface recombination velocities for 4H-SiC (2023)](https://www.sciencedirect.com/science/article/pii/S136980012300673X) -- SRV=150-700 cm/s for SiO2 passivated Si-face. MEDIUM confidence.
+- [SiC detectors review (Frontiers in Physics, 2022)](https://www.frontiersin.org/journals/physics/articles/10.3389/fphy.2022.898833/full) -- Z1/2 center as dominant recombination center. HIGH confidence.
+- [DEVSIM solver documentation](https://devsim.net/solver.html) -- BDF1/BDF2/TRBDF transient methods. HIGH confidence.
+- [DEVSIM command reference](https://devsim.net/CommandReference.html) -- transient solve API: tdelta, charge_error, type options. HIGH confidence.
+- [Carrier lifetime T-dependence in 4H-SiC (IEEE Access)](https://ieeeaccess.ieee.org/featured-articles/lifetimedependence/) -- experimental tau(T) showing sample-dependent behavior. MEDIUM confidence.
+- [Modified TCAD for 4H-SiC JBS - electron trapping effects (2025)](https://www.sciencedirect.com/science/article/abs/pii/S0026271425002896) -- TAT with specific traps can overestimate leakage. MEDIUM confidence.
+- [Ioffe NSM 4H-SiC archive](https://www.ioffe.ru/SVA/NSM/Semicond/SiC/) -- reference n_i(T), bandgap, mobility values. HIGH confidence.
 
 ---
 
-_Pitfalls research for: 4H-SiC TCAD radiation detector simulation under FLASH conditions_
-_Researched: 2026-03-20_
+_Pitfalls research for: v1.1 milestone -- adding temperature dependence, surface physics, and transient dynamics to validated 1D 4H-SiC TCAD simulator_
+_Researched: 2026-03-23_
