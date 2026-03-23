@@ -87,23 +87,28 @@ Plans:
 4. User can compare transient CCE vs steady-state CCE across the 20-230 Gy/s dose-rate range
 5. A Jupyter notebook guides the user through transient FLASH analysis (single-pulse, multi-pulse, steady-state comparison) with publication-quality figures
 
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+
+- [ ] 12-01-PLAN.md — TransientSolver with adaptive time-stepping, single-pulse simulation, and CCE validation
+- [ ] 12-02-PLAN.md — Multi-pulse train, dose-rate sweep, and Jupyter notebook 08
 
 ## Progress
 
 **Execution Order:** Phase 10 -> 11 -> 12
 
-| Phase                                    | Milestone | Plans Complete | Status      | Completed  |
-| ---------------------------------------- | --------- | -------------- | ----------- | ---------- |
-| 1. Material Parameters                   | v1.0      | 3/3            | Complete    | 2026-03-20 |
-| 1.1. Tech Debt Cleanup                   | v1.0      | 1/1            | Complete    | 2026-03-21 |
-| 2. Electrical Characterization           | v1.0      | 5/5            | Complete    | 2026-03-21 |
-| 3. Charge Collection Efficiency          | v1.0      | 3/3            | Complete    | 2026-03-21 |
-| 4. FLASH Plasma Recombination            | v1.0      | 2/2            | Complete    | 2026-03-21 |
-| 5. Parametric Studies                    | v1.0      | 2/2            | Complete    | 2026-03-21 |
-| 6. Code Quality Cleanup                  | v1.0      | 2/2            | Complete    | 2026-03-21 |
-| 7. Solver Robustness                     | v1.0      | 1/1            | Complete    | 2026-03-21 |
-| 8. Audit Gap Closure                     | v1.0      | 1/1            | Complete    | 2026-03-22 |
-| 10. Temperature-Dependent Device Physics | v1.1      | 3/3            | Complete    | 2026-03-23 |
-| 11. Dark Current Modeling                | 2/2 | Complete    | 2026-03-23 | -          |
-| 12. Transient FLASH Dynamics             | v1.1      | 0/?            | Not started | -          |
+| Phase                                    | Milestone | Plans Complete | Status     | Completed  |
+| ---------------------------------------- | --------- | -------------- | ---------- | ---------- |
+| 1. Material Parameters                   | v1.0      | 3/3            | Complete   | 2026-03-20 |
+| 1.1. Tech Debt Cleanup                   | v1.0      | 1/1            | Complete   | 2026-03-21 |
+| 2. Electrical Characterization           | v1.0      | 5/5            | Complete   | 2026-03-21 |
+| 3. Charge Collection Efficiency          | v1.0      | 3/3            | Complete   | 2026-03-21 |
+| 4. FLASH Plasma Recombination            | v1.0      | 2/2            | Complete   | 2026-03-21 |
+| 5. Parametric Studies                    | v1.0      | 2/2            | Complete   | 2026-03-21 |
+| 6. Code Quality Cleanup                  | v1.0      | 2/2            | Complete   | 2026-03-21 |
+| 7. Solver Robustness                     | v1.0      | 1/1            | Complete   | 2026-03-21 |
+| 8. Audit Gap Closure                     | v1.0      | 1/1            | Complete   | 2026-03-22 |
+| 10. Temperature-Dependent Device Physics | v1.1      | 3/3            | Complete   | 2026-03-23 |
+| 11. Dark Current Modeling                | 2/2       | Complete       | 2026-03-23 | -          |
+| 12. Transient FLASH Dynamics             | v1.1      | 0/2            | Planned    | -          |
