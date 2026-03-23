@@ -514,3 +514,188 @@ def create_dark_current_device(T=300, N_t=None, S_n=None, S_p=None, **kwargs):
     setup_surface_recombination(device_info, S_n=S_n, S_p=S_p)
 
     return device_info
+
+
+def sensitivity_sweep(
+    param_name, param_values, V_eval=-30.0, T=300, area=0.05, base_kwargs=None
+):
+    """Sweep a single parameter and evaluate dark current at a fixed voltage.
+
+    Creates a fresh device for each parameter value, ramps to V_eval, extracts
+    dark current components, and cleans up the device.
+
+    Parameters
+    ----------
+    param_name : str
+        Parameter to sweep. One of:
+        - "epi_thickness_cm", "N_D" : passed to create_dd_device via kwargs
+        - "N_t", "S_n", "S_p" : passed to create_dark_current_device
+    param_values : array_like
+        Values of the swept parameter.
+    V_eval : float
+        Reverse voltage at which to evaluate dark current (V). Default -30V.
+    T : float
+        Temperature (K). Default 300.
+    area : float
+        Device area (cm^2). Default 0.05.
+    base_kwargs : dict or None
+        Baseline device parameters passed to create_dark_current_device.
+
+    Returns
+    -------
+    pandas.DataFrame
+        DataFrame with columns: param_name column, I_total, I_SRH, I_TAT, I_SRV.
+    """
+    import pandas as pd
+
+    import devsim.python_packages.simple_physics as simple_physics
+
+    if base_kwargs is None:
+        base_kwargs = {}
+
+    param_values = np.asarray(param_values)
+
+    # Classify the parameter target
+    dd_device_params = {"epi_thickness_cm", "N_D"}
+    dark_current_params = {"N_t", "S_n", "S_p"}
+
+    if param_name not in dd_device_params | dark_current_params:
+        raise ValueError(
+            f"Unknown param_name '{param_name}'. "
+            f"Must be one of {sorted(dd_device_params | dark_current_params)}"
+        )
+
+    records = []
+    for i, val in enumerate(param_values):
+        device_name = f"sweep_{param_name}_{i}"
+        kwargs = dict(base_kwargs)
+        kwargs["T"] = T
+
+        # Route parameter to the correct function
+        dc_kwargs = {}
+        if param_name in dd_device_params:
+            kwargs[param_name] = val
+        else:
+            dc_kwargs[param_name] = val
+
+        kwargs["device_name"] = device_name
+
+        try:
+            device_info = create_dark_current_device(**dc_kwargs, **kwargs)
+            device = device_info["device_name"]
+            region = device_info["region_name"]
+
+            # Ramp to V_eval in steps
+            bias_name = simple_physics.GetContactBiasName("anode")
+            V_step = 0.5
+            current_V = 0.0
+            n_steps = max(1, int(np.ceil(abs(V_eval) / V_step)))
+            V_intermediates = np.linspace(0, V_eval, n_steps + 1)[1:]
+
+            ramp_ok = True
+            for V_int in V_intermediates:
+                devsim.set_parameter(device=device, name=bias_name, value=V_int)
+                _compute_node_efield(device, region)
+                _compute_gamma_factors(device, region)
+                try:
+                    devsim.solve(
+                        type="dc",
+                        absolute_error=1e10,
+                        relative_error=1e-10,
+                        maximum_iterations=40,
+                    )
+                except devsim.error:
+                    try:
+                        devsim.solve(
+                            type="dc",
+                            absolute_error=1e12,
+                            relative_error=1e-8,
+                            maximum_iterations=100,
+                        )
+                    except devsim.error as e:
+                        logger.warning(
+                            f"sensitivity_sweep: ramp failed at V={V_int:.3f} "
+                            f"for {param_name}={val}: {e}"
+                        )
+                        ramp_ok = False
+                        break
+
+            if ramp_ok:
+                _compute_node_efield(device, region)
+                _compute_gamma_factors(device, region)
+                components = extract_dark_current_components(device_info, area=area)
+                records.append(
+                    {
+                        param_name: val,
+                        "I_total": components["I_total"],
+                        "I_SRH": components["I_SRH"],
+                        "I_TAT": components["I_TAT"],
+                        "I_SRV": components["I_SRV"],
+                    }
+                )
+            else:
+                records.append(
+                    {
+                        param_name: val,
+                        "I_total": np.nan,
+                        "I_SRH": np.nan,
+                        "I_TAT": np.nan,
+                        "I_SRV": np.nan,
+                    }
+                )
+        finally:
+            try:
+                devsim.delete_device(device=device_name)
+            except Exception:
+                pass
+
+    return pd.DataFrame(records)
+
+
+def plot_dark_current_decomposition(sweep_result, ax=None, title=None):
+    """Plot dark current decomposition from a voltage sweep.
+
+    Plots |I_total|, |I_SRH|, |I_TAT|, |I_SRV| vs voltage on semilogy axes
+    with publication-quality styling matching plotting.py conventions.
+
+    Parameters
+    ----------
+    sweep_result : dict
+        Output of dark_current_sweep() with keys: voltages, I_total,
+        I_SRH, I_TAT, I_SRV.
+    ax : matplotlib.axes.Axes or None
+        Axes to plot on. If None, creates new figure.
+    title : str or None
+        Plot title. Default: "Dark Current Decomposition".
+
+    Returns
+    -------
+    ax : matplotlib.axes.Axes
+    """
+    import matplotlib.pyplot as plt
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+    V = np.asarray(sweep_result["voltages"])
+
+    components = [
+        ("I_total", "Total", "k", 2.0, "-"),
+        ("I_SRH", "SRH (bulk)", "C0", 1.5, "--"),
+        ("I_TAT", "TAT (effective)", "C1", 1.5, "-."),
+        ("I_SRV", "SRV (surface)", "C2", 1.5, ":"),
+    ]
+
+    for key, label, color, lw, ls in components:
+        I = np.abs(np.asarray(sweep_result[key]))
+        # Only plot if nonzero somewhere
+        if np.any(I > 0):
+            ax.semilogy(V, I, color=color, linewidth=lw, linestyle=ls, label=label)
+
+    ax.set_xlabel("Voltage (V)")
+    ax.set_ylabel("|Dark Current| (A)")
+    ax.set_title(title or "Dark Current Decomposition")
+    ax.grid(True, alpha=0.3)
+    ax.legend(loc="best")
+
+    return ax
