@@ -47,7 +47,13 @@ Full details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 4. User can sweep temperature across 303-313K clinical range and extract a temperature coefficient of sensitivity from the resulting data
 5. A Jupyter notebook guides the user through T-dependent device characterization with publication-quality figures
 
-**Plans**: TBD
+**Plans:** 3 plans
+
+Plans:
+
+- [ ] 10-01-PLAN.md — T-dependent material property functions (bandgap, n_i, mobility, DOS, lifetime) with unit tests
+- [ ] 10-02-PLAN.md — Wire T-dependent functions into device/poisson/CCE pipeline with regression tests
+- [ ] 10-03-PLAN.md — Temperature sweep utilities and Jupyter notebook 06 for characterization
 
 ### Phase 11: Dark Current Modeling
 
@@ -93,6 +99,6 @@ Full details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 | 6. Code Quality Cleanup                  | v1.0      | 2/2            | Complete    | 2026-03-21 |
 | 7. Solver Robustness                     | v1.0      | 1/1            | Complete    | 2026-03-21 |
 | 8. Audit Gap Closure                     | v1.0      | 1/1            | Complete    | 2026-03-22 |
-| 10. Temperature-Dependent Device Physics | v1.1      | 0/?            | Not started | -          |
+| 10. Temperature-Dependent Device Physics | v1.1      | 0/3            | Planned     | -          |
 | 11. Dark Current Modeling                | v1.1      | 0/?            | Not started | -          |
 | 12. Transient FLASH Dynamics             | v1.1      | 0/?            | Not started | -          |
