@@ -9,11 +9,11 @@ Requirements for milestone v1.1: Realistic Device Physics. Each maps to roadmap 
 
 ### Temperature Dependence
 
-- [ ] **TEMP-01**: Simulator computes T-dependent bandgap E_g(T) via Varshni equation for 4H-SiC
-- [ ] **TEMP-02**: Simulator computes T-dependent intrinsic carrier concentration n_i(T) with resolved discrepancy vs validated 5e-9 constant
-- [ ] **TEMP-03**: Simulator computes T-dependent mobility mu_n(T), mu_p(T) via Caughey-Thomas with SiC-specific exponents (gamma_n=-2.40, gamma_p=-2.15)
-- [ ] **TEMP-04**: Simulator computes T-dependent effective DOS (NC, NV) as functions of T
-- [ ] **TEMP-05**: Simulator computes T-dependent SRH lifetimes tau_n(T), tau_p(T)
+- [x] **TEMP-01**: Simulator computes T-dependent bandgap E_g(T) via Varshni equation for 4H-SiC
+- [x] **TEMP-02**: Simulator computes T-dependent intrinsic carrier concentration n_i(T) with resolved discrepancy vs validated 5e-9 constant
+- [x] **TEMP-03**: Simulator computes T-dependent mobility mu_n(T), mu_p(T) via Caughey-Thomas with SiC-specific exponents (gamma_n=-2.40, gamma_p=-2.15)
+- [x] **TEMP-04**: Simulator computes T-dependent effective DOS (NC, NV) as functions of T
+- [x] **TEMP-05**: Simulator computes T-dependent SRH lifetimes tau_n(T), tau_p(T)
 - [ ] **TEMP-06**: All existing simulations reproduce v1.0 validated results at T=300K (regression test)
 - [ ] **TEMP-07**: User can run I-V, C-V, CCE simulations at any temperature in 280-350K range
 - [ ] **TEMP-08**: User can sweep temperature across clinical range (303-313K) and extract temperature coefficient
@@ -70,11 +70,11 @@ Deferred to future release. Tracked but not in current roadmap.
 
 | Requirement | Phase    | Status  |
 | ----------- | -------- | ------- |
-| TEMP-01     | Phase 10 | Pending |
-| TEMP-02     | Phase 10 | Pending |
-| TEMP-03     | Phase 10 | Pending |
-| TEMP-04     | Phase 10 | Pending |
-| TEMP-05     | Phase 10 | Pending |
+| TEMP-01     | Phase 10 | Complete |
+| TEMP-02     | Phase 10 | Complete |
+| TEMP-03     | Phase 10 | Complete |
+| TEMP-04     | Phase 10 | Complete |
+| TEMP-05     | Phase 10 | Complete |
 | TEMP-06     | Phase 10 | Pending |
 | TEMP-07     | Phase 10 | Pending |
 | TEMP-08     | Phase 10 | Pending |
