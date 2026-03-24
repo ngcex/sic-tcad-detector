@@ -1,5 +1,20 @@
 # SiC TCAD Simulator — Petringa Group
 
+## Current Milestone: v2.0 Radiation Damage Modeling
+
+**Goal:** Predict how 4H-SiC detector performance degrades under proton irradiation — CCE loss, dark current rise, carrier removal, and annealing recovery — validated against literature and with design optimization guidance.
+
+**Target features:**
+
+- Fluence-dependent defect introduction (Z1/2, other vacancy centers)
+- Carrier lifetime degradation (τ vs Φ using damage constants)
+- CCE vs fluence prediction curves
+- Dark current increase with accumulated damage
+- Carrier removal / effective doping reduction (C-V shift with fluence)
+- Annealing kinetics (room temperature + thermal)
+- Parametric design optimization for radiation hardness
+- Publication-quality Jupyter notebooks
+
 ## What This Is
 
 A Python-based TCAD simulation toolkit for modeling the electrical, thermal, and transient behavior of 4H-SiC p-n junction radiation detectors developed by the Petringa group at INFN-LNS Catania. Shipped v1.1 with complete device simulation including temperature-dependent physics, dark current modeling, and transient FLASH pulse dynamics across 8 publication-quality Jupyter notebooks.
@@ -39,14 +54,20 @@ Predict how charge collection efficiency (CCE) in the SiC detector degrades unde
 
 ### Active
 
-(None — planning next milestone)
+- [ ] Fluence-dependent defect introduction (Z1/2 carbon vacancy, EH6/7)
+- [ ] Carrier lifetime degradation vs proton fluence
+- [ ] CCE vs fluence prediction curves
+- [ ] Radiation-induced dark current increase
+- [ ] Carrier removal / effective doping reduction
+- [ ] Annealing kinetics modeling
+- [ ] Parametric radiation hardness optimization
+- [ ] Publication-quality radiation damage notebooks
 
-### Deferred (v2+)
+### Deferred (v3+)
 
 - Build-up over-response analysis (2D field distribution near surface)
 - Azimuthal response simulation (3D CCE vs angle)
 - Anisotropic mobility model (c-axis vs a-axis)
-- Radiation damage modeling (displacement damage, defect introduction)
 - Noise analysis (shot noise, 1/f noise from traps)
 
 ### Out of Scope
@@ -138,4 +159,4 @@ The FLASH paper (Petringa 2025, Physica Medica 138) characterizes the dosimetric
 
 ---
 
-_Last updated: 2026-03-24 after v1.1 milestone completion_
+_Last updated: 2026-03-24 after v2.0 milestone start_
