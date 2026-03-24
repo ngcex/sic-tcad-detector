@@ -343,8 +343,8 @@ def extract_dark_current_components(device_info, area=0.05):
         U_TAT = np.array(
             devsim.get_node_model_values(device=device, region=region, name="U_TAT")
         )
-        J_SRH = q * np.trapz(U_SRH_only, x)
-        J_TAT_bulk = q * np.trapz(U_TAT - U_SRH_only, x)
+        J_SRH = q * np.trapezoid(U_SRH_only, x)
+        J_TAT_bulk = q * np.trapezoid(U_TAT - U_SRH_only, x)
     else:
         J_SRH = J_total
         J_TAT_bulk = 0.0
