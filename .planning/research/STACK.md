@@ -1,350 +1,366 @@
 # Technology Stack
 
-**Project:** SiC TCAD Simulator v1.1 -- Realistic Device Physics
-**Researched:** 2026-03-22
-**Scope:** Stack ADDITIONS for temperature-dependent simulation, realistic dark current, and transient FLASH dynamics. Does NOT repeat v1.0 stack (devsim, numpy, scipy, matplotlib, jupyter, pandas, gmsh, lmfit).
+**Project:** SiC TCAD Simulator v2.0 -- Radiation Damage Modeling
+**Researched:** 2026-03-24
+**Scope:** Stack ADDITIONS for radiation damage modeling (defect introduction, carrier lifetime degradation, CCE vs fluence, dark current increase, carrier removal, annealing kinetics). Does NOT repeat v1.0/v1.1 stack.
 
-## What Changes from v1.0
+## What Changes from v1.1
 
-**No new Python packages are needed.** The entire v1.1 feature set is achievable with the existing stack (devsim 2.10.0 + scipy + numpy). The work is physics modeling code that runs on top of devsim's existing capabilities.
+**No new Python packages are needed.** The entire v2.0 radiation damage feature set is achievable with the existing stack (devsim 2.10.0 + scipy + numpy + matplotlib). The work is physics modeling code -- defect parameter databases, fluence-dependent modifications to existing SRH/drift-diffusion models, and ODE integration for annealing kinetics using scipy.integrate.solve_ivp (already in stack).
 
-| v1.1 Feature                      | Stack Impact                                                      | New Package? |
-| --------------------------------- | ----------------------------------------------------------------- | ------------ |
-| Temperature-dependent parameters  | Extend `sic_material.py` with T-dependent functions               | NO           |
-| Surface recombination at contacts | Custom `contact_equation()` models in devsim                      | NO           |
-| Trap-assisted tunneling (Hurkx)   | Custom node model extending USRH in devsim                        | NO           |
-| Generation-recombination current  | Already modeled by SRH in depletion region; needs T-dependent n_i | NO           |
-| Transient FLASH pulse dynamics    | devsim `transient_bdf1`/`transient_bdf2` solver                   | NO           |
-| Inter-pulse memory effects        | devsim transient time-stepping loop                               | NO           |
+| v2.0 Feature                          | Stack Impact                                                                            | New Package? |
+| ------------------------------------- | --------------------------------------------------------------------------------------- | ------------ |
+| Fluence-dependent defect introduction | New `radiation_damage.py` module with defect parameter table; modify devsim trap models | NO           |
+| Carrier lifetime degradation          | Modify SRH tau parameters as f(fluence) using damage constants                          | NO           |
+| CCE vs fluence prediction             | Extend `charge_collection.py` with fluence-loop wrapper                                 | NO           |
+| Dark current increase with damage     | Extend `dark_current.py` with irradiation-induced generation                            | NO           |
+| Carrier removal / doping reduction    | Modify N_eff = N_D - c_r \* Phi in device setup                                         | NO           |
+| Annealing kinetics                    | `scipy.integrate.solve_ivp` with BDF method for stiff ODEs                              | NO           |
+| NIEL scaling                          | Hardcoded lookup table from SR-NIEL; no external API                                    | NO           |
 
-## Existing Stack Capabilities Required (Verified)
+## Radiation Damage Model: The Burin Approach
 
-### devsim 2.10.0 -- Transient Solver
+**Confidence: HIGH** (verified from two peer-reviewed papers: Burin et al., arXiv:2407.16710 and arXiv:2407.11776v3, CERN RD50 collaboration)
 
-**Confidence: HIGH** (verified from installed `tran_diode.py` and `transient_rc.py` examples in `.venv/devsim_data/`)
+The state-of-the-art for TCAD radiation damage in 4H-SiC is the Burin et al. (2024) defect-based model from CERN RD50. Rather than using empirical carrier removal rates, it introduces physical deep-level defects whose concentrations scale linearly with fluence: N_i = g_int \* Phi. These defects then modify SRH recombination, effective doping, and generation currents through standard semiconductor physics -- all of which devsim already supports.
 
-devsim natively supports transient simulation with three time integration methods:
+This approach maps directly onto our existing devsim infrastructure: we already have custom node models for SRH recombination and Hurkx TAT. Adding radiation-induced traps means creating additional trap-level node models that scale with a fluence parameter.
 
-| Solve Type       | Method            | Order | Use Case                                                         |
-| ---------------- | ----------------- | ----- | ---------------------------------------------------------------- |
-| `transient_dc`   | DC initialization | --    | Establish initial steady state before transient                  |
-| `transient_bdf1` | Backward Euler    | 1st   | First step after bias change (L-stable, handles discontinuities) |
-| `transient_bdf2` | BDF2              | 2nd   | Subsequent steps (higher accuracy, A-stable)                     |
-| `transient_tr`   | Trapezoidal       | 2nd   | Alternative to BDF2 (A-stable but not L-stable)                  |
+### Why This Approach (Not Empirical Curve Fitting)
 
-**Key parameters for `devsim.solve()` transient calls:**
+1. **Physical basis**: Defects are real (Z1/2, EH4, EH6/7 measured by DLTS); model is predictive, not just interpolative
+2. **Single framework**: One set of defect parameters reproduces C-V flattening, forward current degradation, and CCE loss simultaneously
+3. **devsim compatible**: devsim supports arbitrary trap levels via custom node models -- no solver changes needed
+4. **Validated**: Reproduced neutron irradiation data at 5x10^14 to 1x10^16 n_eq/cm^2
+
+## Defect Parameter Database (Literature Values)
+
+**Confidence: HIGH** (from Burin et al. 2024, cross-checked with DLTS measurements in multiple papers)
+
+This is the core "data dependency" for v2.0 -- not a software package, but a curated set of physical constants from literature.
+
+### Primary Defect Table (Burin et al. 2024 Optimized Model)
+
+| Defect | Type     | Energy Level  | sigma_e (cm^2) | sigma_h (cm^2) | g_int (cm^-1) | Physical Origin      |
+| ------ | -------- | ------------- | -------------- | -------------- | ------------- | -------------------- |
+| Z1/2   | Acceptor | E_C - 0.67 eV | 2.0e-14        | 3.5e-14        | 5.0           | Carbon vacancy (V_C) |
+| EH6/7  | Donor    | E_C - 1.60 eV | 9.0e-12        | 3.8e-14        | 1.6           | Carbon vacancy (V_C) |
+| EH4    | Acceptor | E_C - 1.03 eV | 5.0e-13        | 5.0e-14        | 2.4           | Lifetime killer      |
+
+Source: Burin et al., "TCAD Simulations of Radiation Damage in 4H-SiC", arXiv:2407.16710 (Table I), validated against neutron-irradiated pad diodes.
+
+### Extended Defect Table (from Burin et al. 2024 full model, arXiv:2407.11776v3)
+
+| Defect | Type  | Energy Level  | sigma_e (cm^2) | sigma_h (cm^2) | Concentration  | Notes                        |
+| ------ | ----- | ------------- | -------------- | -------------- | -------------- | ---------------------------- |
+| B      | Donor | E_V + 0.28 eV | 2.0e-15        | 2.0e-14        | 1.0e14 (fixed) | Shallow, fluence-independent |
+| D      | Donor | E_V + 0.54 eV | 2.0e-15        | 2.0e-14        | 1.0e14 (fixed) | Shallow, fluence-independent |
+
+These shallow levels (B, D) are fixed-concentration defects representing pre-existing background traps. Include if needed for I-V accuracy; can be omitted for first-pass modeling.
+
+### Cross-Validation from Other Sources
+
+| Source                 | Defect            | g_int (cm^-1)        | Notes                 |
+| ---------------------- | ----------------- | -------------------- | --------------------- |
+| Hazdra 2021 (pss-a)    | Z1/2 + precursors | up to 4.0 (neutrons) | 1 MeV neutrons        |
+| Chen et al. 2019 (CPB) | Z1/2              | 0.44-0.57            | 8.2 MeV electrons     |
+| arXiv:2503.09016       | EH3               | 1.48                 | 80 MeV protons (n_eq) |
+
+**Key insight**: Introduction rates depend on particle type and energy. The Burin values (g_int = 5.0, 1.6, 2.4 cm^-1) are for 1 MeV neutron equivalent (n_eq). For different proton energies, scale by NIEL ratio: g_int(E_p) = g_int(1MeV_neq) \* NIEL(E_p) / NIEL(1MeV_n).
+
+### Z1/2 Trap Parameters (Already in Existing Code)
+
+The v1.1 dark current model already uses Z1/2 parameters for the Hurkx TAT model:
+
+- E_t = E_C - 0.67 eV (same as radiation damage model)
+- sigma_e = 2.0e-14 cm^2 (consistent)
+
+This is a natural integration point: the existing Z1/2 trap model needs only a fluence-dependent concentration N_t(Phi) = N_t0 + g_Z12 \* Phi.
+
+## Carrier Removal Rate (Literature Values)
+
+**Confidence: HIGH** (multiple independent measurements converge)
+
+| Source                          | Particle         | Energy    | c_r (cm^-1) | Fluence Range          |
+| ------------------------------- | ---------------- | --------- | ----------- | ---------------------- |
+| arXiv:2510.11304 (2025)         | protons          | 252.7 MeV | 4.2-6.4     | 1.4e11 - 3.5e13 p/cm^2 |
+| Moscatelli (2009)               | protons          | various   | 3.5-5.0     | --                     |
+| Sciencedirect S136980012300464X | protons/neutrons | model     | analytical  | wide range             |
+
+The carrier removal model: N_eff(Phi) = N_D0 - c_r _ Phi, where c_r ~ 5 cm^-1 for protons at relevant energies. Full depletion voltage shifts as V_fd(Phi) = q _ N_eff(Phi) _ d^2 / (2 _ eps).
+
+**Critical fluence** (detector becomes fully compensated): Phi_crit = N_D0 / c_r. For N_D0 = 5e13 cm^-3, Phi_crit ~ 1e13 cm^-2. This sets the useful lifetime range for the Petringa detector.
+
+## Carrier Lifetime Degradation Model
+
+**Confidence: MEDIUM** (standard model well-established; specific K_tau values for 4H-SiC less precisely known than for Si)
+
+### Standard Reciprocal Lifetime Model
+
+The universally used model in radiation damage physics:
+
+```
+1/tau(Phi) = 1/tau_0 + K_tau * Phi
+```
+
+where tau_0 is the pre-irradiation lifetime and K_tau is the lifetime damage constant (cm^2/s or cm^2/ns).
+
+### Alternative: Burin Defect-Based Approach (Preferred)
+
+Rather than using the empirical K_tau, we should use the defect-based approach where lifetime emerges naturally from the SRH model with fluence-dependent trap concentrations:
+
+```
+tau_SRH(Phi) = 1 / (sigma * v_th * N_t(Phi))
+           = 1 / (sigma * v_th * (N_t0 + g_int * Phi))
+```
+
+This is physically equivalent to 1/tau = 1/tau_0 + K_tau*Phi with K_tau = sigma * v_th \* g_int, but provides per-defect resolution and self-consistent treatment with carrier removal and generation.
+
+### Measured Lifetime Values
+
+| Source           | tau_0                  | tau(irradiated) | Fluence        | Notes                |
+| ---------------- | ---------------------- | --------------- | -------------- | -------------------- |
+| arXiv:2503.09016 | ~500 ns (holes)        | 398 ns          | 2e11 n_eq/cm^2 | 18% reduction        |
+| arXiv:2503.09016 | ~500 ns (holes)        | 376 ns          | 1e14 n_eq/cm^2 | 22% reduction        |
+| Chen 2019 (CPB)  | 600 ns (e), 300 ns (h) | 3 ns (h)        | high dose      | tau_n <= 1 ns needed |
+
+**Logarithmic fit** (from arXiv:2503.09016): 1/tau = a \* ln(Phi_neq) + b, with a = 2.4e4, b = 1.9e6. This is an empirical fit valid over their measured range; the defect-based model is preferred for physical extrapolation.
+
+## NIEL Scaling (No External Package Needed)
+
+**Confidence: HIGH** (well-established methodology, SR-NIEL calculator available for validation)
+
+### Approach: Hardcoded Lookup Table
+
+Do NOT build or integrate an external NIEL calculator. The SR-NIEL web calculator (www.sr-niel.org) provides values for SiC, but it is a web-only tool with no Python API. Instead:
+
+1. Pre-compute NIEL values for proton energies relevant to Petringa experiments (30, 62, 70, 150 MeV) using the SR-NIEL web calculator
+2. Store as a simple dict/array in `radiation_damage.py`
+3. Use linear interpolation for intermediate energies
+4. Normalize to 1 MeV neutron equivalent using NIEL(1MeV_n, SiC)
+
+### Key NIEL Values for 4H-SiC
+
+Displacement energy thresholds: E_d(C) = 21 eV, E_d(Si) = 35 eV (compound semiconductor -- both sublattices contribute).
+
+NIEL values must be obtained from SR-NIEL calculator for SiC target at specific proton energies. These will be hardcoded as:
 
 ```python
-devsim.solve(
-    type="transient_bdf1",      # or transient_bdf2, transient_tr
-    absolute_error=1e10,        # Newton convergence
-    relative_error=1e-10,
-    maximum_iterations=30,
-    tdelta=1e-9,                # time step (seconds)
-    charge_error=1e-2,          # relative charge conservation error
-)
+# NIEL values for protons in SiC [MeV*cm^2/g]
+# Source: SR-NIEL calculator (www.sr-niel.org), SiC target
+# To be populated from calculator before implementation
+NIEL_PROTON_SIC = {
+    # E_proton (MeV): NIEL (MeV*cm^2/g)
+    30: None,   # TODO: obtain from SR-NIEL
+    62: None,   # Petringa FLASH energy
+    70: None,
+    150: None,
+}
+NIEL_1MEV_NEUTRON_SIC = None  # Reference value for n_eq conversion
 ```
 
-**TR-BDF2 composite method** (recommended for FLASH pulse simulation -- L-stable, 2nd order):
+**Action item**: Before implementation, run SR-NIEL web calculator for these energies and populate the table. This is a 10-minute manual task, not a software dependency.
+
+## Annealing Kinetics (scipy.integrate.solve_ivp)
+
+**Confidence: HIGH for solver capability; MEDIUM for SiC-specific kinetic parameters**
+
+### Solver: Already in Stack
+
+`scipy.integrate.solve_ivp` with `method='BDF'` handles the stiff ODE system for defect annealing kinetics. No new package needed.
+
+### Physical Model
+
+Annealing of radiation-induced defects follows first-order (or more complex) kinetics:
 
 ```python
-gamma = 2 - math.sqrt(2.0)  # ~0.2929
-# Step 1: TR sub-step
-devsim.solve(type="transient_tr", tdelta=dt, gamma=gamma, charge_error=1e-2, ...)
-# Step 2: BDF2 sub-step
-devsim.solve(type="transient_bdf2", tdelta=dt, gamma=gamma, charge_error=1e-2, ...)
-```
+# Defect concentration evolution during annealing
+# dN_i/dt = -nu_i * exp(-E_a_i / (k_B * T)) * N_i   (first-order)
+# where nu_i is attempt frequency, E_a_i is activation energy
 
-**Transient workflow pattern** (from `tran_diode.py`):
-
-```python
-# 1. DC solve to establish bias point
-devsim.solve(type="dc", ...)
-
-# 2. Initialize transient state
-devsim.solve(type="transient_dc", ...)
-
-# 3. Change bias/generation (the transient stimulus)
-devsim.set_parameter(device=dev, name=bias_name, value=new_value)
-
-# 4. Time-step loop
-t = 0
-while t < t_total:
-    devsim.solve(type="transient_bdf1", tdelta=dt, charge_error=1e-2, ...)
-    # Extract carriers, current at this time step
-    t += dt
-```
-
-**Critical note:** The existing `time_node_model` parameters (`NCharge`, `PCharge`) are already registered in `setup_sic_drift_diffusion()` (lines 139-168 of `drift_diffusion.py`), which means the transient solver is already wired up. No equation changes needed -- just call `solve(type="transient_bdf1", ...)` instead of `solve(type="dc", ...)`.
-
-### devsim 2.10.0 -- Contact Equations for Surface Recombination
-
-**Confidence: HIGH** (verified from `simple_physics.py` source and devsim documentation)
-
-The current code uses `CreateSiliconDriftDiffusionAtContact()` which **pins carriers to equilibrium values** at contacts (Ohmic contact boundary condition). This is correct for the cathode (metal contact) but prevents surface recombination modeling.
-
-To add surface recombination velocity (SRV) at a contact, replace the Ohmic carrier pinning with a flux boundary condition:
-
-```python
-# Surface recombination rate: R_s = S * (n*p - n_i^2) / (n + p + 2*n_i)
-# where S is surface recombination velocity (cm/s)
-# This is the SRH surface recombination model
-
-# Use contact_equation with node_current_model for surface flux
-devsim.contact_equation(
-    device=device, contact="anode",
-    name="ElectronContinuityEquation",
-    node_model=contact_electrons_name,     # Ohmic pinning
-    node_current_model="surface_e_flux",   # ADD: surface recombination flux
-    edge_current_model="ElectronCurrent",
-)
-```
-
-**Implementation approach:** For the 1D device, surface recombination enters as an additional current term at the anode contact (SiO2-passivated surface in the real device). The `ContactSurfaceArea` and `NodeVolume` built-in models handle the geometric scaling.
-
-### devsim 2.10.0 -- Custom Node Models for Hurkx TAT
-
-**Confidence: HIGH** (verified -- project already uses `CreateNodeModel` and `CreateNodeModelDerivative` extensively)
-
-The Hurkx trap-assisted tunneling model is implemented as a field enhancement factor on the SRH lifetimes. The model modifies the existing USRH expression:
-
-```
-USRH_TAT = (n*p - n_i^2) / (taup/Gamma_p * (n + n1) + taun/Gamma_n * (p + p1))
-```
-
-where Gamma_n and Gamma_p are field enhancement factors:
-
-```
-Gamma = integral of exp(u - u^(3/2) * K) du from 0 to infinity
-K = (4/3) * sqrt(2 * m_t * (E_t)^3) / (q * hbar * F)
-```
-
-This is purely a node model modification -- no new devsim capabilities needed. The existing `CreateNodeModel` / `CreateNodeModelDerivative` pattern (already used for `UAuger`, `USRH`) handles this. The field magnitude `F` is already computed as `abs(ElectricField)` from the Poisson equation.
-
-### scipy.optimize -- Parameter Fitting
-
-**Confidence: HIGH** (already in stack, already used for `calibrate_graded_doping`)
-
-`scipy.optimize.curve_fit` or `scipy.optimize.minimize` for fitting:
-
-- SRH lifetime tau_n, tau_p to match 18 pA dark current
-- Surface recombination velocity S to experimental data
-- Hurkx effective tunneling mass m_t as calibration parameter
-
-No new fitting library needed. The existing `lmfit` (already in v1.0 stack) is also available for constrained fits.
-
-## Temperature-Dependent Material Parameters (No New Libraries)
-
-All T-dependent physics goes into extending the existing `sic_material.py` module and `create_sic_device()` function. No external parameter database exists for 4H-SiC in Python -- parameters come from literature.
-
-### Parameters That Need T-Dependence
-
-| Parameter             | T-Dependent Model                                         | Source                       | Confidence |
-| --------------------- | --------------------------------------------------------- | ---------------------------- | ---------- |
-| Bandgap E_g(T)        | Varshni: E_g(0) - alpha\*T^2/(T+beta)                     | Already in `compute_ni()`    | HIGH       |
-| n_i(T)                | sqrt(NC*NV)*exp(-E_g/2kT)                                 | Already in `compute_ni()`    | HIGH       |
-| NC(T), NV(T)          | proportional to T^(3/2)                                   | Already in `compute_ni()`    | HIGH       |
-| mu_n_max(T)           | 950 \* (T/300)^(-2.40)                                    | TU Wien Ayalew Table 3.5     | HIGH       |
-| mu_p_max(T)           | 125 \* (T/300)^(-2.15)                                    | TU Wien Ayalew Table 3.5     | HIGH       |
-| mu_n_min(T)           | 40 \* (T/300)^(-0.5)                                      | TU Wien Ayalew Table 3.5     | MEDIUM     |
-| mu_p_min(T)           | 15.9 \* (T/300)^(-0.5)                                    | TU Wien Ayalew Table 3.5     | MEDIUM     |
-| tau_SRH(T)            | tau_0 \* (T/300)^alpha_tau                                | Needs literature calibration | LOW        |
-| Incomplete ionization | Already T-dependent in `ionized_acceptor_concentration()` | Existing code                | HIGH       |
-
-**Varshni parameters for 4H-SiC** (already coded in `sic_material.py`):
-
-- E_g(0) = 3.265 eV
-- alpha = 6.5e-4 eV/K
-- beta = 1300 K
-
-**Caughey-Thomas T-dependent exponents** (TU Wien Ayalew thesis, Table 3.5):
-
-- Electrons: gamma_mu = -2.40 (mu_max temperature exponent), beta_mu = -0.5 (mu_min exponent)
-- Holes: gamma_mu = -2.15 (mu_max temperature exponent), beta_mu = -0.5 (mu_min exponent)
-
-**Key insight:** `compute_ni(T)` already exists but is not wired into the device pipeline. The `create_sic_device()` function currently uses the fixed `params.n_i_300 = 5e-9`. Wiring T-dependence means calling `compute_ni(T)` and passing the result as the `n_i` parameter. Similarly, mobility_caughey_thomas needs a `T` argument.
-
-## Dark Current Model Components (No New Libraries)
-
-Matching the experimental 18 pA dark current requires three physics contributions, all implementable as devsim node/contact models:
-
-### 1. Generation-Recombination Current (Depletion Region SRH)
-
-**Already modeled** by the existing USRH in the depletion region. The current v1.0 prediction (6.71e-49 A) is too low because:
-
-- n_i for 4H-SiC is ~5e-9 cm^-3, making bulk SRH negligible
-- The real dark current is dominated by surface and trap-assisted mechanisms
-
-With T-dependent n_i, the G-R current will increase but still remain far below 18 pA. This is expected -- the gap must be filled by surface recombination and TAT.
-
-### 2. Surface Recombination Current
-
-**Implementation: custom contact equation with SRV parameter**
-
-Literature values for 4H-SiC SiO2-passivated surface:
-
-- S_n = 150-5000 cm/s (Si-face, CMP, SiO2 passivated)
-- S_p = 150-5000 cm/s
-- S_interface (epi/substrate) = ~5e5 cm/s
-
-Source: Kimoto et al., J. Appl. Phys. 127, 195702 (2020); Rakheja et al., Semicond. Sci. Technol. (2023).
-
-**Confidence: MEDIUM** -- SRV values vary widely with surface preparation; will need to calibrate S to match 18 pA.
-
-### 3. Trap-Assisted Tunneling (Hurkx Model)
-
-**Implementation: modified USRH node model with field enhancement**
-
-The Hurkx model adds a field enhancement factor Gamma to the SRH lifetimes. For 4H-SiC:
-
-- Trap energy E_t = E_g/2 = 1.63 eV (midgap, standard assumption)
-- Tunneling effective mass m_t = 0.25 \* m_0 (standard for SiC, same as Si)
-- One additional fitting parameter vs standard SRH
-
-**Confidence: MEDIUM** -- Hurkx model is well-established in TCAD but has been noted as lacking microscopic physics detail. For our purpose (matching 18 pA), it provides adequate phenomenological description.
-
-**Critical:** The Hurkx field enhancement integral has no closed-form solution. Use the Klaassen approximation:
-
-```
-Gamma(F) approx = 1 + Delta_Gamma
-Delta_Gamma = (2*sqrt(3)*pi * F_crit / F) * exp(-(F_crit/F)^2)  for F > 0
-F_crit = sqrt(24 * m_t * (E_t)^3) / (q * hbar)
-```
-
-This is computable as a devsim node model expression using the existing `ElectricField` edge model.
-
-## Transient FLASH Dynamics (No New Libraries)
-
-### What Needs to Change from v1.0
-
-The v1.0 FLASH study used **steady-state DC solves** with a constant generation rate to approximate the FLASH condition. This misses:
-
-1. **Intra-pulse dynamics**: Carrier build-up during the ~10-200 ms pulse
-2. **Carrier decay**: Recombination/sweep-out after pulse ends
-3. **Inter-pulse memory**: Residual carriers from previous pulse affecting next pulse
-
-### Implementation Using Existing devsim Transient Solver
-
-```python
-# Pseudo-code for FLASH pulse simulation
-# Uses existing devsim transient solve capabilities
-
-# 1. Establish bias point (DC)
-ramp_bias(device_info, V_bias)
-
-# 2. Initialize transient
-devsim.solve(type="transient_dc", ...)
-
-# 3. Pulse ON: apply generation rate, time-step through pulse
-add_generation_to_dd(device_info, gen_values)
-t = 0
-while t < pulse_duration:
-    devsim.solve(type="transient_bdf1", tdelta=dt_pulse, charge_error=1e-2, ...)
-    record_state(t)  # carriers, current, CCE
-    t += dt_pulse
-
-# 4. Pulse OFF: zero generation, time-step through decay
-add_generation_to_dd(device_info, np.zeros_like(gen_values))
-while t < pulse_duration + decay_time:
-    devsim.solve(type="transient_bdf1", tdelta=dt_decay, ...)
-    record_state(t)
-    t += dt_decay
-
-# 5. Repeat for inter-pulse study
-```
-
-**Time scale analysis for adaptive stepping:**
-
-- Dielectric relaxation time: tau_d = eps / (q _ mu_n _ n) ~ 1e-12 s (too fast, handled by drift-diffusion implicitly)
-- SRH lifetime: tau_SRH ~ 1-1000 ns (sets minimum resolved timescale)
-- Transit time across 10 um epi: t_tr = d / v_sat ~ 10e-4 / 2e7 ~ 50 ps
-- Pulse duration: 10-200 ms (macroscopic)
-
-**Recommended time stepping:** Start with dt = 1 ns (resolve SRH dynamics), increase to dt = 1 us after initial transient settles, use adaptive stepping based on charge_error.
-
-### scipy.integrate.solve_ivp (Existing in Stack)
-
-**Use case:** Simplified 0D/1D analytical transient models for validation before running full devsim transient simulations.
-
-```python
 from scipy.integrate import solve_ivp
 
-def carrier_dynamics(t, y, G, tau_srh, tau_auger_coeff):
-    n = y[0]
-    dndt = G - n/tau_srh - tau_auger_coeff * n**3
-    return [dndt]
+def annealing_odes(t, N, T, defect_params):
+    """ODE system for defect annealing.
 
-sol = solve_ivp(carrier_dynamics, [0, t_pulse], [n0],
-                method='BDF', args=(G, tau, C_aug))
+    N: array of defect concentrations [N_Z12, N_EH4, N_EH67, ...]
+    T: annealing temperature (K)
+    defect_params: list of (nu_i, E_a_i) for each defect
+    """
+    k_B = 8.617e-5  # eV/K
+    dNdt = np.zeros_like(N)
+    for i, (nu, E_a) in enumerate(defect_params):
+        dNdt[i] = -nu * np.exp(-E_a / (k_B * T)) * N[i]
+    return dNdt
+
+sol = solve_ivp(annealing_odes, [0, t_anneal], N0,
+                method='BDF', args=(T_anneal, defect_params),
+                rtol=1e-8, atol=1e-12)
 ```
 
-This provides an independent check on devsim transient results.
+### Annealing Parameters from Literature
 
-## What NOT to Add
+**Confidence: MEDIUM** (thermal annealing temperatures well-characterized; room-temperature kinetics less certain)
 
-| Tempting Addition                    | Why NOT                                                    | What to Do Instead                              |
-| ------------------------------------ | ---------------------------------------------------------- | ----------------------------------------------- |
-| FiPy for thermal coupling            | T range is 30-40 C (clinical); isothermal assumption valid | Parameterize T as input, no coupled thermal PDE |
-| COMSOL/Sentaurus                     | Out of scope (open-source constraint)                      | devsim handles all needed physics               |
-| mpmath for arbitrary precision       | n_i overflow already handled by clamped exponentials       | Existing approach works                         |
-| pyvista/vtk for 3D viz               | 1D device, matplotlib sufficient                           | Use matplotlib                                  |
-| h5py for data storage                | Transient data fits in numpy arrays/JSON                   | Use existing save_parametric_results pattern    |
-| External SiC parameter database      | No Python package exists; parameters come from papers      | Extend sic_material.py manually                 |
-| Separate ODE solver for TAT integral | Klaassen approximation is analytical                       | Use devsim node model expression                |
+| Defect  | Annealing Onset    | Full Recovery | Activation Energy       | Source                                 |
+| ------- | ------------------ | ------------- | ----------------------- | -------------------------------------- |
+| Z1/2    | ~1150 C            | 1600-1750 C   | ~3.5-4.0 eV (estimated) | Hiyoshi & Kimoto (2009), Hornos (2011) |
+| EH6/7   | ~1600 C            | 1750 C        | similar to Z1/2         | Same source                            |
+| EH1/EH3 | lower (~300-500 C) | --            | ~1.0-1.5 eV             | Storasta & Bergman (2004)              |
 
-## Installation
+**Key insight for Petringa application**: At room temperature (300K) and clinical operating temperatures (303-313K), Z1/2 and EH6/7 are essentially stable (activation energies >> k_B\*T). Only low-activation-energy defects (EH1, EH3) show meaningful room-temperature annealing. The annealing model is primarily relevant for predicting recovery after intentional thermal treatment, not for in-service operation.
 
-**No changes to v1.0 installation.** All v1.1 work is pure Python modeling code on top of existing dependencies.
+## Leakage Current Increase Model
 
-```bash
-# v1.0 stack is sufficient -- no new packages
-uv pip install devsim==2.10.0 numpy scipy matplotlib jupyter pandas lmfit gmsh==4.15.1
+**Confidence: MEDIUM** (approach clear; SiC-specific alpha values sparse in literature)
+
+### SiC vs Si Behavior
+
+Unlike silicon detectors where leakage current increases dramatically with fluence (Delta_I/V = alpha * Phi_eq with alpha ~ 4e-17 A/cm for Si), 4H-SiC shows much smaller increases -- in some studies, leakage current actually *decreases\* at high fluence due to carrier removal reducing the active region. The Burin TCAD model shows "a slight increase in leakage current with irradiation fluence that remains below an order of magnitude increase" and below measurement limits (~100 fA).
+
+### Implementation Strategy
+
+Use the defect-based model (NOT the empirical alpha model from Si):
+
+1. Add irradiation-induced defects to devsim trap model
+2. The generation current in the depletion region will naturally increase due to higher trap density
+3. The Hurkx TAT model (already implemented) will show enhanced field-dependent current through irradiation defects
+4. Carrier removal narrows the depletion region at fixed bias, partially counteracting current increase
+
+This is self-consistent with the CCE and carrier removal models -- one defect parameter set drives all three effects.
+
+## CCE vs Fluence Model
+
+**Confidence: HIGH** (standard Hecht equation with fluence-dependent lifetime)
+
+### Approach
+
+The existing `charge_collection.py` already computes CCE via:
+
+1. Analytical Hecht equation: CCE(V, mu, tau, d)
+2. DD-simulation-based CCE extraction
+
+For radiation damage, wrap these in a fluence loop:
+
+```python
+for Phi in fluence_values:
+    # 1. Update effective doping
+    N_eff = N_D0 - c_r * Phi
+
+    # 2. Update trap concentrations
+    N_Z12 = N_Z12_0 + g_Z12 * Phi
+    N_EH4 = g_EH4 * Phi
+    N_EH67 = g_EH67 * Phi
+
+    # 3. Rebuild device with new parameters
+    device = create_sic_device(N_D=N_eff, traps=[...])
+
+    # 4. Compute CCE at this fluence
+    cce = compute_cce_dd(device, V_bias)
+```
+
+The Hecht analytical form provides a fast cross-check:
+
+```
+CCE(Phi) = Hecht(V, mu_e, tau_e(Phi), mu_h, tau_h(Phi), d, N_eff(Phi))
 ```
 
 ## Integration Points with Existing Code
 
 ### Files to Modify
 
-| Existing File                                      | Change Needed                                                                      | Why                                            |
-| -------------------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------- |
-| `sic_material.py`                                  | Add T-dependent functions for mobility, tau_SRH                                    | Wire T into Caughey-Thomas, add T-exponents    |
-| `device.py` `create_sic_device()`                  | Call `compute_ni(T)` instead of using fixed `n_i_300`; pass T-dependent mobilities | Enable T-dependent simulation                  |
-| `drift_diffusion.py` `setup_sic_drift_diffusion()` | Add Hurkx-enhanced USRH model option                                               | Replace midgap SRH with field-enhanced version |
-| `drift_diffusion.py` contact equations             | Replace `CreateSiliconDriftDiffusionAtContact` with custom SiC version             | Enable surface recombination at anode          |
+| Existing File                       | Change Needed                                                                       | Why                           |
+| ----------------------------------- | ----------------------------------------------------------------------------------- | ----------------------------- |
+| `sic_material.py`                   | Add defect parameter dataclass `RadiationDefect` with energy, cross-sections, g_int | Central parameter definition  |
+| `device.py` / `create_sic_device()` | Accept fluence parameter; modify N_D -> N_eff(Phi)                                  | Carrier removal               |
+| `drift_diffusion.py`                | Add trap-level node models for radiation defects                                    | SRH with multiple trap levels |
+| `dark_current.py`                   | Add irradiation-enhanced generation term                                            | Dark current vs fluence       |
+| `charge_collection.py`              | Add fluence sweep wrapper                                                           | CCE vs fluence curves         |
 
 ### New Files to Create
 
-| New File                       | Purpose                                                                    |
-| ------------------------------ | -------------------------------------------------------------------------- |
-| `src/surface_recombination.py` | SRV-based contact equations, replaces Ohmic pinning at specified contacts  |
-| `src/hurkx_tat.py`             | Hurkx field-enhanced SRH model, Klaassen approximation for Gamma(F)        |
-| `src/transient_flash.py`       | Transient pulse simulation loop, adaptive time stepping, result recording  |
-| `src/dark_current.py`          | Orchestrator: combines T-dep params + surface + TAT to predict I_dark(V,T) |
+| New File                  | Purpose                                                                                    |
+| ------------------------- | ------------------------------------------------------------------------------------------ |
+| `src/radiation_damage.py` | Defect database, NIEL table, fluence-dependent parameter calculator, carrier removal model |
+| `src/annealing.py`        | ODE-based annealing kinetics using solve_ivp, isothermal and isochronal annealing curves   |
+
+### devsim Integration: Adding Radiation-Induced Traps
+
+The existing code already defines custom SRH recombination via `CreateNodeModel`. Adding radiation-induced traps follows the same pattern:
+
+```python
+# For each radiation-induced defect level:
+for defect in [Z12, EH4, EH67]:
+    # Trap concentration scales with fluence
+    N_t = defect.g_int * fluence
+
+    # SRH recombination rate through this trap level
+    # R_trap = sigma_e * sigma_h * v_th * N_t * (n*p - n_i^2) /
+    #          (sigma_e * (n + n1) + sigma_h * (p + p1))
+    # where n1 = N_C * exp(-(E_C - E_t) / kT)
+    #       p1 = N_V * exp(-(E_t - E_V) / kT)
+
+    CreateNodeModel(device, region, f"USRH_{defect.name}",
+        f"{N_t} * sigma_e_{defect.name} * sigma_h_{defect.name} * v_th * "
+        f"(Electrons * Holes - {n_i_sq}) / "
+        f"(sigma_e_{defect.name} * (Electrons + {n1}) + "
+        f"sigma_h_{defect.name} * (Holes + {p1}))")
+```
+
+This adds to (not replaces) the existing bulk SRH recombination. The total recombination becomes R_total = R_SRH_bulk + R_Z12(Phi) + R_EH4(Phi) + R_EH67(Phi).
+
+## What NOT to Add
+
+| Tempting Addition                          | Why NOT                                                                           | What to Do Instead                               |
+| ------------------------------------------ | --------------------------------------------------------------------------------- | ------------------------------------------------ |
+| Geant4/FLUKA for NIEL                      | Out of scope (Monte Carlo handled separately by group); overkill for lookup table | Hardcode NIEL values from SR-NIEL web calculator |
+| SRIM/TRIM integration                      | Only needed for implantation profiles, not bulk damage                            | Use published introduction rates scaled by NIEL  |
+| pysrim Python package                      | Abandoned project, Python 2 era, not maintained                                   | Not needed -- use published values               |
+| External defect database (e.g., from CERN) | No standard Python package exists for SiC defect DBs                              | Hardcode from Burin et al. papers                |
+| Multi-level trap solver library            | devsim handles arbitrary trap levels via node models                              | Use existing CreateNodeModel pattern             |
+| FiPy or custom PDE solver for annealing    | Annealing is ODE (0D kinetics), not PDE                                           | scipy.integrate.solve_ivp is sufficient          |
+| Sentaurus/TCAD commercial tools            | Out of scope constraint                                                           | devsim + custom models                           |
+| pandas for data management                 | Small parameter tables; numpy arrays + dicts sufficient                           | Keep it simple                                   |
+| lmfit for damage constant fitting          | scipy.optimize.curve_fit adequate; lmfit is overkill here                         | Already in stack if needed                       |
+| h5py for storing fluence sweep data        | JSON/numpy .npz sufficient for 1D data                                            | Existing save pattern                            |
+
+## Installation
+
+**No changes to v1.1 installation.** All v2.0 work is pure Python modeling code on top of existing dependencies.
+
+```bash
+# v1.0/v1.1 stack is sufficient -- no new packages
+uv pip install devsim>=2.10.0 numpy>=1.24 scipy>=1.11 matplotlib>=3.7
+```
+
+The only "dependency" is literature parameter values, which are hardcoded constants.
 
 ## Key Literature Sources for Parameter Values
 
-| Topic                          | Source                                            | What It Provides                           |
-| ------------------------------ | ------------------------------------------------- | ------------------------------------------ |
-| T-dependent mobility           | TU Wien Ayalew thesis, Table 3.5                  | Caughey-Thomas T-exponents for 4H-SiC      |
-| Surface recombination velocity | Kimoto et al., J. Appl. Phys. 127, 195702 (2020)  | SRV vs T for 4H-SiC Si-face                |
-| Hurkx TAT model                | Hurkx et al., IEEE TED 39(2), 1992                | Original model formulation                 |
-| 4H-SiC TAT parameters          | arxiv:2503.09016 (2025)                           | m_t = 0.25 m_0 for SiC                     |
-| SRH lifetime vs T              | Kimoto & Cooper, "Fundamentals of SiC Technology" | tau(T) relationships                       |
-| Bandgap, n_i                   | Ioffe NSM Archive + existing `sic_material.py`    | Already implemented                        |
-| TCAD parameter review          | Burin et al. (2024), CERN RD50                    | Comprehensive 4H-SiC TCAD parameter survey |
+| Topic                       | Source                                        | What It Provides                                                       | Confidence |
+| --------------------------- | --------------------------------------------- | ---------------------------------------------------------------------- | ---------- |
+| TCAD defect model (primary) | Burin et al., arXiv:2407.16710 (2024)         | Complete 3-defect model: Z1/2, EH4, EH6/7 with g_int, sigma_e, sigma_h | HIGH       |
+| Extended TCAD model         | Burin et al., arXiv:2407.11776v3 (2024)       | 5-defect model with shallow levels B, D                                | HIGH       |
+| Carrier removal rate        | arXiv:2510.11304 (2025)                       | c_r = 4.2-6.4 cm^-1 for 252.7 MeV protons                              | HIGH       |
+| Lifetime degradation        | arXiv:2503.09016 (2025)                       | tau vs Phi measurements, 1/tau = a\*ln(Phi) + b fit                    | MEDIUM     |
+| Z1/2 annealing              | Hiyoshi & Kimoto (2009); Hornos et al. (2011) | Annealing temperatures: 1150-1750 C                                    | MEDIUM     |
+| EH1/EH3 annealing           | Storasta & Bergman (2004)                     | Low-T annealing ~300-500 C                                             | MEDIUM     |
+| Lifetime damage (bipolar)   | Hazdra (2021), pss-a 2100218                  | K_T values, Z1/2 introduction up to 4 cm^-1 (neutrons)                 | MEDIUM     |
+| NIEL for SiC                | SR-NIEL calculator (www.sr-niel.org)          | NIEL(E) for protons in SiC                                             | HIGH       |
+| SiC detector review         | Tudisco et al., Front. Phys. 10:898833 (2022) | Overview of radiation hardness studies                                 | MEDIUM     |
+| Carrier lifetime law        | IEEE Access 10538275 (2024)                   | Empirical tau_HL(T, Phi) law for TCAD                                  | MEDIUM     |
+| DLTS defect survey          | Chen et al., CPB 28(1):010701 (2019)          | Z1/2 capture cross-sections, simulation parameters                     | HIGH       |
 
 ## Sources
 
-- [devsim transient_rc.py](file://.venv/devsim_data/testing/transient_rc.py) -- transient solver usage pattern with BDF1, BDF2, TR-BDF methods -- HIGH confidence
-- [devsim tran_diode.py](file://.venv/devsim_data/examples/diode/tran_diode.py) -- transient diode example with time-step loop -- HIGH confidence
-- [devsim simple_physics.py](file://.venv/lib/python3.13/site-packages/devsim/python_packages/simple_physics.py) -- contact equation patterns, carrier pinning -- HIGH confidence
-- [devsim solver docs](https://devsim.net/solver.html) -- transient solve types and parameters -- HIGH confidence
-- [devsim models docs](https://devsim.net/models.html) -- custom equation, contact_equation, interface_equation API -- HIGH confidence
-- [devsim command reference](https://devsim.net/CommandReference.html) -- solve() parameter listing (tdelta, charge_error, gamma) -- HIGH confidence
-- [TU Wien Ayalew thesis, 3.3.1](https://www.iue.tuwien.ac.at/phd/ayalew/node65.html) -- Caughey-Thomas T-dependent parameters for 4H-SiC -- HIGH confidence
-- [Kimoto et al., SRV for 4H-SiC](https://pubs.aip.org/aip/jap/article/127/19/195702/153502/) -- surface recombination velocities vs T -- MEDIUM confidence
-- [Rakheja et al., SRV 4H-SiC](https://www.sciencedirect.com/science/article/pii/S136980012300673X) -- SRV vs carrier concentration -- MEDIUM confidence
-- [Hurkx TAT model](https://www.semanticscholar.org/paper/A-new-recombination-model-for-device-simulation-Hurkx-Klaassen/4e0ad76a1a7d0e1b4db5f1e48bc05a6f16614337) -- original field-enhanced SRH paper -- HIGH confidence
-- [arxiv:2503.09016](https://arxiv.org/pdf/2503.09016) -- 4H-SiC TAT with m_t = 0.25 m_0 -- MEDIUM confidence
-- [Burin TCAD 4H-SiC review (CERN)](https://indico.cern.ch/event/1476607/contributions/6218703/) -- comprehensive parameter survey -- MEDIUM confidence (PDF not readable, metadata confirmed)
-- [Ideal 4H-SiC pn junction](https://www.sciencedirect.com/science/article/abs/pii/S0921510700006024) -- G-R current with n=2 ideality factor, J_0 values -- MEDIUM confidence
+- [Burin et al. TCAD Radiation Damage in 4H-SiC (2024)](https://arxiv.org/abs/2407.16710) -- primary defect model, 3-level table -- HIGH confidence
+- [Burin et al. TCAD Modeling of Radiation-Induced Defects (2024)](https://arxiv.org/html/2407.11776v3) -- extended 5-defect model, validated against neutron data -- HIGH confidence
+- [In-situ Radiation Damage SiC Clinical Proton Beams (2025)](https://arxiv.org/abs/2510.11304) -- carrier removal rate 4.2-6.4 cm^-1 -- HIGH confidence
+- [Proton Irradiation Defects in 4H-SiC PIN (2025)](https://arxiv.org/html/2503.09016) -- EH3 introduction rate, lifetime degradation measurements -- MEDIUM confidence
+- [SiC Detector Degradation Simulation (CPB 2019)](https://cpb.iphy.ac.cn/article/2019/1969/cpb_28_1_010701.html) -- Z1/2 capture cross-sections, CCE model -- HIGH confidence
+- [SR-NIEL Web Calculator](https://www.sr-niel.org/index.php/sr-niel-web-calculators/niel-calculator-for-electrons-protons-and-ions) -- NIEL values for SiC target -- HIGH confidence
+- [Hazdra 2021 Radiation Defects and Carrier Lifetime](https://onlinelibrary.wiley.com/doi/abs/10.1002/pssa.202100218) -- lifetime damage in bipolar devices -- MEDIUM confidence
+- [IEEE Access Carrier Lifetime Law (2024)](https://ieeexplore.ieee.org/document/10538275) -- empirical tau(T, Phi) for TCAD -- MEDIUM confidence
+- [Carrier Removal Analytical Model (2023)](https://www.sciencedirect.com/science/article/abs/pii/S136980012300464X) -- predictive c_r model -- MEDIUM confidence
+- [SiC Detectors Review (Frontiers 2022)](https://www.frontiersin.org/journals/physics/articles/10.3389/fphy.2022.898833/full) -- comprehensive overview -- MEDIUM confidence
+- [scipy.integrate.solve_ivp docs](https://docs.scipy.org/doc/scipy/reference/generated/scipy.integrate.solve_ivp.html) -- BDF method for stiff ODE systems -- HIGH confidence
