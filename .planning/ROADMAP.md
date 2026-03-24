@@ -100,12 +100,12 @@ Plans:
 2. User can generate dark current vs fluence curves with component decomposition showing baseline vs radiation-induced contributions
 3. Simulator correctly reproduces the counterintuitive SiC behavior where dark current may decrease at very high fluence due to carrier removal reducing the generation volume
 
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
 
-- [ ] 15-01: TBD
-- [ ] 15-02: TBD
+- [ ] 15-01-PLAN.md — Dark current vs fluence sweep function with delta-J model and integration tests
+- [ ] 15-02-PLAN.md — Publication-quality dark current vs fluence notebook with component decomposition
 
 ### Phase 16: Carrier Removal & C-V Evolution
 
