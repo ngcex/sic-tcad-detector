@@ -30,7 +30,7 @@ Full details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 
 - [x] **Phase 10: Temperature-Dependent Device Physics** — Thread temperature through all material parameters and device simulations, validated against v1.0 baseline at 300K (completed 2026-03-23)
 - [x] **Phase 11: Dark Current Modeling** — Implement trap-assisted tunneling and surface recombination to match experimental 18 pA dark current (completed 2026-03-23)
-- [ ] **Phase 12: Transient FLASH Dynamics** — Simulate real-time pulse dynamics with adaptive time-stepping, capturing intra-pulse and inter-pulse carrier behavior
+- [x] **Phase 12: Transient FLASH Dynamics** — Simulate real-time pulse dynamics with adaptive time-stepping, capturing intra-pulse and inter-pulse carrier behavior (completed 2026-03-24)
 
 ## Phase Details
 
@@ -87,7 +87,7 @@ Plans:
 4. User can compare transient CCE vs steady-state CCE across the 20-230 Gy/s dose-rate range
 5. A Jupyter notebook guides the user through transient FLASH analysis (single-pulse, multi-pulse, steady-state comparison) with publication-quality figures
 
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 
@@ -111,4 +111,4 @@ Plans:
 | 8. Audit Gap Closure                     | v1.0      | 1/1            | Complete   | 2026-03-22 |
 | 10. Temperature-Dependent Device Physics | v1.1      | 3/3            | Complete   | 2026-03-23 |
 | 11. Dark Current Modeling                | 2/2       | Complete       | 2026-03-23 | -          |
-| 12. Transient FLASH Dynamics             | 1/2 | In Progress|  | -          |
+| 12. Transient FLASH Dynamics             | 2/2 | Complete   | 2026-03-24 | -          |

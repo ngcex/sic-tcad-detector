@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Realistic Device Physics
-status: in-progress
-last_updated: "2026-03-24T00:00:00.000Z"
+status: complete
+last_updated: "2026-03-24T08:23:31.537Z"
 progress:
   total_phases: 12
-  completed_phases: 11
+  completed_phases: 12
   total_plans: 27
-  completed_plans: 26
+  completed_plans: 27
 ---
 
 # Project State
@@ -23,19 +23,19 @@ See: .planning/PROJECT.md (updated 2026-03-22)
 ## Current Position
 
 Phase: 12 of 12 (Transient FLASH Dynamics)
-Plan: 01 of 02
-Status: Plan 12-01 complete
-Last activity: 2026-03-24 — Completed 12-01 (TransientSolver with adaptive time-stepping)
+Plan: 02 of 02
+Status: Phase 12 complete -- v1.0 milestone complete
+Last activity: 2026-03-24 — Completed 12-02 (Multi-pulse train and transient analysis notebook)
 
-Progress: [█████████▌] 96%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 6 (v1.1)
-- Average duration: 7.7 min
-- Total execution time: 0.77 hours
+- Total plans completed: 7 (v1.1)
+- Average duration: 8.6 min
+- Total execution time: 1.0 hours
 
 **By Phase:**
 
@@ -43,12 +43,12 @@ Progress: [█████████▌] 96%
 | ----- | ----- | ------ | -------- |
 | 10    | 3/3   | 13 min | 4.3 min  |
 | 11    | 2/2   | 30 min | 15 min   |
-| 12    | 1/2   | 5 min  | 5 min    |
+| 12    | 2/2   | 19 min | 9.5 min  |
 
 **Recent Trend:**
 
-- Last 5 plans: 10-02 (5 min), 10-03 (5 min), 11-01 (21 min), 11-02 (9 min), 12-01 (5 min)
-- Trend: 12-01 fast execution (existing codebase handles 90% of physics)
+- Last 5 plans: 10-03 (5 min), 11-01 (21 min), 11-02 (9 min), 12-01 (5 min), 12-02 (14 min)
+- Trend: v1.0 milestone COMPLETE -- all 12 phases executed
 
 _Updated after each plan completion_
 
@@ -75,6 +75,9 @@ Recent decisions affecting current work:
 - [12-01]: charge_error=1e10 disables devsim auto step rejection; adaptive_dt manages time steps based on pulse phase
 - [12-01]: BDF1 over BDF2 for unconditional stability at sharp pulse edges
 - [12-01]: CCE clipped to [0, 2] to allow transit-time overshoot effects
+- [12-02]: Inter-pulse gap used as t_post for natural carrier decay between pulses
+- [12-02]: skip_init=True for subsequent pulses preserves devsim transient state
+- [12-02]: Fresh device per dose rate in transient_cce_vs_dose_rate (uuid names, cleanup in finally)
 
 ### Pending Todos
 
@@ -89,5 +92,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-24
-Stopped at: Completed 12-01-PLAN.md
+Stopped at: Completed 12-02-PLAN.md -- v1.0 milestone complete
 Resume file: None
