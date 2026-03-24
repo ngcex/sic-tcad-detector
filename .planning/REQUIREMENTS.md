@@ -30,15 +30,15 @@ Requirements for milestone v1.1: Realistic Device Physics. Each maps to roadmap 
 
 - [x] **TRAN-01**: Simulator implements adaptive time-stepping for transient drift-diffusion with generation pulse
 - [x] **TRAN-02**: User can simulate single FLASH pulse (us rise, ms duration) and extract time-resolved current
-- [ ] **TRAN-03**: User can simulate multi-pulse train and observe inter-pulse carrier dynamics
+- [x] **TRAN-03**: User can simulate multi-pulse train and observe inter-pulse carrier dynamics
 - [x] **TRAN-04**: Transient CCE converges to v1.0 steady-state result at long times (validation)
-- [ ] **TRAN-05**: User can compare transient vs steady-state CCE across dose-rate range
+- [x] **TRAN-05**: User can compare transient vs steady-state CCE across dose-rate range
 
 ### Notebooks
 
 - [x] **NOTE-01**: Jupyter notebook for T-dependent device characterization (I-V, C-V, CCE vs T)
 - [x] **NOTE-02**: Jupyter notebook for dark current analysis (TAT + SRV fitting, sensitivity)
-- [ ] **NOTE-03**: Jupyter notebook for transient FLASH dynamics (single-pulse, multi-pulse, comparison)
+- [x] **NOTE-03**: Jupyter notebook for transient FLASH dynamics (single-pulse, multi-pulse, comparison)
 
 ## v2 Requirements
 
@@ -85,12 +85,12 @@ Deferred to future release. Tracked but not in current roadmap.
 | DARK-05     | Phase 11 | Complete |
 | TRAN-01     | Phase 12 | Complete |
 | TRAN-02     | Phase 12 | Complete |
-| TRAN-03     | Phase 12 | Pending |
+| TRAN-03     | Phase 12 | Complete |
 | TRAN-04     | Phase 12 | Complete |
-| TRAN-05     | Phase 12 | Pending |
+| TRAN-05     | Phase 12 | Complete |
 | NOTE-01     | Phase 10 | Complete |
 | NOTE-02     | Phase 11 | Complete |
-| NOTE-03     | Phase 12 | Pending |
+| NOTE-03     | Phase 12 | Complete |
 
 **Coverage:**
 
