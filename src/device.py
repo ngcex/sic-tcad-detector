@@ -382,6 +382,89 @@ def set_graded_doping_profile(
     )
 
 
+def apply_damaged_params(device_info, damaged_params):
+    """Override SRH lifetimes and doping profile with radiation-damaged values.
+
+    Must be called AFTER create_sic_device() but BEFORE setup_poisson() and
+    solve_equilibrium(). The equilibrium solution must be computed with the
+    damaged doping profile, not the pristine one -- otherwise the built-in
+    potential and carrier distributions will be wrong.
+
+    Staged device creation sequence:
+        1. create_sic_device()       -- mesh + pristine doping
+        2. apply_damaged_params()    -- override lifetimes + doping
+        3. setup_poisson()           -- Poisson with damaged doping
+        4. solve_equilibrium()       -- equilibrium at damaged state
+        5. setup_sic_drift_diffusion() -- DD equations
+
+    Parameters
+    ----------
+    device_info : dict
+        Device info dict from create_sic_device (before Poisson setup).
+    damaged_params : dict
+        Output of compute_damaged_params(). Must contain keys:
+        - tau_n : float, damaged electron lifetime (s)
+        - tau_p : float, damaged hole lifetime (s)
+        - N_D_profile : np.ndarray, damaged donor profile in epi region (cm^-3)
+    """
+    device = device_info["device_name"]
+    region = device_info["region_name"]
+    junction_pos = device_info["junction_pos"]
+
+    # --- Override SRH lifetimes ---
+    devsim.set_parameter(
+        device=device, region=region, name="taun", value=damaged_params["tau_n"]
+    )
+    devsim.set_parameter(
+        device=device, region=region, name="taup", value=damaged_params["tau_p"]
+    )
+
+    # --- Override doping profile ---
+    x_nodes = np.array(
+        devsim.get_node_model_values(device=device, region=region, name="x")
+    )
+
+    # Get current Acceptors profile
+    acceptors = np.array(
+        devsim.get_node_model_values(device=device, region=region, name="Acceptors")
+    )
+
+    # Build full Donors array: zeros in p+ substrate, damaged profile in epi
+    epi_mask = x_nodes >= junction_pos
+    damaged_N_D = damaged_params["N_D_profile"]
+
+    donors = np.zeros_like(x_nodes)
+    # damaged_N_D corresponds to epi-only nodes
+    n_epi_nodes = int(np.sum(epi_mask))
+    if len(damaged_N_D) == n_epi_nodes:
+        donors[epi_mask] = damaged_N_D
+    elif len(damaged_N_D) == len(x_nodes):
+        # Full-length profile: use epi portion only
+        donors[epi_mask] = damaged_N_D[epi_mask]
+    else:
+        raise ValueError(
+            f"damaged_params['N_D_profile'] length ({len(damaged_N_D)}) does not match "
+            f"epi nodes ({n_epi_nodes}) or total nodes ({len(x_nodes)})"
+        )
+
+    # Set Donors via set_node_values (overrides the model-computed values)
+    devsim.set_node_values(
+        device=device, region=region, name="Donors", values=list(donors)
+    )
+
+    # Recompute NetDoping = Donors - Acceptors
+    net_doping = donors - acceptors
+    devsim.set_node_values(
+        device=device, region=region, name="NetDoping", values=list(net_doping)
+    )
+
+    logger.info(
+        f"Applied damaged params: tau_n={damaged_params['tau_n']:.3e}s, "
+        f"tau_p={damaged_params['tau_p']:.3e}s, "
+        f"N_D_epi_mean={np.mean(donors[epi_mask]):.3e} cm^-3"
+    )
+
+
 def calibrate_graded_doping(
     target_W_data=None,
     epi_thickness_cm=10e-4,
