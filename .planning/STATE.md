@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Realistic Device Physics
-status: unknown
-last_updated: "2026-03-23T21:30:50.839Z"
+status: in-progress
+last_updated: "2026-03-24T00:00:00.000Z"
 progress:
-  total_phases: 11
+  total_phases: 12
   completed_phases: 11
-  total_plans: 25
-  completed_plans: 25
+  total_plans: 27
+  completed_plans: 26
 ---
 
 # Project State
@@ -18,24 +18,24 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-22)
 
 **Core value:** Predict how CCE in 4H-SiC detectors degrades under FLASH dose rates, providing the first TCAD-based explanation of plasma recombination effects in SiC dosimeters.
-**Current focus:** Phase 11 — Dark Current Modeling
+**Current focus:** Phase 12 — Transient FLASH Dynamics
 
 ## Current Position
 
-Phase: 11 of 12 (Dark Current Modeling)
-Plan: 02 of 02
-Status: Phase 11 complete
-Last activity: 2026-03-23 — Completed 11-02 (Dark current visualization and sensitivity)
+Phase: 12 of 12 (Transient FLASH Dynamics)
+Plan: 01 of 02
+Status: Plan 12-01 complete
+Last activity: 2026-03-24 — Completed 12-01 (TransientSolver with adaptive time-stepping)
 
-Progress: [██████████] 100%
+Progress: [█████████▌] 96%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 5 (v1.1)
-- Average duration: 8.2 min
-- Total execution time: 0.68 hours
+- Total plans completed: 6 (v1.1)
+- Average duration: 7.7 min
+- Total execution time: 0.77 hours
 
 **By Phase:**
 
@@ -43,11 +43,12 @@ Progress: [██████████] 100%
 | ----- | ----- | ------ | -------- |
 | 10    | 3/3   | 13 min | 4.3 min  |
 | 11    | 2/2   | 30 min | 15 min   |
+| 12    | 1/2   | 5 min  | 5 min    |
 
 **Recent Trend:**
 
-- Last 5 plans: 10-01 (3 min), 10-02 (5 min), 10-03 (5 min), 11-01 (21 min), 11-02 (9 min)
-- Trend: 11-02 faster than 11-01 (visualization vs model development)
+- Last 5 plans: 10-02 (5 min), 10-03 (5 min), 11-01 (21 min), 11-02 (9 min), 12-01 (5 min)
+- Trend: 12-01 fast execution (existing codebase handles 90% of physics)
 
 _Updated after each plan completion_
 
@@ -71,6 +72,9 @@ Recent decisions affecting current work:
 - [11-01]: Gamma=1 at SiC detector fields is correct physics; Hurkx enhancement requires MV/cm fields
 - [11-02]: pandas DataFrame for sensitivity_sweep output (consistent with temperature_sweep patterns)
 - [11-02]: Device cleanup via devsim.delete_device in finally block for sweep resource management
+- [12-01]: charge_error=1e10 disables devsim auto step rejection; adaptive_dt manages time steps based on pulse phase
+- [12-01]: BDF1 over BDF2 for unconditional stability at sharp pulse edges
+- [12-01]: CCE clipped to [0, 2] to allow transit-time overshoot effects
 
 ### Pending Todos
 
@@ -80,10 +84,10 @@ None.
 
 - [Phase 10]: RESOLVED in 10-01 — n_i(300K) discrepancy handled via calibration factor: n_i(T) = n_i_300 \* compute_ni(T)/compute_ni(300).
 - [Phase 11]: Dark current mechanism ambiguity — 18 pA may be perimeter leakage (inherently 2D, unmodellable in 1D). TAT with effective parameters is the fallback.
-- [Phase 12]: Transient computational cost unverified — estimated ~30s/pulse but adaptive dt across 6-order timescale gap may be expensive.
+- [Phase 12]: RESOLVED in 12-01 — Transient simulation runs in ~3s per pulse (much faster than estimated 30s) with adaptive dt and charge_error=1e10.
 
 ## Session Continuity
 
-Last session: 2026-03-23
-Stopped at: Completed 11-02-PLAN.md (Phase 11 complete)
+Last session: 2026-03-24
+Stopped at: Completed 12-01-PLAN.md
 Resume file: None
