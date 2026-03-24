@@ -180,7 +180,7 @@ Phases execute in numeric order: 13 → 14 → 15 → 16 → 17 → 18
 | 10. Temperature-Dependent Device Physics   | v1.1      | 3/3            | Complete    | 2026-03-23 |
 | 11. Dark Current Modeling                  | v1.1      | 2/2            | Complete    | 2026-03-23 |
 | 12. Transient FLASH Dynamics               | v1.1      | 2/2            | Complete    | 2026-03-24 |
-| 13. Damage Physics Foundation              | 2/2 | Complete   | 2026-03-24 | -          |
+| 13. Damage Physics Foundation              | 2/2 | Complete    | 2026-03-24 | -          |
 | 14. CCE vs Fluence                         | v2.0      | 0/2            | Not started | -          |
 | 15. Dark Current vs Fluence                | v2.0      | 0/2            | Not started | -          |
 | 16. Carrier Removal & C-V Evolution        | v2.0      | 0/2            | Not started | -          |
