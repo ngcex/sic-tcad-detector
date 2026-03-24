@@ -1,0 +1,463 @@
+"""Radiation damage physics for 4H-SiC proton irradiation.
+
+Pure-Python module (NO devsim dependency) implementing:
+- Defect introduction rates (Z1/2, EH4, EH6/7) linear in fluence
+- Carrier lifetime degradation (linear and logarithmic models)
+- Carrier removal reducing effective doping
+- NIEL hardness factor scaling across proton energies
+- High-level compute_damaged_params interface
+
+All units in CGS (cm, cm^-3, eV, s) per project convention.
+Defect parameters from Burin et al., arXiv:2407.16710 (2024).
+
+NIEL hardness factors are placeholders pending SR-NIEL calculator lookup.
+The module works with any NIEL table -- values are data, not code.
+
+References:
+    - Burin et al., arXiv:2407.16710 (2024): Defect introduction rates,
+      trap energy levels, capture cross-sections for Z1/2, EH4, EH6/7
+    - SR-NIEL Calculator (sr-niel.org): NIEL values for protons in SiC
+"""
+
+from dataclasses import dataclass
+import logging
+
+import numpy as np
+
+from src.sic_material import SiC4H_Parameters
+
+logger = logging.getLogger(__name__)
+
+# Physical constants
+_k_B_J = 1.3806e-23  # J/K, Boltzmann constant
+_m0_kg = 9.109e-31  # kg, electron rest mass
+
+# Material constants from SiC4H_Parameters (avoid duplicating values)
+_sic = SiC4H_Parameters()
+_M_E_DOS = _sic.m_e_dos  # 0.77 m0
+_M_H_DOS = _sic.m_h_dos  # 1.0 m0
+
+
+# ---------------------------------------------------------------------------
+# NIEL hardness factors for protons in SiC
+# kappa(E) = NIEL_proton(E) / NIEL_neutron(1 MeV)
+# PLACEHOLDER values -- must be replaced with SR-NIEL calculator data
+# before production use. See STATE.md blockers.
+# ---------------------------------------------------------------------------
+NIEL_HARDNESS_PROTON_SIC: dict[float, float] = {
+    30: 0.50,  # placeholder -- obtain from SR-NIEL
+    62: 0.35,  # placeholder -- obtain from SR-NIEL
+    70: 0.33,  # placeholder -- obtain from SR-NIEL
+    150: 0.22,  # placeholder -- obtain from SR-NIEL
+}
+
+
+@dataclass
+class RadiationDamageParams:
+    """Radiation damage constants for 4H-SiC.
+
+    All introduction rates in cm^-1 (concentration per unit fluence).
+    All capture cross-sections in cm^2.
+    All energy levels in eV (below Ec unless noted).
+
+    Reference energy: 1 MeV neutron equivalent (neq).
+    Scale to proton energies via NIEL hardness factors.
+
+    Source: Burin et al., arXiv:2407.16710 (2024), Table I.
+    """
+
+    # --- Z1/2 center (carbon vacancy) ---
+    eta_Z12: float = 5.0  # cm^-1, introduction rate
+    E_Z12: float = 0.67  # eV below Ec
+    sigma_n_Z12: float = 2e-14  # cm^2, electron capture cross-section
+    sigma_p_Z12: float = 3.5e-14  # cm^2, hole capture cross-section
+    type_Z12: str = "acceptor"
+
+    # --- EH6/7 center ---
+    eta_EH67: float = 1.6  # cm^-1, introduction rate
+    E_EH67: float = 1.60  # eV below Ec
+    sigma_n_EH67: float = 9e-12  # cm^2, electron capture cross-section
+    sigma_p_EH67: float = 3.8e-14  # cm^2, hole capture cross-section
+    type_EH67: str = "donor"
+
+    # --- EH4 center ---
+    eta_EH4: float = 2.4  # cm^-1, introduction rate
+    E_EH4: float = 1.03  # eV below Ec
+    sigma_n_EH4: float = 5e-13  # cm^2, electron capture cross-section
+    sigma_p_EH4: float = 5e-14  # cm^2, hole capture cross-section
+    type_EH4: str = "acceptor"
+
+    # --- Carrier removal ---
+    eta_removal: float = 5.0  # cm^-1, effective carrier removal rate
+
+    # --- Provenance ---
+    source: str = "Burin et al., arXiv:2407.16710 (2024)"
+    reference_particle: str = "1 MeV neutron equivalent"
+
+    def __post_init__(self):
+        """Validate that all physical parameters are positive."""
+        for name in ("eta_Z12", "eta_EH67", "eta_EH4", "eta_removal"):
+            if getattr(self, name) <= 0:
+                raise ValueError(f"{name} must be positive, got {getattr(self, name)}")
+        for name in (
+            "sigma_n_Z12",
+            "sigma_p_Z12",
+            "sigma_n_EH67",
+            "sigma_p_EH67",
+            "sigma_n_EH4",
+            "sigma_p_EH4",
+        ):
+            if getattr(self, name) <= 0:
+                raise ValueError(f"{name} must be positive, got {getattr(self, name)}")
+
+
+# ---------------------------------------------------------------------------
+# Pure functions -- all stateless, taking explicit parameters
+# ---------------------------------------------------------------------------
+
+
+def defect_concentration(eta: float, fluence: float) -> float:
+    """Compute defect concentration from introduction rate and fluence.
+
+    N_defect = eta * Phi [cm^-3].
+
+    Parameters
+    ----------
+    eta : float
+        Introduction rate (cm^-1).
+    fluence : float
+        Fluence (neq/cm^2).
+
+    Returns
+    -------
+    float
+        Defect concentration (cm^-3).
+    """
+    return eta * fluence
+
+
+def defect_concentrations(params: RadiationDamageParams, fluence_neq: float) -> dict:
+    """Compute defect concentrations for all three defect types.
+
+    Parameters
+    ----------
+    params : RadiationDamageParams
+        Damage constants (introduction rates in cm^-1).
+    fluence_neq : float
+        Fluence in 1-MeV neutron equivalent (neq/cm^2).
+
+    Returns
+    -------
+    dict
+        Keys: N_Z12, N_EH67, N_EH4 (cm^-3).
+    """
+    return {
+        "N_Z12": defect_concentration(params.eta_Z12, fluence_neq),
+        "N_EH67": defect_concentration(params.eta_EH67, fluence_neq),
+        "N_EH4": defect_concentration(params.eta_EH4, fluence_neq),
+    }
+
+
+def degraded_lifetime(
+    tau_0: float,
+    K_tau: float,
+    fluence: float,
+    model: str = "linear",
+    alpha: float = 0.8,
+) -> float:
+    """Compute radiation-degraded carrier lifetime.
+
+    Parameters
+    ----------
+    tau_0 : float
+        Pristine (pre-irradiation) lifetime (s).
+    K_tau : float
+        Lifetime damage constant (cm^2/s).
+    fluence : float
+        Fluence (neq/cm^2).
+    model : str
+        "linear" or "logarithmic".
+    alpha : float
+        Exponent for logarithmic model (default 0.8, empirical).
+
+    Returns
+    -------
+    float
+        Degraded lifetime (s). Always >= 1e-15.
+
+    Raises
+    ------
+    ValueError
+        If model is not "linear" or "logarithmic".
+
+    Notes
+    -----
+    Linear model: 1/tau = 1/tau_0 + K_tau * Phi
+    Logarithmic model: tau = tau_0 / (1 + K_tau * tau_0 * Phi)^alpha
+        More gradual saturation at high fluence.
+    """
+    if model == "linear":
+        inv_tau = 1.0 / tau_0 + K_tau * fluence
+        return max(1.0 / inv_tau, 1e-15)
+    elif model == "logarithmic":
+        factor = (1.0 + K_tau * tau_0 * fluence) ** alpha
+        return max(tau_0 / factor, 1e-15)
+    else:
+        raise ValueError(
+            f"Unknown lifetime model '{model}'. Use 'linear' or 'logarithmic'."
+        )
+
+
+def effective_doping(N_D: float, eta: float, fluence: float) -> float:
+    """Compute effective doping after carrier removal.
+
+    N_eff = max(N_D - eta * Phi, 0) [cm^-3].
+    Floor at zero prevents unphysical negative doping.
+
+    Parameters
+    ----------
+    N_D : float
+        Original donor concentration (cm^-3).
+    eta : float
+        Carrier removal rate (cm^-1).
+    fluence : float
+        Fluence (neq/cm^2).
+
+    Returns
+    -------
+    float
+        Effective doping (cm^-3), >= 0.
+    """
+    return max(N_D - eta * fluence, 0.0)
+
+
+def apply_carrier_removal(
+    N_D_profile: np.ndarray, eta_removal: float, fluence_neq: float, floor: float = 0.0
+) -> np.ndarray:
+    """Apply carrier removal position-dependently to doping profile.
+
+    N_D_damaged(x) = max(N_D(x) - eta * Phi, floor)
+
+    Parameters
+    ----------
+    N_D_profile : array
+        Original donor concentration at each node (cm^-3).
+    eta_removal : float
+        Carrier removal rate (cm^-1).
+    fluence_neq : float
+        Fluence in 1 MeV neutron equivalent (neq/cm^2).
+    floor : float
+        Minimum N_D value (cm^-3). Default 0.
+
+    Returns
+    -------
+    np.ndarray
+        Damaged doping profile (cm^-3).
+    """
+    removal = eta_removal * fluence_neq
+    result = np.maximum(N_D_profile - removal, floor)
+
+    # Warn if any position approaches compensation
+    if np.any(result < 1e10):
+        logger.warning(
+            "Effective doping below 1e10 cm^-3 at %d position(s) -- "
+            "approaching full compensation. Fluence_neq=%.2e",
+            int(np.sum(result < 1e10)),
+            fluence_neq,
+        )
+
+    return result
+
+
+def compute_K_tau(
+    params: RadiationDamageParams, carrier: str = "electron", T: float = 300.0
+) -> float:
+    """Compute lifetime damage constant from defect capture cross-sections.
+
+    K_tau = sum_i (eta_i * sigma_i * v_th)
+
+    Units: [cm^-1 * cm^2 * cm/s] = [cm^2/s]
+    So 1/tau = 1/tau_0 + K_tau * Phi has units [1/s] = [1/s] + [cm^2/s * 1/cm^2].
+
+    Parameters
+    ----------
+    params : RadiationDamageParams
+        Defect parameters.
+    carrier : str
+        "electron" or "hole".
+    T : float
+        Temperature (K). Default 300.
+
+    Returns
+    -------
+    float
+        K_tau (cm^2/s).
+
+    Raises
+    ------
+    ValueError
+        If carrier is not "electron" or "hole".
+    """
+    if carrier == "electron":
+        m_eff = _M_E_DOS * _m0_kg
+        v_th = np.sqrt(3 * _k_B_J * T / m_eff) * 100  # m/s -> cm/s
+        K_tau = (
+            params.eta_Z12 * params.sigma_n_Z12 * v_th
+            + params.eta_EH67 * params.sigma_n_EH67 * v_th
+            + params.eta_EH4 * params.sigma_n_EH4 * v_th
+        )
+    elif carrier == "hole":
+        m_eff = _M_H_DOS * _m0_kg
+        v_th = np.sqrt(3 * _k_B_J * T / m_eff) * 100  # m/s -> cm/s
+        K_tau = (
+            params.eta_Z12 * params.sigma_p_Z12 * v_th
+            + params.eta_EH67 * params.sigma_p_EH67 * v_th
+            + params.eta_EH4 * params.sigma_p_EH4 * v_th
+        )
+    else:
+        raise ValueError(f"carrier must be 'electron' or 'hole', got '{carrier}'")
+    return K_tau
+
+
+def get_hardness_factor(energy_MeV: float, niel_table: dict | None = None) -> float:
+    """Get NIEL hardness factor for a given proton energy.
+
+    Uses linear interpolation between table entries for intermediate energies.
+
+    Parameters
+    ----------
+    energy_MeV : float
+        Proton energy (MeV).
+    niel_table : dict, optional
+        Mapping energy (MeV) -> hardness factor. Defaults to
+        NIEL_HARDNESS_PROTON_SIC.
+
+    Returns
+    -------
+    float
+        Hardness factor (dimensionless).
+    """
+    if niel_table is None:
+        niel_table = NIEL_HARDNESS_PROTON_SIC
+    energies = sorted(niel_table.keys())
+    factors = [niel_table[e] for e in energies]
+    return float(np.interp(energy_MeV, energies, factors))
+
+
+def scale_to_proton_energy(
+    damage_constant: float, energy_MeV: float, niel_table: dict | None = None
+) -> float:
+    """Scale a 1-MeV-neq damage constant to a specific proton energy.
+
+    scaled = damage_constant * kappa(energy)
+
+    Parameters
+    ----------
+    damage_constant : float
+        Damage constant calibrated to 1 MeV neutron equivalent.
+    energy_MeV : float
+        Proton energy (MeV).
+    niel_table : dict, optional
+        Custom NIEL table. Defaults to NIEL_HARDNESS_PROTON_SIC.
+
+    Returns
+    -------
+    float
+        Scaled damage constant.
+    """
+    kappa = get_hardness_factor(energy_MeV, niel_table)
+    return damage_constant * kappa
+
+
+def compute_damaged_params(
+    pristine_tau_n: float,
+    pristine_tau_p: float,
+    N_D_profile: np.ndarray,
+    fluence: float,
+    energy_MeV: float = 62.0,
+    damage_params: RadiationDamageParams | None = None,
+    lifetime_model: str = "linear",
+    T: float = 300.0,
+) -> dict:
+    """Compute all radiation-degraded device parameters for a given fluence.
+
+    CRITICAL: Short-circuits at fluence <= 0 -- returns pristine values
+    with NO arithmetic operations (regression safety per Pitfall 1).
+
+    Parameters
+    ----------
+    pristine_tau_n : float
+        Pre-irradiation electron lifetime (s).
+    pristine_tau_p : float
+        Pre-irradiation hole lifetime (s).
+    N_D_profile : np.ndarray
+        Original donor concentration profile (cm^-3).
+    fluence : float
+        Proton fluence (protons/cm^2).
+    energy_MeV : float
+        Proton energy (MeV). Default 62.0.
+    damage_params : RadiationDamageParams, optional
+        Damage constants. Defaults to RadiationDamageParams().
+    lifetime_model : str
+        "linear" or "logarithmic". Default "linear".
+    T : float
+        Temperature (K). Default 300.
+
+    Returns
+    -------
+    dict
+        Keys: tau_n, tau_p, N_D_profile, N_Z12, N_EH67, N_EH4,
+        fluence, fluence_neq, energy_MeV, lifetime_model.
+    """
+    # Short-circuit: zero or negative fluence returns pristine values unchanged
+    if fluence <= 0:
+        return {
+            "tau_n": pristine_tau_n,
+            "tau_p": pristine_tau_p,
+            "N_D_profile": N_D_profile,
+            "N_Z12": 0.0,
+            "N_EH67": 0.0,
+            "N_EH4": 0.0,
+            "fluence": 0.0,
+            "fluence_neq": 0.0,
+            "energy_MeV": energy_MeV,
+            "lifetime_model": lifetime_model,
+        }
+
+    if damage_params is None:
+        damage_params = RadiationDamageParams()
+
+    # Convert proton fluence to 1-MeV-neq equivalent
+    kappa = get_hardness_factor(energy_MeV)
+    fluence_neq = fluence * kappa
+
+    # Lifetime degradation
+    K_tau_n = compute_K_tau(damage_params, carrier="electron", T=T)
+    K_tau_p = compute_K_tau(damage_params, carrier="hole", T=T)
+    tau_n = degraded_lifetime(
+        pristine_tau_n, K_tau_n, fluence_neq, model=lifetime_model
+    )
+    tau_p = degraded_lifetime(
+        pristine_tau_p, K_tau_p, fluence_neq, model=lifetime_model
+    )
+
+    # Carrier removal (position-dependent)
+    N_D_damaged = apply_carrier_removal(
+        N_D_profile, damage_params.eta_removal, fluence_neq
+    )
+
+    # Defect concentrations
+    defects = defect_concentrations(damage_params, fluence_neq)
+
+    return {
+        "tau_n": tau_n,
+        "tau_p": tau_p,
+        "N_D_profile": N_D_damaged,
+        "N_Z12": defects["N_Z12"],
+        "N_EH67": defects["N_EH67"],
+        "N_EH4": defects["N_EH4"],
+        "fluence": fluence,
+        "fluence_neq": fluence_neq,
+        "energy_MeV": energy_MeV,
+        "lifetime_model": lifetime_model,
+    }
