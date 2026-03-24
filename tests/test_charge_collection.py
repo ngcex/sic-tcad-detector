@@ -14,6 +14,8 @@ import pytest
 from src.charge_collection import (
     add_generation_to_dd,
     cce_vs_bias,
+    cce_vs_bias_at_fluence,
+    cce_vs_fluence,
     compare_cce_hecht_vs_dd,
     compute_cce_from_current,
     compute_cce_from_dd,
@@ -400,3 +402,109 @@ class TestHechtCCE300KRegression:
         # Verify it differs from the default-T call (which gives ~1.0)
         cce_default = hecht_cce(5, 9.5e-4, T=300)
         assert float(cce) != pytest.approx(float(cce_default), rel=0.01)
+
+
+# ===================================================================
+# Fluence sweep tests (Phase 14, Plan 01)
+# ===================================================================
+
+
+@pytest.fixture(scope="session")
+def pristine_cce_at_minus40():
+    """Session-scoped pristine CCE reference at V=-40V.
+
+    Avoids redundant device creation across multiple fluence tests.
+    """
+    result = cce_vs_bias(np.array([-40.0]), epi_thickness_cm=10e-4)
+    return result["cce_values"][0]
+
+
+@pytest.mark.slow
+class TestCCEVsFluence:
+    """Integration tests for CCE vs fluence sweep functions."""
+
+    def test_cce_vs_fluence_zero_fluence_matches_pristine(
+        self, pristine_cce_at_minus40
+    ):
+        """Zero fluence must return CCE identical to pristine cce_vs_bias.
+
+        This is the regression safety test: zero damage = no change.
+        """
+        result = cce_vs_fluence(np.array([0.0]), V_bias=-40.0)
+        cce_zero = result["cce_values"][0]
+
+        assert abs(cce_zero - pristine_cce_at_minus40) < 1e-6, (
+            f"Zero-fluence CCE ({cce_zero:.6f}) does not match pristine "
+            f"CCE ({pristine_cce_at_minus40:.6f}) within 1e-6"
+        )
+
+    def test_cce_vs_fluence_monotonic_degradation(self):
+        """CCE must decrease monotonically with increasing fluence.
+
+        Higher fluence = more damage = lower CCE.
+        Uses fluences below the full compensation threshold (~5e13 for
+        62 MeV protons with eta_removal=5, kappa=0.35) to avoid Newton
+        solver divergence near zero doping.
+        """
+        fluences = np.geomspace(1e11, 5e13, 5)
+        result = cce_vs_fluence(fluences, V_bias=-40.0)
+        cce = result["cce_values"]
+
+        # Skip NaN values (solver failures at very high fluence)
+        valid = ~np.isnan(cce)
+        cce_valid = cce[valid]
+
+        assert (
+            len(cce_valid) >= 3
+        ), f"Need at least 3 valid CCE points, got {len(cce_valid)}"
+
+        for i in range(1, len(cce_valid)):
+            assert cce_valid[i] <= cce_valid[i - 1] + 1e-6, (
+                f"CCE not monotonically decreasing: "
+                f"CCE[{i-1}]={cce_valid[i-1]:.4f} < CCE[{i}]={cce_valid[i]:.4f}"
+            )
+
+    def test_cce_vs_fluence_returns_correct_shape(self):
+        """Result arrays must have correct length and valid CCE in [0, 1]."""
+        fluences = np.geomspace(1e11, 5e13, 5)
+        result = cce_vs_fluence(fluences, V_bias=-40.0)
+
+        assert len(result["cce_values"]) == 5
+        valid = ~np.isnan(result["cce_values"])
+        assert np.all(result["cce_values"][valid] >= 0.0)
+        assert np.all(result["cce_values"][valid] <= 1.0)
+
+    def test_cce_vs_bias_at_fluence_recovery(self):
+        """CCE must increase with higher reverse bias at fixed damage.
+
+        Higher bias extends depletion and improves collection even in
+        a damaged detector (validates CCED-03).
+
+        Uses moderate fluence (1e12) and voltage range (-10 to -40V) to
+        stay within Newton solver convergence regime. At 1e13 fluence,
+        the heavily compensated doping can cause solver divergence at
+        high bias.
+        """
+        V_range = np.array([-10.0, -20.0, -40.0])
+        result = cce_vs_bias_at_fluence(V_range, fluence=1e12)
+        cce = result["cce_values"]
+
+        for i in range(1, len(cce)):
+            assert cce[i] >= cce[i - 1] - 0.01, (
+                f"CCE not increasing with bias: "
+                f"CCE[{i-1}]={cce[i-1]:.4f} at V={V_range[i-1]:.0f}V > "
+                f"CCE[{i}]={cce[i]:.4f} at V={V_range[i]:.0f}V"
+            )
+
+    def test_cce_vs_bias_at_fluence_below_pristine(self, pristine_cce_at_minus40):
+        """CCE at fluence=1e12 must be less than pristine CCE at same bias.
+
+        Radiation damage always reduces charge collection efficiency.
+        """
+        result = cce_vs_bias_at_fluence(np.array([-40.0]), fluence=1e12)
+        cce_damaged = result["cce_values"][0]
+
+        assert cce_damaged < pristine_cce_at_minus40, (
+            f"Damaged CCE ({cce_damaged:.4f}) should be less than pristine "
+            f"CCE ({pristine_cce_at_minus40:.4f}) at V=-40V"
+        )
