@@ -62,7 +62,7 @@ Full details: [milestones/v1.1-ROADMAP.md](milestones/v1.1-ROADMAP.md)
 4. Running the full v1.1 test suite at fluence=0 produces bit-identical results for C-V (R^2=0.998), CCE (100% at V>-40V), and dark current (18.5 pA at -30V)
 5. User can generate a publication-quality notebook showing defect introduction rates, lifetime degradation curves, and effective doping vs fluence
 
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
 
@@ -180,7 +180,7 @@ Phases execute in numeric order: 13 → 14 → 15 → 16 → 17 → 18
 | 10. Temperature-Dependent Device Physics   | v1.1      | 3/3            | Complete    | 2026-03-23 |
 | 11. Dark Current Modeling                  | v1.1      | 2/2            | Complete    | 2026-03-23 |
 | 12. Transient FLASH Dynamics               | v1.1      | 2/2            | Complete    | 2026-03-24 |
-| 13. Damage Physics Foundation              | v2.0      | 0/2            | Not started | -          |
+| 13. Damage Physics Foundation              | 1/2 | In Progress|  | -          |
 | 14. CCE vs Fluence                         | v2.0      | 0/2            | Not started | -          |
 | 15. Dark Current vs Fluence                | v2.0      | 0/2            | Not started | -          |
 | 16. Carrier Removal & C-V Evolution        | v2.0      | 0/2            | Not started | -          |

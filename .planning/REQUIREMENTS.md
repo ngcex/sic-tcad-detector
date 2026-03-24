@@ -9,10 +9,10 @@ Requirements for radiation damage milestone. Each maps to roadmap phases.
 
 ### Damage Physics
 
-- [ ] **DMGP-01**: Simulator can compute defect introduction rates for Z1/2, EH4, EH6/7 as linear function of proton fluence
-- [ ] **DMGP-02**: Simulator can compute carrier lifetime degradation via 1/τ = 1/τ₀ + K_τ·Φ with literature damage constants
-- [ ] **DMGP-03**: Simulator can compute effective doping reduction via N_eff = N_D - η·Φ (carrier removal)
-- [ ] **DMGP-04**: Simulator can scale damage constants across proton energies using NIEL hardness factors
+- [x] **DMGP-01**: Simulator can compute defect introduction rates for Z1/2, EH4, EH6/7 as linear function of proton fluence
+- [x] **DMGP-02**: Simulator can compute carrier lifetime degradation via 1/τ = 1/τ₀ + K_τ·Φ with literature damage constants
+- [x] **DMGP-03**: Simulator can compute effective doping reduction via N_eff = N_D - η·Φ (carrier removal)
+- [x] **DMGP-04**: Simulator can scale damage constants across proton energies using NIEL hardness factors
 - [ ] **DMGP-05**: Fluence=0 reproduces v1.1 pristine results exactly (regression safety)
 
 ### CCE Degradation
@@ -77,10 +77,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase    | Status  |
 | ----------- | -------- | ------- |
-| DMGP-01     | Phase 13 | Pending |
-| DMGP-02     | Phase 13 | Pending |
-| DMGP-03     | Phase 13 | Pending |
-| DMGP-04     | Phase 13 | Pending |
+| DMGP-01     | Phase 13 | Complete |
+| DMGP-02     | Phase 13 | Complete |
+| DMGP-03     | Phase 13 | Complete |
+| DMGP-04     | Phase 13 | Complete |
 | DMGP-05     | Phase 13 | Pending |
 | CCED-01     | Phase 14 | Pending |
 | CCED-02     | Phase 14 | Pending |
