@@ -8,7 +8,12 @@ Validates:
 - K_tau computation from defect capture cross-sections
 - NIEL hardness factor scaling and interpolation
 - compute_damaged_params high-level interface with zero-fluence short circuit
+- Regression safety: fluence=0 preserves bit-identical pristine values
 """
+
+import ast
+import subprocess
+import sys
 
 import numpy as np
 import pytest
@@ -333,3 +338,108 @@ class TestComputeDamagedParams:
         N_D = np.array([1e15])
         r = compute_damaged_params(1e-6, 6e-7, N_D, 1e12, lifetime_model="logarithmic")
         assert r["lifetime_model"] == "logarithmic"
+
+
+class TestRegressionSafety:
+    """Regression safety tests: fluence=0 must preserve pristine values exactly.
+
+    These tests guard against the DMGP-05 requirement: importing and using
+    the radiation_damage module at zero fluence must produce bit-identical
+    results to the v1.1 baseline (no floating-point contamination).
+    """
+
+    def test_zero_fluence_preserves_pristine_tau(self):
+        """compute_damaged_params(fluence=0) returns exact pristine lifetimes."""
+        params = RadiationDamageParams()
+        N_D = np.array([2.9e15, 1e14, 8.5e13])
+        r = compute_damaged_params(
+            pristine_tau_n=1e-6,
+            pristine_tau_p=1e-6,
+            N_D_profile=N_D,
+            fluence=0.0,
+            damage_params=params,
+        )
+        # Exact equality (not approx) -- zero fluence must not touch values
+        assert r["tau_n"] == 1e-6
+        assert r["tau_p"] == 1e-6
+        assert np.array_equal(r["N_D_profile"], N_D)
+
+    def test_zero_fluence_no_floating_point_contamination(self):
+        """fluence=0 returns the same float objects, not max(x - 0.0*y, 0.0).
+
+        Guards against FP contamination: max(N_D - 0.0 * eta, 0.0) can
+        produce values that differ from N_D by ULP due to rounding.
+        The short-circuit must bypass all arithmetic entirely.
+        """
+        tau_n = 1e-6
+        tau_p = 6e-7
+        N_D = np.array([2.9e15, 1e14, 8.5e13])
+        r = compute_damaged_params(tau_n, tau_p, N_D, fluence=0.0)
+
+        # The returned N_D_profile must be the exact same object (identity)
+        # because the short-circuit returns the input array directly
+        assert (
+            r["N_D_profile"] is N_D
+        ), "N_D_profile at fluence=0 must be the same object (no copy, no arithmetic)"
+        # Float values must also be identical objects or at minimum bit-equal
+        assert r["tau_n"] == tau_n
+        assert r["tau_p"] == tau_p
+        # Verify no ULP difference via hex representation
+        import struct
+
+        pristine_bytes = struct.pack("d", tau_n)
+        result_bytes = struct.pack("d", r["tau_n"])
+        assert pristine_bytes == result_bytes, "tau_n has ULP contamination"
+
+    @pytest.mark.slow
+    def test_full_v11_test_suite_passes(self):
+        """Meta-test: all v1.1 tests still pass with radiation_damage module present.
+
+        Runs the existing test suite (excluding this file) via subprocess.
+        This ensures the radiation_damage module import chain doesn't break
+        any previously-passing tests.
+        """
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "tests/",
+                "--ignore=tests/test_radiation_damage.py",
+                "-x",
+                "-q",
+            ],
+            capture_output=True,
+            text=True,
+            cwd="/Users/ngcex/projects/physics/petringa",
+            timeout=600,
+        )
+        assert result.returncode == 0, (
+            f"v1.1 test suite failed (returncode={result.returncode}):\n"
+            f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+        )
+
+    def test_damage_module_has_no_devsim_import(self):
+        """Structural guarantee: radiation_damage.py does not import devsim.
+
+        Parses the module AST and verifies no Import or ImportFrom node
+        references 'devsim'. This is stronger than a runtime check because
+        it catches conditional imports inside functions.
+        """
+        module_path = "src/radiation_damage.py"
+        with open(module_path) as f:
+            tree = ast.parse(f.read(), filename=module_path)
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    assert "devsim" not in alias.name, (
+                        f"radiation_damage.py imports devsim at line {node.lineno}: "
+                        f"import {alias.name}"
+                    )
+            elif isinstance(node, ast.ImportFrom):
+                if node.module and "devsim" in node.module:
+                    raise AssertionError(
+                        f"radiation_damage.py imports from devsim at line {node.lineno}: "
+                        f"from {node.module} import ..."
+                    )
