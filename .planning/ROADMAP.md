@@ -82,7 +82,7 @@ Plans:
 3. User can plot CCE vs bias at fixed fluence levels, demonstrating that increasing bias recovers CCE at moderate damage
 4. User can generate a publication-quality notebook comparing linear vs logarithmic lifetime models side-by-side with uncertainty bands from damage constant scatter
 
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
 
@@ -212,7 +212,7 @@ Phases execute in numeric order: 13 → 14 → 15 → 16 → 17 → 18
 | 11. Dark Current Modeling                  | v1.1      | 2/2            | Complete    | 2026-03-23 |
 | 12. Transient FLASH Dynamics               | v1.1      | 2/2            | Complete    | 2026-03-24 |
 | 13. Damage Physics Foundation              | 2/2       | Complete       | 2026-03-24  | -          |
-| 14. CCE vs Fluence                         | v2.0      | 0/2            | Not started | -          |
+| 14. CCE vs Fluence                         | 1/2 | In Progress|  | -          |
 | 15. Dark Current vs Fluence                | v2.0      | 0/2            | Not started | -          |
 | 16. Carrier Removal & C-V Evolution        | v2.0      | 0/2            | Not started | -          |
 | 17. Annealing Kinetics                     | v2.0      | 0/1            | Not started | -          |
