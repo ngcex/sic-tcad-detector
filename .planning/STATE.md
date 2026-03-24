@@ -1,13 +1,13 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.0
+milestone: v1.0
 milestone_name: Radiation Damage Modeling
-status: in-progress
-last_updated: "2026-03-24T22:21:34Z"
+status: unknown
+last_updated: "2026-03-24T22:28:41.321Z"
 progress:
-  total_phases: 18
+  total_phases: 14
   completed_phases: 14
-  total_plans: 40
+  total_plans: 31
   completed_plans: 31
 ---
 
