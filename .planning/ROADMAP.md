@@ -82,12 +82,12 @@ Plans:
 3. User can plot CCE vs bias at fixed fluence levels, demonstrating that increasing bias recovers CCE at moderate damage
 4. User can generate a publication-quality notebook comparing linear vs logarithmic lifetime models side-by-side with uncertainty bands from damage constant scatter
 
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
 
-- [ ] 14-01: TBD
-- [ ] 14-02: TBD
+- [ ] 14-01-PLAN.md — Fluence sweep infrastructure: apply_damaged_params helper, cce_vs_fluence, cce_vs_bias_at_fluence functions with tests
+- [ ] 14-02-PLAN.md — Publication-quality CCE vs fluence notebook with multi-bias overlay, bias recovery plots, and sensitivity analysis
 
 ### Phase 15: Dark Current vs Fluence
 
