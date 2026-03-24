@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Radiation Damage Modeling
 status: in-progress
-last_updated: "2026-03-24T22:02:07Z"
+last_updated: "2026-03-24T22:21:34Z"
 progress:
   total_phases: 18
-  completed_phases: 13
+  completed_phases: 14
   total_plans: 40
-  completed_plans: 30
+  completed_plans: 31
 ---
 
 # Project State
@@ -22,20 +22,20 @@ See: .planning/PROJECT.md (updated 2026-03-24)
 
 ## Current Position
 
-Phase: 14 of 18 (CCE vs Fluence)
-Plan: 1 of 2 in current phase
-Status: Plan 14-01 complete, Plan 14-02 remaining
-Last activity: 2026-03-24 — Completed 14-01 fluence sweep infrastructure
+Phase: 14 of 18 (CCE vs Fluence) -- COMPLETE
+Plan: 2 of 2 in current phase (all complete)
+Status: Phase 14 complete, ready for Phase 15
+Last activity: 2026-03-24 — Completed 14-02 publication notebook
 
-Progress: [███████████████████████░░░░░░░] 75% (30/40 plans across all milestones)
+Progress: [████████████████████████░░░░░░] 78% (31/40 plans across all milestones)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 30 (v1.0: 20, v1.1: 7, v2.0: 3)
+- Total plans completed: 31 (v1.0: 20, v1.1: 7, v2.0: 4)
 - Average duration: ~14 min
-- Total execution time: ~7.1 hours
+- Total execution time: ~7.4 hours
 
 **Recent Trend:**
 
@@ -58,6 +58,8 @@ Recent decisions affecting current work:
 - [v2.0-13-02]: AST-based no-devsim check stronger than runtime import guard
 - [v2.0-14-01]: Staged device creation pattern: apply damage before Poisson equilibrium
 - [v2.0-14-01]: Fluence range limited to ~5e13 for 62 MeV protons to avoid solver divergence
+- [v2.0-14-02]: Bias-sweep max fluence reduced to 5e13 (cce_vs_bias_at_fluence single-device pattern lacks per-point error handling)
+- [v2.0-14-02]: Sensitivity envelope via uniform 0.5x-2.0x scaling of all eta damage constants
 
 ### Pending Todos
 
@@ -72,5 +74,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-24
-Stopped at: Completed 14-01-PLAN.md (fluence sweep infrastructure)
+Stopped at: Completed 14-02-PLAN.md (publication notebook)
 Resume file: None
