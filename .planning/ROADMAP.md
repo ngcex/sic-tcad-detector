@@ -5,6 +5,7 @@
 - ✅ **v1.0 SiC TCAD Simulator MVP** — Phases 1-8 (shipped 2026-03-22)
 - ✅ **v1.1 Realistic Device Physics** — Phases 10-12 (shipped 2026-03-24)
 - 🚧 **v2.0 Radiation Damage Modeling** — Phases 13-18 (in progress)
+- 📋 **v3.0 SiC Microdosimeter Design Study** — Phases 19+ (planned)
 
 ## Phases
 
@@ -160,6 +161,36 @@ Plans:
 - [ ] 18-02: TBD
 - [ ] 18-03: TBD
 
+---
+
+### 📋 v3.0 SiC Microdosimeter Design Study (Planned)
+
+**Milestone Goal:** Feasibility study and TCAD-based design of a novel 4H-SiC microdosimeter (100×100×10 µm and 300×300×10 µm sensitive volumes) for clinical proton/ion microdosimetry — including 2D simulation, Geant4 coupling, alternative structure exploration, and parametric optimization with fabrication recommendations.
+
+**Depends on:** v2.0 complete (radiation damage physics for hardness assessment)
+
+**Tentative phases** (to be refined with `/gsd:new-milestone` when v2.0 ships):
+
+| #   | Phase (tentative)                 | Goal                                                                   | Key capabilities                                                                       |
+| --- | --------------------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| 19  | 2D Mesh & Electrostatics          | Extend simulator to 2D devsim; validate against 1D for Petringa device | 2D mesh generation, 2D Poisson solver, guard ring geometry                             |
+| 20  | 2D Carrier Transport & CCE        | 2D drift-diffusion with edge effects; CCE comparison 1D vs 2D          | Transport equations in 2D, boundary conditions, edge field effects                     |
+| 21  | Single-Particle Transient         | Charge pulse from individual particle events (not beam average)        | Transient charge generation along track, induced current pulse, charge collection time |
+| 22  | MC Coupling Interface             | Import Geant4/FLUKA energy deposition → TCAD charge generation         | LET spectrum import, track structure → charge profile, event-by-event simulation       |
+| 23  | Microdosimetric Spectra           | Compute lineal energy (y) spectra and dose-mean y_D from pulse heights | Pulse height → y conversion, tissue-equivalence κ factor, y_D/y_F computation          |
+| 24  | Alternative Structures            | Explore mesa-etched, 3D electrode, stacked ΔE-E designs in 2D          | Structure-specific mesh, comparative CCE/noise/resolution analysis                     |
+| 25  | Optimization & Feasibility Report | Parametric sweep and publication-quality feasibility study             | Geometry × doping × bias optimization, fabrication constraints, final report notebook  |
+
+**Requirement categories (to be detailed at milestone start):**
+
+- **MESH**: 2D mesh generation and electrostatics
+- **TRNS**: 2D transport and CCE validation
+- **SPRT**: Single-particle transient response
+- **MCCP**: Monte Carlo coupling interface
+- **MDOS**: Microdosimetric spectra computation
+- **ALTS**: Alternative structure design
+- **FEAS**: Feasibility report and optimization
+
 ## Progress
 
 **Execution Order:**
@@ -180,7 +211,7 @@ Phases execute in numeric order: 13 → 14 → 15 → 16 → 17 → 18
 | 10. Temperature-Dependent Device Physics   | v1.1      | 3/3            | Complete    | 2026-03-23 |
 | 11. Dark Current Modeling                  | v1.1      | 2/2            | Complete    | 2026-03-23 |
 | 12. Transient FLASH Dynamics               | v1.1      | 2/2            | Complete    | 2026-03-24 |
-| 13. Damage Physics Foundation              | 2/2 | Complete    | 2026-03-24 | -          |
+| 13. Damage Physics Foundation              | 2/2       | Complete       | 2026-03-24  | -          |
 | 14. CCE vs Fluence                         | v2.0      | 0/2            | Not started | -          |
 | 15. Dark Current vs Fluence                | v2.0      | 0/2            | Not started | -          |
 | 16. Carrier Removal & C-V Evolution        | v2.0      | 0/2            | Not started | -          |

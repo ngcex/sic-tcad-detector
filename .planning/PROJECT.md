@@ -63,7 +63,42 @@ Predict how charge collection efficiency (CCE) in the SiC detector degrades unde
 - [ ] Parametric radiation hardness optimization
 - [ ] Publication-quality radiation damage notebooks
 
-### Deferred (v3+)
+### Deferred — v3.0 Microdosimeter Design Study
+
+**Goal:** Feasibility study and TCAD design of a novel 4H-SiC microdosimeter (100×100×10 µm and 300×300×10 µm sensitive volumes) for clinical proton/ion microdosimetry.
+
+**Scope:**
+
+- 2D devsim extension for accurate edge effects in micro-scale volumes
+- Baseline: Petringa p⁺/n⁻-epi/n⁺-sub adapted to micro geometry
+- Alternative structures: mesa-etched SV, 3D electrodes, stacked ΔE-E (research-driven selection)
+- Geant4/FLUKA coupling: import LET spectra → TCAD charge generation → microdosimetric y-spectra
+- Tissue-equivalence correction (κ factor SiC → tissue)
+- Parametric optimization: geometry × doping × bias for optimal microdosimetric response
+- Publication-quality feasibility report with fabrication recommendations
+
+**Key capabilities needed:**
+
+- 2D electrostatics and carrier transport (devsim 2D mesh)
+- Single-particle transient charge generation (not just steady-state)
+- MC import interface (Geant4 phase-space or LET spectra → charge deposition profile)
+- Lineal energy (y) spectrum computation from pulse height distributions
+- Guard ring and edge termination modeling
+- Noise floor analysis (minimum detectable energy)
+
+**Depends on:** v2.0 complete (radiation damage physics for hardness assessment)
+
+**Tentative phases (to be refined at milestone start):**
+
+- 2D devsim mesh generation and electrostatics
+- 2D carrier transport and CCE validation against 1D
+- Single-particle transient response (charge pulse per event)
+- MC coupling interface (Geant4/FLUKA import)
+- Microdosimetric spectra computation (y-spectra, dose-mean y_D)
+- Alternative structure exploration (mesa, 3D, stacked)
+- Parametric optimization and feasibility report
+
+### Deferred — Other (v4+)
 
 - Build-up over-response analysis (2D field distribution near surface)
 - Azimuthal response simulation (3D CCE vs angle)
@@ -72,12 +107,11 @@ Predict how charge collection efficiency (CCE) in the SiC detector degrades unde
 
 ### Out of Scope
 
-- Monte Carlo particle transport (Geant4) — handled separately by the group
-- Full 3D device fabrication process simulation — focus is on device physics
+- Full Monte Carlo particle transport (Geant4/FLUKA simulation runs) — handled separately by the group; we import results
 - Commercial TCAD (Silvaco/Synopsys) — this project uses open-source tools only
 - Real-time clinical dosimetry software — this is a research simulation tool
 - GUI application — Jupyter notebooks sufficient for research group
-- Perimeter leakage current — inherently 2D effect; fitted SRV absorbs this contribution in 1D
+- Full 3D device simulation — 2D sufficient for planar/mesa structures; 3D electrode modeled as 2D cross-section
 
 ## Context
 
@@ -159,4 +193,4 @@ The FLASH paper (Petringa 2025, Physica Medica 138) characterizes the dosimetric
 
 ---
 
-_Last updated: 2026-03-24 after v2.0 milestone start_
+_Last updated: 2026-03-24 after v3.0 microdosimeter milestone outline_
