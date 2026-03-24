@@ -22,12 +22,16 @@ References:
 """
 
 import logging
+import uuid
 
 import devsim
 import numpy as np
+import pandas as pd
 
 from src.charge_collection import add_generation_to_dd
-from src.drift_diffusion import extract_contact_current
+from src.drift_diffusion import create_dd_device, extract_contact_current, ramp_bias
+from src.flash_recombination import add_auger_recombination
+from src.generation_profiles import proton_generation_profile
 
 logger = logging.getLogger(__name__)
 
@@ -182,6 +186,7 @@ class TransientSolver:
         dt_min=1e-8,
         dt_max=1e-4,
         dose_rate_Gy_s=None,
+        skip_init=False,
     ):
         """Simulate a single FLASH pulse with adaptive time-stepping.
 
@@ -204,6 +209,10 @@ class TransientSolver:
             Maximum time step (s). Default: 1e-4.
         dose_rate_Gy_s : float or None
             Dose rate for metadata (Gy/s). Not used in computation.
+        skip_init : bool
+            If True, skip the dark current measurement (device already has
+            transient state from a previous pulse). Used by
+            simulate_pulse_train for multi-pulse sequences. Default: False.
 
         Returns
         -------
@@ -352,3 +361,225 @@ class TransientSolver:
             f"(Q_collected={Q_collected:.4e}, Q_generated={Q_generated:.4e})"
         )
         return cce
+
+
+def simulate_pulse_train(
+    device_info,
+    G_spatial,
+    n_pulses=10,
+    t_rise=1e-6,
+    t_duration=1e-3,
+    t_fall=1e-6,
+    t_gap=1e-3,
+    dt_min=1e-8,
+    dt_max=1e-4,
+    contact="cathode",
+    dose_rate_Gy_s=None,
+):
+    """Simulate N consecutive FLASH pulses with inter-pulse carrier memory.
+
+    Creates a TransientSolver, initializes transient state, then loops over
+    ``n_pulses`` calls to ``simulate_pulse``. Device state persists between
+    pulses (no re-initialization), so inter-pulse carrier memory effects are
+    captured naturally by devsim.
+
+    Parameters
+    ----------
+    device_info : dict
+        Device info dict from create_dd_device(), already biased and with
+        Auger recombination added.
+    G_spatial : array_like
+        Spatial generation profile at mesh nodes (cm^-3 s^-1).
+    n_pulses : int
+        Number of consecutive pulses. Default: 10.
+    t_rise : float
+        Pulse rise time (s). Default: 1e-6.
+    t_duration : float
+        Pulse plateau duration (s). Default: 1e-3.
+    t_fall : float
+        Pulse fall time (s). Default: 1e-6.
+    t_gap : float
+        Inter-pulse gap duration (s). Default: 1e-3.
+    dt_min : float
+        Minimum time step (s). Default: 1e-8.
+    dt_max : float
+        Maximum time step (s). Default: 1e-4.
+    contact : str
+        Contact for current extraction. Default: "cathode".
+    dose_rate_Gy_s : float or None
+        Dose rate for metadata. Not used in computation.
+
+    Returns
+    -------
+    result : dict
+        Dictionary with:
+        - "times": np.array of concatenated time points (s), continuous
+        - "currents": np.array of concatenated contact currents (A/cm^2)
+        - "n_pulses": int, number of pulses simulated
+        - "pulse_times": list of per-pulse result dicts from simulate_pulse
+        - "I_dark": float, dark current before first pulse (A/cm^2)
+        - "t_rise", "t_duration", "t_fall", "t_gap": pulse parameters
+        - "dose_rate_Gy_s": dose rate metadata
+    """
+    G_spatial = np.asarray(G_spatial, dtype=float)
+
+    solver = TransientSolver(device_info, contact=contact)
+    solver.initialize()
+
+    # Record dark current before first pulse
+    I_dark = extract_contact_current(device_info, contact=contact)
+
+    all_times = []
+    all_currents = []
+    pulse_results = []
+    t_offset = 0.0
+
+    for i in range(n_pulses):
+        logger.info(f"Pulse {i + 1}/{n_pulses}: t_offset={t_offset:.4e} s")
+
+        # Use t_gap as post-pulse decay time (inter-pulse gap)
+        result_i = solver.simulate_pulse(
+            G_spatial,
+            t_rise=t_rise,
+            t_duration=t_duration,
+            t_fall=t_fall,
+            t_post=t_gap,
+            dt_min=dt_min,
+            dt_max=dt_max,
+            dose_rate_Gy_s=dose_rate_Gy_s,
+            skip_init=(i > 0),
+        )
+
+        pulse_results.append(result_i)
+
+        # Offset times to make continuous timeline
+        all_times.append(result_i["times"] + t_offset)
+        all_currents.append(result_i["currents"])
+
+        # Advance offset by this pulse's total duration
+        t_offset += t_rise + t_duration + t_fall + t_gap
+
+    logger.info(
+        f"Pulse train complete: {n_pulses} pulses, " f"total time = {t_offset:.4e} s"
+    )
+
+    return {
+        "times": np.concatenate(all_times),
+        "currents": np.concatenate(all_currents),
+        "n_pulses": n_pulses,
+        "pulse_times": pulse_results,
+        "I_dark": float(I_dark),
+        "t_rise": t_rise,
+        "t_duration": t_duration,
+        "t_fall": t_fall,
+        "t_gap": t_gap,
+        "dose_rate_Gy_s": dose_rate_Gy_s,
+    }
+
+
+def transient_cce_vs_dose_rate(
+    V_bias=-30.0,
+    dose_rates=None,
+    t_rise=1e-6,
+    t_duration=1e-3,
+    t_fall=1e-6,
+    dt_min=1e-8,
+    dt_max=1e-4,
+    epi_thickness_cm=10e-4,
+):
+    """Sweep dose rates and compute transient CCE at each.
+
+    For each dose rate, creates a fresh device, simulates a single FLASH
+    pulse, and extracts the transient CCE. Results are returned as a
+    pandas DataFrame for easy comparison with steady-state CCE.
+
+    Parameters
+    ----------
+    V_bias : float
+        Reverse bias voltage (V, negative). Default: -30.
+    dose_rates : array_like or None
+        Dose rates to sweep (Gy/s). Default: [20, 50, 100, 150, 200, 230].
+    t_rise : float
+        Pulse rise time (s). Default: 1e-6.
+    t_duration : float
+        Pulse plateau duration (s). Default: 1e-3.
+    t_fall : float
+        Pulse fall time (s). Default: 1e-6.
+    dt_min : float
+        Minimum time step (s). Default: 1e-8.
+    dt_max : float
+        Maximum time step (s). Default: 1e-4.
+    epi_thickness_cm : float
+        Epitaxial layer thickness (cm). Default: 10e-4 (10 um).
+
+    Returns
+    -------
+    df : pandas.DataFrame
+        DataFrame with columns ["dose_rate_Gy_s", "transient_cce"].
+    """
+    if dose_rates is None:
+        dose_rates = np.array([20, 50, 100, 150, 200, 230], dtype=float)
+    else:
+        dose_rates = np.asarray(dose_rates, dtype=float)
+
+    cce_values = []
+
+    for dose_rate in dose_rates:
+        dev_id = uuid.uuid4().hex[:8]
+        device_info = create_dd_device(
+            device_name=f"transient_sweep_{dev_id}",
+            epi_thickness_cm=epi_thickness_cm,
+            doping_profile="graded",
+            N_D_junction=2.90e15,
+            N_D_bulk=8.50e13,
+            L_transition=1.0e-4,
+        )
+        device = device_info["device_name"]
+        region = device_info["region_name"]
+
+        try:
+            add_auger_recombination(device_info)
+
+            # Ramp bias via anode (reverse bias)
+            ramp_bias(device_info, V_bias, contact="anode")
+
+            # Get mesh and generation profile
+            x_nodes = np.array(
+                devsim.get_node_model_values(device=device, region=region, name="x")
+            )
+            G_spatial = proton_generation_profile(
+                x_nodes, E_MeV=62, dose_rate_Gy_s=dose_rate
+            )
+
+            # Zero generation in p+ region
+            junction_pos = device_info["junction_pos"]
+            G_spatial[x_nodes < junction_pos] = 0.0
+
+            # Transient simulation
+            solver = TransientSolver(device_info, contact="cathode")
+            solver.initialize()
+
+            result = solver.simulate_pulse(
+                G_spatial,
+                t_rise=t_rise,
+                t_duration=t_duration,
+                t_fall=t_fall,
+                dt_min=dt_min,
+                dt_max=dt_max,
+                dose_rate_Gy_s=dose_rate,
+            )
+
+            cce = solver.compute_transient_cce(result, G_spatial, x_nodes)
+            cce_values.append(cce)
+
+            logger.info(
+                f"transient_cce_vs_dose_rate: {dose_rate:.0f} Gy/s " f"-> CCE={cce:.4f}"
+            )
+
+        finally:
+            try:
+                devsim.delete_device(device=device)
+            except Exception:
+                pass
+
+    return pd.DataFrame({"dose_rate_Gy_s": dose_rates, "transient_cce": cce_values})
