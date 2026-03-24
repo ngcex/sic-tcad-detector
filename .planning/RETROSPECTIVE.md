@@ -56,12 +56,67 @@ _A living document updated after each milestone. Lessons feed forward into futur
 
 ---
 
+## Milestone: v1.1 — Realistic Device Physics
+
+**Shipped:** 2026-03-24
+**Phases:** 3 | **Plans:** 7
+**Timeline:** 2 days (2026-03-23 → 2026-03-24)
+
+### What Was Built
+
+- Temperature-dependent material parameters (bandgap, n_i, mobility, DOS, SRH lifetimes) threaded through entire simulation pipeline
+- Hurkx TAT + surface recombination dark current model calibrated to 18.5 pA at -30V
+- Transient BDF1 solver with adaptive time-stepping spanning 6 orders of magnitude (μs to ms)
+- Inter-pulse carrier memory analysis confirming negligible memory in SiC (τ_p/t_gap = 6×10⁻⁴)
+- Transient CCE validated against steady-state (deviation < 0.1%)
+- 3 new publication-quality notebooks (06: T-dependence, 07: dark current, 08: transient FLASH)
+
+### What Worked
+
+- **Phase dependency chain (10→11→12)**: Temperature functions built first, consumed by dark current, which informed transient — no rework needed
+- **Requirements-driven roadmap**: 21 requirements mapped to 3 phases before any planning — every plan had clear acceptance criteria
+- **Sentinel pattern for backward compatibility**: `_UNSET` sentinel in charge_collection.py allowed T-parameter threading without breaking any v1.0 caller
+- **Calibration-in-plan**: N_t calibrated during 11-01 (not deferred) — learned from v1.0's graded doping experience
+- **All notebooks ran first try** after two minor fixes (np.trapz → np.trapezoid, invalid rcParams key)
+
+### What Was Inefficient
+
+- **np.trapz regression**: Phase 3 already fixed np.trapz → np.trapezoid across the codebase, but Phase 11 reintroduced it in dark_current.py — knowledge wasn't carried forward automatically
+- **effective_dos() orphaned**: Function was implemented and tested but never consumed by any downstream module; physics satisfied implicitly through intrinsic_concentration
+- **savefig.bbox_inches in rcParams**: Not a valid matplotlib rc parameter — caught only at notebook execution time
+
+### Patterns Established
+
+- **Ratio-scaling for calibrated constants**: `n_i(T) = n_i_300 * compute_ni(T)/compute_ni(300)` preserves validated constant while adding T-dependence
+- **Effective generation rate N_t**: When first-principles models hit fundamental limits (n_i^2 bottleneck in SiC), use effective parameters that absorb unmodeled physics
+- **charge_error=1e10 for adaptive time-stepping**: Disable devsim's auto step rejection, manage dt externally with phase-aware adaptive_dt
+- **skip_init for pulse trains**: Preserve devsim transient state between pulses without re-initializing
+- **Fresh device per sweep point**: uuid-named devices with cleanup in `finally` block for parametric sweeps
+
+### Key Lessons
+
+1. **Deprecated API tracking needs to be systematic**: The np.trapz fix in Phase 3 should have been enforced project-wide (e.g., a linter rule), not left to per-file awareness
+2. **DC approximation confirmed for SiC at FLASH**: Transient CCE ≈ steady-state CCE means v1.0's approach was fundamentally correct — the transient solver adds understanding but not new physics for this material
+3. **Dark current in 1D is inherently limited**: 18 pA likely arises from perimeter leakage (2D), so the effective N_t model is the best achievable in 1D — further accuracy requires geometry upgrade
+4. **Temperature stability is a SiC advantage**: dCCE/dT ≈ 0 in the clinical range — worth highlighting in any publication
+
+### Cost Observations
+
+- 7 plans in ~1 hour total execution (avg 8.6 min/plan)
+- Phase 11 most expensive (30 min total) due to devsim device creation per sensitivity sweep point
+- No gap closure phases needed — learned from v1.0 to calibrate within the implementing plan
+- Notebook verification (human) caught 2 bugs that automated tests missed (deprecated API, invalid rcParam)
+
+---
+
 ## Cross-Milestone Trends
 
-| Metric            | v1.0    |
-| ----------------- | ------- |
-| Phases            | 9       |
-| Plans             | 20      |
-| Avg plan duration | 4.2 min |
-| Gap closure plans | 5 (25%) |
-| Timeline          | 3 days  |
+| Metric            | v1.0    | v1.1    |
+| ----------------- | ------- | ------- |
+| Phases            | 9       | 3       |
+| Plans             | 20      | 7       |
+| Avg plan duration | 4.2 min | 8.6 min |
+| Gap closure plans | 5 (25%) | 0 (0%)  |
+| Timeline          | 3 days  | 2 days  |
+| Requirements      | ~25     | 21      |
+| Notebooks added   | 5       | 3       |
