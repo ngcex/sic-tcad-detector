@@ -13,7 +13,7 @@ Requirements for radiation damage milestone. Each maps to roadmap phases.
 - [x] **DMGP-02**: Simulator can compute carrier lifetime degradation via 1/τ = 1/τ₀ + K_τ·Φ with literature damage constants
 - [x] **DMGP-03**: Simulator can compute effective doping reduction via N_eff = N_D - η·Φ (carrier removal)
 - [x] **DMGP-04**: Simulator can scale damage constants across proton energies using NIEL hardness factors
-- [ ] **DMGP-05**: Fluence=0 reproduces v1.1 pristine results exactly (regression safety)
+- [x] **DMGP-05**: Fluence=0 reproduces v1.1 pristine results exactly (regression safety)
 
 ### CCE Degradation
 
@@ -44,7 +44,7 @@ Requirements for radiation damage milestone. Each maps to roadmap phases.
 
 ### Notebooks & Validation
 
-- [ ] **NBKV-01**: Publication-quality notebook for radiation damage overview (defect intro, lifetime, carrier removal)
+- [x] **NBKV-01**: Publication-quality notebook for radiation damage overview (defect intro, lifetime, carrier removal)
 - [ ] **NBKV-02**: Publication-quality notebook for CCE vs fluence with sensitivity analysis
 - [ ] **NBKV-03**: Publication-quality notebook for dark current and C-V evolution under irradiation
 - [ ] **NBKV-04**: Validation against published 4H-SiC irradiation data where available
@@ -81,7 +81,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DMGP-02     | Phase 13 | Complete |
 | DMGP-03     | Phase 13 | Complete |
 | DMGP-04     | Phase 13 | Complete |
-| DMGP-05     | Phase 13 | Pending |
+| DMGP-05     | Phase 13 | Complete |
 | CCED-01     | Phase 14 | Pending |
 | CCED-02     | Phase 14 | Pending |
 | CCED-03     | Phase 14 | Pending |
@@ -94,7 +94,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PARM-01     | Phase 18 | Pending |
 | PARM-02     | Phase 18 | Pending |
 | PARM-03     | Phase 18 | Pending |
-| NBKV-01     | Phase 13 | Pending |
+| NBKV-01     | Phase 13 | Complete |
 | NBKV-02     | Phase 14 | Pending |
 | NBKV-03     | Phase 16 | Pending |
 | NBKV-04     | Phase 18 | Pending |
