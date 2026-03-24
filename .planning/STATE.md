@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Realistic Device Physics
-status: complete
-last_updated: "2026-03-24T08:23:31.537Z"
+status: unknown
+last_updated: "2026-03-24T08:31:26.812Z"
 progress:
   total_phases: 12
   completed_phases: 12
