@@ -17,9 +17,9 @@ Requirements for radiation damage milestone. Each maps to roadmap phases.
 
 ### CCE Degradation
 
-- [ ] **CCED-01**: User can generate CCE vs fluence curves for a given bias and device geometry
-- [ ] **CCED-02**: User can visualize CCE degradation across multiple bias voltages on a single plot
-- [ ] **CCED-03**: User can see CCE recovery by increasing bias at a given fluence (partial compensation)
+- [x] **CCED-01**: User can generate CCE vs fluence curves for a given bias and device geometry
+- [x] **CCED-02**: User can visualize CCE degradation across multiple bias voltages on a single plot
+- [x] **CCED-03**: User can see CCE recovery by increasing bias at a given fluence (partial compensation)
 
 ### Dark Current
 
@@ -82,9 +82,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DMGP-03     | Phase 13 | Complete |
 | DMGP-04     | Phase 13 | Complete |
 | DMGP-05     | Phase 13 | Complete |
-| CCED-01     | Phase 14 | Pending |
-| CCED-02     | Phase 14 | Pending |
-| CCED-03     | Phase 14 | Pending |
+| CCED-01     | Phase 14 | Complete |
+| CCED-02     | Phase 14 | Complete |
+| CCED-03     | Phase 14 | Complete |
 | DCRR-01     | Phase 15 | Pending |
 | DCRR-02     | Phase 15 | Pending |
 | CRMV-01     | Phase 16 | Pending |
