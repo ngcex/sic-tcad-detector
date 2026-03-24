@@ -583,6 +583,383 @@ def cce_vs_bias(
     }
 
 
+def cce_vs_fluence(
+    fluence_range,
+    V_bias=-40.0,
+    epi_thickness_cm=10e-4,
+    alpha_range_cm=15e-4,
+    generation_rate=1e18,
+    energy_MeV=62.0,
+    lifetime_model="linear",
+    damage_params=None,
+):
+    """Compute CCE vs proton fluence at fixed reverse bias.
+
+    Creates a fresh DD device for each fluence point (fluence-as-temperature
+    pattern) using staged device creation so that damaged doping is applied
+    before Poisson equilibrium.
+
+    For the internal fluence grid, np.geomspace is recommended since damage
+    physics spans orders of magnitude (e.g., 1e10 to 1e14 protons/cm^2).
+
+    Parameters
+    ----------
+    fluence_range : array_like
+        Array of proton fluences (protons/cm^2). Zero fluence returns
+        pristine CCE (regression safety).
+    V_bias : float
+        Fixed reverse bias voltage applied to anode (V, negative).
+        Default: -40V.
+    epi_thickness_cm : float
+        Epitaxial layer thickness (cm). Default: 10 um.
+    alpha_range_cm : float
+        Alpha particle range in SiC (cm). Default: 15 um.
+    generation_rate : float
+        Peak generation rate (cm^-3 s^-1). Default: 1e18.
+    energy_MeV : float
+        Proton energy (MeV). Default: 62.0.
+    lifetime_model : str
+        "linear" or "logarithmic". Default: "linear".
+    damage_params : RadiationDamageParams or None
+        Custom damage parameters. Default: RadiationDamageParams().
+
+    Returns
+    -------
+    result : dict
+        Dictionary with:
+        - "fluences": numpy array of fluences (protons/cm^2)
+        - "cce_values": numpy array of CCE values
+        - "V_bias": float, the bias voltage used
+        - "energy_MeV": float
+        - "lifetime_model": str
+    """
+    from src.device import apply_damaged_params, create_sic_device
+    from src.drift_diffusion import ramp_bias, setup_sic_drift_diffusion
+    from src.poisson import setup_poisson, solve_equilibrium
+    from src.radiation_damage import compute_damaged_params
+
+    fluence_range = np.asarray(fluence_range, dtype=float)
+
+    # --- Extract pristine parameters for compute_damaged_params ---
+    pristine_tau_n = srh_lifetime(300.0, "electron")
+    pristine_tau_p = srh_lifetime(300.0, "hole")
+
+    # Extract pristine N_D profile from a reference device (epi-only nodes)
+    ref_id = uuid.uuid4().hex[:8]
+    ref_name = f"fluence_ref_{ref_id}"
+    ref_info = create_sic_device(
+        device_name=ref_name,
+        epi_thickness_cm=epi_thickness_cm,
+        doping_profile="graded",
+        N_D_junction=2.90e15,
+        N_D_bulk=8.50e13,
+        L_transition=1.0e-4,
+    )
+    try:
+        ref_x = np.array(
+            devsim.get_node_model_values(
+                device=ref_name, region=ref_info["region_name"], name="x"
+            )
+        )
+        ref_donors = np.array(
+            devsim.get_node_model_values(
+                device=ref_name, region=ref_info["region_name"], name="Donors"
+            )
+        )
+        epi_mask_ref = ref_x >= ref_info["junction_pos"]
+        pristine_N_D_profile = ref_donors[epi_mask_ref]
+    finally:
+        try:
+            devsim.delete_device(device=ref_name)
+        except Exception:
+            pass
+
+    # --- Sweep fluence ---
+    cce_values = np.zeros(len(fluence_range))
+
+    for i, fluence in enumerate(fluence_range):
+        dev_id = uuid.uuid4().hex[:8]
+        dev_name = f"fluence_sweep_{dev_id}"
+
+        try:
+            # Compute damaged parameters
+            damaged = compute_damaged_params(
+                pristine_tau_n=pristine_tau_n,
+                pristine_tau_p=pristine_tau_p,
+                N_D_profile=pristine_N_D_profile,
+                fluence=fluence,
+                energy_MeV=energy_MeV,
+                damage_params=damage_params,
+                lifetime_model=lifetime_model,
+            )
+
+            # Staged device creation
+            device_info = create_sic_device(
+                device_name=dev_name,
+                epi_thickness_cm=epi_thickness_cm,
+                doping_profile="graded",
+                N_D_junction=2.90e15,
+                N_D_bulk=8.50e13,
+                L_transition=1.0e-4,
+            )
+
+            # Apply damage BEFORE Poisson setup
+            apply_damaged_params(device_info, damaged)
+
+            # Continue staged setup
+            setup_poisson(device_info)
+            solve_equilibrium(device_info)
+            setup_sic_drift_diffusion(device_info)
+            device_info["dd_initialized"] = True
+
+            device = device_info["device_name"]
+            region = device_info["region_name"]
+
+            # Ramp bias (cathode voltage = -V_bias for reverse bias)
+            cathode_V = -V_bias
+            ramp_bias(device_info, cathode_V, contact="cathode", V_step=0.5)
+
+            # Prepare generation profile
+            x_nodes = np.array(
+                devsim.get_node_model_values(device=device, region=region, name="x")
+            )
+            junction_pos = device_info["junction_pos"]
+            x_epi = x_nodes - junction_pos
+
+            gen_profile = alpha_generation_profile(x_epi, alpha_range_cm=alpha_range_cm)
+            max_profile = np.max(gen_profile)
+            if max_profile > 0:
+                gen_values = gen_profile * (generation_rate / max_profile)
+            else:
+                gen_values = np.zeros_like(x_nodes)
+            gen_values[x_epi < 0] = 0.0
+
+            # Add generation and solve
+            add_generation_to_dd(device_info, gen_values)
+            devsim.solve(
+                type="dc",
+                absolute_error=1e10,
+                relative_error=1e-10,
+                maximum_iterations=40,
+            )
+
+            # Extract CCE
+            cce = compute_cce_from_dd(device_info, gen_values, contact="cathode")
+            cce_values[i] = cce
+
+            logger.info(f"cce_vs_fluence: fluence={fluence:.2e} p/cm^2, CCE={cce:.4f}")
+
+        except Exception as e:
+            logger.warning(f"cce_vs_fluence: failed at fluence={fluence:.2e}: {e}")
+            cce_values[i] = np.nan
+        finally:
+            try:
+                devsim.delete_device(device=dev_name)
+            except Exception:
+                pass
+
+    return {
+        "fluences": fluence_range,
+        "cce_values": cce_values,
+        "V_bias": V_bias,
+        "energy_MeV": energy_MeV,
+        "lifetime_model": lifetime_model,
+    }
+
+
+def cce_vs_bias_at_fluence(
+    V_range,
+    fluence,
+    epi_thickness_cm=10e-4,
+    alpha_range_cm=15e-4,
+    generation_rate=1e18,
+    energy_MeV=62.0,
+    lifetime_model="linear",
+    damage_params=None,
+):
+    """Compute CCE vs reverse bias voltage at a fixed proton fluence.
+
+    Creates a single damaged DD device using staged creation, then sweeps
+    bias voltage to show how higher reverse bias recovers CCE at a given
+    damage level.
+
+    Parameters
+    ----------
+    V_range : array_like
+        Array of voltages (V). Negative = reverse bias on diode.
+    fluence : float
+        Proton fluence (protons/cm^2).
+    epi_thickness_cm : float
+        Epitaxial layer thickness (cm). Default: 10 um.
+    alpha_range_cm : float
+        Alpha particle range in SiC (cm). Default: 15 um.
+    generation_rate : float
+        Peak generation rate (cm^-3 s^-1). Default: 1e18.
+    energy_MeV : float
+        Proton energy (MeV). Default: 62.0.
+    lifetime_model : str
+        "linear" or "logarithmic". Default: "linear".
+    damage_params : RadiationDamageParams or None
+        Custom damage parameters. Default: RadiationDamageParams().
+
+    Returns
+    -------
+    result : dict
+        Dictionary with:
+        - "voltages": numpy array of applied voltages (V)
+        - "cce_values": numpy array of CCE values
+        - "fluence": float
+        - "energy_MeV": float
+        - "lifetime_model": str
+    """
+    from src.device import apply_damaged_params, create_sic_device
+    from src.drift_diffusion import ramp_bias, setup_sic_drift_diffusion
+    from src.poisson import setup_poisson, solve_equilibrium
+    from src.radiation_damage import compute_damaged_params
+
+    V_range = np.asarray(V_range, dtype=float)
+
+    # --- Extract pristine parameters ---
+    pristine_tau_n = srh_lifetime(300.0, "electron")
+    pristine_tau_p = srh_lifetime(300.0, "hole")
+
+    # Extract pristine N_D profile from reference device
+    ref_id = uuid.uuid4().hex[:8]
+    ref_name = f"bias_fluence_ref_{ref_id}"
+    ref_info = create_sic_device(
+        device_name=ref_name,
+        epi_thickness_cm=epi_thickness_cm,
+        doping_profile="graded",
+        N_D_junction=2.90e15,
+        N_D_bulk=8.50e13,
+        L_transition=1.0e-4,
+    )
+    try:
+        ref_x = np.array(
+            devsim.get_node_model_values(
+                device=ref_name, region=ref_info["region_name"], name="x"
+            )
+        )
+        ref_donors = np.array(
+            devsim.get_node_model_values(
+                device=ref_name, region=ref_info["region_name"], name="Donors"
+            )
+        )
+        epi_mask_ref = ref_x >= ref_info["junction_pos"]
+        pristine_N_D_profile = ref_donors[epi_mask_ref]
+    finally:
+        try:
+            devsim.delete_device(device=ref_name)
+        except Exception:
+            pass
+
+    # --- Compute damaged parameters ---
+    damaged = compute_damaged_params(
+        pristine_tau_n=pristine_tau_n,
+        pristine_tau_p=pristine_tau_p,
+        N_D_profile=pristine_N_D_profile,
+        fluence=fluence,
+        energy_MeV=energy_MeV,
+        damage_params=damage_params,
+        lifetime_model=lifetime_model,
+    )
+
+    # --- Staged device creation ---
+    dev_id = uuid.uuid4().hex[:8]
+    dev_name = f"bias_at_fluence_{dev_id}"
+
+    device_info = create_sic_device(
+        device_name=dev_name,
+        epi_thickness_cm=epi_thickness_cm,
+        doping_profile="graded",
+        N_D_junction=2.90e15,
+        N_D_bulk=8.50e13,
+        L_transition=1.0e-4,
+    )
+
+    apply_damaged_params(device_info, damaged)
+
+    setup_poisson(device_info)
+    solve_equilibrium(device_info)
+    setup_sic_drift_diffusion(device_info)
+    device_info["dd_initialized"] = True
+
+    device = device_info["device_name"]
+    region = device_info["region_name"]
+
+    # --- Prepare generation profile ---
+    x_nodes = np.array(
+        devsim.get_node_model_values(device=device, region=region, name="x")
+    )
+    junction_pos = device_info["junction_pos"]
+    x_epi = x_nodes - junction_pos
+
+    gen_profile = alpha_generation_profile(x_epi, alpha_range_cm=alpha_range_cm)
+    max_profile = np.max(gen_profile)
+    if max_profile > 0:
+        gen_values = gen_profile * (generation_rate / max_profile)
+    else:
+        gen_values = np.zeros_like(x_nodes)
+    gen_values[x_epi < 0] = 0.0
+
+    Q = 1.602e-19
+    I_generated = Q * np.trapezoid(gen_values, x_nodes)
+
+    # --- Sweep bias on single damaged device ---
+    # Sort voltages for stable ramping (descending: 0, -10, -20, ...)
+    sorted_indices = np.argsort(-V_range)
+    sorted_V = V_range[sorted_indices]
+
+    cce_sorted = np.zeros(len(V_range))
+
+    try:
+        for idx, V_target in zip(sorted_indices, sorted_V):
+            cathode_V = -V_target  # reverse bias convention
+
+            ramp_bias(device_info, cathode_V, contact="cathode", V_step=0.5)
+
+            # Add generation and solve
+            add_generation_to_dd(device_info, gen_values)
+            devsim.solve(
+                type="dc",
+                absolute_error=1e10,
+                relative_error=1e-10,
+                maximum_iterations=40,
+            )
+
+            cce = compute_cce_from_dd(device_info, gen_values, contact="cathode")
+            cce_sorted[idx] = cce
+
+            logger.info(
+                f"cce_vs_bias_at_fluence: V={V_target:.1f}V, fluence={fluence:.2e}, "
+                f"CCE={cce:.4f}"
+            )
+
+            # Reset generation for next bias ramp
+            zero_gen = np.zeros_like(gen_values)
+            add_generation_to_dd(device_info, zero_gen)
+            devsim.solve(
+                type="dc",
+                absolute_error=1e10,
+                relative_error=1e-10,
+                maximum_iterations=40,
+            )
+
+    finally:
+        try:
+            devsim.delete_device(device=dev_name)
+        except Exception:
+            pass
+
+    return {
+        "voltages": V_range,
+        "cce_values": cce_sorted,
+        "fluence": fluence,
+        "energy_MeV": energy_MeV,
+        "lifetime_model": lifetime_model,
+    }
+
+
 def cce_vs_epi_thickness(
     epi_range_cm,
     V_bias=-3.0,
