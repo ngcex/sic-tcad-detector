@@ -1,194 +1,203 @@
 # Project Research Summary
 
-**Project:** Petringa SiC TCAD Simulator v1.1 -- Realistic Device Physics
-**Domain:** 1D 4H-SiC semiconductor device simulation for radiation detector dosimetry
-**Researched:** 2026-03-23
+**Project:** SiC TCAD Simulator v2.0 — Radiation Damage Modeling
+**Domain:** Physics-based TCAD simulation / semiconductor detector science (4H-SiC)
+**Researched:** 2026-03-24
 **Confidence:** MEDIUM-HIGH
 
 ## Executive Summary
 
-The v1.1 milestone extends the validated 1D 4H-SiC TCAD simulator with three capabilities: temperature-dependent material parameters (303-313K clinical range), realistic dark current modeling (matching the experimental 18 pA), and transient FLASH pulse dynamics (10-200 ms pulses at 20-230 Gy/s). The existing v1.0 stack (devsim 2.10.0, numpy, scipy, matplotlib, lmfit) is entirely sufficient -- no new packages are needed. All new work is physics modeling code: extending `sic_material.py` with T-dependent functions, creating new modules for surface physics and transient simulation, and wiring these into the existing drift-diffusion pipeline. The architecture is additive: three new modules (`temperature.py`, `surface_physics.py`, `transient.py`) plug into the existing `device.py` -> `drift_diffusion.py` -> `charge_collection.py` flow without restructuring it.
+This project extends a validated 1D devsim-based 4H-SiC drift-diffusion simulator (v1.1) with fluence-dependent radiation damage physics. The target application is predicting performance degradation of the Petringa group's thin-epi PIN detector under clinical proton beams at INFN-LNS (62 MeV). The state-of-the-art approach is the Burin et al. (2024, CERN RD50) three-defect TCAD model: Z1/2, EH6/7, and EH4 deep levels whose concentrations scale linearly with fluence (N_i = g_i \* Phi). This is not empirical curve fitting — the physical defects are DLTS-measured with known energy levels and capture cross-sections. Critically, the entire v2.0 feature set is achievable with the existing stack (devsim + scipy + numpy + matplotlib); no new packages are needed.
 
-The recommended approach is a four-phase build: (1) temperature-dependent parameters as foundation, (2) dark current physics (TAT + surface recombination), (3) transient FLASH dynamics, (4) combined analysis and publication figures. This ordering is driven by hard dependencies -- surface recombination and TAT both require T-dependent n_i(T), and transient simulation benefits from having all steady-state physics stabilized first. The v1.0 steady-state FLASH result serves as the critical validation anchor for transient work (transient CCE at long times must converge to the DC steady-state solution).
+The recommended architecture treats fluence exactly as temperature is treated today: a first-class parameter passed to `create_sic_device()` that modifies material properties before the devsim solver runs. This design means the drift-diffusion solver, CCE computation, and dark current modules require zero changes — they consume devsim parameters regardless of origin. The key new module is `radiation_damage.py`, a pure-Python physics layer with no devsim dependency, which computes degraded lifetime (1/tau = 1/tau_0 + K_tau*Phi), effective doping (N_eff = N_D - c_r*Phi), and fluence-dependent trap densities. A `fluence_sweep.py` module orchestrates per-fluence device creation following the established `temperature_sweep.py` pattern.
 
-Three risks dominate. First, the dark current modeling: the experimental 18 pA cannot be explained by any n_i-proportional mechanism because SiC's n_i (~5e-9 cm^-3) makes all such currents negligibly small (~1e-25 A). The 1D model must rely on field-enhanced generation (trap-assisted tunneling) with effective fitting parameters, and the fit may not be physically unique. Second, transient solver stability across a 6-order timescale gap (ns carrier dynamics vs ms pulse durations) requires user-implemented adaptive time-stepping since devsim has no built-in adaptive dt. Third, threading temperature through the codebase risks silently breaking the validated 300K baseline -- the `compute_ni(300)` function returns ~6.5e-9 vs the calibrated constant 5e-9, requiring explicit reconciliation before use.
+The dominant risk is regression: the radiation damage module touches SRH recombination, doping, and trap parameters that the v1.1 validated baseline depends on. A non-additive implementation will silently break C-V (R^2=0.998), CCE, and the 18 pA dark current calibration. A second major risk is specific to the Petringa device's low bulk doping (N_D_bulk = 8.5e13 cm^-3): with a carrier removal rate of ~5 cm^-1, full doping compensation occurs at Phi_crit ~ 1.6e13 p/cm^2 — a surprisingly low fluence that falls within the operational range and can cause Newton solver divergence if not handled explicitly.
 
 ## Key Findings
 
 ### Recommended Stack
 
-No new packages. The entire v1.1 feature set runs on the existing devsim 2.10.0 + scipy + numpy + matplotlib stack. devsim natively supports transient simulation (BDF1/BDF2/TR-BDF2 integrators), custom node models for TAT, and custom contact equations for surface recombination. The existing `time_node_model` registrations in `setup_sic_drift_diffusion()` already make the DD equations transient-capable -- calling `solve(type="transient_bdf1")` instead of `solve(type="dc")` is sufficient.
+No new Python packages are required. All v2.0 physics is pure modeling code on top of devsim 2.10.0 + scipy + numpy + matplotlib. The only "dependency" is a curated set of physical constants from peer-reviewed literature, hardcoded as Python dataclasses. scipy.integrate.solve_ivp (BDF method) handles the stiff annealing kinetics ODEs and is already in the stack. NIEL scaling values for protons in SiC should be pre-computed from the SR-NIEL web calculator and stored as a hardcoded lookup table — no web API integration is needed.
 
-**Core technologies (unchanged from v1.0):**
+**Core technologies:**
 
-- **devsim 2.10.0:** Drift-diffusion solver with transient BDF1/BDF2 already wired via `time_node_model` -- no equation changes needed
-- **scipy/numpy:** Parameter fitting (curve_fit/minimize), ODE validation (solve_ivp for simplified transient cross-checks)
-- **lmfit:** Constrained parameter fitting for dark current calibration (tau_SRH, S, m_t against 18 pA target)
+- `devsim 2.10.0`: drift-diffusion + Poisson solver with custom node models — already validated, supports arbitrary trap levels via CreateNodeModel without solver changes
+- `scipy.integrate.solve_ivp` (BDF): annealing kinetics ODE system — already in stack, handles stiff first-order equations
+- `numpy`: defect parameter tables, NIEL lookup, fluence sweep arithmetic — already in stack
+- Literature constants (Burin et al. 2024): three-defect model parameters (g_int, sigma_e, sigma_h per defect) — the core "data dependency", not a software package
+
+**Key parameter values (HIGH confidence, from Burin et al. 2024):**
+
+- Z1/2: E_C - 0.67 eV, acceptor, g = 5.0 cm^-1, sigma_e = 2.0e-14 cm^2, sigma_h = 3.5e-14 cm^2
+- EH6/7: E_C - 1.60 eV, donor, g = 1.6 cm^-1, sigma_e = 9.0e-12 cm^2, sigma_h = 3.8e-14 cm^2
+- EH4: E_C - 1.03 eV, acceptor, g = 2.4 cm^-1, sigma_e = 5.0e-13 cm^2, sigma_h = 5.0e-14 cm^2
+- Carrier removal rate: c_r = 4.2–6.4 cm^-1 for ~250 MeV protons (NIEL-scale upward for 62 MeV)
 
 ### Expected Features
 
-**Must have (table stakes):**
+**Must have (table stakes for "radiation damage modeling" claim):**
 
-- T-dependent bandgap E_g(T), n_i(T), mobility mu(T), NC/NV(T) -- Varshni + Caughey-Thomas with 4H-SiC exponents from Ayalew thesis
-- Dark current decomposition: bulk SRH + surface + TAT contributions identified and plotted separately
-- Reverse I-V matching 18 pA experimental value at -60V with physics-based models
-- Temperature coefficient of sensitivity matching experimental -0.079 +/- 0.005 %/C
-- Transient current pulse I(t) with intra-pulse carrier build-up dynamics
-- Validation against analytical limits (transient CCE converges to v1.0 steady-state CCE at low dose rate)
+- Defect introduction model (N_defect = g \* Phi) — foundation for all downstream effects
+- Carrier lifetime degradation tau(Phi) — primary CCE loss mechanism; every radiation damage paper plots this
+- Carrier removal / effective doping N_eff(Phi) — primary C-V observable; expected by every reviewer
+- CCE vs fluence prediction — the headline scientific result
+- C-V shift with fluence — direct experimental validation target (C-V flattening indicates full compensation)
+- Dark current vs fluence — second validation target (note: SiC current does NOT increase monotonically like Si; may decrease at high fluence due to carrier removal)
 
-**Should have (differentiators -- publishable novelty):**
+**Should have (differentiators for publication):**
 
-- Hurkx trap-assisted tunneling as field-enhanced SRH -- dominant dark current mechanism in SiC
-- Surface recombination velocity at contacts -- SRV-based boundary condition replacing Ohmic pinning
-- Inter-pulse memory effects in multi-pulse FLASH trains -- no published SiC TCAD study exists
-- Plasma build-up and sweep-out time constants extracted from transient simulations
-- T-dependent CCE reproducing the -0.079%/C coefficient from combined T + transient physics
-- CCE per pulse in multi-pulse trains showing pulse-resolved dosimetric response
+- Multi-defect trap model (Z1/2 + EH6/7 + EH4) — most published SiC papers use a single effective trap; three-defect model is what commercial TCAD does and enables accurate simultaneous I-V and C-V matching
+- NIEL scaling for proton energy dependence — generalizes tool beyond one calibration point; essential for translating neutron-calibrated constants to 62 MeV Petringa conditions
+- Forward I-V degradation — independent damage model validation that falls out from multi-defect model without extra code
+- Parametric radiation hardness optimization — sweep epi thickness, doping, bias to find operating conditions maximizing CCE at target fluence; the design guidance the group needs for next-generation detectors
 
-**Defer (v2+):**
+**Defer to v3+:**
 
-- Coupled thermal simulation (clinical T range 30-40C too narrow; SiC thermal conductivity 3-5 W/cm-K prevents self-heating)
-- Multi-level trap model (single midgap trap captures 90%+ of physics; multi-trap adds 15+ unconstrained parameters)
-- Band-to-band tunneling (max field ~0.1 MV/cm, far below the ~3 MV/cm threshold for SiC BTBT)
-- 2D/3D effects, noise simulation, radiation damage evolution, readout electronics modeling
+- Annealing kinetics — complex, limited quantitative SiC data, low practical relevance (Z1/2 is thermally stable to >1000C; room-temperature annealing is negligible)
+- Monte Carlo defect cascade simulation — handled by Geant4 group; NIEL scaling from tabulated values is sufficient
+- Polarization / space charge buildup dynamics — non-equilibrium trapping, poorly understood, out of scope
+- Surface damage / TID effects — bulk displacement damage dominates for this detector geometry
 
 ### Architecture Approach
 
-The v1.1 architecture adds three new modules to the existing linear pipeline without restructuring it. Temperature becomes a parameter threaded through all material computations via a `TemperatureDependentParams` frozen dataclass stored in `device_info["tdep"]`. Surface physics attaches at the contact boundary layer using devsim's `contact_equation()` API, following the proven pattern from the existing Auger implementation in `flash_recombination.py`. Transient solving wraps devsim's built-in BDF integrators with a Python-side adaptive time-stepping loop.
+The core architectural decision is to treat fluence as a first-class parameter parallel to temperature. Fluence flows through `radiation_damage.py` (new, pure physics, no devsim dependency) into `sic_material.py` (minimal backward-compatible additions) into `create_sic_device()` (gains Phi and damage_params parameters), where computed scalar irradiated values are set as devsim parameters. All downstream modules — `drift_diffusion.py`, `dark_current.py`, `charge_collection.py` — remain completely unchanged. A fresh devsim device is created per fluence point following the established `temperature_sweep.py` pattern, avoiding in-place parameter mutation issues.
 
 **Major components:**
 
-1. **`temperature.py`** (NEW) -- Single source of truth for all T-dependent parameters; returns frozen dataclass with E_g, n_i, NC, NV, mu_n, mu_p, tau_n, tau_p, V_t at any T
-2. **`surface_physics.py`** (NEW) -- Surface SRH recombination at contacts via `contact_equation()` + field-enhanced generation (TAT) in depletion region via modified USRH node model
-3. **`transient.py`** (NEW) -- Pulse ON/OFF time-stepping loop with adaptive dt, CCE extraction per pulse, multi-pulse train orchestration
-4. **`device.py`** (MODIFY) -- Wire T-dependent params from `temperature.py` instead of hardcoded 300K constants; store `tdep` in `device_info`
-5. **`drift_diffusion.py`** (MINOR) -- Parameterize n1/p1 with T-dependent n_i; no equation changes
-
-**Key architectural patterns:**
-
-- Parameter threading via `device_info["tdep"]` dict prevents T-inconsistency between modules
-- Contact equation modification follows the proven Auger pattern: CreateNodeModel -> CreateNodeModelDerivative -> re-register equation
-- All new physics is additive and toggleable: disabled by default, v1.0 behavior preserved when off
-- Device recreated at each T for parametric sweeps (simplest approach, avoids mutable state)
+1. `radiation_damage.py` (NEW) — pure physics: defect concentrations, degraded lifetime, effective doping, NIEL lookup table, Arrhenius annealing ODE; no devsim imports
+2. `sic_material.py` (MODIFIED) — adds optional `Phi` parameter to `srh_lifetime()`; backward-compatible at Phi=0 by construction
+3. `device.py` (MODIFIED) — `create_sic_device()` gains `Phi` and `damage_params`; wires irradiated scalar values to devsim; stores radiation state in device_info dict
+4. `fluence_sweep.py` (NEW) — orchestrates CCE/dark current/C-V vs fluence sweeps, mirrors `temperature_sweep.py` using UUID device names and try/finally cleanup
+5. `annealing.py` (NEW, deferred) — ODE-based annealing kinetics using scipy.integrate.solve_ivp with BDF method
 
 ### Critical Pitfalls
 
-1. **Scattered 300K constants (Critical)** -- n_i, mu, tau hardcoded at 300K in 6+ locations across `device.py`, `charge_collection.py`, `sic_material.py`. Missing any one produces silent physics errors. Prevention: centralize all T-dependent computation in `temperature.py`, full codebase audit of every `params.n_i_300` / `params.mu_n_max` usage, verify bit-identical results at T=300K.
+1. **Fluence=0 regression failure** — the damage module touches the same SRH/doping/trap physics the v1.1 validated baseline depends on. Any non-additive modification silently breaks C-V (R^2=0.998), CCE=100% at V>-40V, and the 18 pA dark current calibration. Prevention: design the damage API as purely additive — at Phi=0 the function does nothing; lifetime degradation updates existing taun/taup rather than replacing the lifetime model; carrier removal creates a new Donors_eff node model rather than overwriting the graded profile. Build the regression test BEFORE writing any damage code.
 
-2. **Surface recombination cannot explain 18 pA (Critical)** -- At n_i=5e-9, surface SRH gives ~1e-25 A -- 16 orders of magnitude below the 18 pA target. No physically reasonable SRV bridges this gap. Prevention: use field-enhanced generation (TAT) as the primary dark current mechanism. Do the quantitative math BEFORE implementing any dark current model.
+2. **Carrier removal reaches full compensation at Phi_crit ~ 1.6e13 p/cm^2** — for the Petringa device (N_D_bulk = 8.5e13 cm^-3, c_r ~ 5 cm^-1), this is within the operational fluence range. At this boundary the Newton solver can diverge, the Hecht equation becomes invalid, and the electric field profile changes qualitatively. Prevention: compute Phi_crit as the first task of the carrier removal phase; use logarithmic fluence steps that straddle this boundary; monitor Newton iteration count.
 
-3. **TAT complexity explosion (Critical)** -- Full multi-trap Hurkx model has 15-20 fitting parameters for a single I-V curve -- massively underconstrained. Prevention: start with simplest 2-parameter field-dependent generation (prefactor G0 + field scale E0). Add complexity only if I-V shape demands it. Ensure all Jacobian derivatives are analytically correct.
+3. **Wrong damage constants — orders-of-magnitude scatter in literature** — g_Z1/2 values range from 0.44 to 5.0 cm^-1 across studies; carrier removal rates range from 5 to 260 cm^-1 depending on particle type, energy, and measurement technique. Using neutron-calibrated introduction rates for 62 MeV proton predictions introduces systematic error. Prevention: all constants must be explicitly named with provenance in a `DamageParameters` dataclass (e.g., `g_Z12: float = 5.0  # Burin 2024, neutron`); use directly measured c_r from C-V (not derived from g values); implement sensitivity analysis varying each constant by 2x.
 
-4. **Breaking validated 300K baseline (Critical)** -- `compute_ni(300)` returns ~6.5e-9 vs calibrated 5e-9 (30% discrepancy from different DOS masses). Switching silently changes all equilibrium results. Prevention: extract golden reference values BEFORE code changes, build `test_300K_regression()`, reconcile DOS masses to reproduce 5e-9 or re-validate.
+4. **Dark current double-counting** — the v1.1 Hurkx TAT model uses an effective trap density N_t = 2.2e13 cm^-3 calibrated to 18 pA. This already implicitly includes generation from pre-existing Z1/2 centers. Adding radiation-induced Z1/2 as a separate SRH term on top will double-count at Phi=0. Prevention: use the additive delta model: J_dark(Phi) = J_dark(0) + delta_J_dark(Phi), where delta_J represents only the additional generation from radiation-introduced defects beyond the calibrated baseline.
 
-5. **Transient timestep across 6-order timescale gap (Moderate)** -- ns carrier dynamics vs ms pulse durations with no built-in adaptive stepping. Prevention: implement adaptive dt in Python driver (start at 0.1 ns, increase 1.5x when Newton converges in <10 iterations, halve when >30). Use BDF1 at pulse on/off discontinuities, BDF2 during quasi-steady.
+5. **Linear vs logarithmic lifetime degradation — disputed for SiC** — Luo et al. (2025) found a logarithmic dependence (1/tau = a\*ln(Phi) + b) rather than the standard linear model used in Si. The logarithmic model predicts significantly less CCE degradation at high fluence. Neither model is directly validated for 62 MeV proton conditions. Prevention: implement both models behind a `lifetime_model: "linear" | "logarithmic"` flag; show both predictions in CCE vs fluence plots.
 
 ## Implications for Roadmap
 
-Based on combined research findings, suggested phase structure:
+The strict physics dependency chain (defect introduction feeds lifetime and doping, which feed CCE and C-V) and the regression risk together dictate the phase structure. The architecture's clean separation — `radiation_damage.py` has no devsim dependency — enables early unit testing before any solver integration.
 
-### Phase 1: Temperature Foundation
+### Phase 1: Damage Physics Foundation
 
-**Rationale:** Every other v1.1 feature depends on T-dependent parameters being available. This is a pure computation module with no solver changes -- low risk, immediately testable against published literature tables. Must come first because both dark current (Phase 2) and transient (Phase 3) need n_i(T), mu(T), tau(T).
-**Delivers:** `temperature.py` module with `compute_material_params(T, N_D)` returning all T-dependent quantities; modified `device.py` wiring T into the pipeline; modified `sic_material.py` with T-exponent constants; T-dependent I-V and C-V demonstrating expected shifts; `test_300K_regression()` ensuring no baseline breakage.
-**Addresses:** T-dependent E_g, n_i, mu, NC/NV (all table stakes); foundation for temperature coefficient.
-**Avoids:** Pitfall 1 (scattered 300K constants) via centralized computation; Pitfall 2 (wrong T-exponents) by using verified 4H-SiC Ayalew values (gamma_n=-2.40, gamma_p=-2.15); Pitfall 15 (n_i mismatch) by reconciling `compute_ni` with calibrated 5e-9; Pitfall 3 (regression) by extracting golden values first.
-**Estimated scope:** ~300 LOC new + ~150 LOC modifications. Low-medium complexity.
+**Rationale:** Pure-Python physics with no devsim dependency; fully testable as standalone unit tests. Must exist before any device simulation can use irradiated parameters. Writing the regression test first enforces the additive API constraint and catches integration issues before they reach the solver.
+**Delivers:** `radiation_damage.py` with `RadiationDamageParams` dataclass (provenance-tagged constants from Burin 2024), `defect_concentration()`, `degraded_lifetime()` (linear + logarithmic models behind flag), `effective_doping()` with floor at zero, NIEL lookup table stub. Regression test suite confirming Phi=0 returns bit-identical v1.1 results for C-V, CCE, dark current.
+**Addresses:** Defect introduction model, carrier lifetime degradation (both table stakes)
+**Avoids:** Pitfall 1 (regression — build test first), Pitfall 2 (wrong constants — provenance-tagged dataclass), Pitfall 7 (g vs c confusion — separate named variables), Pitfall 3 (SiC != Si — use Burin not Hamburg model)
 
-### Phase 2: Dark Current Physics
+### Phase 2: Device Integration
 
-**Rationale:** Depends on T-dependent n_i from Phase 1. The 40-order-of-magnitude gap between bulk SRH prediction (6.7e-49 A) and experiment (18 pA) is the central physics problem. Must be solved before transient work to have a complete, credible device model for publication.
-**Delivers:** `surface_physics.py` with field-enhanced generation (TAT, Klaassen approximation) and surface recombination contact equations; dark current calibration matching 18 pA at -60V; decomposition plot showing I_bulk + I_surface + I_TAT vs voltage; I_dark(T) validation.
-**Addresses:** Reverse I-V matching experiment (table stakes); dark current decomposition (table stakes); Hurkx TAT (differentiator); SRV at contacts (differentiator).
-**Avoids:** Pitfall 4 (surface recombination too weak) by leading with TAT as primary mechanism; Pitfall 5 (TAT complexity) by starting with 2-parameter model; Pitfall 8 (contact vs region model confusion) by implementing surface physics at contact level only and verifying spatial localization.
-**Estimated scope:** ~300 LOC new. Medium-high complexity -- custom devsim contact_equation patterns with analytical Jacobian derivatives.
+**Rationale:** Connects radiation physics to the devsim solver. Requires Phase 1. This is the only phase where new code touches the validated devsim device creation path — treat it with the same care as the regression phase.
+**Delivers:** `create_sic_device()` extended with `Phi` and `damage_params` parameters (backward-compatible defaults). Irradiated tau_n, tau_p, N_eff, N_t wired to devsim parameters. device_info dict extended with radiation state. Phi_crit computed and logged for the Petringa device geometry. Carrier removal implemented as a node model (position-dependent) applying N_eff(x) = N_D(x) - c_r\*Phi to the graded profile.
+**Uses:** radiation_damage.py from Phase 1, graded doping node model (Approach A: uniform carrier removal across epi)
+**Implements:** Parameter passthrough architecture (fluence-as-temperature pattern), fresh-device-per-sweep-point (UUID device names + try/finally cleanup)
+**Avoids:** Pitfall 4 (operating point shift — must handle Phi_crit), Pitfall 9 (position-dependence — use node model not scalar), Pitfall 1 (additive API — Phi=0 must change nothing)
 
-### Phase 3: Transient FLASH Dynamics
+### Phase 3: CCE vs Fluence
 
-**Rationale:** Depends on working DD pipeline from Phases 1-2. Most complex new feature -- benefits from having all steady-state physics stabilized. The v1.0 steady-state FLASH result provides the validation anchor (transient CCE at t >> tau_SRH must match DC CCE). This is the highest-novelty phase.
-**Delivers:** `transient.py` with single-pulse I(t) waveforms, multi-pulse train simulation (N=10+), inter-pulse memory quantification, adaptive time-stepping; transient CCE extraction per pulse; plasma build-up and sweep-out time constant extraction; validation against v1.0 steady-state at low dose rate.
-**Addresses:** Transient I(t) waveform (table stakes); intra-pulse dynamics (table stakes); inter-pulse memory (differentiator); plasma build-up time constants (differentiator); carrier sweep-out dynamics (differentiator).
-**Avoids:** Pitfall 6 (timestep selection) via adaptive dt with convergence monitoring; Pitfall 13 (initial condition discontinuity) via mandatory DC init + transient_dc; Pitfall 14 (charge conservation drift) via per-step conservation accounting.
-**Estimated scope:** ~400 LOC new. High complexity -- stiff multi-scale time-stepping over 6 orders of magnitude.
+**Rationale:** The primary scientific deliverable. Requires Phases 1-2. This is the headline result that justifies the v2.0 milestone and enables comparison with the Hecht analytical model.
+**Delivers:** `fluence_sweep.py` with `sweep_cce_vs_fluence()`. Notebook: CCE vs Phi at multiple bias voltages. Notebook: CCE vs bias at multiple fluence levels. Hecht equation cross-check with fluence-dependent parameters (DD solver is primary; Hecht is cross-check only). Logarithmic vs linear lifetime model comparison.
+**Avoids:** Pitfall 13 (Hecht breakdown at high damage — rely on DD not Hecht beyond Phi_crit), Pitfall 10 (wrong comparison data — document device/energy mismatch when comparing to literature)
 
-### Phase 4: Combined Analysis and Publication Figures
+### Phase 4: Dark Current vs Fluence
 
-**Rationale:** All physics modules must be complete and individually validated before parametric studies combining T + transient + dark current. This phase is orchestration and visualization, not new physics.
-**Delivers:** T-dependent CCE vs bias at T = 300, 303, 306, 310, 313 K; temperature coefficient extraction and validation against -0.079%/C; combined parametric sweeps (CCE vs dose_rate, T, bias, pulse structure); publication-quality transient waveform figures; comparison table of transient vs steady-state CCE across full parameter space.
-**Addresses:** T-dependent CCE (differentiator); temperature coefficient validation (table stakes); CCE per pulse in multi-pulse train (differentiator); pulse structure optimization (differentiator).
-**Avoids:** No new pitfalls -- uses validated pieces from earlier phases.
-**Estimated scope:** 2-3 Jupyter notebooks. Medium complexity (orchestration and visualization).
+**Rationale:** Second key observable. Requires Phases 1-2. Validates the damage model independently from CCE. Note the counterintuitive SiC behavior (dark current does not increase monotonically with fluence as in Si) must be reproduced.
+**Delivers:** `sweep_dark_current_vs_fluence()`. Additive delta_J model preserving the v1.1 18 pA calibration at Phi=0. Notebook: I_dark vs Phi and I-V curves at multiple fluences.
+**Avoids:** Pitfall 5 (double-counting — additive delta_J_dark, not merged trap model)
+
+### Phase 5: Carrier Removal / C-V Shift + NIEL Scaling
+
+**Rationale:** C-V is the most directly comparable experimental observable for validation against literature data. NIEL scaling is a prerequisite before claiming 62 MeV predictions since all primary literature data is for different particle energies.
+**Delivers:** `sweep_cv_vs_fluence()`. N_eff(x, Phi) node model. NIEL lookup table populated from SR-NIEL web calculator (manual task: proton values at 30, 62, 70, 150 MeV for SiC target). Notebook: C-V curves shifting with fluence, N_D_eff vs Phi. Hardness factor k(62 MeV) documented with uncertainty.
+**Avoids:** Pitfall 10 (wrong comparison data — note Luo et al. data is closest match by doping but has 10x different epi thickness)
+
+### Phase 6: Multi-Defect Model + Parametric Optimization
+
+**Rationale:** Replaces the single-effective-defect approximation with the full Burin three-defect TCAD model. Required for publication-quality simultaneous I-V and C-V matching. Parametric optimization synthesizes all damage features into concrete design guidance. Deliberately deferred until the single-defect pipeline is fully validated end-to-end.
+**Delivers:** Full multi-level SRH trap model in devsim (Z1/2 + EH6/7 + EH4 as separate CreateNodeModel expressions). Forward I-V degradation vs fluence. Parametric sweep over (epi thickness, N_D, V_bias) at target fluence to find CCE-maximizing geometry. Publication-quality combined figures.
+**Avoids:** Pitfall 6 (Newton convergence — start with single defect first, add levels incrementally with iteration monitoring), Pitfall 3 (EH6/7 donor assignment — validate C-V shift direction against literature)
+
+### Phase 7: Annealing Kinetics (Optional / Deferred)
+
+**Rationale:** Deferred because: (1) Z1/2 does not anneal at room temperature (activation energy ~4 eV, stable to >1000C), making this irrelevant for in-service operation; (2) quantitative SiC annealing kinetics data is sparse (LOW-MEDIUM confidence); (3) all other damage features are more scientifically urgent. Build only if the Petringa group explicitly requests thermal recovery predictions.
+**Delivers:** `annealing.py` with `annealing_trajectory()` (Arrhenius first-order ODE) and `multi_step_annealing()`. Notebook: defect recovery at elevated temperatures.
+**Avoids:** Pitfall 11 (Si activation energies — use SiC-specific E_a; Z1/2 does not anneal at room temperature)
 
 ### Phase Ordering Rationale
 
-- **Hard dependency chain:** Phase 1 (T-params) feeds Phase 2 (dark current needs n_i(T)) and Phase 3 (transient needs T-dependent material properties). Phase 4 integrates all three.
-- **Validation anchoring:** Each phase has an unambiguous pass/fail criterion: Phase 1 matches Ayalew/Ioffe tables and preserves v1.0 baseline; Phase 2 matches 18 pA at -60V; Phase 3 converges to v1.0 steady-state at low dose rate; Phase 4 reproduces -0.079%/C.
-- **Risk front-loading:** The hardest physics question (can a 1D model match 18 pA with physical parameters?) lands in Phase 2, early enough to pivot strategy if TAT alone is insufficient.
-- **Regression safety:** Phase 1 mandates golden value extraction and regression test creation before any physics changes touch the codebase.
-- **Scientific narrative:** The phase ordering mirrors the paper narrative -- establish T-dependent model, validate against dark current, predict novel transient behavior, combine for complete dosimetric characterization.
+- Phases 1-2 are strictly required before any fluence simulation: defect physics must exist before it can be wired to the devsim solver.
+- Phase 3 before 4-5 because CCE vs fluence is the primary result; dark current and C-V are secondary validation targets.
+- Phase 6 is deliberately last: multi-defect convergence issues (Pitfall 6) are much easier to debug after the single-effective-defect pipeline is validated across the full fluence range. The Burin model's anomalously large EH6/7 sigma_e (9e-12 cm^2) will stress the Newton solver.
+- The regression constraint drives Phase 1 to include the test infrastructure before any simulation code — not as a post-hoc addition.
+- Phase 7 is fully decoupled from Phases 1-6 and can be dropped entirely without affecting the core deliverables.
 
 ### Research Flags
 
 Phases likely needing deeper research during planning:
 
-- **Phase 2 (Dark Current):** The quantitative analysis proves surface SRH is 16 orders of magnitude too weak. TAT implementation in devsim requires custom Jacobian derivatives with no built-in support, no examples, and sparse forum discussion. The Klaassen approximation for Gamma(F) needs numerical validation. Key decision: fit to 18 pA with effective parameters, or attempt full physical decomposition (which may require accepting that perimeter leakage is unmodellable in 1D)?
-- **Phase 3 (Transient):** Adaptive time-stepping strategy needs empirical validation -- devsim's Python-level time loop has no precedent for FLASH-duration (200 ms) pulses. Need to determine whether TR-BDF2 composite method is necessary or if BDF1 alone suffices for the generation on/off discontinuity. Computational cost estimate (30s/pulse) is unverified.
+- **Phase 5 (NIEL Scaling):** NIEL values for 62 MeV protons in SiC must be obtained from the SR-NIEL web calculator (www.sr-niel.org) before implementation begins. This is a manual 10-minute task, not a software integration, but must not be forgotten. The scaling factor from 252 MeV (MedAustron data) to 62 MeV (Petringa) significantly changes c_r and Phi_crit.
+- **Phase 6 (Multi-Defect Model):** EH6/7 charge character (donor vs acceptor) is actively debated in literature. The Burin model assigns it as a donor with anomalously large sigma_e (9e-12 cm^2 — 450x larger than Z1/2). If the donor assignment is wrong, the sign of its doping contribution reverses. Validate against the C-V shift direction in the first available Petringa irradiation data.
+- **Phase 3-5 (Carrier Removal Rate at 62 MeV):** No direct measurement of c_r at 62 MeV exists in the literature. Published values are for 252 MeV (4.2-6.4 cm^-1) and 55 MeV (~75 cm^-1). The 62 MeV value must be NIEL-interpolated and carries significant uncertainty. Phi_crit for the Petringa device is highly sensitive to this value.
 
-Phases with standard patterns (skip research-phase):
+Phases with standard patterns (research not needed):
 
-- **Phase 1 (Temperature):** Varshni, Caughey-Thomas T-scaling, and DOS T^1.5 are textbook models with well-documented 4H-SiC parameters from the Ayalew thesis. The implementation is parameter wiring into an existing pipeline.
-- **Phase 4 (Combined Analysis):** Pure orchestration of validated components using existing parametric sweep patterns from v1.0. No new physics or solver patterns needed.
+- **Phase 1 (Damage Physics Foundation):** Defect introduction (N = g*Phi), degraded lifetime (1/tau = 1/tau_0 + K*Phi), and effective doping (N_eff = N_D - c\*Phi) are textbook TCAD physics. Implement directly from Burin et al. parameter tables.
+- **Phase 2 (Device Integration):** Follows the exact pattern of the existing temperature integration. The create_sic_device() + devsim.set_parameter() pipeline is already established.
+- **Phase 7 (Annealing):** Arrhenius first-order ODE with scipy.integrate.solve_ivp is a standard numerical problem. Uncertainty is in the SiC-specific activation energies, not the solver approach.
 
 ## Confidence Assessment
 
-| Area         | Confidence  | Notes                                                                                                                                                                                                                                 |
-| ------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Stack        | HIGH        | No new packages needed; all devsim transient capabilities verified from installed examples (tran_diode.py, transient_rc.py) and documentation                                                                                         |
-| Features     | HIGH        | Feature set derived from experimental validation targets in Petringa papers and Lopez Paz 2024; clear quantitative pass/fail criteria for every feature                                                                               |
-| Architecture | HIGH        | Additive design following existing proven patterns (Auger implementation as template); devsim transient API confirmed from source code                                                                                                |
-| Pitfalls     | MEDIUM-HIGH | Codebase-specific pitfalls verified against actual source (line-level references); physics pitfalls confirmed by quantitative estimates (surface SRH math); TAT fitting risk is real but bounded by the 2-parameter starting approach |
+| Area         | Confidence | Notes                                                                                                                                                                                                                                                                                                                                                              |
+| ------------ | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Stack        | HIGH       | No new packages needed; all v2.0 physics achievable with existing devsim + scipy + numpy. Zero dependency risk. devsim's CreateNodeModel supports arbitrary trap levels without solver changes.                                                                                                                                                                    |
+| Features     | HIGH       | Table stakes features are well-defined by domain conventions; deferral decisions are clear and well-justified. Feature dependency chain is fully mapped.                                                                                                                                                                                                           |
+| Architecture | HIGH       | Fluence-as-temperature-analogue pattern maps cleanly onto the existing codebase. Anti-patterns are explicitly identified. Build order is dependency-driven with no ambiguity. MEMORY note about graded doping profile is addressed by Approach A (node model).                                                                                                     |
+| Pitfalls     | MEDIUM     | Integration pitfalls (regression, double-counting) are HIGH confidence from codebase analysis. Physics pitfalls (g vs c confusion, linear vs log lifetime) are MEDIUM from literature. Numerical edge cases near Phi_crit are inferred from commercial TCAD reports (GTS TCAD convergence issues explicitly reported by Burin et al.), not yet verified in devsim. |
 
 **Overall confidence:** MEDIUM-HIGH
 
-The stack, features, and architecture are well-characterized with high-quality sources. The main uncertainties are: (1) whether a 1D model can physically reproduce 18 pA dark current with meaningful (not purely curve-fitting) parameters, and (2) whether devsim's transient solver handles the FLASH timescale gap (ns to ms) without prohibitive computational cost or convergence failure at high injection.
-
 ### Gaps to Address
 
-- **n_i(300K) discrepancy:** `compute_ni(300)` returns ~6.5e-9 vs calibrated 5e-9. Must reconcile (adjust DOS effective masses to reproduce 5e-9, or accept new value and fully re-validate all v1.0 results). This is a Phase 1 blocker -- resolve before any T-dependent work.
-- **Dark current mechanism ambiguity:** The 18 pA could be perimeter leakage (inherently 2D, unmodellable in 1D), TAT through Z1/2 centers (1D-capable), or measurement artifact (cable/probe leakage). If TAT with physical parameters cannot match 18 pA, strategy must shift to effective parameters with documented limitations.
-- **SRH lifetime T-dependence model:** Literature is contradictory for 4H-SiC -- the Z1/2 center shows sample-dependent tau(T) behavior. For the 303-313K clinical range, the effect is <5% regardless of model choice. Recommend: keep tau constant for v1.1, document the assumption.
-- **Donor incomplete ionization:** N donors at E_C - 0.05/0.09 eV are ~85% ionized at 300K but not modeled (full ionization assumed). Effect is <3% in clinical range. Add `ionized_donor_concentration()` for completeness but do not iterate self-consistently.
-- **Transient computational cost:** Estimated ~30s per pulse, ~5 min for 10-pulse train at one dose rate. Acceptable but unverified. If convergence requires smaller dt than estimated, cost could increase 10x, making parametric sweeps over dose rate and T expensive.
+- **NIEL values for 62 MeV protons in SiC:** Must run SR-NIEL calculator before Phase 5 begins. Populate the `NIEL_PROTON_SIC` dict in `radiation_damage.py` (currently stubbed with `None` placeholders). Estimated effort: 10 minutes. This is a blocker for any proton-specific predictions.
+- **Carrier removal rate at 62 MeV:** No direct measurement exists. Must NIEL-scale from 252 MeV MedAustron data (c_r = 4.2–6.4 cm^-1). At 62 MeV, NIEL is substantially higher, so c_r will be higher, making Phi_crit for the Petringa device lower than 1.6e13 p/cm^2. Compute the range and document it as an uncertainty band on all Phi_crit-dependent predictions.
+- **Linear vs logarithmic lifetime model for 62 MeV protons:** Empirically unresolved. Implement both behind a flag; present both curves in notebooks. State this uncertainty explicitly in any publication draft.
+- **EH6/7 donor vs acceptor assignment:** Literature is split; the Burin model uses donor with anomalously large sigma_e. This must be validated against Petringa group experimental data as soon as any irradiated C-V or I-V measurements are available.
+- **Graded doping profile under damage:** Confirmed from MEMORY: uniform N_D fails at reverse bias, graded profile is already implemented. Radiation damage carrier removal must be applied via the node model (Approach A: N_eff(x) = N_D(x) - c_r\*Phi), not as a scalar parameter override. This is explicitly addressed in the architecture.
 
 ## Sources
 
 ### Primary (HIGH confidence)
 
-- devsim 2.10.0 installed examples (`tran_diode.py`, `transient_rc.py`, `simple_physics.py`) -- transient solver patterns, contact equation API, time_node_model usage
-- devsim documentation (devsim.net/solver.html, devsim.net/CommandReference.html, devsim.net/models.html) -- solve types, tdelta/charge_error parameters, custom equation API
-- TU Wien Ayalew thesis, Table 3.5 -- 4H-SiC Caughey-Thomas T-dependent parameters: gamma_n=-2.40, gamma_p=-2.15, beta=-0.5
-- Petringa group papers (SiC_Photons_MedicalPhysics, Microdosimetry.pdf, Flash.pdf) -- experimental validation targets (18 pA dark current, CCE, C-V)
-- Lopez Paz et al., Med Phys 2024 -- 11 Gy/pulse linearity, -0.079%/C temperature coefficient, <2% sensitivity drift after 100 kGy, 4 MGy/s capability
-- Hurkx et al., IEEE TED 39(2), 1992 -- original field-enhanced SRH (TAT) model formulation
-- TU Wien Schleich thesis -- TAT current implementation for SiC TCAD
+- Burin et al., arXiv:2407.16710 (2024) — three-defect model (Z1/2 + EH6/7 + EH4): introduction rates, capture cross-sections, TCAD methodology, validation against neutron-irradiated pad diodes
+- Burin et al., arXiv:2407.11776v3 (2024) — extended five-defect model, GTS Sentaurus TCAD, forward/reverse I-V matching across full fluence range
+- arXiv:2510.11304 (2025, MedAustron) — carrier removal rate 4.2–6.4 cm^-1 for 252.7 MeV clinical proton beams; in-situ C-V measurement
+- Chen et al., CPB 28(1):010701 (2019) — Z1/2 capture cross-sections validated by DLTS, CCE model
+- SR-NIEL web calculator (www.sr-niel.org) — NIEL(E) tabulations for protons in SiC
 
 ### Secondary (MEDIUM confidence)
 
-- Kimoto et al., J. Appl. Phys. 127, 195702 (2020) -- SRV for SiO2-passivated 4H-SiC Si-face: 150-5000 cm/s
-- arXiv:2503.09016 (2025) -- 4H-SiC TAT tunneling effective mass m_t = 0.25\*m_0
-- Burin et al., CERN RD50 (2024) -- comprehensive 4H-SiC TCAD parameter survey
-- IEEE Access 2024 (10538275) -- carrier lifetime vs T in 4H-SiC, power-law dependence
-- Frontiers in Sensors 2025 (1622153) -- SiC detector FLASH challenges review
-- Hatakeyama et al., Materials Science Forum (2013) -- alternative 4H-SiC mobility T-exponents
-- Rakheja et al., Semicond. Sci. Technol. (2023) -- SRV vs carrier concentration
-- devsim Forum -- surface recombination implementation discussion (sparse)
+- arXiv:2503.09016 (Luo et al., 2025) — logarithmic lifetime degradation model, EH3 introduction rate 1.48 cm^-1, counterintuitive dark current decrease; 80 MeV protons, different energy from Petringa
+- IEEE Access 10538275 (2024) — temperature and fluence dependence of carrier lifetime in 4H-SiC (K_tau Arrhenius behavior)
+- Hazdra, pss-a 2100218 (2021) — non-linear lifetime degradation in 4H-SiC bipolar devices, Z1/2 as dominant recombination center
+- ScienceDirect S136980012300464X (2023) — predictive analytical model for carrier removal using NIEL; power diodes, not detectors
+- Tudisco et al., Front. Phys. 10:898833 (2022) — SiC detector radiation hardness review
+- Hiyoshi & Kimoto (2009); Hornos et al. (2011) — Z1/2 thermal stability (>1150 C annealing onset)
+- Hazdra et al. (2019), IET — comprehensive displacement damage + TID review for 4H-SiC power devices
 
-### Tertiary (LOW confidence)
+### Tertiary (LOW-MEDIUM confidence)
 
-- SRH lifetime T-scaling model (tau ~ T^1.5 phonon-assisted) -- generic semiconductor model, not SiC-specific validated
-- Auger coefficient T-dependence for 4H-SiC -- poorly characterized in literature, assumed negligible for v1.1
+- Storasta & Bergman (2004) — EH1/EH3 low-temperature annealing at 300–500 C; limited quantitative data for proton-specific conditions
+- Annealing kinetics parameters for room-temperature operation — synthesized from multiple sources; no single validated study for 62 MeV proton-irradiated thin-epi detectors
 
 ---
 
-_Research completed: 2026-03-23_
+_Research completed: 2026-03-24_
 _Ready for roadmap: yes_
