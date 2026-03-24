@@ -42,7 +42,7 @@ Full details: [milestones/v1.1-ROADMAP.md](milestones/v1.1-ROADMAP.md)
 **Milestone Goal:** Predict how 4H-SiC detector performance degrades under proton irradiation — CCE loss, dark current rise, carrier removal, and annealing recovery — validated against literature and with design optimization guidance.
 
 - [x] **Phase 13: Damage Physics Foundation** - Pure-Python radiation damage module with defect introduction, lifetime degradation, carrier removal, NIEL scaling, and v1.1 regression safety (completed 2026-03-24)
-- [ ] **Phase 14: CCE vs Fluence** - Primary scientific deliverable: fluence sweep infrastructure and CCE degradation curves with sensitivity analysis
+- [x] **Phase 14: CCE vs Fluence** - Primary scientific deliverable: fluence sweep infrastructure and CCE degradation curves with sensitivity analysis (completed 2026-03-24)
 - [ ] **Phase 15: Dark Current vs Fluence** - Additive delta-J radiation-induced dark current model preserving v1.1 calibration
 - [ ] **Phase 16: Carrier Removal & C-V Evolution** - C-V shift under irradiation, full compensation detection, and combined dark current / C-V notebook
 - [ ] **Phase 17: Annealing Kinetics** - Thermal recovery modeling for defect concentrations, CCE, and dark current
@@ -82,7 +82,7 @@ Plans:
 3. User can plot CCE vs bias at fixed fluence levels, demonstrating that increasing bias recovers CCE at moderate damage
 4. User can generate a publication-quality notebook comparing linear vs logarithmic lifetime models side-by-side with uncertainty bands from damage constant scatter
 
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 
@@ -212,7 +212,7 @@ Phases execute in numeric order: 13 → 14 → 15 → 16 → 17 → 18
 | 11. Dark Current Modeling                  | v1.1      | 2/2            | Complete    | 2026-03-23 |
 | 12. Transient FLASH Dynamics               | v1.1      | 2/2            | Complete    | 2026-03-24 |
 | 13. Damage Physics Foundation              | 2/2       | Complete       | 2026-03-24  | -          |
-| 14. CCE vs Fluence                         | 1/2 | In Progress|  | -          |
+| 14. CCE vs Fluence                         | 2/2 | Complete   | 2026-03-24 | -          |
 | 15. Dark Current vs Fluence                | v2.0      | 0/2            | Not started | -          |
 | 16. Carrier Removal & C-V Evolution        | v2.0      | 0/2            | Not started | -          |
 | 17. Annealing Kinetics                     | v2.0      | 0/1            | Not started | -          |
