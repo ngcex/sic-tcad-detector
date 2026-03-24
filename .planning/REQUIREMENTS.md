@@ -75,17 +75,37 @@ Explicitly excluded. Documented to prevent scope creep.
 
 Which phases cover which requirements. Updated during roadmap creation.
 
-| Requirement               | Phase | Status |
-| ------------------------- | ----- | ------ |
-| (populated by roadmapper) |       |        |
+| Requirement | Phase    | Status  |
+| ----------- | -------- | ------- |
+| DMGP-01     | Phase 13 | Pending |
+| DMGP-02     | Phase 13 | Pending |
+| DMGP-03     | Phase 13 | Pending |
+| DMGP-04     | Phase 13 | Pending |
+| DMGP-05     | Phase 13 | Pending |
+| CCED-01     | Phase 14 | Pending |
+| CCED-02     | Phase 14 | Pending |
+| CCED-03     | Phase 14 | Pending |
+| DCRR-01     | Phase 15 | Pending |
+| DCRR-02     | Phase 15 | Pending |
+| CRMV-01     | Phase 16 | Pending |
+| CRMV-02     | Phase 16 | Pending |
+| ANNL-01     | Phase 17 | Pending |
+| ANNL-02     | Phase 17 | Pending |
+| PARM-01     | Phase 18 | Pending |
+| PARM-02     | Phase 18 | Pending |
+| PARM-03     | Phase 18 | Pending |
+| NBKV-01     | Phase 13 | Pending |
+| NBKV-02     | Phase 14 | Pending |
+| NBKV-03     | Phase 16 | Pending |
+| NBKV-04     | Phase 18 | Pending |
 
 **Coverage:**
 
 - v2.0 requirements: 21 total
-- Mapped to phases: 0
-- Unmapped: 21 ⚠️
+- Mapped to phases: 21
+- Unmapped: 0
 
 ---
 
 _Requirements defined: 2026-03-24_
-_Last updated: 2026-03-24 after initial definition_
+_Last updated: 2026-03-24 after roadmap creation_
