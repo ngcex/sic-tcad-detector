@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Radiation Damage Modeling
-status: unknown
-last_updated: "2026-03-25T07:52:00Z"
+status: phase-complete
+last_updated: "2026-03-25T07:56:39Z"
 progress:
   total_phases: 15
-  completed_phases: 14
+  completed_phases: 15
   total_plans: 33
-  completed_plans: 32
+  completed_plans: 33
 ---
 
 # Project State
@@ -22,18 +22,18 @@ See: .planning/PROJECT.md (updated 2026-03-24)
 
 ## Current Position
 
-Phase: 15 of 18 (Dark Current vs Fluence) -- IN PROGRESS
-Plan: 1 of 2 in current phase (1 complete)
-Status: 15-01 complete, ready for 15-02
-Last activity: 2026-03-25 — Completed 15-01 dark current vs fluence sweep
+Phase: 15 of 18 (Dark Current vs Fluence) -- COMPLETE
+Plan: 2 of 2 in current phase (2 complete)
+Status: Phase 15 complete, ready for Phase 16
+Last activity: 2026-03-25 — Completed 15-02 dark current vs fluence publication notebook
 
-Progress: [████████████████████████░░░░░░] 80% (32/40 plans across all milestones)
+Progress: [█████████████████████████░░░░░] 83% (33/40 plans across all milestones)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 32 (v1.0: 20, v1.1: 7, v2.0: 5)
+- Total plans completed: 33 (v1.0: 20, v1.1: 7, v2.0: 6)
 - Average duration: ~14 min
 - Total execution time: ~7.4 hours
 
@@ -76,5 +76,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-25
-Stopped at: Completed 15-01-PLAN.md (dark current vs fluence sweep)
+Stopped at: Completed 15-02-PLAN.md (dark current vs fluence publication notebook)
 Resume file: None
