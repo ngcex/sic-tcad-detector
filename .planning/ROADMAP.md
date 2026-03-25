@@ -44,7 +44,7 @@ Full details: [milestones/v1.1-ROADMAP.md](milestones/v1.1-ROADMAP.md)
 - [x] **Phase 13: Damage Physics Foundation** - Pure-Python radiation damage module with defect introduction, lifetime degradation, carrier removal, NIEL scaling, and v1.1 regression safety (completed 2026-03-24)
 - [x] **Phase 14: CCE vs Fluence** - Primary scientific deliverable: fluence sweep infrastructure and CCE degradation curves with sensitivity analysis (completed 2026-03-24)
 - [x] **Phase 15: Dark Current vs Fluence** - Additive delta-J radiation-induced dark current model preserving v1.1 calibration (completed 2026-03-25)
-- [ ] **Phase 16: Carrier Removal & C-V Evolution** - C-V shift under irradiation, full compensation detection, and combined dark current / C-V notebook
+- [x] **Phase 16: Carrier Removal & C-V Evolution** - C-V shift under irradiation, full compensation detection, and combined dark current / C-V notebook (completed 2026-03-25)
 - [ ] **Phase 17: Annealing Kinetics** - Thermal recovery modeling for defect concentrations, CCE, and dark current
 - [ ] **Phase 18: Multi-Defect Model & Parametric Optimization** - Three-defect Burin model, parametric radiation hardness sweeps, and publication-grade validation
 
@@ -118,7 +118,7 @@ Plans:
 2. Simulator computes and logs Phi_crit (full compensation fluence) for the Petringa device geometry and flags when a requested fluence approaches or exceeds it
 3. User can generate a publication-quality notebook combining dark current vs fluence and C-V evolution under irradiation, with component decomposition for both observables
 
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 
@@ -214,6 +214,6 @@ Phases execute in numeric order: 13 → 14 → 15 → 16 → 17 → 18
 | 13. Damage Physics Foundation              | 2/2       | Complete       | 2026-03-24  | -          |
 | 14. CCE vs Fluence                         | 2/2       | Complete       | 2026-03-24  | -          |
 | 15. Dark Current vs Fluence                | 2/2       | Complete       | 2026-03-25  | -          |
-| 16. Carrier Removal & C-V Evolution        | 1/2 | In Progress|  | -          |
+| 16. Carrier Removal & C-V Evolution        | 2/2 | Complete   | 2026-03-25 | -          |
 | 17. Annealing Kinetics                     | v2.0      | 0/1            | Not started | -          |
 | 18. Multi-Defect & Parametric Optimization | v2.0      | 0/3            | Not started | -          |

@@ -8,7 +8,7 @@ progress:
   total_phases: 15
   completed_phases: 15
   total_plans: 33
-  completed_plans: 34
+  completed_plans: 35
 ---
 
 # Project State
@@ -23,17 +23,17 @@ See: .planning/PROJECT.md (updated 2026-03-24)
 ## Current Position
 
 Phase: 16 of 18 (Carrier Removal C-V Evolution)
-Plan: 1 of 2 in current phase (1 complete)
-Status: Plan 16-01 complete, ready for 16-02
-Last activity: 2026-03-25 — Completed 16-01 compute_phi_crit + cv_at_fluence + tests
+Plan: 2 of 2 in current phase (2 complete)
+Status: Phase 16 complete, ready for Phase 17
+Last activity: 2026-03-25 — Completed 16-02 dark current + C-V evolution publication notebook
 
-Progress: [██████████████████████████░░░░] 85% (34/40 plans across all milestones)
+Progress: [███████████████████████████░░░] 88% (35/40 plans across all milestones)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 34 (v1.0: 20, v1.1: 7, v2.0: 7)
+- Total plans completed: 35 (v1.0: 20, v1.1: 7, v2.0: 8)
 - Average duration: ~14 min
 - Total execution time: ~7.4 hours
 
@@ -63,6 +63,7 @@ Recent decisions affecting current work:
 - [v2.0-15-01]: Dark current solver robust at extreme fluence (no generation injection unlike CCE); test accepts finite or NaN
 - [v2.0-15-01]: Fluence change detection needs abs=0 in pytest.approx due to N_t-dominated signal (~0.1% change at 1e12)
 - [v2.0-16-01]: Phi_crit from min(N_D > 0) not mean/bulk; cv_at_fluence returns None at Phi_crit (not raises)
+- [v2.0-16-02]: Phi_crit ~4.86e13 protons/cm^2 for Petringa device; fluence levels chosen to show C-V progression without exceeding compensation
 
 ### Pending Todos
 
@@ -77,5 +78,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-25
-Stopped at: Completed 16-01-PLAN.md (compute_phi_crit + cv_at_fluence + tests)
+Stopped at: Completed 16-02-PLAN.md (dark current + C-V evolution publication notebook)
 Resume file: None
