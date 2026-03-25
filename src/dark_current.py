@@ -652,6 +652,288 @@ def sensitivity_sweep(
     return pd.DataFrame(records)
 
 
+def dark_current_vs_fluence(
+    fluence_range,
+    V_bias=-30.0,
+    area=0.04,
+    epi_thickness_cm=10e-4,
+    energy_MeV=62.0,
+    lifetime_model="linear",
+    damage_params=None,
+    N_t=None,
+    S_n=None,
+    S_p=None,
+):
+    """Compute dark current vs proton fluence at fixed reverse bias.
+
+    Creates a fresh DD device for each fluence point (fluence-as-temperature
+    pattern) using staged device creation so that damaged doping is applied
+    before Poisson equilibrium.  TAT and SRV models are set up on each
+    per-point device so that field-enhanced generation responds to the
+    radiation-degraded lifetimes.
+
+    Parameters
+    ----------
+    fluence_range : array_like
+        Array of proton fluences (protons/cm^2).  Zero fluence returns
+        the pristine (calibrated) dark current.
+    V_bias : float
+        Reverse bias voltage applied to anode (V, negative).  Default -30V.
+    area : float
+        Device area (cm^2).  Default 0.04 cm^2.
+    epi_thickness_cm : float
+        Epitaxial layer thickness (cm).  Default 10 um.
+    energy_MeV : float
+        Proton energy (MeV).  Default 62.0.
+    lifetime_model : str
+        ``"linear"`` or ``"logarithmic"``.  Default ``"linear"``.
+    damage_params : RadiationDamageParams or None
+        Custom damage parameters.  Default: ``RadiationDamageParams()``.
+    N_t : float or None
+        Effective generation rate (cm^-3 s^-1).  Default from material params.
+    S_n : float or None
+        Electron surface recombination velocity (cm/s).
+    S_p : float or None
+        Hole surface recombination velocity (cm/s).
+
+    Returns
+    -------
+    result : dict
+        Dictionary with:
+
+        - ``fluences``: numpy array of fluences (protons/cm^2)
+        - ``I_total``, ``I_SRH``, ``I_TAT``, ``I_SRV``: numpy arrays (A)
+        - ``I_baseline``: float, I_total at first fluence if it is 0.0
+        - ``delta_I``: numpy array (I_total - I_baseline), only if first
+          fluence is 0.0
+        - ``V_bias``, ``energy_MeV``, ``lifetime_model``: echo-back scalars
+    """
+    import uuid
+
+    import devsim.python_packages.simple_physics as simple_physics
+
+    from src.device import apply_damaged_params, create_sic_device
+    from src.drift_diffusion import setup_sic_drift_diffusion
+    from src.poisson import setup_poisson, solve_equilibrium
+    from src.radiation_damage import compute_damaged_params
+    from src.sic_material import srh_lifetime
+
+    fluence_range = np.asarray(fluence_range, dtype=float)
+
+    # --- Extract pristine parameters (once) ---
+    pristine_tau_n = srh_lifetime(300.0, "electron")
+    pristine_tau_p = srh_lifetime(300.0, "hole")
+
+    ref_id = uuid.uuid4().hex[:8]
+    ref_name = f"dc_fluence_ref_{ref_id}"
+    ref_info = create_sic_device(
+        device_name=ref_name,
+        epi_thickness_cm=epi_thickness_cm,
+        doping_profile="graded",
+        N_D_junction=2.90e15,
+        N_D_bulk=8.50e13,
+        L_transition=1.0e-4,
+    )
+    try:
+        ref_x = np.array(
+            devsim.get_node_model_values(
+                device=ref_name, region=ref_info["region_name"], name="x"
+            )
+        )
+        ref_donors = np.array(
+            devsim.get_node_model_values(
+                device=ref_name, region=ref_info["region_name"], name="Donors"
+            )
+        )
+        epi_mask_ref = ref_x >= ref_info["junction_pos"]
+        pristine_N_D_profile = ref_donors[epi_mask_ref]
+    finally:
+        try:
+            devsim.delete_device(device=ref_name)
+        except Exception:
+            pass
+
+    # --- Sweep fluence ---
+    n_pts = len(fluence_range)
+    I_total = np.full(n_pts, np.nan)
+    I_SRH = np.full(n_pts, np.nan)
+    I_TAT = np.full(n_pts, np.nan)
+    I_SRV = np.full(n_pts, np.nan)
+
+    for i, fluence in enumerate(fluence_range):
+        dev_id = uuid.uuid4().hex[:8]
+        dev_name = f"dc_fluence_{dev_id}"
+
+        try:
+            # Compute damaged parameters
+            damaged = compute_damaged_params(
+                pristine_tau_n=pristine_tau_n,
+                pristine_tau_p=pristine_tau_p,
+                N_D_profile=pristine_N_D_profile,
+                fluence=fluence,
+                energy_MeV=energy_MeV,
+                damage_params=damage_params,
+                lifetime_model=lifetime_model,
+            )
+
+            # Staged device creation
+            device_info = create_sic_device(
+                device_name=dev_name,
+                epi_thickness_cm=epi_thickness_cm,
+                doping_profile="graded",
+                N_D_junction=2.90e15,
+                N_D_bulk=8.50e13,
+                L_transition=1.0e-4,
+            )
+
+            # Apply damage BEFORE Poisson setup
+            apply_damaged_params(device_info, damaged)
+
+            # Continue staged setup
+            setup_poisson(device_info)
+            solve_equilibrium(device_info)
+            setup_sic_drift_diffusion(device_info)
+            device_info["dd_initialized"] = True
+
+            # Setup TAT and SRV models
+            setup_tat_model(device_info, N_t=N_t)
+            setup_surface_recombination(device_info, S_n=S_n, S_p=S_p)
+
+            device = device_info["device_name"]
+            region = device_info["region_name"]
+
+            # Ramp bias on anode (negative = reverse bias)
+            bias_name = simple_physics.GetContactBiasName("anode")
+            V_step = 1.0
+            n_steps = max(1, int(np.ceil(abs(V_bias) / V_step)))
+            V_intermediates = np.linspace(0, V_bias, n_steps + 1)[1:]
+
+            for V_int in V_intermediates:
+                devsim.set_parameter(device=device, name=bias_name, value=V_int)
+                _compute_node_efield(device, region)
+                _compute_gamma_factors(device, region)
+                devsim.solve(
+                    type="dc",
+                    absolute_error=1e10,
+                    relative_error=1e-10,
+                    maximum_iterations=40,
+                )
+
+            # Recompute E-field and Gamma after final bias
+            _compute_node_efield(device, region)
+            _compute_gamma_factors(device, region)
+
+            # Extract dark current components
+            components = extract_dark_current_components(device_info, area=area)
+            I_total[i] = components["I_total"]
+            I_SRH[i] = components["I_SRH"]
+            I_TAT[i] = components["I_TAT"]
+            I_SRV[i] = components["I_SRV"]
+
+            logger.info(
+                f"dark_current_vs_fluence: fluence={fluence:.2e}, "
+                f"I_total={I_total[i]:.3e} A"
+            )
+
+        except Exception as e:
+            logger.warning(
+                f"dark_current_vs_fluence: failed at fluence={fluence:.2e}: {e}"
+            )
+            # I_total[i] etc. remain NaN
+        finally:
+            try:
+                devsim.delete_device(device=dev_name)
+            except Exception:
+                pass
+
+    # Build result dict
+    result = {
+        "fluences": fluence_range,
+        "I_total": I_total,
+        "I_SRH": I_SRH,
+        "I_TAT": I_TAT,
+        "I_SRV": I_SRV,
+        "V_bias": V_bias,
+        "energy_MeV": energy_MeV,
+        "lifetime_model": lifetime_model,
+    }
+
+    # Delta-J decomposition (only if first fluence is 0.0)
+    if len(fluence_range) > 0 and fluence_range[0] == 0.0:
+        result["I_baseline"] = I_total[0]
+        result["delta_I"] = I_total - I_total[0]
+
+    return result
+
+
+def plot_dark_current_vs_fluence(result, ax=None, title=None):
+    """Plot dark current vs proton fluence with component decomposition.
+
+    Plots total and component dark currents on log-log axes, skipping
+    fluence=0 (cannot take log of zero).  If an ``I_baseline`` is present,
+    draws a horizontal dashed line at the pristine level.
+
+    Parameters
+    ----------
+    result : dict
+        Output of :func:`dark_current_vs_fluence`.
+    ax : matplotlib.axes.Axes or None
+        Axes to plot on.  If ``None``, creates a new figure.
+    title : str or None
+        Plot title.
+
+    Returns
+    -------
+    ax : matplotlib.axes.Axes
+    """
+    import matplotlib.pyplot as plt
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+    fluences = np.asarray(result["fluences"])
+    # Skip fluence=0 for log-log
+    mask = fluences > 0
+
+    components = [
+        ("I_total", "Total", "k", 2.0, "-"),
+        ("I_SRH", "SRH (bulk)", "C0", 1.5, "--"),
+        ("I_TAT", "TAT (effective)", "C1", 1.5, "-."),
+        ("I_SRV", "SRV (surface)", "C2", 1.5, ":"),
+    ]
+
+    for key, label, color, lw, ls in components:
+        I = np.abs(np.asarray(result[key]))
+        if np.any(I[mask] > 0):
+            ax.loglog(
+                fluences[mask],
+                I[mask],
+                color=color,
+                linewidth=lw,
+                linestyle=ls,
+                label=label,
+            )
+
+    # Baseline horizontal line
+    if "I_baseline" in result and not np.isnan(result["I_baseline"]):
+        I_bl = abs(result["I_baseline"])
+        ax.axhline(
+            I_bl,
+            color="gray",
+            linestyle="--",
+            linewidth=1.0,
+            label=f"Pristine ({I_bl * 1e12:.1f} pA)",
+        )
+
+    ax.set_xlabel(r"Proton Fluence (p/cm$^2$)")
+    ax.set_ylabel("|Dark Current| (A)")
+    ax.set_title(title or "Dark Current vs Proton Fluence")
+    ax.grid(True, alpha=0.3)
+    ax.legend(loc="best")
+
+    return ax
+
+
 def plot_dark_current_decomposition(sweep_result, ax=None, title=None):
     """Plot dark current decomposition from a voltage sweep.
 
