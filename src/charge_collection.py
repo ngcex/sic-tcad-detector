@@ -960,6 +960,295 @@ def cce_vs_bias_at_fluence(
     }
 
 
+def cce_post_anneal(
+    fluence,
+    T_anneal,
+    t_anneal,
+    V_bias=-40.0,
+    epi_thickness_cm=10e-4,
+    alpha_range_cm=15e-4,
+    generation_rate=1e18,
+    energy_MeV=62.0,
+    lifetime_model="linear",
+    damage_params=None,
+    anneal_params=None,
+) -> dict:
+    """Compute CCE for an irradiated + annealed device at a single operating point.
+
+    Composes annealing recovery (Plan 17-01) with DD-based CCE extraction.
+    Uses the same "fresh device per point" staged creation pattern as
+    cce_vs_fluence but with compute_annealed_params instead of
+    compute_damaged_params.
+
+    Parameters
+    ----------
+    fluence : float
+        Proton fluence (protons/cm^2). Zero returns pristine CCE.
+    T_anneal : float
+        Annealing temperature (K).
+    t_anneal : float
+        Annealing time (s).
+    V_bias : float
+        Reverse bias voltage applied to anode (V, negative). Default -40V.
+    epi_thickness_cm : float
+        Epitaxial layer thickness (cm). Default 10 um.
+    alpha_range_cm : float
+        Alpha particle range in SiC (cm). Default 15 um.
+    generation_rate : float
+        Peak generation rate (cm^-3 s^-1). Default 1e18.
+    energy_MeV : float
+        Proton energy (MeV). Default 62.0.
+    lifetime_model : str
+        "linear" or "logarithmic". Default "linear".
+    damage_params : RadiationDamageParams or None
+        Custom damage parameters.
+    anneal_params : AnnealingParams or None
+        Custom annealing parameters.
+
+    Returns
+    -------
+    result : dict
+        Dictionary with: cce, fluence, T_anneal, t_anneal, V_bias,
+        energy_MeV, f_Z12, f_EH67, f_EH4, tau_n, tau_p.
+    """
+    from src.device import apply_damaged_params, create_sic_device
+    from src.drift_diffusion import ramp_bias, setup_sic_drift_diffusion
+    from src.poisson import setup_poisson, solve_equilibrium
+    from src.radiation_damage import compute_annealed_params
+
+    fluence = float(fluence)
+
+    # Extract pristine parameters
+    pristine_tau_n = srh_lifetime(300.0, "electron")
+    pristine_tau_p = srh_lifetime(300.0, "hole")
+
+    # Extract pristine N_D profile from a reference device
+    ref_id = uuid.uuid4().hex[:8]
+    ref_name = f"cce_anneal_ref_{ref_id}"
+    ref_info = create_sic_device(
+        device_name=ref_name,
+        epi_thickness_cm=epi_thickness_cm,
+        doping_profile="graded",
+        N_D_junction=2.90e15,
+        N_D_bulk=8.50e13,
+        L_transition=1.0e-4,
+    )
+    try:
+        ref_x = np.array(
+            devsim.get_node_model_values(
+                device=ref_name, region=ref_info["region_name"], name="x"
+            )
+        )
+        ref_donors = np.array(
+            devsim.get_node_model_values(
+                device=ref_name, region=ref_info["region_name"], name="Donors"
+            )
+        )
+        epi_mask_ref = ref_x >= ref_info["junction_pos"]
+        pristine_N_D_profile = ref_donors[epi_mask_ref]
+    finally:
+        try:
+            devsim.delete_device(device=ref_name)
+        except Exception:
+            pass
+
+    # Compute annealed parameters (damage + recovery)
+    annealed = compute_annealed_params(
+        pristine_tau_n=pristine_tau_n,
+        pristine_tau_p=pristine_tau_p,
+        N_D_profile=pristine_N_D_profile,
+        fluence=fluence,
+        energy_MeV=energy_MeV,
+        T_anneal=T_anneal,
+        t_anneal=t_anneal,
+        damage_params=damage_params,
+        anneal_params=anneal_params,
+        lifetime_model=lifetime_model,
+    )
+
+    # Create fresh device with staged creation
+    dev_id = uuid.uuid4().hex[:8]
+    dev_name = f"cce_anneal_{dev_id}"
+
+    try:
+        device_info = create_sic_device(
+            device_name=dev_name,
+            epi_thickness_cm=epi_thickness_cm,
+            doping_profile="graded",
+            N_D_junction=2.90e15,
+            N_D_bulk=8.50e13,
+            L_transition=1.0e-4,
+        )
+
+        # Apply annealed params before Poisson setup
+        apply_damaged_params(device_info, annealed)
+
+        # Continue staged setup
+        setup_poisson(device_info)
+        solve_equilibrium(device_info)
+        setup_sic_drift_diffusion(device_info)
+        device_info["dd_initialized"] = True
+
+        device = device_info["device_name"]
+        region = device_info["region_name"]
+
+        # Ramp bias
+        cathode_V = -V_bias
+        ramp_bias(device_info, cathode_V, contact="cathode", V_step=0.5)
+
+        # Prepare generation profile
+        x_nodes = np.array(
+            devsim.get_node_model_values(device=device, region=region, name="x")
+        )
+        junction_pos = device_info["junction_pos"]
+        x_epi = x_nodes - junction_pos
+
+        gen_profile = alpha_generation_profile(x_epi, alpha_range_cm=alpha_range_cm)
+        max_profile = np.max(gen_profile)
+        if max_profile > 0:
+            gen_values = gen_profile * (generation_rate / max_profile)
+        else:
+            gen_values = np.zeros_like(x_nodes)
+        gen_values[x_epi < 0] = 0.0
+
+        # Add generation and solve
+        add_generation_to_dd(device_info, gen_values)
+        devsim.solve(
+            type="dc",
+            absolute_error=1e10,
+            relative_error=1e-10,
+            maximum_iterations=40,
+        )
+
+        # Extract CCE
+        cce = compute_cce_from_dd(device_info, gen_values, contact="cathode")
+
+        logger.info(
+            f"cce_post_anneal: fluence={fluence:.2e}, T_anneal={T_anneal}K, "
+            f"t_anneal={t_anneal}s, CCE={cce:.4f}"
+        )
+
+        return {
+            "cce": cce,
+            "fluence": fluence,
+            "T_anneal": T_anneal,
+            "t_anneal": t_anneal,
+            "V_bias": V_bias,
+            "energy_MeV": energy_MeV,
+            "f_Z12": annealed.get("f_Z12", 0.0),
+            "f_EH67": annealed.get("f_EH67", 0.0),
+            "f_EH4": annealed.get("f_EH4", 0.0),
+            "tau_n": annealed["tau_n"],
+            "tau_p": annealed["tau_p"],
+        }
+
+    except Exception as e:
+        logger.warning(f"cce_post_anneal: failed: {e}")
+        return {
+            "cce": np.nan,
+            "fluence": fluence,
+            "T_anneal": T_anneal,
+            "t_anneal": t_anneal,
+            "V_bias": V_bias,
+            "energy_MeV": energy_MeV,
+            "f_Z12": annealed.get("f_Z12", 0.0),
+            "f_EH67": annealed.get("f_EH67", 0.0),
+            "f_EH4": annealed.get("f_EH4", 0.0),
+            "tau_n": annealed.get("tau_n", np.nan),
+            "tau_p": annealed.get("tau_p", np.nan),
+        }
+    finally:
+        try:
+            devsim.delete_device(device=dev_name)
+        except Exception:
+            pass
+
+
+def cce_anneal_vs_temperature(
+    fluence,
+    T_anneal_range,
+    t_anneal,
+    V_bias=-40.0,
+    epi_thickness_cm=10e-4,
+    alpha_range_cm=15e-4,
+    generation_rate=1e18,
+    energy_MeV=62.0,
+    lifetime_model="linear",
+    damage_params=None,
+    anneal_params=None,
+) -> dict:
+    """Sweep annealing temperature and compute CCE at each point.
+
+    Uses a fresh device per temperature point. Enables plotting CCE
+    recovery vs annealing temperature at fixed fluence and anneal time.
+
+    Parameters
+    ----------
+    fluence : float
+        Proton fluence (protons/cm^2).
+    T_anneal_range : array_like
+        Array of annealing temperatures (K) to sweep.
+    t_anneal : float
+        Annealing time (s), fixed across sweep.
+    V_bias : float
+        Reverse bias voltage (V, negative). Default -40V.
+    epi_thickness_cm : float
+        Epitaxial layer thickness (cm). Default 10 um.
+    alpha_range_cm : float
+        Alpha particle range (cm). Default 15 um.
+    generation_rate : float
+        Peak generation rate (cm^-3 s^-1). Default 1e18.
+    energy_MeV : float
+        Proton energy (MeV). Default 62.0.
+    lifetime_model : str
+        "linear" or "logarithmic". Default "linear".
+    damage_params : RadiationDamageParams or None
+        Custom damage parameters.
+    anneal_params : AnnealingParams or None
+        Custom annealing parameters.
+
+    Returns
+    -------
+    result : dict
+        Dictionary with:
+        - "T_anneal_range": numpy array of temperatures (K)
+        - "cce_values": numpy array of CCE at each temperature
+        - "fluence": float
+        - "t_anneal": float
+        - "V_bias": float
+    """
+    T_anneal_range = np.asarray(T_anneal_range, dtype=float)
+    cce_values = np.zeros(len(T_anneal_range))
+
+    for i, T_ann in enumerate(T_anneal_range):
+        result = cce_post_anneal(
+            fluence=fluence,
+            T_anneal=T_ann,
+            t_anneal=t_anneal,
+            V_bias=V_bias,
+            epi_thickness_cm=epi_thickness_cm,
+            alpha_range_cm=alpha_range_cm,
+            generation_rate=generation_rate,
+            energy_MeV=energy_MeV,
+            lifetime_model=lifetime_model,
+            damage_params=damage_params,
+            anneal_params=anneal_params,
+        )
+        cce_values[i] = result["cce"]
+
+        logger.info(
+            f"cce_anneal_vs_temperature: T={T_ann:.0f}K, CCE={result['cce']:.4f}"
+        )
+
+    return {
+        "T_anneal_range": T_anneal_range,
+        "cce_values": cce_values,
+        "fluence": fluence,
+        "t_anneal": t_anneal,
+        "V_bias": V_bias,
+    }
+
+
 def cce_vs_epi_thickness(
     epi_range_cm,
     V_bias=-3.0,
