@@ -866,6 +866,217 @@ def dark_current_vs_fluence(
     return result
 
 
+def dark_current_post_anneal(
+    fluence,
+    T_anneal,
+    t_anneal,
+    V_bias=-30.0,
+    area=0.04,
+    epi_thickness_cm=10e-4,
+    energy_MeV=62.0,
+    lifetime_model="linear",
+    damage_params=None,
+    anneal_params=None,
+    N_t=None,
+    S_n=None,
+    S_p=None,
+) -> dict:
+    """Compute dark current for an irradiated + annealed device.
+
+    Composes annealing recovery (Plan 17-01) with the TAT/SRV dark current
+    model.  Uses the same "fresh device per point" staged creation pattern
+    as dark_current_vs_fluence but with compute_annealed_params.
+
+    Parameters
+    ----------
+    fluence : float
+        Proton fluence (protons/cm^2). Zero returns pristine dark current.
+    T_anneal : float
+        Annealing temperature (K).
+    t_anneal : float
+        Annealing time (s).
+    V_bias : float
+        Reverse bias voltage (V, negative). Default -30V.
+    area : float
+        Device area (cm^2). Default 0.04.
+    epi_thickness_cm : float
+        Epitaxial layer thickness (cm). Default 10 um.
+    energy_MeV : float
+        Proton energy (MeV). Default 62.0.
+    lifetime_model : str
+        "linear" or "logarithmic". Default "linear".
+    damage_params : RadiationDamageParams or None
+        Custom damage parameters.
+    anneal_params : AnnealingParams or None
+        Custom annealing parameters.
+    N_t : float or None
+        Effective generation rate (cm^-3 s^-1).
+    S_n : float or None
+        Electron surface recombination velocity (cm/s).
+    S_p : float or None
+        Hole surface recombination velocity (cm/s).
+
+    Returns
+    -------
+    result : dict
+        Dictionary with: I_total, fluence, T_anneal, t_anneal, V_bias,
+        f_Z12, f_EH67, f_EH4, I_SRH, I_TAT, I_SRV.
+    """
+    import uuid
+
+    import devsim.python_packages.simple_physics as simple_physics
+
+    from src.device import apply_damaged_params, create_sic_device
+    from src.drift_diffusion import setup_sic_drift_diffusion
+    from src.poisson import setup_poisson, solve_equilibrium
+    from src.radiation_damage import compute_annealed_params
+    from src.sic_material import srh_lifetime
+
+    fluence = float(fluence)
+
+    # Extract pristine parameters
+    pristine_tau_n = srh_lifetime(300.0, "electron")
+    pristine_tau_p = srh_lifetime(300.0, "hole")
+
+    ref_id = uuid.uuid4().hex[:8]
+    ref_name = f"dc_anneal_ref_{ref_id}"
+    ref_info = create_sic_device(
+        device_name=ref_name,
+        epi_thickness_cm=epi_thickness_cm,
+        doping_profile="graded",
+        N_D_junction=2.90e15,
+        N_D_bulk=8.50e13,
+        L_transition=1.0e-4,
+    )
+    try:
+        ref_x = np.array(
+            devsim.get_node_model_values(
+                device=ref_name, region=ref_info["region_name"], name="x"
+            )
+        )
+        ref_donors = np.array(
+            devsim.get_node_model_values(
+                device=ref_name, region=ref_info["region_name"], name="Donors"
+            )
+        )
+        epi_mask_ref = ref_x >= ref_info["junction_pos"]
+        pristine_N_D_profile = ref_donors[epi_mask_ref]
+    finally:
+        try:
+            devsim.delete_device(device=ref_name)
+        except Exception:
+            pass
+
+    # Compute annealed parameters
+    annealed = compute_annealed_params(
+        pristine_tau_n=pristine_tau_n,
+        pristine_tau_p=pristine_tau_p,
+        N_D_profile=pristine_N_D_profile,
+        fluence=fluence,
+        energy_MeV=energy_MeV,
+        T_anneal=T_anneal,
+        t_anneal=t_anneal,
+        damage_params=damage_params,
+        anneal_params=anneal_params,
+        lifetime_model=lifetime_model,
+    )
+
+    dev_id = uuid.uuid4().hex[:8]
+    dev_name = f"dc_anneal_{dev_id}"
+
+    try:
+        # Staged device creation
+        device_info = create_sic_device(
+            device_name=dev_name,
+            epi_thickness_cm=epi_thickness_cm,
+            doping_profile="graded",
+            N_D_junction=2.90e15,
+            N_D_bulk=8.50e13,
+            L_transition=1.0e-4,
+        )
+
+        # Apply annealed params before Poisson
+        apply_damaged_params(device_info, annealed)
+
+        # Continue staged setup
+        setup_poisson(device_info)
+        solve_equilibrium(device_info)
+        setup_sic_drift_diffusion(device_info)
+        device_info["dd_initialized"] = True
+
+        # Setup TAT and SRV models
+        setup_tat_model(device_info, N_t=N_t)
+        setup_surface_recombination(device_info, S_n=S_n, S_p=S_p)
+
+        device = device_info["device_name"]
+        region = device_info["region_name"]
+
+        # Ramp bias on anode
+        bias_name = simple_physics.GetContactBiasName("anode")
+        V_step = 1.0
+        n_steps = max(1, int(np.ceil(abs(V_bias) / V_step)))
+        V_intermediates = np.linspace(0, V_bias, n_steps + 1)[1:]
+
+        for V_int in V_intermediates:
+            devsim.set_parameter(device=device, name=bias_name, value=V_int)
+            _compute_node_efield(device, region)
+            _compute_gamma_factors(device, region)
+            devsim.solve(
+                type="dc",
+                absolute_error=1e10,
+                relative_error=1e-10,
+                maximum_iterations=40,
+            )
+
+        # Recompute after final bias
+        _compute_node_efield(device, region)
+        _compute_gamma_factors(device, region)
+
+        # Extract dark current components
+        components = extract_dark_current_components(device_info, area=area)
+
+        logger.info(
+            f"dark_current_post_anneal: fluence={fluence:.2e}, "
+            f"T_anneal={T_anneal}K, t_anneal={t_anneal}s, "
+            f"I_total={components['I_total']:.3e} A"
+        )
+
+        return {
+            "I_total": components["I_total"],
+            "fluence": fluence,
+            "T_anneal": T_anneal,
+            "t_anneal": t_anneal,
+            "V_bias": V_bias,
+            "f_Z12": annealed.get("f_Z12", 0.0),
+            "f_EH67": annealed.get("f_EH67", 0.0),
+            "f_EH4": annealed.get("f_EH4", 0.0),
+            "I_SRH": components["I_SRH"],
+            "I_TAT": components["I_TAT"],
+            "I_SRV": components["I_SRV"],
+        }
+
+    except Exception as e:
+        logger.warning(f"dark_current_post_anneal: failed: {e}")
+        return {
+            "I_total": np.nan,
+            "fluence": fluence,
+            "T_anneal": T_anneal,
+            "t_anneal": t_anneal,
+            "V_bias": V_bias,
+            "f_Z12": annealed.get("f_Z12", 0.0),
+            "f_EH67": annealed.get("f_EH67", 0.0),
+            "f_EH4": annealed.get("f_EH4", 0.0),
+            "I_SRH": np.nan,
+            "I_TAT": np.nan,
+            "I_SRV": np.nan,
+        }
+    finally:
+        try:
+            devsim.delete_device(device=dev_name)
+        except Exception:
+            pass
+
+
 def plot_dark_current_vs_fluence(result, ax=None, title=None):
     """Plot dark current vs proton fluence with component decomposition.
 
