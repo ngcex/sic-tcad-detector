@@ -100,7 +100,7 @@ Plans:
 2. User can generate dark current vs fluence curves with component decomposition showing baseline vs radiation-induced contributions
 3. Simulator correctly reproduces the counterintuitive SiC behavior where dark current may decrease at very high fluence due to carrier removal reducing the generation volume
 
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
 
@@ -213,7 +213,7 @@ Phases execute in numeric order: 13 → 14 → 15 → 16 → 17 → 18
 | 12. Transient FLASH Dynamics               | v1.1      | 2/2            | Complete    | 2026-03-24 |
 | 13. Damage Physics Foundation              | 2/2       | Complete       | 2026-03-24  | -          |
 | 14. CCE vs Fluence                         | 2/2 | Complete    | 2026-03-24 | -          |
-| 15. Dark Current vs Fluence                | v2.0      | 0/2            | Not started | -          |
+| 15. Dark Current vs Fluence                | 1/2 | In Progress|  | -          |
 | 16. Carrier Removal & C-V Evolution        | v2.0      | 0/2            | Not started | -          |
 | 17. Annealing Kinetics                     | v2.0      | 0/1            | Not started | -          |
 | 18. Multi-Defect & Parametric Optimization | v2.0      | 0/3            | Not started | -          |
