@@ -15,13 +15,23 @@ References:
 """
 
 import logging
+import uuid
 
+import matplotlib.pyplot as plt
 import numpy as np
 
 import devsim
 import devsim.python_packages.simple_physics as simple_physics
 
-from src.poisson import extract_depletion_width_numerical
+from src.device import apply_damaged_params, create_sic_device
+from src.drift_diffusion import setup_sic_drift_diffusion
+from src.poisson import (
+    extract_depletion_width_numerical,
+    setup_poisson,
+    solve_equilibrium,
+)
+from src.radiation_damage import compute_damaged_params, compute_phi_crit
+from src.sic_material import srh_lifetime
 
 logger = logging.getLogger(__name__)
 
@@ -214,3 +224,224 @@ def cv_sweep(device_info, V_range, eps_r=9.7, area=1.0):
         "depletion_widths": W_arr,
         "capacitance": C_arr,
     }
+
+
+def cv_at_fluence(
+    fluence,
+    V_range,
+    area=1.0,
+    epi_thickness_cm=10e-4,
+    energy_MeV=62.0,
+    lifetime_model="linear",
+    damage_params=None,
+    phi_crit_threshold=0.90,
+):
+    """Compute C-V curve for a device at a given proton fluence.
+
+    Creates a fresh DD device with radiation-damaged parameters using the
+    staged device creation pattern (fluence-as-temperature), runs a C-V
+    sweep, and cleans up the device.
+
+    Parameters
+    ----------
+    fluence : float
+        Proton fluence (protons/cm^2).
+    V_range : array_like
+        Array of reverse bias voltages (V, should be <= 0 for reverse bias).
+    area : float
+        Junction area (cm^2). Default 1.0.
+    epi_thickness_cm : float
+        Epitaxial layer thickness (cm). Default 10 um.
+    energy_MeV : float
+        Proton energy (MeV). Default 62.0.
+    lifetime_model : str
+        "linear" or "logarithmic". Default "linear".
+    damage_params : RadiationDamageParams or None
+        Custom damage parameters. Default: RadiationDamageParams().
+    phi_crit_threshold : float
+        Fraction of Phi_crit at which to warn. Default 0.90.
+
+    Returns
+    -------
+    dict or None
+        C-V result dict with keys: voltages, depletion_widths, capacitance,
+        fluence. Returns None if fluence >= Phi_crit (solver would diverge).
+    """
+    V_range = np.asarray(V_range, dtype=float)
+
+    # Extract pristine lifetimes
+    pristine_tau_n = srh_lifetime(300.0, "electron")
+    pristine_tau_p = srh_lifetime(300.0, "hole")
+
+    # Create a reference device to extract pristine N_D profile
+    ref_id = uuid.uuid4().hex[:8]
+    ref_name = f"cv_ref_{ref_id}"
+    ref_info = create_sic_device(
+        device_name=ref_name,
+        epi_thickness_cm=epi_thickness_cm,
+        doping_profile="graded",
+        N_D_junction=2.90e15,
+        N_D_bulk=8.50e13,
+        L_transition=1.0e-4,
+    )
+    try:
+        ref_x = np.array(
+            devsim.get_node_model_values(
+                device=ref_name, region=ref_info["region_name"], name="x"
+            )
+        )
+        ref_donors = np.array(
+            devsim.get_node_model_values(
+                device=ref_name, region=ref_info["region_name"], name="Donors"
+            )
+        )
+        epi_mask = ref_x >= ref_info["junction_pos"]
+        pristine_N_D_profile = ref_donors[epi_mask]
+    finally:
+        try:
+            devsim.delete_device(device=ref_name)
+        except Exception:
+            pass
+
+    # Check Phi_crit
+    phi_crit_info = compute_phi_crit(
+        pristine_N_D_profile,
+        energy_MeV=energy_MeV,
+    )
+    phi_crit = phi_crit_info["phi_crit_proton"]
+
+    if fluence >= phi_crit:
+        logger.error(
+            "Fluence %.3e >= Phi_crit %.3e protons/cm^2: full compensation, "
+            "cannot solve. Returning None.",
+            fluence,
+            phi_crit,
+        )
+        return None
+
+    if fluence >= phi_crit_threshold * phi_crit:
+        logger.warning(
+            "Fluence %.3e is >= %.0f%% of Phi_crit (%.3e): approaching "
+            "full carrier compensation.",
+            fluence,
+            phi_crit_threshold * 100,
+            phi_crit,
+        )
+
+    # Create device for this fluence point
+    dev_id = uuid.uuid4().hex[:8]
+    dev_name = f"cv_fluence_{dev_id}"
+
+    try:
+        # Compute damaged parameters
+        damaged = compute_damaged_params(
+            pristine_tau_n=pristine_tau_n,
+            pristine_tau_p=pristine_tau_p,
+            N_D_profile=pristine_N_D_profile,
+            fluence=fluence,
+            energy_MeV=energy_MeV,
+            damage_params=damage_params,
+            lifetime_model=lifetime_model,
+        )
+
+        # Staged device creation
+        device_info = create_sic_device(
+            device_name=dev_name,
+            epi_thickness_cm=epi_thickness_cm,
+            doping_profile="graded",
+            N_D_junction=2.90e15,
+            N_D_bulk=8.50e13,
+            L_transition=1.0e-4,
+        )
+
+        # Apply damage BEFORE Poisson setup
+        if fluence > 0:
+            apply_damaged_params(device_info, damaged)
+
+        # Continue staged setup
+        setup_poisson(device_info)
+        solve_equilibrium(device_info)
+        setup_sic_drift_diffusion(device_info)
+
+        # Run C-V sweep
+        cv_result = cv_sweep(device_info, V_range, area=area)
+        cv_result["fluence"] = fluence
+
+        logger.info(
+            "cv_at_fluence: fluence=%.3e, %d voltage points solved",
+            fluence,
+            len(cv_result["voltages"]),
+        )
+
+        return cv_result
+
+    except Exception as e:
+        logger.error("cv_at_fluence failed at fluence=%.3e: %s", fluence, e)
+        raise
+    finally:
+        try:
+            devsim.delete_device(device=dev_name)
+        except Exception:
+            pass
+
+
+def plot_cv_evolution(cv_results, fluences, ax=None, title=None):
+    """Overlay C-V curves at different fluence levels.
+
+    Uses a viridis colormap gradient to distinguish fluence levels, with
+    lower fluence in darker colors and higher fluence in lighter colors.
+
+    Parameters
+    ----------
+    cv_results : list of dict
+        List of C-V result dicts (from cv_at_fluence or cv_sweep).
+        None entries are skipped (above Phi_crit).
+    fluences : array_like
+        Fluence values corresponding to each cv_result (protons/cm^2).
+    ax : matplotlib.axes.Axes, optional
+        Axes to plot on. If None, creates new figure.
+    title : str, optional
+        Plot title. Default: "C-V Evolution with Fluence".
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+        The axes object with the plot.
+    """
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+    fluences = np.asarray(fluences, dtype=float)
+    cmap = plt.cm.viridis
+
+    # Normalize fluence range for colormap
+    valid_fluences = [f for f, r in zip(fluences, cv_results) if r is not None]
+    if len(valid_fluences) == 0:
+        logger.warning("plot_cv_evolution: no valid C-V results to plot")
+        return ax
+
+    f_min = min(valid_fluences)
+    f_max = max(valid_fluences)
+    if f_max > f_min:
+        norm = plt.Normalize(vmin=f_min, vmax=f_max)
+    else:
+        norm = plt.Normalize(vmin=0, vmax=max(f_max, 1.0))
+
+    for fluence, cv_result in zip(fluences, cv_results):
+        if cv_result is None:
+            continue
+        color = cmap(norm(fluence))
+        if fluence == 0:
+            label = "Pristine"
+        else:
+            label = f"{fluence:.1e} p/cm$^2$"
+        ax.plot(
+            cv_result["voltages"], cv_result["capacitance"], color=color, label=label
+        )
+
+    ax.set_xlabel("Voltage (V)")
+    ax.set_ylabel("Capacitance (F/cm$^2$)")
+    ax.set_title(title or "C-V Evolution with Fluence")
+    ax.legend(fontsize=8)
+
+    return ax
