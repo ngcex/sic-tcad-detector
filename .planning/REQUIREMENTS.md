@@ -28,8 +28,8 @@ Requirements for radiation damage milestone. Each maps to roadmap phases.
 
 ### Carrier Removal
 
-- [ ] **CRMV-01**: User can generate C-V curves at different fluence levels showing depletion width changes
-- [ ] **CRMV-02**: Simulator can detect and flag approach to full doping compensation (Φ_crit)
+- [x] **CRMV-01**: User can generate C-V curves at different fluence levels showing depletion width changes
+- [x] **CRMV-02**: Simulator can detect and flag approach to full doping compensation (Φ_crit)
 
 ### Annealing
 
@@ -87,8 +87,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CCED-03     | Phase 14 | Complete |
 | DCRR-01     | Phase 15 | Complete |
 | DCRR-02     | Phase 15 | Complete |
-| CRMV-01     | Phase 16 | Pending |
-| CRMV-02     | Phase 16 | Pending |
+| CRMV-01     | Phase 16 | Complete |
+| CRMV-02     | Phase 16 | Complete |
 | ANNL-01     | Phase 17 | Pending |
 | ANNL-02     | Phase 17 | Pending |
 | PARM-01     | Phase 18 | Pending |

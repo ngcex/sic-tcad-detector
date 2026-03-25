@@ -8,7 +8,7 @@ progress:
   total_phases: 15
   completed_phases: 15
   total_plans: 33
-  completed_plans: 33
+  completed_plans: 34
 ---
 
 # Project State
@@ -18,22 +18,22 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-24)
 
 **Core value:** Predict how CCE in 4H-SiC detectors degrades under proton irradiation, providing validated radiation damage predictions with design optimization guidance.
-**Current focus:** Phase 15 — Dark Current vs Fluence
+**Current focus:** Phase 16 — Carrier Removal C-V Evolution
 
 ## Current Position
 
-Phase: 15 of 18 (Dark Current vs Fluence) -- COMPLETE
-Plan: 2 of 2 in current phase (2 complete)
-Status: Phase 15 complete, ready for Phase 16
-Last activity: 2026-03-25 — Completed 15-02 dark current vs fluence publication notebook
+Phase: 16 of 18 (Carrier Removal C-V Evolution)
+Plan: 1 of 2 in current phase (1 complete)
+Status: Plan 16-01 complete, ready for 16-02
+Last activity: 2026-03-25 — Completed 16-01 compute_phi_crit + cv_at_fluence + tests
 
-Progress: [█████████████████████████░░░░░] 83% (33/40 plans across all milestones)
+Progress: [██████████████████████████░░░░] 85% (34/40 plans across all milestones)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 33 (v1.0: 20, v1.1: 7, v2.0: 6)
+- Total plans completed: 34 (v1.0: 20, v1.1: 7, v2.0: 7)
 - Average duration: ~14 min
 - Total execution time: ~7.4 hours
 
@@ -62,6 +62,7 @@ Recent decisions affecting current work:
 - [v2.0-14-02]: Sensitivity envelope via uniform 0.5x-2.0x scaling of all eta damage constants
 - [v2.0-15-01]: Dark current solver robust at extreme fluence (no generation injection unlike CCE); test accepts finite or NaN
 - [v2.0-15-01]: Fluence change detection needs abs=0 in pytest.approx due to N_t-dominated signal (~0.1% change at 1e12)
+- [v2.0-16-01]: Phi_crit from min(N_D > 0) not mean/bulk; cv_at_fluence returns None at Phi_crit (not raises)
 
 ### Pending Todos
 
@@ -76,5 +77,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-25
-Stopped at: Completed 15-02-PLAN.md (dark current vs fluence publication notebook)
+Stopped at: Completed 16-01-PLAN.md (compute_phi_crit + cv_at_fluence + tests)
 Resume file: None

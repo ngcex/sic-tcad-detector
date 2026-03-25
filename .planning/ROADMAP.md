@@ -118,7 +118,7 @@ Plans:
 2. Simulator computes and logs Phi_crit (full compensation fluence) for the Petringa device geometry and flags when a requested fluence approaches or exceeds it
 3. User can generate a publication-quality notebook combining dark current vs fluence and C-V evolution under irradiation, with component decomposition for both observables
 
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
 
@@ -214,6 +214,6 @@ Phases execute in numeric order: 13 → 14 → 15 → 16 → 17 → 18
 | 13. Damage Physics Foundation              | 2/2       | Complete       | 2026-03-24  | -          |
 | 14. CCE vs Fluence                         | 2/2       | Complete       | 2026-03-24  | -          |
 | 15. Dark Current vs Fluence                | 2/2       | Complete       | 2026-03-25  | -          |
-| 16. Carrier Removal & C-V Evolution        | v2.0      | 0/2            | Not started | -          |
+| 16. Carrier Removal & C-V Evolution        | 1/2 | In Progress|  | -          |
 | 17. Annealing Kinetics                     | v2.0      | 0/1            | Not started | -          |
 | 18. Multi-Defect & Parametric Optimization | v2.0      | 0/3            | Not started | -          |
