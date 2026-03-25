@@ -216,5 +216,5 @@ Phases execute in numeric order: 13 → 14 → 15 → 16 → 17 → 18
 | 14. CCE vs Fluence                         | v2.0      | 2/2            | Complete    | 2026-03-24 |
 | 15. Dark Current vs Fluence                | v2.0      | 2/2            | Complete    | 2026-03-25 |
 | 16. Carrier Removal & C-V Evolution        | v2.0      | 2/2            | Complete    | 2026-03-25 |
-| 17. Annealing Kinetics                     | 2/2 | Complete   | 2026-03-25 | -          |
+| 17. Annealing Kinetics                     | 2/2 | Complete    | 2026-03-25 | -          |
 | 18. Multi-Defect & Parametric Optimization | v2.0      | 0/3            | Not started | -          |
