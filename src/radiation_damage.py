@@ -369,6 +369,76 @@ def scale_to_proton_energy(
     return damage_constant * kappa
 
 
+def compute_phi_crit(
+    N_D_profile: np.ndarray,
+    eta_removal: float = 5.0,
+    energy_MeV: float = 62.0,
+    niel_table: dict | None = None,
+) -> dict:
+    """Compute critical fluence for full carrier compensation.
+
+    Phi_crit is the proton fluence at which the minimum doping position
+    reaches full compensation (N_eff = 0). Beyond Phi_crit, the device
+    cannot sustain a depletion region and the solver will diverge.
+
+    Phi_crit_neq = min(N_D where N_D > 0) / eta_removal
+    Phi_crit_proton = Phi_crit_neq / kappa(energy)
+
+    Parameters
+    ----------
+    N_D_profile : np.ndarray
+        Donor concentration profile (cm^-3). Only positive values are
+        considered (p-side zeros are ignored).
+    eta_removal : float
+        Carrier removal rate (cm^-1). Default 5.0.
+    energy_MeV : float
+        Proton energy (MeV). Default 62.0.
+    niel_table : dict, optional
+        Custom NIEL hardness table. Defaults to NIEL_HARDNESS_PROTON_SIC.
+
+    Returns
+    -------
+    dict
+        Keys:
+        - phi_crit_proton : float, critical proton fluence (protons/cm^2)
+        - phi_crit_neq : float, critical 1-MeV-neq fluence (neq/cm^2)
+        - N_D_min : float, minimum positive doping in profile (cm^-3)
+        - kappa : float, NIEL hardness factor used
+
+    Raises
+    ------
+    ValueError
+        If N_D_profile has no positive values.
+    """
+    positive_mask = N_D_profile > 0
+    if not np.any(positive_mask):
+        raise ValueError("N_D_profile has no positive values; cannot compute Phi_crit")
+
+    N_D_min = float(np.min(N_D_profile[positive_mask]))
+    kappa = get_hardness_factor(energy_MeV, niel_table)
+
+    phi_crit_neq = N_D_min / eta_removal
+    phi_crit_proton = phi_crit_neq / kappa
+
+    logger.info(
+        "Phi_crit: %.3e protons/cm^2 (%.3e neq/cm^2) at %g MeV "
+        "(N_D_min=%.3e, eta=%.1f, kappa=%.3f)",
+        phi_crit_proton,
+        phi_crit_neq,
+        energy_MeV,
+        N_D_min,
+        eta_removal,
+        kappa,
+    )
+
+    return {
+        "phi_crit_proton": phi_crit_proton,
+        "phi_crit_neq": phi_crit_neq,
+        "N_D_min": N_D_min,
+        "kappa": kappa,
+    }
+
+
 def compute_damaged_params(
     pristine_tau_n: float,
     pristine_tau_p: float,
