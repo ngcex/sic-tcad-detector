@@ -135,11 +135,12 @@ Plans:
 1. User can model defect annealing recovery fraction as a function of temperature and time using Arrhenius first-order kinetics with SiC-specific activation energies
 2. User can predict post-anneal CCE and dark current at a specified thermal treatment (temperature, duration), confirming that Z1/2 is thermally stable below ~1000C while other defects recover at lower temperatures
 
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
 
-- [ ] 17-01: TBD
+- [ ] 17-01-PLAN.md — Core annealing module: AnnealingParams dataclass, annealing_fraction Arrhenius function, compute_annealed_params composition, and unit tests
+- [ ] 17-02-PLAN.md — Post-anneal CCE and dark current prediction functions with devsim integration tests
 
 ### Phase 18: Multi-Defect Model & Parametric Optimization
 
@@ -211,9 +212,9 @@ Phases execute in numeric order: 13 → 14 → 15 → 16 → 17 → 18
 | 10. Temperature-Dependent Device Physics   | v1.1      | 3/3            | Complete    | 2026-03-23 |
 | 11. Dark Current Modeling                  | v1.1      | 2/2            | Complete    | 2026-03-23 |
 | 12. Transient FLASH Dynamics               | v1.1      | 2/2            | Complete    | 2026-03-24 |
-| 13. Damage Physics Foundation              | 2/2       | Complete       | 2026-03-24  | -          |
-| 14. CCE vs Fluence                         | 2/2       | Complete       | 2026-03-24  | -          |
-| 15. Dark Current vs Fluence                | 2/2       | Complete       | 2026-03-25  | -          |
-| 16. Carrier Removal & C-V Evolution        | 2/2 | Complete    | 2026-03-25 | -          |
-| 17. Annealing Kinetics                     | v2.0      | 0/1            | Not started | -          |
+| 13. Damage Physics Foundation              | v2.0      | 2/2            | Complete    | 2026-03-24 |
+| 14. CCE vs Fluence                         | v2.0      | 2/2            | Complete    | 2026-03-24 |
+| 15. Dark Current vs Fluence                | v2.0      | 2/2            | Complete    | 2026-03-25 |
+| 16. Carrier Removal & C-V Evolution        | v2.0      | 2/2            | Complete    | 2026-03-25 |
+| 17. Annealing Kinetics                     | v2.0      | 0/2            | Not started | -          |
 | 18. Multi-Defect & Parametric Optimization | v2.0      | 0/3            | Not started | -          |
