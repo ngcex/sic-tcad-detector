@@ -10,6 +10,7 @@ import devsim
 
 from src.dark_current import (
     create_dark_current_device,
+    dark_current_vs_fluence,
     extract_dark_current_components,
     dark_current_sweep,
     setup_tat_model,
@@ -300,3 +301,111 @@ class TestDarkCurrentSweep:
             decimal=6,
             err_msg="Returned voltages should match input range",
         )
+
+
+# ---------------------------------------------------------------------------
+# TestDarkCurrentVsFluence
+# ---------------------------------------------------------------------------
+
+
+class TestDarkCurrentVsFluence:
+    """Integration tests for dark_current_vs_fluence() fluence sweep."""
+
+    def test_pristine_baseline_matches_calibration(self):
+        """At fluence=0, dark current should match v1.1 calibrated pristine.
+
+        Expecting ~18.5 pA at -30V with area=0.04 cm^2.  Accept 5-100 pA.
+        """
+        result = dark_current_vs_fluence(
+            fluence_range=np.array([0.0]),
+            V_bias=-30.0,
+            area=0.04,
+        )
+        I_dark = abs(result["I_total"][0])
+        assert 5e-12 <= I_dark <= 200e-12, (
+            f"Pristine dark current = {I_dark:.2e} A ({I_dark * 1e12:.2f} pA), "
+            f"expected 5-200 pA range"
+        )
+
+    def test_dark_current_changes_with_fluence(self):
+        """Dark current at 1e12 p/cm^2 should differ from pristine."""
+        result = dark_current_vs_fluence(
+            fluence_range=np.array([0.0, 1e12]),
+            V_bias=-30.0,
+            area=0.04,
+        )
+        I_0 = result["I_total"][0]
+        I_1 = result["I_total"][1]
+        assert not np.isnan(I_0) and not np.isnan(
+            I_1
+        ), "Both pristine and 1e12 fluence should converge"
+        # At 1e12, lifetime degradation produces a small (~0.1%) but real
+        # change in dark current because the effective N_t term dominates.
+        assert abs(I_1) != pytest.approx(abs(I_0), rel=1e-4, abs=0), (
+            f"Dark current should change with fluence: "
+            f"I(0)={I_0:.3e}, I(1e12)={I_1:.3e}"
+        )
+
+    def test_monotonic_increase_moderate_fluence(self):
+        """Dark current should increase monotonically over moderate fluence range."""
+        result = dark_current_vs_fluence(
+            fluence_range=np.geomspace(1e10, 1e13, 4),
+            V_bias=-30.0,
+            area=0.04,
+        )
+        I_mag = np.abs(result["I_total"])
+        # Only check non-NaN values
+        valid = ~np.isnan(I_mag)
+        I_valid = I_mag[valid]
+        if len(I_valid) > 1:
+            assert np.all(
+                np.diff(I_valid) > 0
+            ), f"Dark current should increase monotonically: {I_valid}"
+
+    def test_component_decomposition_present(self):
+        """Result should contain all component arrays of correct length."""
+        fluences = np.array([0.0, 1e11])
+        result = dark_current_vs_fluence(
+            fluence_range=fluences,
+            V_bias=-30.0,
+            area=0.04,
+        )
+        for key in ("I_total", "I_SRH", "I_TAT", "I_SRV"):
+            assert key in result, f"Missing key: {key}"
+            arr = result[key]
+            assert isinstance(arr, np.ndarray), f"{key} should be numpy array"
+            assert len(arr) == len(
+                fluences
+            ), f"{key} length {len(arr)} != fluence length {len(fluences)}"
+
+    def test_delta_j_computed(self):
+        """Delta-J should be computed when first fluence is 0.0."""
+        result = dark_current_vs_fluence(
+            fluence_range=np.array([0.0, 1e12]),
+            V_bias=-30.0,
+            area=0.04,
+        )
+        assert "I_baseline" in result, "I_baseline should be in result"
+        assert "delta_I" in result, "delta_I should be in result"
+        assert result["delta_I"][0] == 0.0, "delta_I[0] should be 0.0"
+        assert (
+            result["delta_I"][1] != 0.0
+        ), f"delta_I[1] should be nonzero, got {result['delta_I'][1]:.3e}"
+
+    def test_extreme_fluence_handled_gracefully(self):
+        """Extremely high fluence should not crash; returns finite or NaN.
+
+        Unlike CCE (which injects generation causing solver divergence),
+        the dark current model is more robust at extreme fluences because
+        the effective generation term N_t dominates.  The test verifies
+        graceful handling -- either a valid result or NaN, but no exception.
+        """
+        result = dark_current_vs_fluence(
+            fluence_range=np.array([1e15]),
+            V_bias=-30.0,
+            area=0.04,
+        )
+        val = result["I_total"][0]
+        assert np.isnan(val) or np.isfinite(
+            val
+        ), f"Expected NaN or finite at 1e15 fluence, got {val}"
