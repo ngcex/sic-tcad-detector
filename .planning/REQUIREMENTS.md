@@ -24,7 +24,7 @@ Requirements for radiation damage milestone. Each maps to roadmap phases.
 ### Dark Current
 
 - [x] **DCRR-01**: Simulator can compute radiation-induced dark current change using additive ΔJ model (preserving v1.1 calibration)
-- [ ] **DCRR-02**: User can generate dark current vs fluence curves with component decomposition
+- [x] **DCRR-02**: User can generate dark current vs fluence curves with component decomposition
 
 ### Carrier Removal
 
@@ -86,7 +86,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CCED-02     | Phase 14 | Complete |
 | CCED-03     | Phase 14 | Complete |
 | DCRR-01     | Phase 15 | Complete |
-| DCRR-02     | Phase 15 | Pending |
+| DCRR-02     | Phase 15 | Complete |
 | CRMV-01     | Phase 16 | Pending |
 | CRMV-02     | Phase 16 | Pending |
 | ANNL-01     | Phase 17 | Pending |
