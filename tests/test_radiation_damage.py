@@ -24,6 +24,7 @@ from src.radiation_damage import (
     apply_carrier_removal,
     compute_K_tau,
     compute_damaged_params,
+    compute_phi_crit,
     defect_concentration,
     defect_concentrations,
     degraded_lifetime,
@@ -443,3 +444,58 @@ class TestRegressionSafety:
                         f"radiation_damage.py imports from devsim at line {node.lineno}: "
                         f"from {node.module} import ..."
                     )
+
+
+class TestComputePhiCrit:
+    """Tests for compute_phi_crit()."""
+
+    def test_phi_crit_graded_profile(self):
+        """Graded profile: Phi_crit from N_D_min at bulk end.
+
+        N_D_min = 8.5e13. eta = 5.0, kappa(62) = 0.35.
+        phi_crit_neq = 8.5e13 / 5.0 = 1.7e13
+        phi_crit_proton = 1.7e13 / 0.35 ~ 4.857e13
+        """
+        N_D = np.linspace(8.5e13, 2.9e15, 50)
+        result = compute_phi_crit(N_D, eta_removal=5.0, energy_MeV=62.0)
+        expected_proton = 8.5e13 / 5.0 / 0.35
+        np.testing.assert_allclose(
+            result["phi_crit_proton"], expected_proton, rtol=0.10
+        )
+        assert result["N_D_min"] == pytest.approx(8.5e13, rel=0.01)
+
+    def test_phi_crit_uniform_profile(self):
+        """Uniform N_D=1e15 profile.
+
+        phi_crit_neq = 1e15 / 5.0 = 2e14
+        phi_crit_proton = 2e14 / 0.35 ~ 5.714e14
+        """
+        N_D = np.full(20, 1e15)
+        result = compute_phi_crit(N_D, eta_removal=5.0, energy_MeV=62.0)
+        expected_proton = 1e15 / 5.0 / 0.35
+        np.testing.assert_allclose(
+            result["phi_crit_proton"], expected_proton, rtol=0.01
+        )
+
+    def test_phi_crit_returns_all_keys(self):
+        """Returned dict has all expected keys."""
+        N_D = np.array([1e14, 1e15])
+        result = compute_phi_crit(N_D)
+        assert set(result.keys()) == {
+            "phi_crit_proton",
+            "phi_crit_neq",
+            "N_D_min",
+            "kappa",
+        }
+
+    def test_phi_crit_different_energies(self):
+        """30 MeV (kappa~1.0) gives smaller phi_crit_proton than 62 MeV (kappa=0.35).
+
+        Harder protons deposit more NIEL per proton, so fewer are needed
+        to reach compensation.
+        """
+        N_D = np.full(10, 1e15)
+        result_30 = compute_phi_crit(N_D, energy_MeV=30.0)
+        result_62 = compute_phi_crit(N_D, energy_MeV=62.0)
+        # kappa(30)=0.50 > kappa(62)=0.35 -> phi_crit_proton(30) < phi_crit_proton(62)
+        assert result_30["phi_crit_proton"] < result_62["phi_crit_proton"]

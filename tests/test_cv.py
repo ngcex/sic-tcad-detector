@@ -126,3 +126,76 @@ class TestCvSweepIntegration:
             assert 1.0e-4 < W[0] < 3.0e-4
         finally:
             devsim.delete_device(device=device_info["device_name"])
+
+
+@pytest.mark.slow
+class TestCvAtFluence:
+    """Integration tests for cv_at_fluence()."""
+
+    def test_pristine_cv_matches_baseline(self):
+        """cv_at_fluence(fluence=0) produces valid C-V with monotonic W increase."""
+        from src.cv_analysis import cv_at_fluence
+
+        result = cv_at_fluence(fluence=0.0, V_range=[0, -5, -10, -20, -30])
+        assert result is not None
+        C = result["capacitance"]
+        W = result["depletion_widths"]
+        assert len(C) > 0
+        # Capacitance should decrease with increasing reverse bias
+        # (depletion width increases)
+        for i in range(1, len(W)):
+            assert (
+                W[i] >= W[i - 1]
+            ), f"W should increase with reverse bias: W[{i}]={W[i]:.4e} < W[{i-1}]={W[i-1]:.4e}"
+        assert result["fluence"] == 0.0
+
+    def test_cv_flattens_at_moderate_fluence(self):
+        """C-V at moderate fluence is flatter than pristine.
+
+        At 5e13 protons/cm^2, carrier removal reduces doping variation
+        in the epi layer, leading to more uniform depletion and flatter C-V.
+        """
+        from src.cv_analysis import cv_at_fluence
+
+        V_pts = [0, -5, -10, -20, -30]
+        pristine = cv_at_fluence(fluence=0.0, V_range=V_pts)
+        damaged = cv_at_fluence(fluence=2e13, V_range=V_pts)
+
+        assert pristine is not None
+        assert damaged is not None
+
+        # Capacitance spread (max - min) should be smaller for damaged device
+        spread_pristine = np.max(pristine["capacitance"]) - np.min(
+            pristine["capacitance"]
+        )
+        spread_damaged = np.max(damaged["capacitance"]) - np.min(damaged["capacitance"])
+        assert (
+            spread_damaged < spread_pristine
+        ), f"Damaged C-V spread ({spread_damaged:.4e}) should be < pristine ({spread_pristine:.4e})"
+
+    def test_cv_returns_none_above_phi_crit(self):
+        """cv_at_fluence returns None when fluence >= Phi_crit."""
+        from src.cv_analysis import cv_at_fluence
+
+        # Phi_crit ~ 4.86e13 for graded profile at 62 MeV
+        # 2e14 is well above Phi_crit
+        result = cv_at_fluence(fluence=2e14, V_range=[0, -10])
+        assert result is None
+
+    def test_cv_at_fluence_cleanup(self):
+        """No leftover devsim devices after cv_at_fluence call."""
+        import devsim
+
+        from src.cv_analysis import cv_at_fluence
+
+        # Record devices before
+        devices_before = set(devsim.get_device_list())
+
+        cv_at_fluence(fluence=0.0, V_range=[0, -5])
+
+        # Record devices after
+        devices_after = set(devsim.get_device_list())
+
+        # No new devices should remain (all cleaned up)
+        new_devices = devices_after - devices_before
+        assert len(new_devices) == 0, f"Leftover devices: {new_devices}"
