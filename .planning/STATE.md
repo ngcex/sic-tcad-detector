@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Radiation Damage Modeling
-status: unknown
-last_updated: "2026-03-25T10:15:07.463Z"
+status: in-progress
+last_updated: "2026-03-25T16:32:02Z"
 progress:
-  total_phases: 16
+  total_phases: 18
   completed_phases: 16
-  total_plans: 35
-  completed_plans: 35
+  total_plans: 40
+  completed_plans: 36
 ---
 
 # Project State
@@ -18,24 +18,24 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-24)
 
 **Core value:** Predict how CCE in 4H-SiC detectors degrades under proton irradiation, providing validated radiation damage predictions with design optimization guidance.
-**Current focus:** Phase 16 — Carrier Removal C-V Evolution
+**Current focus:** Phase 17 — Annealing Kinetics
 
 ## Current Position
 
-Phase: 16 of 18 (Carrier Removal C-V Evolution)
-Plan: 2 of 2 in current phase (2 complete)
-Status: Phase 16 complete, ready for Phase 17
-Last activity: 2026-03-25 — Completed 16-02 dark current + C-V evolution publication notebook
+Phase: 17 of 18 (Annealing Kinetics)
+Plan: 1 of 2 in current phase (1 complete)
+Status: Plan 17-01 complete, ready for 17-02
+Last activity: 2026-03-25 — Completed 17-01 annealing kinetics foundation
 
-Progress: [███████████████████████████░░░] 88% (35/40 plans across all milestones)
+Progress: [████████████████████████████░░] 90% (36/40 plans across all milestones)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 35 (v1.0: 20, v1.1: 7, v2.0: 8)
+- Total plans completed: 36 (v1.0: 20, v1.1: 7, v2.0: 9)
 - Average duration: ~14 min
-- Total execution time: ~7.4 hours
+- Total execution time: ~7.5 hours
 
 **Recent Trend:**
 
@@ -64,6 +64,9 @@ Recent decisions affecting current work:
 - [v2.0-15-01]: Fluence change detection needs abs=0 in pytest.approx due to N_t-dominated signal (~0.1% change at 1e12)
 - [v2.0-16-01]: Phi_crit from min(N_D > 0) not mean/bulk; cv_at_fluence returns None at Phi_crit (not raises)
 - [v2.0-16-02]: Phi_crit ~4.86e13 protons/cm^2 for Petringa device; fluence levels chosen to show C-V progression without exceeding compensation
+- [v2.0-17-01]: Z1/2 E_a=4.5 eV calibrated for practical stability below 1000C (f~0.05 at 1000C/1h)
+- [v2.0-17-01]: K_tau recomputed directly from reduced etas (not dataclasses.replace) to handle f=1.0 edge case
+- [v2.0-17-01]: Carrier removal recovery proportional to Z1/2 fraction (Z1/2-dominated)
 
 ### Pending Todos
 
@@ -78,5 +81,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-25
-Stopped at: Completed 16-02-PLAN.md (dark current + C-V evolution publication notebook)
+Stopped at: Completed 17-01-PLAN.md (annealing kinetics foundation)
 Resume file: None
