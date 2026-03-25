@@ -154,13 +154,13 @@ Plans:
 3. User can sweep epi thickness, bulk doping, and bias voltage to identify the most radiation-hard configuration at a target fluence, with results presented as a ranked table
 4. User can generate a publication-quality validation notebook comparing simulator predictions against published 4H-SiC irradiation data with explicit documentation of device/energy mismatches
 
-**Plans**: TBD
+**Plans:** 3 plans
 
 Plans:
 
-- [ ] 18-01: TBD
-- [ ] 18-02: TBD
-- [ ] 18-03: TBD
+- [ ] 18-01-PLAN.md — Parameterize device geometry, single-defect constructor, uncertainty envelope, and parametric sweep functions with tests
+- [ ] 18-02-PLAN.md — Multi-defect comparison notebook (PARM-03) + uncertainty bands (PARM-01) + parametric optimization notebook (PARM-02)
+- [ ] 18-03-PLAN.md — Validation notebook against published 4H-SiC irradiation data (NBKV-04)
 
 ---
 
@@ -216,5 +216,5 @@ Phases execute in numeric order: 13 → 14 → 15 → 16 → 17 → 18
 | 14. CCE vs Fluence                         | v2.0      | 2/2            | Complete    | 2026-03-24 |
 | 15. Dark Current vs Fluence                | v2.0      | 2/2            | Complete    | 2026-03-25 |
 | 16. Carrier Removal & C-V Evolution        | v2.0      | 2/2            | Complete    | 2026-03-25 |
-| 17. Annealing Kinetics                     | 2/2 | Complete    | 2026-03-25 | -          |
+| 17. Annealing Kinetics                     | 2/2       | Complete       | 2026-03-25  | -          |
 | 18. Multi-Defect & Parametric Optimization | v2.0      | 0/3            | Not started | -          |
