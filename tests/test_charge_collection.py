@@ -13,6 +13,8 @@ import pytest
 
 from src.charge_collection import (
     add_generation_to_dd,
+    cce_anneal_vs_temperature,
+    cce_post_anneal,
     cce_vs_bias,
     cce_vs_bias_at_fluence,
     cce_vs_fluence,
@@ -508,3 +510,125 @@ class TestCCEVsFluence:
             f"Damaged CCE ({cce_damaged:.4f}) should be less than pristine "
             f"CCE ({pristine_cce_at_minus40:.4f}) at V=-40V"
         )
+
+
+# ===================================================================
+# Post-anneal CCE tests (Phase 17, Plan 02)
+# ===================================================================
+
+
+@pytest.mark.slow
+class TestCCEPostAnneal:
+    """Integration tests for post-anneal CCE functions."""
+
+    def test_cce_post_anneal_returns_dict(self):
+        """cce_post_anneal should return dict with all expected keys."""
+        result = cce_post_anneal(
+            fluence=1e13,
+            T_anneal=873.15,  # 600C
+            t_anneal=3600.0,  # 1 hour
+            V_bias=-40.0,
+        )
+        expected_keys = {
+            "cce",
+            "fluence",
+            "T_anneal",
+            "t_anneal",
+            "f_Z12",
+            "f_EH67",
+            "f_EH4",
+            "tau_n",
+            "tau_p",
+        }
+        assert expected_keys.issubset(
+            set(result.keys())
+        ), f"Missing keys: {expected_keys - set(result.keys())}"
+
+    def test_cce_post_anneal_recovery(self):
+        """Post-anneal CCE at 600C/1h should be higher than damaged CCE.
+
+        This is the core ANNL-02 test: annealing partially recovers CCE.
+        EH4 and EH67 defects anneal out at 600C, improving lifetimes.
+        """
+        fluence = 1e13
+
+        # Damaged CCE (no annealing)
+        damaged_result = cce_vs_fluence(np.array([fluence]), V_bias=-40.0)
+        cce_damaged = damaged_result["cce_values"][0]
+
+        # Post-anneal CCE at 600C/1h
+        anneal_result = cce_post_anneal(
+            fluence=fluence,
+            T_anneal=873.15,
+            t_anneal=3600.0,
+            V_bias=-40.0,
+        )
+        cce_annealed = anneal_result["cce"]
+
+        assert not np.isnan(cce_damaged), "Damaged CCE should not be NaN"
+        assert not np.isnan(cce_annealed), "Annealed CCE should not be NaN"
+        assert cce_annealed > cce_damaged, (
+            f"Post-anneal CCE ({cce_annealed:.4f}) should be > damaged CCE "
+            f"({cce_damaged:.4f}) after 600C/1h anneal"
+        )
+
+    def test_cce_post_anneal_partial_only(self, pristine_cce_at_minus40):
+        """At 600C, Z1/2 is stable so recovery is partial, not full.
+
+        Post-anneal CCE < pristine CCE because Z1/2 (E_a=4.5 eV) does
+        not anneal at 600C (f_Z12 ~ 0).
+        """
+        anneal_result = cce_post_anneal(
+            fluence=1e13,
+            T_anneal=873.15,
+            t_anneal=3600.0,
+            V_bias=-40.0,
+        )
+        cce_annealed = anneal_result["cce"]
+
+        assert not np.isnan(cce_annealed), "Annealed CCE should not be NaN"
+        assert cce_annealed < pristine_cce_at_minus40, (
+            f"Post-anneal CCE ({cce_annealed:.4f}) should be < pristine CCE "
+            f"({pristine_cce_at_minus40:.4f}) -- Z1/2 limits full recovery"
+        )
+
+    def test_cce_post_anneal_zero_fluence(self, pristine_cce_at_minus40):
+        """At fluence=0, post-anneal CCE equals pristine regardless of T_anneal."""
+        anneal_result = cce_post_anneal(
+            fluence=0.0,
+            T_anneal=1273.15,  # 1000C (extreme)
+            t_anneal=3600.0,
+            V_bias=-40.0,
+        )
+        cce_annealed = anneal_result["cce"]
+
+        assert abs(cce_annealed - pristine_cce_at_minus40) < 1e-4, (
+            f"Zero-fluence post-anneal CCE ({cce_annealed:.6f}) should match "
+            f"pristine ({pristine_cce_at_minus40:.6f})"
+        )
+
+    def test_cce_anneal_vs_temperature_monotonic(self):
+        """CCE recovery should increase monotonically with annealing temperature.
+
+        Higher temperature anneals more defects (especially EH4/EH67),
+        improving lifetimes and CCE.
+        """
+        T_range = np.array([673.15, 773.15, 873.15, 1073.15])  # 400-800C
+        result = cce_anneal_vs_temperature(
+            fluence=1e13,
+            T_anneal_range=T_range,
+            t_anneal=3600.0,
+            V_bias=-40.0,
+        )
+        cce = result["cce_values"]
+        valid = ~np.isnan(cce)
+        cce_valid = cce[valid]
+
+        assert (
+            len(cce_valid) >= 3
+        ), f"Need at least 3 valid CCE points, got {len(cce_valid)}"
+        for i in range(1, len(cce_valid)):
+            assert cce_valid[i] >= cce_valid[i - 1] - 1e-4, (
+                f"CCE not monotonically increasing with temperature: "
+                f"CCE[{i-1}]={cce_valid[i-1]:.4f} > CCE[{i}]={cce_valid[i]:.4f}"
+            )
