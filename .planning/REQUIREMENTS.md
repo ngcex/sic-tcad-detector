@@ -34,7 +34,7 @@ Requirements for radiation damage milestone. Each maps to roadmap phases.
 ### Annealing
 
 - [x] **ANNL-01**: Simulator can model thermal annealing recovery fraction as function of temperature and time
-- [ ] **ANNL-02**: User can predict post-anneal CCE and dark current recovery at specified thermal treatment
+- [x] **ANNL-02**: User can predict post-anneal CCE and dark current recovery at specified thermal treatment
 
 ### Parametric & Sensitivity
 
@@ -90,7 +90,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CRMV-01     | Phase 16 | Complete |
 | CRMV-02     | Phase 16 | Complete |
 | ANNL-01     | Phase 17 | Complete |
-| ANNL-02     | Phase 17 | Pending |
+| ANNL-02     | Phase 17 | Complete |
 | PARM-01     | Phase 18 | Pending |
 | PARM-02     | Phase 18 | Pending |
 | PARM-03     | Phase 18 | Pending |

@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Radiation Damage Modeling
 status: in-progress
-last_updated: "2026-03-25T16:32:02Z"
+last_updated: "2026-03-25T16:45:35Z"
 progress:
   total_phases: 18
-  completed_phases: 16
+  completed_phases: 17
   total_plans: 40
-  completed_plans: 36
+  completed_plans: 37
 ---
 
 # Project State
@@ -22,18 +22,18 @@ See: .planning/PROJECT.md (updated 2026-03-24)
 
 ## Current Position
 
-Phase: 17 of 18 (Annealing Kinetics)
-Plan: 1 of 2 in current phase (1 complete)
-Status: Plan 17-01 complete, ready for 17-02
-Last activity: 2026-03-25 — Completed 17-01 annealing kinetics foundation
+Phase: 17 of 18 (Annealing Kinetics) -- COMPLETE
+Plan: 2 of 2 in current phase (2 complete)
+Status: Phase 17 complete, ready for Phase 18
+Last activity: 2026-03-25 — Completed 17-02 post-anneal CCE and dark current
 
-Progress: [████████████████████████████░░] 90% (36/40 plans across all milestones)
+Progress: [█████████████████████████████░] 93% (37/40 plans across all milestones)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 36 (v1.0: 20, v1.1: 7, v2.0: 9)
+- Total plans completed: 37 (v1.0: 20, v1.1: 7, v2.0: 10)
 - Average duration: ~14 min
 - Total execution time: ~7.5 hours
 
@@ -67,6 +67,7 @@ Recent decisions affecting current work:
 - [v2.0-17-01]: Z1/2 E_a=4.5 eV calibrated for practical stability below 1000C (f~0.05 at 1000C/1h)
 - [v2.0-17-01]: K_tau recomputed directly from reduced etas (not dataclasses.replace) to handle f=1.0 edge case
 - [v2.0-17-01]: Carrier removal recovery proportional to Z1/2 fraction (Z1/2-dominated)
+- [v2.0-17-02]: Dark current recovery validated via SRH component (N_t TAT term dominates total by 4 orders of magnitude)
 
 ### Pending Todos
 
@@ -81,5 +82,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-25
-Stopped at: Completed 17-01-PLAN.md (annealing kinetics foundation)
+Stopped at: Completed 17-02-PLAN.md (post-anneal CCE and dark current)
 Resume file: None

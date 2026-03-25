@@ -45,7 +45,7 @@ Full details: [milestones/v1.1-ROADMAP.md](milestones/v1.1-ROADMAP.md)
 - [x] **Phase 14: CCE vs Fluence** - Primary scientific deliverable: fluence sweep infrastructure and CCE degradation curves with sensitivity analysis (completed 2026-03-24)
 - [x] **Phase 15: Dark Current vs Fluence** - Additive delta-J radiation-induced dark current model preserving v1.1 calibration (completed 2026-03-25)
 - [x] **Phase 16: Carrier Removal & C-V Evolution** - C-V shift under irradiation, full compensation detection, and combined dark current / C-V notebook (completed 2026-03-25)
-- [ ] **Phase 17: Annealing Kinetics** - Thermal recovery modeling for defect concentrations, CCE, and dark current
+- [x] **Phase 17: Annealing Kinetics** - Thermal recovery modeling for defect concentrations, CCE, and dark current (completed 2026-03-25)
 - [ ] **Phase 18: Multi-Defect Model & Parametric Optimization** - Three-defect Burin model, parametric radiation hardness sweeps, and publication-grade validation
 
 ## Phase Details
@@ -135,7 +135,7 @@ Plans:
 1. User can model defect annealing recovery fraction as a function of temperature and time using Arrhenius first-order kinetics with SiC-specific activation energies
 2. User can predict post-anneal CCE and dark current at a specified thermal treatment (temperature, duration), confirming that Z1/2 is thermally stable below ~1000C while other defects recover at lower temperatures
 
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 
@@ -216,5 +216,5 @@ Phases execute in numeric order: 13 → 14 → 15 → 16 → 17 → 18
 | 14. CCE vs Fluence                         | v2.0      | 2/2            | Complete    | 2026-03-24 |
 | 15. Dark Current vs Fluence                | v2.0      | 2/2            | Complete    | 2026-03-25 |
 | 16. Carrier Removal & C-V Evolution        | v2.0      | 2/2            | Complete    | 2026-03-25 |
-| 17. Annealing Kinetics                     | 1/2 | In Progress|  | -          |
+| 17. Annealing Kinetics                     | 2/2 | Complete   | 2026-03-25 | -          |
 | 18. Multi-Defect & Parametric Optimization | v2.0      | 0/3            | Not started | -          |
