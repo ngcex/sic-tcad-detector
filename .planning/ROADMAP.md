@@ -213,7 +213,7 @@ Phases execute in numeric order: 13 → 14 → 15 → 16 → 17 → 18
 | 12. Transient FLASH Dynamics               | v1.1      | 2/2            | Complete    | 2026-03-24 |
 | 13. Damage Physics Foundation              | 2/2       | Complete       | 2026-03-24  | -          |
 | 14. CCE vs Fluence                         | 2/2 | Complete    | 2026-03-24 | -          |
-| 15. Dark Current vs Fluence                | 2/2 | Complete   | 2026-03-25 | -          |
+| 15. Dark Current vs Fluence                | 2/2 | Complete    | 2026-03-25 | -          |
 | 16. Carrier Removal & C-V Evolution        | v2.0      | 0/2            | Not started | -          |
 | 17. Annealing Kinetics                     | v2.0      | 0/1            | Not started | -          |
 | 18. Multi-Defect & Parametric Optimization | v2.0      | 0/3            | Not started | -          |
