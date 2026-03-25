@@ -135,7 +135,7 @@ Plans:
 1. User can model defect annealing recovery fraction as a function of temperature and time using Arrhenius first-order kinetics with SiC-specific activation energies
 2. User can predict post-anneal CCE and dark current at a specified thermal treatment (temperature, duration), confirming that Z1/2 is thermally stable below ~1000C while other defects recover at lower temperatures
 
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
 
@@ -216,5 +216,5 @@ Phases execute in numeric order: 13 → 14 → 15 → 16 → 17 → 18
 | 14. CCE vs Fluence                         | v2.0      | 2/2            | Complete    | 2026-03-24 |
 | 15. Dark Current vs Fluence                | v2.0      | 2/2            | Complete    | 2026-03-25 |
 | 16. Carrier Removal & C-V Evolution        | v2.0      | 2/2            | Complete    | 2026-03-25 |
-| 17. Annealing Kinetics                     | v2.0      | 0/2            | Not started | -          |
+| 17. Annealing Kinetics                     | 1/2 | In Progress|  | -          |
 | 18. Multi-Defect & Parametric Optimization | v2.0      | 0/3            | Not started | -          |
