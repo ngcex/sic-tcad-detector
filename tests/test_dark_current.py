@@ -10,6 +10,7 @@ import devsim
 
 from src.dark_current import (
     create_dark_current_device,
+    dark_current_post_anneal,
     dark_current_vs_fluence,
     extract_dark_current_components,
     dark_current_sweep,
@@ -409,3 +410,100 @@ class TestDarkCurrentVsFluence:
         assert np.isnan(val) or np.isfinite(
             val
         ), f"Expected NaN or finite at 1e15 fluence, got {val}"
+
+
+# ---------------------------------------------------------------------------
+# TestDarkCurrentPostAnneal (Phase 17, Plan 02)
+# ---------------------------------------------------------------------------
+
+
+class TestDarkCurrentPostAnneal:
+    """Integration tests for dark_current_post_anneal()."""
+
+    def test_dark_current_post_anneal_returns_dict(self):
+        """dark_current_post_anneal should return dict with expected keys."""
+        result = dark_current_post_anneal(
+            fluence=1e13,
+            T_anneal=873.15,  # 600C
+            t_anneal=3600.0,  # 1 hour
+            V_bias=-30.0,
+            area=0.04,
+        )
+        expected_keys = {
+            "I_total",
+            "fluence",
+            "T_anneal",
+            "t_anneal",
+            "V_bias",
+            "f_Z12",
+            "f_EH67",
+            "f_EH4",
+            "I_SRH",
+            "I_TAT",
+            "I_SRV",
+        }
+        assert expected_keys.issubset(
+            set(result.keys())
+        ), f"Missing keys: {expected_keys - set(result.keys())}"
+
+    def test_dark_current_post_anneal_recovery(self):
+        """Post-anneal SRH dark current component should be LOWER than irradiated.
+
+        Annealing recovers lifetimes, reducing SRH generation current.
+        The total dark current is dominated by the effective N_t TAT term
+        (~1e-10 A) which does not depend on bulk lifetime, so the SRH
+        component (~1e-14 A) is the physically relevant indicator of
+        annealing recovery for dark current.
+        """
+        fluence = 1e13
+
+        # Damaged dark current (no annealing)
+        damaged_result = dark_current_vs_fluence(
+            fluence_range=np.array([fluence]),
+            V_bias=-30.0,
+            area=0.04,
+        )
+        I_SRH_damaged = abs(damaged_result["I_SRH"][0])
+
+        # Post-anneal dark current at 600C/1h
+        anneal_result = dark_current_post_anneal(
+            fluence=fluence,
+            T_anneal=873.15,
+            t_anneal=3600.0,
+            V_bias=-30.0,
+            area=0.04,
+        )
+        I_SRH_annealed = abs(anneal_result["I_SRH"])
+
+        assert not np.isnan(I_SRH_damaged), "Damaged I_SRH should not be NaN"
+        assert not np.isnan(I_SRH_annealed), "Annealed I_SRH should not be NaN"
+        assert I_SRH_annealed < I_SRH_damaged, (
+            f"Post-anneal SRH current ({I_SRH_annealed:.3e} A) should be < "
+            f"damaged SRH ({I_SRH_damaged:.3e} A) after 600C/1h anneal"
+        )
+
+    def test_dark_current_post_anneal_zero_fluence(self):
+        """At fluence=0, post-anneal dark current equals pristine."""
+        pristine_result = dark_current_vs_fluence(
+            fluence_range=np.array([0.0]),
+            V_bias=-30.0,
+            area=0.04,
+        )
+        I_pristine = abs(pristine_result["I_total"][0])
+
+        anneal_result = dark_current_post_anneal(
+            fluence=0.0,
+            T_anneal=1273.15,  # 1000C
+            t_anneal=3600.0,
+            V_bias=-30.0,
+            area=0.04,
+        )
+        I_annealed = abs(anneal_result["I_total"])
+
+        assert not np.isnan(I_pristine), "Pristine dark current should not be NaN"
+        assert not np.isnan(I_annealed), "Annealed dark current should not be NaN"
+        # Allow 1% tolerance for numerical differences in device creation
+        assert I_annealed == pytest.approx(I_pristine, rel=0.01), (
+            f"Zero-fluence post-anneal ({I_annealed:.3e} A) should match "
+            f"pristine ({I_pristine:.3e} A)"
+        )
