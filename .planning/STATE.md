@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Radiation Damage Modeling
 status: unknown
-last_updated: "2026-03-24T22:28:41.321Z"
+last_updated: "2026-03-25T07:52:00Z"
 progress:
-  total_phases: 14
+  total_phases: 15
   completed_phases: 14
-  total_plans: 31
-  completed_plans: 31
+  total_plans: 33
+  completed_plans: 32
 ---
 
 # Project State
@@ -18,22 +18,22 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-24)
 
 **Core value:** Predict how CCE in 4H-SiC detectors degrades under proton irradiation, providing validated radiation damage predictions with design optimization guidance.
-**Current focus:** Phase 14 — CCE vs Fluence
+**Current focus:** Phase 15 — Dark Current vs Fluence
 
 ## Current Position
 
-Phase: 14 of 18 (CCE vs Fluence) -- COMPLETE
-Plan: 2 of 2 in current phase (all complete)
-Status: Phase 14 complete, ready for Phase 15
-Last activity: 2026-03-24 — Completed 14-02 publication notebook
+Phase: 15 of 18 (Dark Current vs Fluence) -- IN PROGRESS
+Plan: 1 of 2 in current phase (1 complete)
+Status: 15-01 complete, ready for 15-02
+Last activity: 2026-03-25 — Completed 15-01 dark current vs fluence sweep
 
-Progress: [████████████████████████░░░░░░] 78% (31/40 plans across all milestones)
+Progress: [████████████████████████░░░░░░] 80% (32/40 plans across all milestones)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 31 (v1.0: 20, v1.1: 7, v2.0: 4)
+- Total plans completed: 32 (v1.0: 20, v1.1: 7, v2.0: 5)
 - Average duration: ~14 min
 - Total execution time: ~7.4 hours
 
@@ -60,6 +60,8 @@ Recent decisions affecting current work:
 - [v2.0-14-01]: Fluence range limited to ~5e13 for 62 MeV protons to avoid solver divergence
 - [v2.0-14-02]: Bias-sweep max fluence reduced to 5e13 (cce_vs_bias_at_fluence single-device pattern lacks per-point error handling)
 - [v2.0-14-02]: Sensitivity envelope via uniform 0.5x-2.0x scaling of all eta damage constants
+- [v2.0-15-01]: Dark current solver robust at extreme fluence (no generation injection unlike CCE); test accepts finite or NaN
+- [v2.0-15-01]: Fluence change detection needs abs=0 in pytest.approx due to N_t-dominated signal (~0.1% change at 1e12)
 
 ### Pending Todos
 
@@ -73,6 +75,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-24
-Stopped at: Completed 14-02-PLAN.md (publication notebook)
+Last session: 2026-03-25
+Stopped at: Completed 15-01-PLAN.md (dark current vs fluence sweep)
 Resume file: None
