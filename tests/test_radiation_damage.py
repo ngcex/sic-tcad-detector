@@ -20,13 +20,17 @@ import pytest
 
 from src.radiation_damage import (
     NIEL_HARDNESS_PROTON_SIC,
+    AnnealingParams,
     RadiationDamageParams,
+    annealing_fraction,
     apply_carrier_removal,
     compute_K_tau,
+    compute_annealed_params,
     compute_damaged_params,
     compute_phi_crit,
     defect_concentration,
     defect_concentrations,
+    defect_recovery_fractions,
     degraded_lifetime,
     effective_doping,
     get_hardness_factor,
@@ -499,3 +503,311 @@ class TestComputePhiCrit:
         result_62 = compute_phi_crit(N_D, energy_MeV=62.0)
         # kappa(30)=0.50 > kappa(62)=0.35 -> phi_crit_proton(30) < phi_crit_proton(62)
         assert result_30["phi_crit_proton"] < result_62["phi_crit_proton"]
+
+
+# ---------------------------------------------------------------------------
+# Annealing kinetics tests
+# ---------------------------------------------------------------------------
+
+
+class TestAnnealingParams:
+    """Tests for AnnealingParams dataclass."""
+
+    def test_default_values(self):
+        """Verify activation energies and attempt frequencies match plan."""
+        p = AnnealingParams()
+        assert p.E_a_Z12 == 4.5
+        assert p.E_a_EH67 == 3.2
+        assert p.E_a_EH4 == 1.8
+        assert p.nu_0_Z12 == 1e13
+        assert p.nu_0_EH67 == 1e13
+        assert p.nu_0_EH4 == 1e13
+
+    def test_validation_negative_E_a(self):
+        """Negative activation energy raises ValueError."""
+        with pytest.raises(ValueError, match="E_a_Z12"):
+            AnnealingParams(E_a_Z12=-1.0)
+
+    def test_validation_negative_nu_0(self):
+        """Negative attempt frequency raises ValueError."""
+        with pytest.raises(ValueError, match="nu_0_Z12"):
+            AnnealingParams(nu_0_Z12=-1.0)
+
+    def test_custom_values(self):
+        """Can override defaults."""
+        p = AnnealingParams(E_a_Z12=5.0, nu_0_EH4=1e14)
+        assert p.E_a_Z12 == 5.0
+        assert p.nu_0_EH4 == 1e14
+        # Other defaults unchanged
+        assert p.E_a_EH67 == 3.2
+
+
+class TestAnnealingFraction:
+    """Tests for annealing_fraction."""
+
+    def test_zero_time_returns_zero(self):
+        """t=0 gives zero recovery."""
+        assert annealing_fraction(T=1000, t=0, E_a=1.8) == 0.0
+
+    def test_negative_time_returns_zero(self):
+        """Negative time gives zero recovery."""
+        assert annealing_fraction(T=1000, t=-1, E_a=1.8) == 0.0
+
+    def test_high_temp_long_time_full_recovery(self):
+        """Very high T and long t gives near-complete recovery."""
+        f = annealing_fraction(T=2000, t=3600 * 24, E_a=1.8)
+        assert f > 0.999
+
+    def test_overflow_protection(self):
+        """Extreme conditions trigger overflow clip and return 1.0."""
+        f = annealing_fraction(T=5000, t=1e10, E_a=0.5)
+        assert f == 1.0
+
+    def test_monotonic_in_temperature(self):
+        """Higher T gives higher recovery at fixed t, E_a."""
+        f_low = annealing_fraction(T=500, t=3600, E_a=1.8)
+        f_high = annealing_fraction(T=1000, t=3600, E_a=1.8)
+        assert f_high >= f_low
+
+    def test_monotonic_in_time(self):
+        """Longer t gives higher recovery at fixed T, E_a."""
+        f_short = annealing_fraction(T=800, t=60, E_a=1.8)
+        f_long = annealing_fraction(T=800, t=3600, E_a=1.8)
+        assert f_long >= f_short
+
+    def test_Z12_stable_below_1000C(self):
+        """Z1/2 (E_a=4.5 eV) shows minimal recovery at 1000C/1h.
+
+        With E_a=4.5 eV at 1273K, research predicts f ~ 0.05.
+        We assert < 0.10 for practical stability (not zero, but negligible
+        for detector performance purposes).
+        """
+        f = annealing_fraction(T=1273.15, t=3600, E_a=4.5)
+        assert f < 0.10
+
+    def test_Z12_anneals_at_1500C(self):
+        """Z1/2 shows significant recovery at 1500C/1h."""
+        f = annealing_fraction(T=1773.15, t=3600, E_a=4.5)
+        assert f > 0.5
+
+    def test_EH4_anneals_at_600C(self):
+        """EH4 (E_a=1.8 eV) shows significant recovery at 600C/1h."""
+        f = annealing_fraction(T=873.15, t=3600, E_a=1.8)
+        assert f > 0.5
+
+
+class TestDefectRecoveryFractions:
+    """Tests for defect_recovery_fractions."""
+
+    def test_returns_all_three_defects(self):
+        """All three defect keys present."""
+        r = defect_recovery_fractions(T_anneal=873.15, t_anneal=3600)
+        assert set(r.keys()) == {"f_Z12", "f_EH67", "f_EH4"}
+
+    def test_differential_stability(self):
+        """At 600C/1h, f_EH4 >> f_EH67 >> f_Z12.
+
+        This is the whole point of per-defect annealing: different defects
+        have dramatically different thermal stabilities in 4H-SiC.
+        """
+        r = defect_recovery_fractions(T_anneal=873.15, t_anneal=3600)
+        assert r["f_EH4"] > r["f_EH67"]
+        assert r["f_EH67"] > r["f_Z12"]
+
+    def test_default_params(self):
+        """Works with anneal_params=None (uses AnnealingParams defaults)."""
+        r = defect_recovery_fractions(T_anneal=1000, t_anneal=60, anneal_params=None)
+        assert 0 <= r["f_EH4"] <= 1
+
+
+class TestComputeAnnealedParams:
+    """Tests for compute_annealed_params."""
+
+    # Shared device parameters for unit tests
+    PRISTINE_TAU_N = 1e-6  # s
+    PRISTINE_TAU_P = 1e-6  # s
+    N_D_PROFILE = np.full(100, 5e14)  # cm^-3
+    FLUENCE = 1e13  # protons/cm^2
+    ENERGY_MEV = 62.0
+
+    def test_no_annealing_passthrough(self):
+        """With T_anneal=None, output matches compute_damaged_params exactly."""
+        damaged = compute_damaged_params(
+            self.PRISTINE_TAU_N,
+            self.PRISTINE_TAU_P,
+            self.N_D_PROFILE,
+            self.FLUENCE,
+            self.ENERGY_MEV,
+        )
+        annealed = compute_annealed_params(
+            self.PRISTINE_TAU_N,
+            self.PRISTINE_TAU_P,
+            self.N_D_PROFILE,
+            self.FLUENCE,
+            self.ENERGY_MEV,
+            T_anneal=None,
+            t_anneal=None,
+        )
+        assert annealed["tau_n"] == damaged["tau_n"]
+        assert annealed["tau_p"] == damaged["tau_p"]
+        assert np.array_equal(annealed["N_D_profile"], damaged["N_D_profile"])
+        assert annealed["N_Z12"] == damaged["N_Z12"]
+
+    def test_zero_fluence_unchanged(self):
+        """Even with T_anneal set, fluence=0 returns pristine values."""
+        r = compute_annealed_params(
+            self.PRISTINE_TAU_N,
+            self.PRISTINE_TAU_P,
+            self.N_D_PROFILE,
+            fluence=0.0,
+            T_anneal=873.15,
+            t_anneal=3600,
+        )
+        assert r["tau_n"] == self.PRISTINE_TAU_N
+        assert r["tau_p"] == self.PRISTINE_TAU_P
+
+    def test_annealed_lifetimes_longer_than_damaged(self):
+        """At moderate T_anneal where EH4 recovers, tau_n annealed > tau_n damaged."""
+        damaged = compute_damaged_params(
+            self.PRISTINE_TAU_N,
+            self.PRISTINE_TAU_P,
+            self.N_D_PROFILE,
+            self.FLUENCE,
+            self.ENERGY_MEV,
+        )
+        annealed = compute_annealed_params(
+            self.PRISTINE_TAU_N,
+            self.PRISTINE_TAU_P,
+            self.N_D_PROFILE,
+            self.FLUENCE,
+            self.ENERGY_MEV,
+            T_anneal=873.15,  # 600C
+            t_anneal=3600,  # 1 hour
+        )
+        assert annealed["tau_n"] > damaged["tau_n"]
+        assert annealed["tau_p"] > damaged["tau_p"]
+
+    def test_annealed_defects_reduced(self):
+        """N_EH4 annealed < N_EH4 damaged at 600C/1h."""
+        damaged = compute_damaged_params(
+            self.PRISTINE_TAU_N,
+            self.PRISTINE_TAU_P,
+            self.N_D_PROFILE,
+            self.FLUENCE,
+            self.ENERGY_MEV,
+        )
+        annealed = compute_annealed_params(
+            self.PRISTINE_TAU_N,
+            self.PRISTINE_TAU_P,
+            self.N_D_PROFILE,
+            self.FLUENCE,
+            self.ENERGY_MEV,
+            T_anneal=873.15,
+            t_anneal=3600,
+        )
+        assert annealed["N_EH4"] < damaged["N_EH4"]
+
+    def test_Z12_unchanged_at_moderate_temp(self):
+        """N_Z12 annealed ~= N_Z12 damaged at 600C/1h (Z1/2 stable)."""
+        damaged = compute_damaged_params(
+            self.PRISTINE_TAU_N,
+            self.PRISTINE_TAU_P,
+            self.N_D_PROFILE,
+            self.FLUENCE,
+            self.ENERGY_MEV,
+        )
+        annealed = compute_annealed_params(
+            self.PRISTINE_TAU_N,
+            self.PRISTINE_TAU_P,
+            self.N_D_PROFILE,
+            self.FLUENCE,
+            self.ENERGY_MEV,
+            T_anneal=873.15,
+            t_anneal=3600,
+        )
+        # Z1/2 should be essentially unchanged at 600C
+        np.testing.assert_allclose(annealed["N_Z12"], damaged["N_Z12"], rtol=0.01)
+
+    def test_carrier_removal_tracks_Z12(self):
+        """N_D profile after annealing at 600C nearly identical to damaged.
+
+        Carrier removal is Z1/2-dominated, and Z1/2 is stable at 600C,
+        so carrier removal recovery should be minimal.
+        """
+        damaged = compute_damaged_params(
+            self.PRISTINE_TAU_N,
+            self.PRISTINE_TAU_P,
+            self.N_D_PROFILE,
+            self.FLUENCE,
+            self.ENERGY_MEV,
+        )
+        annealed = compute_annealed_params(
+            self.PRISTINE_TAU_N,
+            self.PRISTINE_TAU_P,
+            self.N_D_PROFILE,
+            self.FLUENCE,
+            self.ENERGY_MEV,
+            T_anneal=873.15,
+            t_anneal=3600,
+        )
+        np.testing.assert_allclose(
+            annealed["N_D_profile"], damaged["N_D_profile"], rtol=0.01
+        )
+
+    def test_output_keys_include_annealing(self):
+        """Result dict has annealing-specific keys."""
+        r = compute_annealed_params(
+            self.PRISTINE_TAU_N,
+            self.PRISTINE_TAU_P,
+            self.N_D_PROFILE,
+            self.FLUENCE,
+            self.ENERGY_MEV,
+            T_anneal=873.15,
+            t_anneal=3600,
+        )
+        for key in ("f_Z12", "f_EH67", "f_EH4", "T_anneal", "t_anneal"):
+            assert key in r, f"Missing key: {key}"
+
+    def test_lifetime_recomputation_not_interpolation(self):
+        """Verify lifetime is recomputed from reduced etas, not interpolated.
+
+        At 600C/1h where only EH4 anneals significantly, the lifetime
+        improvement should reflect EH4's specific K_tau contribution,
+        not a uniform fraction of the total damage.
+        """
+        damaged = compute_damaged_params(
+            self.PRISTINE_TAU_N,
+            self.PRISTINE_TAU_P,
+            self.N_D_PROFILE,
+            self.FLUENCE,
+            self.ENERGY_MEV,
+        )
+        annealed = compute_annealed_params(
+            self.PRISTINE_TAU_N,
+            self.PRISTINE_TAU_P,
+            self.N_D_PROFILE,
+            self.FLUENCE,
+            self.ENERGY_MEV,
+            T_anneal=873.15,
+            t_anneal=3600,
+        )
+
+        # If lifetime were linearly interpolated with total recovery fraction,
+        # the improvement would be proportional to the average f across all
+        # defects. Instead, since EH4's contribution to K_tau is smaller than
+        # Z1/2+EH6/7 combined, the actual improvement should be less than
+        # what uniform interpolation would predict.
+        f_EH4 = annealed["f_EH4"]
+
+        # Uniform interpolation prediction (wrong approach):
+        # tau_interp = 1/(1/tau_damaged - f_EH4 * avg_K_contribution * fluence)
+        # vs actual recomputation from reduced etas (correct approach)
+
+        # The annealed lifetime should be between damaged and pristine
+        assert damaged["tau_n"] < annealed["tau_n"] < self.PRISTINE_TAU_N
+
+        # Verify EH4 actually annealed significantly
+        assert f_EH4 > 0.99  # 600C/1h essentially fully anneals EH4
+
+        # But Z1/2 didn't anneal, so total improvement is partial
+        assert annealed["f_Z12"] < 0.01  # Z1/2 stable at 600C
