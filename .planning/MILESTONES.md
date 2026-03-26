@@ -45,3 +45,23 @@
 - TAT uses effective N_t generation rate rather than physical trap density (documented, physically correct for 4H-SiC)
 
 ---
+
+## v2.0 Radiation Damage Modeling (Shipped: 2026-03-26)
+
+**Phases completed:** 6 phases (13-18), 13 plans
+**Timeline:** 3 days (2026-03-24 → 2026-03-26)
+**Commits:** 49
+**Requirements:** 21/21 satisfied
+**Codebase:** ~15,400 LOC Python (13,100 new lines)
+
+**Key accomplishments:**
+
+- Pure-Python radiation damage module with Burin 2024 defect constants (Z1/2, EH4, EH6/7), NIEL energy scaling, and zero-fluence regression safety against v1.1 baseline
+- CCE vs fluence prediction curves with multi-bias overlay, bias recovery analysis, and sensitivity envelope from damage constant scatter (0.5x–2x)
+- Additive delta-J dark current model preserving v1.1 calibrated 18.5 pA baseline, with component decomposition showing radiation-induced vs pristine contributions
+- Carrier removal and C-V evolution under irradiation with critical fluence detection (Phi_crit ~4.86e13 cm⁻²) and progressive C-V flattening visualization
+- Thermal annealing kinetics with per-defect Arrhenius recovery — Z1/2 stable below 1000°C, other defects recover at lower temperatures
+- Three-defect Burin model comparison against single-effective-defect, parametric radiation hardness optimization (epi × doping × bias), and validation against published 4H-SiC irradiation data
+- 6 publication-quality Jupyter notebooks (09: damage overview, 10: CCE vs fluence, 11: dark current + C-V, 12: multi-defect comparison, 13: parametric optimization, 14: literature validation)
+
+---
