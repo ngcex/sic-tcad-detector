@@ -38,9 +38,9 @@ Requirements for radiation damage milestone. Each maps to roadmap phases.
 
 ### Parametric & Sensitivity
 
-- [ ] **PARM-01**: User can generate CCE vs fluence with uncertainty bands from damage constant scatter
-- [ ] **PARM-02**: User can sweep epi thickness × doping × bias to identify most radiation-hard configurations
-- [ ] **PARM-03**: User can compare single-defect vs multi-defect (Burin three-defect) model predictions
+- [x] **PARM-01**: User can generate CCE vs fluence with uncertainty bands from damage constant scatter
+- [x] **PARM-02**: User can sweep epi thickness × doping × bias to identify most radiation-hard configurations
+- [x] **PARM-03**: User can compare single-defect vs multi-defect (Burin three-defect) model predictions
 
 ### Notebooks & Validation
 
@@ -91,9 +91,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CRMV-02     | Phase 16 | Complete |
 | ANNL-01     | Phase 17 | Complete |
 | ANNL-02     | Phase 17 | Complete |
-| PARM-01     | Phase 18 | Pending |
-| PARM-02     | Phase 18 | Pending |
-| PARM-03     | Phase 18 | Pending |
+| PARM-01     | Phase 18 | Complete |
+| PARM-02     | Phase 18 | Complete |
+| PARM-03     | Phase 18 | Complete |
 | NBKV-01     | Phase 13 | Complete |
 | NBKV-02     | Phase 14 | Complete |
 | NBKV-03     | Phase 16 | Complete |

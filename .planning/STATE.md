@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Radiation Damage Modeling
-status: unknown
-last_updated: "2026-03-25T17:39:24.585Z"
+status: in-progress
+last_updated: "2026-03-26T00:24:00Z"
 progress:
   total_phases: 17
   completed_phases: 17
   total_plans: 37
-  completed_plans: 37
+  completed_plans: 38
 ---
 
 # Project State
@@ -18,16 +18,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-24)
 
 **Core value:** Predict how CCE in 4H-SiC detectors degrades under proton irradiation, providing validated radiation damage predictions with design optimization guidance.
-**Current focus:** Phase 17 — Annealing Kinetics
+**Current focus:** Phase 18 — Multi-Defect Parametric Optimization
 
 ## Current Position
 
-Phase: 17 of 18 (Annealing Kinetics) -- COMPLETE
-Plan: 2 of 2 in current phase (2 complete)
-Status: Phase 17 complete, ready for Phase 18
-Last activity: 2026-03-25 — Completed 17-02 post-anneal CCE and dark current
+Phase: 18 of 18 (Multi-Defect Parametric Optimization)
+Plan: 1 of 3 in current phase (1 complete)
+Status: Phase 18 in progress
+Last activity: 2026-03-26 — Completed 18-01 parametric optimization infrastructure
 
-Progress: [█████████████████████████████░] 93% (37/40 plans across all milestones)
+Progress: [██████████████████████████████] 95% (38/40 plans across all milestones)
 
 ## Performance Metrics
 
@@ -68,6 +68,9 @@ Recent decisions affecting current work:
 - [v2.0-17-01]: K_tau recomputed directly from reduced etas (not dataclasses.replace) to handle f=1.0 edge case
 - [v2.0-17-01]: Carrier removal recovery proportional to Z1/2 fraction (Z1/2-dominated)
 - [v2.0-17-02]: Dark current recovery validated via SRH component (N_t TAT term dominates total by 4 orders of magnitude)
+- [v2.0-18-01]: Geometry kwargs (N_D_junction/N_D_bulk/L_transition) placed after epi_thickness_cm in all sweep functions
+- [v2.0-18-01]: Near-zero eta (1e-10) for disabled defects in single-defect model (validation requires eta > 0)
+- [v2.0-18-01]: cce_uncertainty_envelope/radiation_hardness_sweep use lazy imports to keep radiation_damage.py devsim-free
 
 ### Pending Todos
 
@@ -81,6 +84,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-25
-Stopped at: Completed 17-02-PLAN.md (post-anneal CCE and dark current)
+Last session: 2026-03-26
+Stopped at: Completed 18-01-PLAN.md (parametric optimization infrastructure)
 Resume file: None
