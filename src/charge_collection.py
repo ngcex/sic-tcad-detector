@@ -587,6 +587,9 @@ def cce_vs_fluence(
     fluence_range,
     V_bias=-40.0,
     epi_thickness_cm=10e-4,
+    N_D_junction=2.90e15,
+    N_D_bulk=8.50e13,
+    L_transition=1.0e-4,
     alpha_range_cm=15e-4,
     generation_rate=1e18,
     energy_MeV=62.0,
@@ -612,6 +615,12 @@ def cce_vs_fluence(
         Default: -40V.
     epi_thickness_cm : float
         Epitaxial layer thickness (cm). Default: 10 um.
+    N_D_junction : float
+        Junction-side donor concentration (cm^-3). Default: 2.90e15.
+    N_D_bulk : float
+        Bulk-side donor concentration (cm^-3). Default: 8.50e13.
+    L_transition : float
+        Doping transition length (cm). Default: 1.0e-4 (1 um).
     alpha_range_cm : float
         Alpha particle range in SiC (cm). Default: 15 um.
     generation_rate : float
@@ -651,9 +660,9 @@ def cce_vs_fluence(
         device_name=ref_name,
         epi_thickness_cm=epi_thickness_cm,
         doping_profile="graded",
-        N_D_junction=2.90e15,
-        N_D_bulk=8.50e13,
-        L_transition=1.0e-4,
+        N_D_junction=N_D_junction,
+        N_D_bulk=N_D_bulk,
+        L_transition=L_transition,
     )
     try:
         ref_x = np.array(
@@ -698,9 +707,9 @@ def cce_vs_fluence(
                 device_name=dev_name,
                 epi_thickness_cm=epi_thickness_cm,
                 doping_profile="graded",
-                N_D_junction=2.90e15,
-                N_D_bulk=8.50e13,
-                L_transition=1.0e-4,
+                N_D_junction=N_D_junction,
+                N_D_bulk=N_D_bulk,
+                L_transition=L_transition,
             )
 
             # Apply damage BEFORE Poisson setup
@@ -771,6 +780,9 @@ def cce_vs_bias_at_fluence(
     V_range,
     fluence,
     epi_thickness_cm=10e-4,
+    N_D_junction=2.90e15,
+    N_D_bulk=8.50e13,
+    L_transition=1.0e-4,
     alpha_range_cm=15e-4,
     generation_rate=1e18,
     energy_MeV=62.0,
@@ -791,6 +803,12 @@ def cce_vs_bias_at_fluence(
         Proton fluence (protons/cm^2).
     epi_thickness_cm : float
         Epitaxial layer thickness (cm). Default: 10 um.
+    N_D_junction : float
+        Junction-side donor concentration (cm^-3). Default: 2.90e15.
+    N_D_bulk : float
+        Bulk-side donor concentration (cm^-3). Default: 8.50e13.
+    L_transition : float
+        Doping transition length (cm). Default: 1.0e-4 (1 um).
     alpha_range_cm : float
         Alpha particle range in SiC (cm). Default: 15 um.
     generation_rate : float
@@ -830,9 +848,9 @@ def cce_vs_bias_at_fluence(
         device_name=ref_name,
         epi_thickness_cm=epi_thickness_cm,
         doping_profile="graded",
-        N_D_junction=2.90e15,
-        N_D_bulk=8.50e13,
-        L_transition=1.0e-4,
+        N_D_junction=N_D_junction,
+        N_D_bulk=N_D_bulk,
+        L_transition=L_transition,
     )
     try:
         ref_x = np.array(
@@ -872,9 +890,9 @@ def cce_vs_bias_at_fluence(
         device_name=dev_name,
         epi_thickness_cm=epi_thickness_cm,
         doping_profile="graded",
-        N_D_junction=2.90e15,
-        N_D_bulk=8.50e13,
-        L_transition=1.0e-4,
+        N_D_junction=N_D_junction,
+        N_D_bulk=N_D_bulk,
+        L_transition=L_transition,
     )
 
     apply_damaged_params(device_info, damaged)

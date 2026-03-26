@@ -657,6 +657,9 @@ def dark_current_vs_fluence(
     V_bias=-30.0,
     area=0.04,
     epi_thickness_cm=10e-4,
+    N_D_junction=2.90e15,
+    N_D_bulk=8.50e13,
+    L_transition=1.0e-4,
     energy_MeV=62.0,
     lifetime_model="linear",
     damage_params=None,
@@ -683,6 +686,12 @@ def dark_current_vs_fluence(
         Device area (cm^2).  Default 0.04 cm^2.
     epi_thickness_cm : float
         Epitaxial layer thickness (cm).  Default 10 um.
+    N_D_junction : float
+        Junction-side donor concentration (cm^-3).  Default: 2.90e15.
+    N_D_bulk : float
+        Bulk-side donor concentration (cm^-3).  Default: 8.50e13.
+    L_transition : float
+        Doping transition length (cm).  Default: 1.0e-4 (1 um).
     energy_MeV : float
         Proton energy (MeV).  Default 62.0.
     lifetime_model : str
@@ -730,9 +739,9 @@ def dark_current_vs_fluence(
         device_name=ref_name,
         epi_thickness_cm=epi_thickness_cm,
         doping_profile="graded",
-        N_D_junction=2.90e15,
-        N_D_bulk=8.50e13,
-        L_transition=1.0e-4,
+        N_D_junction=N_D_junction,
+        N_D_bulk=N_D_bulk,
+        L_transition=L_transition,
     )
     try:
         ref_x = np.array(
@@ -781,9 +790,9 @@ def dark_current_vs_fluence(
                 device_name=dev_name,
                 epi_thickness_cm=epi_thickness_cm,
                 doping_profile="graded",
-                N_D_junction=2.90e15,
-                N_D_bulk=8.50e13,
-                L_transition=1.0e-4,
+                N_D_junction=N_D_junction,
+                N_D_bulk=N_D_bulk,
+                L_transition=L_transition,
             )
 
             # Apply damage BEFORE Poisson setup
