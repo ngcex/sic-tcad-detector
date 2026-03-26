@@ -47,7 +47,7 @@ Requirements for radiation damage milestone. Each maps to roadmap phases.
 - [x] **NBKV-01**: Publication-quality notebook for radiation damage overview (defect intro, lifetime, carrier removal)
 - [x] **NBKV-02**: Publication-quality notebook for CCE vs fluence with sensitivity analysis
 - [x] **NBKV-03**: Publication-quality notebook for dark current and C-V evolution under irradiation
-- [ ] **NBKV-04**: Validation against published 4H-SiC irradiation data where available
+- [x] **NBKV-04**: Validation against published 4H-SiC irradiation data where available
 
 ## Future Requirements
 
@@ -97,7 +97,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | NBKV-01     | Phase 13 | Complete |
 | NBKV-02     | Phase 14 | Complete |
 | NBKV-03     | Phase 16 | Complete |
-| NBKV-04     | Phase 18 | Pending |
+| NBKV-04     | Phase 18 | Complete |
 
 **Coverage:**
 

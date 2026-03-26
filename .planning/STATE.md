@@ -72,6 +72,9 @@ Recent decisions affecting current work:
 - [v2.0-18-01]: Near-zero eta (1e-10) for disabled defects in single-defect model (validation requires eta > 0)
 - [v2.0-18-01]: cce_uncertainty_envelope/radiation_hardness_sweep use lazy imports to keep radiation_damage.py devsim-free
 - [v2.0-18-02]: Notebook 13 designed for offline execution (~15-20 min sweep) with no auto-execution
+- [v2.0-18-03]: Trend comparison validation over point-by-point due to lack of digitized tabulated data
+- [v2.0-18-03]: Approximate reference CCE curve (4 anchor points) for compute_agreement_metrics
+- [v2.0-18-03]: Circular validation explicitly documented: defect params from Burin 2024
 
 ### Pending Todos
 
@@ -86,5 +89,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-26
-Stopped at: Completed 18-02-PLAN.md (multi-defect comparison and parametric optimization notebooks)
+Stopped at: Completed 18-03-PLAN.md (validation against published 4H-SiC irradiation data)
 Resume file: None
