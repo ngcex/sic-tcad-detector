@@ -1,23 +1,13 @@
 # SiC TCAD Simulator — Petringa Group
 
-## Current Milestone: v2.0 Radiation Damage Modeling
+## Current State: v2.0 shipped, v3.0 planned
 
-**Goal:** Predict how 4H-SiC detector performance degrades under proton irradiation — CCE loss, dark current rise, carrier removal, and annealing recovery — validated against literature and with design optimization guidance.
-
-**Target features:**
-
-- Fluence-dependent defect introduction (Z1/2, other vacancy centers)
-- Carrier lifetime degradation (τ vs Φ using damage constants)
-- CCE vs fluence prediction curves
-- Dark current increase with accumulated damage
-- Carrier removal / effective doping reduction (C-V shift with fluence)
-- Annealing kinetics (room temperature + thermal)
-- Parametric design optimization for radiation hardness
-- Publication-quality Jupyter notebooks
+**Shipped:** v2.0 Radiation Damage Modeling (2026-03-26)
+**Next:** v3.0 SiC Microdosimeter Design Study (planned)
 
 ## What This Is
 
-A Python-based TCAD simulation toolkit for modeling the electrical, thermal, and transient behavior of 4H-SiC p-n junction radiation detectors developed by the Petringa group at INFN-LNS Catania. Shipped v1.1 with complete device simulation including temperature-dependent physics, dark current modeling, and transient FLASH pulse dynamics across 8 publication-quality Jupyter notebooks.
+A Python-based TCAD simulation toolkit for modeling the electrical, thermal, transient, and radiation damage behavior of 4H-SiC p-n junction radiation detectors developed by the Petringa group at INFN-LNS Catania. Shipped v2.0 with complete radiation damage modeling including fluence-dependent CCE degradation, dark current increase, carrier removal, annealing kinetics, multi-defect Burin model, and parametric radiation hardness optimization across 14 publication-quality Jupyter notebooks.
 
 ## Core Value
 
@@ -51,17 +41,20 @@ Predict how charge collection efficiency (CCE) in the SiC detector degrades unde
 - ✓ Single-pulse and multi-pulse FLASH simulation — v1.1
 - ✓ Transient CCE validation against steady-state (deviation < 0.2) — v1.1
 - ✓ 8 publication-quality Jupyter notebooks — v1.1
+- ✓ Fluence-dependent defect introduction (Z1/2, EH4, EH6/7) with Burin 2024 constants — v2.0
+- ✓ Carrier lifetime degradation vs proton fluence (linear model with NIEL scaling) — v2.0
+- ✓ CCE vs fluence prediction curves with multi-bias overlay and sensitivity analysis — v2.0
+- ✓ Radiation-induced dark current increase (additive delta-J preserving v1.1 calibration) — v2.0
+- ✓ Carrier removal / effective doping reduction with C-V evolution and Phi_crit detection — v2.0
+- ✓ Annealing kinetics modeling (per-defect Arrhenius recovery for CCE and dark current) — v2.0
+- ✓ Parametric radiation hardness optimization (epi × doping × bias sweep with ranked results) — v2.0
+- ✓ Three-defect Burin model vs single-effective-defect comparison — v2.0
+- ✓ Validation against published 4H-SiC irradiation data (trend comparison) — v2.0
+- ✓ 14 publication-quality Jupyter notebooks — v2.0
 
 ### Active
 
-- [ ] Fluence-dependent defect introduction (Z1/2 carbon vacancy, EH6/7)
-- [ ] Carrier lifetime degradation vs proton fluence
-- [ ] CCE vs fluence prediction curves
-- [ ] Radiation-induced dark current increase
-- [ ] Carrier removal / effective doping reduction
-- [ ] Annealing kinetics modeling
-- [ ] Parametric radiation hardness optimization
-- [ ] Publication-quality radiation damage notebooks
+(To be defined with `/gsd:new-milestone` for v3.0 Microdosimeter Design Study)
 
 ### Deferred — v3.0 Microdosimeter Design Study
 
@@ -115,15 +108,16 @@ Predict how charge collection efficiency (CCE) in the SiC detector degrades unde
 
 ## Context
 
-### Current State (v1.1 shipped)
+### Current State (v2.0 shipped)
 
-- ~10,000+ LOC Python across `src/` package
+- ~15,400 LOC Python across `src/` package
 - Tech stack: Python 3, devsim, numpy/scipy/matplotlib, Jupyter notebooks
-- 8 validated Jupyter notebooks (material params, I-V/C-V, CCE, FLASH, parametric, T-dependence, dark current, transient)
-- Full temperature-dependent physics (280-350K) with clinical coefficient extraction
-- Dark current at 141 pA at -30V (within order of magnitude of 18 pA target; effective N_t model)
-- Transient CCE matches steady-state within 0.1% — validates DC approximation for SiC at FLASH dose rates
-- Inter-pulse carrier memory negligible (τ_p/t_gap = 6×10⁻⁴)
+- 14 validated Jupyter notebooks (material params, I-V/C-V, CCE, FLASH, parametric, T-dependence, dark current, transient, radiation damage overview, CCE vs fluence, dark current + C-V evolution, multi-defect comparison, parametric optimization, literature validation)
+- Complete radiation damage pipeline: defect introduction → lifetime degradation → CCE/dark current/C-V prediction → annealing recovery
+- Three-defect Burin model (Z1/2 + EH6/7 + EH4) with per-defect NIEL scaling across proton energies
+- Phi_crit ~4.86e13 cm⁻² for Petringa device (full doping compensation threshold)
+- Uncertainty quantification via damage constant scatter (0.5x–2x envelope)
+- Validated against published Rafí 2024, Moscatelli 2016, and Brodar 2022 irradiation data (trend comparison)
 
 ### Device Parameters (from group papers)
 
@@ -146,11 +140,12 @@ Predict how charge collection efficiency (CCE) in the SiC detector degrades unde
 
 The FLASH paper (Petringa 2025, Physica Medica 138) characterizes the dosimetric _system_ (Faraday Cup + SEM + DGIC) at INFN-LNS with 62 MeV protons at 20–230 Gy/s. The SiC detector itself has NOT been characterized under FLASH conditions — this is the open problem.
 
-### Open Problems for v2+
+### Open Problems for v3+
 
 1. **2D/3D geometry** — Guard ring, edge termination, build-up over-response, azimuthal dependence
-2. **Radiation damage** — Displacement damage from proton irradiation, defect introduction rates
-3. **Noise analysis** — Shot noise and 1/f noise from trap states
+2. **Microdosimetry** — Single-particle transients, lineal energy spectra, tissue-equivalence correction
+3. **Monte Carlo coupling** — Geant4/FLUKA energy deposition import for event-by-event simulation
+4. **Noise analysis** — Shot noise and 1/f noise from trap states
 
 ### Reference Papers
 
@@ -177,20 +172,25 @@ The FLASH paper (Petringa 2025, Physica Medica 138) characterizes the dosimetric
 
 ## Key Decisions
 
-| Decision                       | Rationale                                                                          | Outcome                                                         |
-| ------------------------------ | ---------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| Start with FLASH problem       | Highest novelty, no existing TCAD work on SiC under FLASH                          | ✓ Good — produced first SiC-specific FLASH TCAD prediction      |
-| Use devsim for device physics  | Open-source, Python-native, proven for semiconductor simulation                    | ✓ Good — handled all physics including transient high-injection |
-| devsim-only (no fipy)          | devsim transient solver handled high-injection without needing separate PDE solver | ✓ Good — simplified architecture, one solver for everything     |
-| Python + Jupyter               | Interactive analysis, publication-quality plots, group accessibility               | ✓ Good — 8 validated notebooks ready for group use              |
-| Graded epi doping              | Uniform N_D fails to match C-V under reverse bias; graded profile needed           | ✓ Good — C-V R²=0.998 after calibration                         |
-| Clamped exponential Boltzmann  | SiC n_i~5e-9 causes overflow in standard exponential                               | ✓ Good — stable solver without accuracy loss                    |
-| Flat CCE as null result        | Auger recombination negligible at FLASH dose rates (delta_n << threshold)          | ✓ Good — valid scientific finding                               |
-| Calibrated n_i(T) anchor       | Physical n_i formula gives 3.93e-9 vs validated 5e-9; use ratio-scaling            | ✓ Good — exact 5e-9 at 300K, correct T-dependence               |
-| Effective N_t for dark current | n_i^2 bottleneck prevents pA-level dark current with standard SRH/TAT in 1D        | ✓ Good — calibrated to 18.5 pA, physically motivated            |
-| BDF1 over BDF2 for transient   | Unconditional stability at sharp pulse edges outweighs accuracy                    | ✓ Good — stable across 6 orders of magnitude in dt              |
-| DC approximation validated     | Transient CCE matches steady-state within 0.1%                                     | ✓ Good — confirms v1.0 approach was correct for SiC             |
+| Decision                           | Rationale                                                                          | Outcome                                                             |
+| ---------------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Start with FLASH problem           | Highest novelty, no existing TCAD work on SiC under FLASH                          | ✓ Good — produced first SiC-specific FLASH TCAD prediction          |
+| Use devsim for device physics      | Open-source, Python-native, proven for semiconductor simulation                    | ✓ Good — handled all physics including transient high-injection     |
+| devsim-only (no fipy)              | devsim transient solver handled high-injection without needing separate PDE solver | ✓ Good — simplified architecture, one solver for everything         |
+| Python + Jupyter                   | Interactive analysis, publication-quality plots, group accessibility               | ✓ Good — 8 validated notebooks ready for group use                  |
+| Graded epi doping                  | Uniform N_D fails to match C-V under reverse bias; graded profile needed           | ✓ Good — C-V R²=0.998 after calibration                             |
+| Clamped exponential Boltzmann      | SiC n_i~5e-9 causes overflow in standard exponential                               | ✓ Good — stable solver without accuracy loss                        |
+| Flat CCE as null result            | Auger recombination negligible at FLASH dose rates (delta_n << threshold)          | ✓ Good — valid scientific finding                                   |
+| Calibrated n_i(T) anchor           | Physical n_i formula gives 3.93e-9 vs validated 5e-9; use ratio-scaling            | ✓ Good — exact 5e-9 at 300K, correct T-dependence                   |
+| Effective N_t for dark current     | n_i^2 bottleneck prevents pA-level dark current with standard SRH/TAT in 1D        | ✓ Good — calibrated to 18.5 pA, physically motivated                |
+| BDF1 over BDF2 for transient       | Unconditional stability at sharp pulse edges outweighs accuracy                    | ✓ Good — stable across 6 orders of magnitude in dt                  |
+| DC approximation validated         | Transient CCE matches steady-state within 0.1%                                     | ✓ Good — confirms v1.0 approach was correct for SiC                 |
+| Fluence-as-temperature pattern     | Fresh devsim device per fluence point; no in-place parameter mutation              | ✓ Good — clean sweep isolation, no state leakage                    |
+| Additive delta-J dark current      | J_dark(Phi) = J_dark(0) + delta_J(Phi) preserves v1.1 calibrated baseline          | ✓ Good — 18.5 pA preserved exactly at fluence=0                     |
+| Near-zero eta for disabled defects | Single-defect model uses eta=1e-10 instead of 0 (validation requires eta>0)        | ✓ Good — avoids division issues while being physically negligible   |
+| Trend comparison validation        | No digitized tabulated data available from literature                              | ✓ Good — honest about circular validation with Burin 2024 params    |
+| Z1/2 E_a=4.5 eV calibration        | Gives practical stability below 1000°C (f~0.05 at 1000°C/1h)                       | ✓ Good — matches experimental observation of Z1/2 thermal stability |
 
 ---
 
-_Last updated: 2026-03-24 after v3.0 microdosimeter milestone outline_
+_Last updated: 2026-03-27 after v2.0 milestone_

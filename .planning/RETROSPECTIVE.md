@@ -109,14 +109,69 @@ _A living document updated after each milestone. Lessons feed forward into futur
 
 ---
 
+## Milestone: v2.0 — Radiation Damage Modeling
+
+**Shipped:** 2026-03-26
+**Phases:** 6 | **Plans:** 13
+**Timeline:** 3 days (2026-03-24 → 2026-03-26)
+
+### What Was Built
+
+- Pure-Python radiation damage module with Burin 2024 defect constants and NIEL energy scaling
+- CCE vs fluence prediction curves with multi-bias overlay and sensitivity analysis
+- Additive delta-J dark current model preserving v1.1 calibrated baseline
+- Carrier removal and C-V evolution with critical fluence detection (Phi_crit ~4.86e13 cm⁻²)
+- Per-defect Arrhenius annealing kinetics for CCE and dark current recovery
+- Three-defect Burin model with parametric radiation hardness optimization
+- Validation against 3 published 4H-SiC irradiation datasets (trend comparison)
+- 6 new publication-quality Jupyter notebooks (09-14)
+
+### What Worked
+
+- **Requirements-first roadmap**: 21 requirements mapped across 6 phases with clear traceability — every plan had acceptance criteria derived from requirements
+- **Fluence-as-temperature pattern**: Fresh devsim device per sweep point eliminated all state mutation bugs — no rework needed across 5 phases that used this pattern
+- **Phase dependency chain (13→14/15/16→17→18)**: Foundation phase built clean abstractions consumed by all downstream phases without modification
+- **Zero-fluence regression safety**: AST-based structural check + subprocess meta-test ensured v1.1 compatibility throughout development
+- **Calibration-in-plan learned from v1.0/v1.1**: No gap closure phases needed — every parameter calibrated within implementing plan
+
+### What Was Inefficient
+
+- **Milestone audit ran too early**: Audit on 2026-03-25 flagged Phase 18 as incomplete (it hadn't started); re-audit wasn't done after Phase 18 shipped — stale audit complicated milestone completion
+- **NIEL 62 MeV interpolation**: Carrier removal rate at 62 MeV was interpolated rather than looked up; Phi_crit sensitivity to this value is a known limitation
+- **Solver divergence near Phi_crit**: cce_vs_fluence silently returns NaN near full compensation rather than providing a clear diagnostic — handled pragmatically but not elegantly
+
+### Patterns Established
+
+- **Fluence-as-temperature**: Create fresh device per sweep point, apply damage before Poisson equilibrium
+- **Additive delta-J**: Preserve calibrated baseline by adding radiation-induced component separately
+- **Near-zero eta (1e-10)**: Disable individual defects in multi-defect model without division-by-zero risk
+- **Lazy imports in pure-Python modules**: cce_uncertainty_envelope and radiation_hardness_sweep use lazy devsim imports to keep radiation_damage.py importable without devsim
+- **Parameterized geometry kwargs**: N_D_junction/N_D_bulk/L_transition passed through all sweep functions for parametric studies
+
+### Key Lessons
+
+1. **Run milestone audit after all phases complete, not during**: Stale audit creates confusion at completion time
+2. **Trend comparison is honest validation**: When digitized data isn't available, explicit trend comparison with documented device/energy mismatches is scientifically sound
+3. **Circular validation must be documented**: Using Burin 2024 params to validate against Burin 2024 data is acknowledged, not hidden — future validation needs independent datasets
+4. **SiC radiation hardness is geometry-dependent**: Parametric sweep revealed epi thickness and doping have stronger effect than bias on radiation hardness — useful for group's design decisions
+
+### Cost Observations
+
+- 13 plans in ~3 hours total execution (avg ~14 min/plan)
+- Phase 18 most expensive (3 plans, ~45 min) due to parametric sweeps with devsim
+- No gap closure phases needed — continued v1.1's pattern of in-plan calibration
+- Notebooks 13-14 designed for offline execution (~15-20 min sweeps) to avoid blocking
+
+---
+
 ## Cross-Milestone Trends
 
-| Metric            | v1.0    | v1.1    |
-| ----------------- | ------- | ------- |
-| Phases            | 9       | 3       |
-| Plans             | 20      | 7       |
-| Avg plan duration | 4.2 min | 8.6 min |
-| Gap closure plans | 5 (25%) | 0 (0%)  |
-| Timeline          | 3 days  | 2 days  |
-| Requirements      | ~25     | 21      |
-| Notebooks added   | 5       | 3       |
+| Metric            | v1.0    | v1.1    | v2.0    |
+| ----------------- | ------- | ------- | ------- |
+| Phases            | 9       | 3       | 6       |
+| Plans             | 20      | 7       | 13      |
+| Avg plan duration | 4.2 min | 8.6 min | ~14 min |
+| Gap closure plans | 5 (25%) | 0 (0%)  | 0 (0%)  |
+| Timeline          | 3 days  | 2 days  | 3 days  |
+| Requirements      | ~25     | 21      | 21      |
+| Notebooks added   | 5       | 3       | 6       |
