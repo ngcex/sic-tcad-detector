@@ -34,6 +34,7 @@ from src.radiation_damage import (
     degraded_lifetime,
     effective_doping,
     get_hardness_factor,
+    make_single_defect_params,
     scale_to_proton_energy,
 )
 
@@ -811,3 +812,40 @@ class TestComputeAnnealedParams:
 
         # But Z1/2 didn't anneal, so total improvement is partial
         assert annealed["f_Z12"] < 0.01  # Z1/2 stable at 600C
+
+
+# ---------------------------------------------------------------------------
+# Single-defect constructor tests (Phase 18, Plan 01)
+# ---------------------------------------------------------------------------
+
+
+class TestMakeSingleDefectParams:
+    """Tests for make_single_defect_params."""
+
+    def test_k_tau_electron_matches(self):
+        """compute_K_tau(single, electron) == compute_K_tau(three, electron)."""
+        three = RadiationDamageParams()
+        single = make_single_defect_params(three)
+        K_three = compute_K_tau(three, carrier="electron")
+        K_single = compute_K_tau(single, carrier="electron")
+        np.testing.assert_allclose(K_single, K_three, atol=1e-20)
+
+    def test_k_tau_hole_matches(self):
+        """compute_K_tau(single, hole) == compute_K_tau(three, hole)."""
+        three = RadiationDamageParams()
+        single = make_single_defect_params(three)
+        K_three = compute_K_tau(three, carrier="hole")
+        K_single = compute_K_tau(single, carrier="hole")
+        np.testing.assert_allclose(K_single, K_three, atol=1e-20)
+
+    def test_eta_removal_preserved(self):
+        """Single-defect eta_removal matches three-defect eta_removal."""
+        three = RadiationDamageParams()
+        single = make_single_defect_params(three)
+        assert single.eta_removal == three.eta_removal
+
+    def test_near_zero_defects_valid(self):
+        """Near-zero eta values for disabled defects pass validation."""
+        single = make_single_defect_params()
+        assert single.eta_EH67 > 0
+        assert single.eta_EH4 > 0
