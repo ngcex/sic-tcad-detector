@@ -832,3 +832,253 @@ def compute_annealed_params(
         "T_anneal": T_anneal,
         "t_anneal": t_anneal,
     }
+
+
+# ---------------------------------------------------------------------------
+# Multi-defect parametric optimization functions (Phase 18)
+# ---------------------------------------------------------------------------
+
+
+def make_single_defect_params(
+    three_defect_params: RadiationDamageParams | None = None,
+    T: float = 300.0,
+) -> RadiationDamageParams:
+    """Construct a single-defect RadiationDamageParams with K_tau identical to three-defect.
+
+    Collapses the three-defect model (Z1/2, EH6/7, EH4) into an effective
+    single defect by computing effective cross-sections such that
+    K_tau(single) == K_tau(three-defect) for both electrons and holes.
+
+    The single defect uses eta_eff = sum(eta_i) and derives sigma_eff from
+    K_tau / (eta_eff * v_th). The EH6/7 and EH4 slots are set to near-zero
+    (1e-10) to satisfy RadiationDamageParams validation while being negligible.
+
+    Parameters
+    ----------
+    three_defect_params : RadiationDamageParams, optional
+        Source three-defect parameters. Default: RadiationDamageParams().
+    T : float
+        Temperature (K) for thermal velocity. Default 300.
+
+    Returns
+    -------
+    RadiationDamageParams
+        Single-defect model with K_tau matching the three-defect input.
+    """
+    if three_defect_params is None:
+        three_defect_params = RadiationDamageParams()
+
+    eta_eff = (
+        three_defect_params.eta_Z12
+        + three_defect_params.eta_EH67
+        + three_defect_params.eta_EH4
+    )
+
+    K_tau_n = compute_K_tau(three_defect_params, carrier="electron", T=T)
+    K_tau_p = compute_K_tau(three_defect_params, carrier="hole", T=T)
+
+    # Thermal velocities
+    m_eff_e = _M_E_DOS * _m0_kg
+    v_th_e = np.sqrt(3 * _k_B_J * T / m_eff_e) * 100  # cm/s
+
+    m_eff_h = _M_H_DOS * _m0_kg
+    v_th_h = np.sqrt(3 * _k_B_J * T / m_eff_h) * 100  # cm/s
+
+    sigma_n_eff = K_tau_n / (eta_eff * v_th_e)
+    sigma_p_eff = K_tau_p / (eta_eff * v_th_h)
+
+    return RadiationDamageParams(
+        eta_Z12=eta_eff,
+        E_Z12=0.67,
+        sigma_n_Z12=sigma_n_eff,
+        sigma_p_Z12=sigma_p_eff,
+        eta_EH67=1e-10,
+        sigma_n_EH67=1e-20,
+        sigma_p_EH67=1e-20,
+        eta_EH4=1e-10,
+        sigma_n_EH4=1e-20,
+        sigma_p_EH4=1e-20,
+        eta_removal=three_defect_params.eta_removal,
+    )
+
+
+def cce_uncertainty_envelope(
+    fluence_range,
+    V_bias=-40.0,
+    scale_low=0.5,
+    scale_high=2.0,
+    epi_thickness_cm=10e-4,
+    energy_MeV=62.0,
+    damage_params=None,
+):
+    """Compute min/max CCE bounds from per-defect eta scatter.
+
+    Generates all 8 combinations of (scale_low, scale_high) for each of
+    (eta_Z12, eta_EH67, eta_EH4) and computes CCE for each combination.
+    Returns element-wise min and max across all combinations, plus the
+    nominal (unscaled) CCE.
+
+    Parameters
+    ----------
+    fluence_range : array_like
+        Array of proton fluences (protons/cm^2).
+    V_bias : float
+        Fixed reverse bias voltage (V, negative). Default -40.
+    scale_low : float
+        Lower scaling factor for etas. Default 0.5.
+    scale_high : float
+        Upper scaling factor for etas. Default 2.0.
+    epi_thickness_cm : float
+        Epitaxial layer thickness (cm). Default 10 um.
+    energy_MeV : float
+        Proton energy (MeV). Default 62.0.
+    damage_params : RadiationDamageParams, optional
+        Baseline damage parameters. Default: RadiationDamageParams().
+
+    Returns
+    -------
+    dict
+        Keys: cce_min, cce_max, cce_nominal (numpy arrays), fluences.
+    """
+    import itertools
+
+    from src.charge_collection import cce_vs_fluence
+
+    if damage_params is None:
+        damage_params = RadiationDamageParams()
+
+    fluence_range = np.asarray(fluence_range, dtype=float)
+
+    # Nominal CCE (unscaled)
+    nominal_result = cce_vs_fluence(
+        fluence_range,
+        V_bias=V_bias,
+        epi_thickness_cm=epi_thickness_cm,
+        energy_MeV=energy_MeV,
+        damage_params=damage_params,
+    )
+    cce_nominal = nominal_result["cce_values"]
+
+    # All 8 combinations of low/high scaling for 3 defects
+    all_cce = [cce_nominal]
+    for scales in itertools.product([scale_low, scale_high], repeat=3):
+        s_Z12, s_EH67, s_EH4 = scales
+        scaled_params = RadiationDamageParams(
+            eta_Z12=damage_params.eta_Z12 * s_Z12,
+            E_Z12=damage_params.E_Z12,
+            sigma_n_Z12=damage_params.sigma_n_Z12,
+            sigma_p_Z12=damage_params.sigma_p_Z12,
+            eta_EH67=damage_params.eta_EH67 * s_EH67,
+            E_EH67=damage_params.E_EH67,
+            sigma_n_EH67=damage_params.sigma_n_EH67,
+            sigma_p_EH67=damage_params.sigma_p_EH67,
+            eta_EH4=damage_params.eta_EH4 * s_EH4,
+            E_EH4=damage_params.E_EH4,
+            sigma_n_EH4=damage_params.sigma_n_EH4,
+            sigma_p_EH4=damage_params.sigma_p_EH4,
+            # Carrier removal tracks Z1/2
+            eta_removal=damage_params.eta_removal * s_Z12,
+        )
+        result = cce_vs_fluence(
+            fluence_range,
+            V_bias=V_bias,
+            epi_thickness_cm=epi_thickness_cm,
+            energy_MeV=energy_MeV,
+            damage_params=scaled_params,
+        )
+        all_cce.append(result["cce_values"])
+
+    all_cce = np.array(all_cce)
+
+    return {
+        "cce_min": np.min(all_cce, axis=0),
+        "cce_max": np.max(all_cce, axis=0),
+        "cce_nominal": cce_nominal,
+        "fluences": fluence_range,
+    }
+
+
+def radiation_hardness_sweep(
+    epi_thicknesses,
+    N_D_bulks,
+    V_biases,
+    target_fluence,
+    energy_MeV=62.0,
+    damage_params=None,
+):
+    """Sweep device geometry parameters and rank by CCE retention.
+
+    Iterates over all combinations of epi thickness, bulk doping, and bias
+    voltage. For each combination, computes CCE at pristine and target
+    fluence, returning a DataFrame sorted by CCE retention (damaged/pristine).
+
+    Parameters
+    ----------
+    epi_thicknesses : array_like
+        Epitaxial layer thicknesses (cm).
+    N_D_bulks : array_like
+        Bulk doping concentrations (cm^-3).
+    V_biases : array_like
+        Reverse bias voltages (V, negative).
+    target_fluence : float
+        Proton fluence at which to evaluate damage (protons/cm^2).
+    energy_MeV : float
+        Proton energy (MeV). Default 62.0.
+    damage_params : RadiationDamageParams, optional
+        Damage parameters. Default: RadiationDamageParams().
+
+    Returns
+    -------
+    pandas.DataFrame
+        Columns: epi_um, N_D_bulk, V_bias, CCE_pristine, CCE_damaged,
+        CCE_retention. Sorted by CCE_retention descending.
+    """
+    import itertools
+    import warnings
+
+    import pandas as pd
+
+    from src.charge_collection import cce_vs_fluence
+
+    records = []
+    for epi, nd, vb in itertools.product(epi_thicknesses, N_D_bulks, V_biases):
+        try:
+            result = cce_vs_fluence(
+                fluence_range=np.array([0.0, target_fluence]),
+                V_bias=vb,
+                epi_thickness_cm=epi,
+                N_D_bulk=nd,
+                energy_MeV=energy_MeV,
+                damage_params=damage_params,
+            )
+            cce_pristine = result["cce_values"][0]
+            cce_damaged = result["cce_values"][1]
+            cce_retention = cce_damaged / cce_pristine if cce_pristine > 0 else np.nan
+        except Exception as e:
+            logger.warning(
+                "radiation_hardness_sweep: failed for epi=%.1e, N_D=%.1e, V=%.1f: %s",
+                epi,
+                nd,
+                vb,
+                e,
+            )
+            cce_pristine = np.nan
+            cce_damaged = np.nan
+            cce_retention = np.nan
+
+        records.append(
+            {
+                "epi_um": epi * 1e4,
+                "N_D_bulk": nd,
+                "V_bias": vb,
+                "CCE_pristine": cce_pristine,
+                "CCE_damaged": cce_damaged,
+                "CCE_retention": cce_retention,
+            }
+        )
+
+    return (
+        pd.DataFrame(records)
+        .sort_values("CCE_retention", ascending=False)
+        .reset_index(drop=True)
+    )

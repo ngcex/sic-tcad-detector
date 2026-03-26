@@ -24,6 +24,10 @@ from src.charge_collection import (
     hecht_cce,
     hecht_cce_partial_depletion,
 )
+from src.radiation_damage import (
+    cce_uncertainty_envelope,
+    radiation_hardness_sweep,
+)
 
 
 class TestHechtEquation:
@@ -632,3 +636,61 @@ class TestCCEPostAnneal:
                 f"CCE not monotonically increasing with temperature: "
                 f"CCE[{i-1}]={cce_valid[i-1]:.4f} > CCE[{i}]={cce_valid[i]:.4f}"
             )
+
+
+# ===================================================================
+# Parametric optimization tests (Phase 18, Plan 01)
+# ===================================================================
+
+
+@pytest.mark.slow
+class TestParametricFunctions:
+    """Tests for cce_uncertainty_envelope and radiation_hardness_sweep."""
+
+    def test_cce_uncertainty_envelope_bounds(self):
+        """Verify cce_min <= cce_nominal <= cce_max, all equal at fluence=0."""
+        fluences = np.array([0.0, 1e12])
+        result = cce_uncertainty_envelope(fluences, V_bias=-40.0)
+
+        cce_min = result["cce_min"]
+        cce_max = result["cce_max"]
+        cce_nom = result["cce_nominal"]
+
+        # At fluence=0: all should be equal (no damage, scaling irrelevant)
+        np.testing.assert_allclose(cce_min[0], cce_nom[0], atol=1e-6)
+        np.testing.assert_allclose(cce_max[0], cce_nom[0], atol=1e-6)
+
+        # At damaged point: min <= nominal <= max
+        assert (
+            cce_min[1] <= cce_nom[1] + 1e-6
+        ), f"cce_min ({cce_min[1]:.4f}) > cce_nominal ({cce_nom[1]:.4f})"
+        assert (
+            cce_nom[1] <= cce_max[1] + 1e-6
+        ), f"cce_nominal ({cce_nom[1]:.4f}) > cce_max ({cce_max[1]:.4f})"
+
+    def test_radiation_hardness_sweep_returns_dataframe(self):
+        """Sweep with 2 epi, 1 doping, 1 bias returns sorted DataFrame."""
+        import pandas as pd
+
+        df = radiation_hardness_sweep(
+            epi_thicknesses=[8e-4, 12e-4],
+            N_D_bulks=[8.50e13],
+            V_biases=[-40.0],
+            target_fluence=1e12,
+        )
+
+        assert isinstance(df, pd.DataFrame)
+        assert len(df) == 2
+        expected_cols = {
+            "epi_um",
+            "N_D_bulk",
+            "V_bias",
+            "CCE_pristine",
+            "CCE_damaged",
+            "CCE_retention",
+        }
+        assert expected_cols.issubset(set(df.columns))
+
+        # Sorted by CCE_retention descending
+        retentions = df["CCE_retention"].values
+        assert retentions[0] >= retentions[1] or np.isnan(retentions[1])
