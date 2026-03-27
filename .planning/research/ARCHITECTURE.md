@@ -1,539 +1,571 @@
 # Architecture Patterns
 
-**Domain:** Radiation damage modeling integration into existing 4H-SiC TCAD simulator
-**Researched:** 2026-03-24
+**Domain:** 2D TCAD microdosimeter simulation with MC coupling, extending existing 1D SiC simulator
+**Researched:** 2026-03-27
+**Overall confidence:** HIGH (devsim 2D API verified via official docs, existing codebase fully read, microdosimetry physics well-established)
 
 ## Recommended Architecture
 
-### Design Principle: Fluence as a First-Class Parameter (Like Temperature)
+### Design Decision: Separate `device2d.py`, Do NOT Modify `device.py`
 
-The existing codebase has an established pattern for how temperature flows through the system: `T` is passed to `create_sic_device()`, which computes T-dependent material properties (n_i, mu, tau, E_g) and sets them as devsim region parameters. Radiation damage should follow the **exact same pattern** with fluence (`Phi`).
+The 1D and 2D device creation must live in **separate modules**. The reasons are structural, not cosmetic:
 
-The key insight: fluence modifies the same material properties that temperature does (lifetime, trap density, effective doping), so the integration points are the same functions that already handle T-dependence. No new devsim physics equations are needed -- only the parameter values change.
+1. **Mesh topology is fundamentally different.** 1D uses `create_1d_mesh` / `add_1d_mesh_line` / `add_1d_region` / `add_1d_contact`. 2D uses `create_2d_mesh` / `add_2d_mesh_line` (with `dir="x"/"y"`) / `add_2d_region` (with `xl,xh,yl,yh` box coordinates) / `add_2d_contact` (with `yl,yh` + `bloat`). These are entirely different devsim API calls with no shared code path.
 
-### High-Level Data Flow
+2. **Contact geometry differs.** 1D contacts are point tags ("top"/"bot"). 2D contacts are line segments specified by coordinate ranges. The contact equation setup via `simple_physics.CreateSiliconDriftDiffusionAtContact` works identically in both cases (devsim handles dimensionality internally), but the _creation_ is different.
+
+3. **Doping profiles are 2D fields.** The existing `set_doping_profile()` and `set_graded_doping_profile()` use 1D expressions (`step(x - junction_pos)`). In 2D, doping depends on both x and y (e.g., mesa structures have lateral doping boundaries).
+
+4. **The existing `device_info` dict contract is stable and validated.** 14 notebooks and 6+ modules depend on `create_sic_device()` returning a dict with `device_name`, `region_name`, `junction_pos`, `epi_thickness_cm`, `N_D`, `params`, etc. Modifying this risks regressions across all existing work.
+
+**However**, the physics setup (Poisson, DD, SRH, Auger) is dimension-agnostic in devsim. The existing `poisson.py`, `drift_diffusion.py`, and `flash_recombination.py` modules should work unmodified on 2D devices, since devsim's equation framework operates on device/region names regardless of mesh dimensionality. This is the key architectural insight: **mesh creation is dimension-specific; physics setup is dimension-agnostic.**
+
+### Component Boundary Diagram
 
 ```
-Fluence (Phi, cm^-2)
-    |
-    v
-radiation_damage.py  <-- NEW MODULE (pure physics, no devsim)
-    |  Computes: tau(Phi,T), N_t(Phi), N_D_eff(Phi), defect concentrations
-    |
-    v
-sic_material.py  <-- MODIFIED (accept Phi parameter in existing functions)
-    |  srh_lifetime(T, carrier, params, Phi) -> tau degraded by damage
-    |  Also: new function for effective_doping(N_D_0, Phi, eta)
-    |
-    v
-device.py / create_sic_device()  <-- MODIFIED (accept Phi, pass through)
-    |  Sets degraded tau, N_t, N_D_eff as devsim parameters
-    |
-    v
-drift_diffusion.py / dark_current.py / charge_collection.py  <-- UNCHANGED
-    |  These consume devsim parameters; they don't care where values came from
-    |
-    v
-Notebooks: fluence_sweep.ipynb, annealing.ipynb  <-- NEW
+EXISTING (unchanged)                    NEW modules
+================================       ================================
+
+sic_material.py                         device2d.py
+  SiC4H_Parameters dataclass              create_sic_device_2d()
+  mobility, n_i, lifetime funcs           -> returns device_info dict
+                                            (same contract + geometry_type="2D")
+device.py                                 set_doping_profile_2d()
+  create_sic_device() [1D]                create_mesa_device()
+  set_doping_profile()                    create_3d_electrode_device() [2D cross-section]
+  set_graded_doping_profile()
+  apply_damaged_params()                mc_coupling.py
+                                          MCEventReader (Geant4/FLUKA/CSV)
+poisson.py                               LETSpectrumReader
+  setup_poisson()        <-- used by 2D   IonTrackProfile (LET -> G(x,y))
+  solve_equilibrium()    <-- used by 2D   convert_energy_to_charge()
+
+drift_diffusion.py                      single_particle.py
+  setup_sic_drift_diffusion() <-- 2D ok   SingleParticleTransient
+  create_dd_device() [1D convenience]     inject_ion_track()
+  ramp_bias()            <-- used by 2D   extract_current_pulse()
+  extract_contact_current() <-- 2D ok     integrate_collected_charge()
+
+transient.py                            microdosimetry.py
+  TransientSolver        <-- 2D ok        compute_lineal_energy()
+  pulse_envelope()                        build_y_spectrum()
+  adaptive_dt()                           tissue_equivalence_correction()
+                                          dose_mean_yD()
+charge_collection.py                      frequency_mean_yF()
+  add_generation_to_dd() <-- 2D ok
+  compute_cce_from_dd()  <-- 2D ok      structures.py (optional, Phase 6+)
+                                          SVGeometry dataclass
+generation_profiles.py                    parameterize_guard_ring()
+  alpha_generation_profile() [1D]         parameterize_edge_termination()
+  proton_generation_profile() [1D]
+                                        plotting2d.py
+flash_recombination.py                    plot_2d_potential()
+  add_auger_recombination() <-- 2D ok     plot_2d_field()
+                                          plot_y_spectrum()
+radiation_damage.py
+  [v2.0 damage physics -- unchanged]
 ```
 
 ### Component Boundaries
 
-| Component                          | Responsibility                                                                                                                                 | Communicates With                         |
-| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| `radiation_damage.py` (NEW)        | Pure radiation physics: defect introduction rates, lifetime damage constants, carrier removal, annealing kinetics. No devsim dependency.       | `sic_material.py`, notebooks              |
-| `sic_material.py` (MODIFIED)       | Material parameters now accept optional `Phi` to return irradiated values. Backward-compatible: `Phi=0` or `Phi=None` returns pristine values. | `device.py`, all downstream               |
-| `device.py` (MODIFIED)             | `create_sic_device()` gains `Phi` parameter, computes and sets irradiated material params.                                                     | `drift_diffusion.py`                      |
-| `drift_diffusion.py` (UNCHANGED)   | DD solver consumes whatever params are set. No changes needed.                                                                                 | `dark_current.py`, `charge_collection.py` |
-| `dark_current.py` (UNCHANGED)      | TAT model already parameterized by `N_t`. Irradiated `N_t` flows through automatically.                                                        | Notebooks                                 |
-| `charge_collection.py` (UNCHANGED) | CCE computation already works with whatever tau, mu are set.                                                                                   | Notebooks                                 |
-| `fluence_sweep.py` (NEW)           | Orchestrates fluence-parameter sweeps analogous to `temperature_sweep.py`. Creates fresh device per fluence, extracts CCE/dark current.        | All `src/` modules, notebooks             |
-| `annealing.py` (NEW)               | Annealing kinetics: defect concentration evolution with time/temperature. Feeds back into `radiation_damage.py` effective defect populations.  | `radiation_damage.py`, notebooks          |
+| Component                | Responsibility                                                                                       | Communicates With                                                     | New/Modified                                              |
+| ------------------------ | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | --------------------------------------------------------- |
+| `device2d.py`            | 2D mesh generation, doping, contacts for planar/mesa/3D-electrode geometries                         | `sic_material.py`, `poisson.py`, `drift_diffusion.py`                 | **NEW**                                                   |
+| `mc_coupling.py`         | Import MC output (Geant4 phase-space, FLUKA, CSV LET spectra), convert to charge generation profiles | `single_particle.py`, `sic_material.py`                               | **NEW**                                                   |
+| `single_particle.py`     | Single-ion transient: inject track, run time-domain, extract current pulse and collected charge      | `device2d.py`, `drift_diffusion.py`, `transient.py`, `mc_coupling.py` | **NEW**                                                   |
+| `microdosimetry.py`      | Lineal energy computation, y-spectra, tissue equivalence, dose-mean y_D                              | `single_particle.py`, `mc_coupling.py`                                | **NEW**                                                   |
+| `structures.py`          | Geometry parameterization dataclasses for alternative SV designs                                     | `device2d.py`                                                         | **NEW**                                                   |
+| `poisson.py`             | Poisson equation setup and equilibrium solve                                                         | `device.py` or `device2d.py` (dimension-agnostic)                     | **UNCHANGED**                                             |
+| `drift_diffusion.py`     | DD equation setup, bias ramping, current extraction                                                  | `device.py` or `device2d.py`                                          | **MINOR** (add `create_dd_device_2d` convenience wrapper) |
+| `transient.py`           | Time-domain solver with adaptive dt                                                                  | `drift_diffusion.py`                                                  | **UNCHANGED**                                             |
+| `charge_collection.py`   | Generation injection, CCE computation                                                                | `drift_diffusion.py`                                                  | **UNCHANGED**                                             |
+| `generation_profiles.py` | 1D analytical generation profiles (alpha, proton)                                                    | `sic_material.py`                                                     | **UNCHANGED**                                             |
 
-## New Module: `radiation_damage.py`
+### The `device_info` Dict Contract
 
-This is the core new module. It contains pure physics functions (no devsim calls), making it testable and reusable.
-
-### Key Physics Implemented
-
-**1. Defect Introduction (Fluence-Proportional)**
-
-Defect concentration scales linearly with fluence:
-
-```
-N_defect(Phi) = g * Phi
-```
-
-where `g` is the introduction rate (cm^-1).
-
-Literature values for proton irradiation of 4H-SiC:
-
-- Z1/2 (acceptor, E_C - 0.67 eV): g = 5.0 cm^-1
-- EH6/7 (donor, E_C - 1.6 eV): g = 1.6 cm^-1
-- EH4 (acceptor, E_C - 1.03 eV): g = 2.4 cm^-1
-
-Source: Burin et al., arXiv:2407.16710 (neutron); proton rates differ by NIEL scaling factor.
-
-**2. Carrier Lifetime Degradation**
-
-Standard damage constant formulation:
-
-```
-1/tau(Phi) = 1/tau_0 + K_tau * Phi
-```
-
-where `K_tau` is the lifetime damage constant. For SiC under proton irradiation, typical values are K_tau ~ 10^-7 to 10^-5 cm^2/s depending on energy and carrier type.
-
-Alternative (from IEEE Access paper, logarithmic fit):
-
-```
-1/tau = a * ln(Phi_neq) + b
-```
-
-Use the linear (1/tau) model as primary -- it is more physically motivated (each defect adds independent recombination channel) and more widely used in TCAD.
-
-**3. Carrier Removal (Effective Doping Reduction)**
-
-```
-N_D_eff(Phi) = N_D_0 - eta * Phi
-```
-
-where `eta` is the carrier removal rate (cm^-1). For 4H-SiC:
-
-- Clinical proton beams (252.7 MeV): eta = 4.2 to 6.4 cm^-1
-- Lower energy protons: eta increases (inversely with energy via NIEL)
-
-Critical fluence (full compensation): Phi_c = N_D_0 / eta
-
-For the Petringa device (N_D ~ 10^14 cm^-3, eta ~ 5 cm^-1):
-Phi_c ~ 2 x 10^13 cm^-2
-
-**4. Annealing Kinetics**
-
-First-order defect recovery:
-
-```
-N_defect(t, T_ann) = N_defect(0) * exp(-t / tau_ann(T_ann))
-```
-
-where tau_ann follows Arrhenius:
-
-```
-tau_ann(T) = tau_0 * exp(E_a / (k_B * T))
-```
-
-Z1/2 is essentially stable below ~1200 C (E_a ~ 4-5 eV for carbon vacancy migration). Room-temperature annealing primarily affects less stable defects (EH4, interstitials).
-
-### Suggested API
+The returned `device_info` dict is the central coordination object. For 2D devices, it extends the existing contract:
 
 ```python
-@dataclass
-class RadiationDamageParams:
-    """Radiation damage parameters for 4H-SiC under proton irradiation."""
-    # Defect introduction rates (cm^-1)
-    g_Z12: float = 5.0        # Z1/2 center
-    g_EH67: float = 1.6       # EH6/7 center
-    g_EH4: float = 2.4        # EH4 cluster
+# Existing fields (preserved exactly for 1D and extended to 2D)
+{
+    "device_name": str,
+    "region_name": str,
+    "junction_pos": float,        # y-coordinate of junction in 2D
+    "epi_thickness_cm": float,
+    "N_D": float,
+    "N_A": float,
+    "N_A_ionized": float,
+    "T": float,
+    "n_i": float,
+    "E_g": float,
+    "params": SiC4H_Parameters,
+    "mu_n": float,
+    "mu_p": float,
+    "num_nodes": int,
+    "doping_profile": str,
+    # ... graded doping fields ...
+}
 
-    # Carrier removal rate (cm^-1)
-    eta: float = 5.0           # donor removal rate
-
-    # Lifetime damage constant (cm^2/s)
-    K_tau_n: float = 1e-6      # electron lifetime
-    K_tau_p: float = 5e-7      # hole lifetime
-
-    # Annealing activation energies (eV)
-    E_a_Z12: float = 4.5       # Z1/2 (very stable)
-    E_a_EH4: float = 1.5       # EH4 (anneals at lower T)
-
-
-def defect_concentration(Phi, g):
-    """N_defect = g * Phi"""
-
-def degraded_lifetime(tau_0, Phi, K_tau):
-    """1/tau = 1/tau_0 + K_tau * Phi"""
-
-def effective_doping(N_D_0, Phi, eta):
-    """N_D_eff = max(N_D_0 - eta * Phi, 0)"""
-
-def annealed_concentration(N_0, t, T, E_a, tau_0=1e-13):
-    """N(t) = N_0 * exp(-t/tau_ann(T))"""
+# New 2D-specific fields (added by create_sic_device_2d)
+{
+    "geometry_type": "2D",         # vs implicit "1D" for existing devices
+    "sv_width_cm": float,         # sensitive volume width (x-direction)
+    "sv_depth_cm": float,         # sensitive volume depth (y-direction, = epi_thickness)
+    "structure_type": str,        # "planar" | "mesa" | "3d_electrode"
+    "contact_names": list,        # ["anode", "cathode", ...] may include guard ring
+    "mean_chord_length_cm": float, # 4V/S for the SV geometry
+}
 ```
 
-## Modifications to Existing Modules
+Downstream modules (`poisson.py`, `drift_diffusion.py`, `charge_collection.py`) only use `device_name` and `region_name` to interact with devsim -- they never inspect mesh topology. This means they work on 2D devices without modification.
 
-### `sic_material.py` -- Minimal Changes
+## Data Flow: MC Event to y-Spectrum
 
-Add `Phi` parameter to `srh_lifetime()`:
+This is the core pipeline for microdosimetry. Each step has a clear input/output contract.
 
-```python
-def srh_lifetime(T, carrier="electron", params=None, Phi=0.0, damage_params=None):
-    """Temperature- AND fluence-dependent SRH lifetime.
+```
+                         MC COUPLING LAYER
+                    ============================
 
-    At Phi=0, returns exactly the same as current implementation (backward-compatible).
-    """
-    tau_0 = tau_300 * (T / 300.0) ** params.alpha_tau  # existing T-dependence
-    if Phi > 0 and damage_params is not None:
-        K_tau = damage_params.K_tau_n if carrier == "electron" else damage_params.K_tau_p
-        return 1.0 / (1.0 / tau_0 + K_tau * Phi)
-    return tau_0
+[Geant4 phase-space file]     [FLUKA output]      [Pre-binned LET CSV]
+        |                          |                       |
+        v                          v                       v
+   Geant4PhspReader          FLUKAReader            CSVLETReader
+   (parse IAEA binary       (parse FLUKA            (parse CSV with
+    or ROOT/CSV export)       usrbin/usrtrack)        LET, weight cols)
+        |                          |                       |
+        +----------+---------------+                       |
+                   |                                       |
+                   v                                       v
+            MCEvent dataclass                    LETSpectrum dataclass
+            - particle_type: str                 - LET_values: ndarray (keV/um)
+            - energy_MeV: float                  - weights: ndarray
+            - position: (x, y, z)                - particle_type: str
+            - direction: (dx, dy, dz)
+            - LET_keV_um: float
+                   |
+                   v
+
+                    CHARGE GENERATION LAYER
+                    ============================
+
+            IonTrackProfile
+            - LET (keV/um) -> dE/dx (eV/cm)
+            - Track projected along particle direction through SV
+            - Output: G(x, y) array on 2D mesh nodes (cm^-3 s^-1)
+            - Radial profile: optional delta-ray penumbra
+                   |
+                   v
+
+                    TCAD TRANSIENT LAYER
+                    ============================
+
+            SingleParticleTransient
+            1. Take pre-biased 2D device (or create + bias)
+            2. Set G(x,y) as RadGenRate via set_node_values
+            3. Time-domain BDF1 solve: short pulse (~ ns duration)
+            4. Integrate cathode current I(t) -> Q_collected (C)
+                   |
+                   v
+            PulseResult dataclass
+            - Q_collected: float (C)
+            - E_deposited: float (eV) [from MC event]
+            - E_collected: float (eV) [Q_collected / q * E_pair]
+            - current_trace: ndarray [optional, for debugging]
+            - collection_time: float (s)
+                   |
+                   v
+
+                    MICRODOSIMETRIC ANALYSIS LAYER
+                    ============================
+
+            For each MC event (or LET bin):
+            1. y_SiC = E_collected / (l_bar * rho_SiC)  [keV/um]
+                 where l_bar = mean chord length of SV
+            2. Apply tissue-equivalence:
+                 y_tissue = y_SiC * kappa(E)
+                 kappa = (S_tissue/S_SiC) * (rho_SiC/rho_tissue)
+                 kappa ~ 0.57 for muscle (Si value; SiC closer to 1.0)
+            3. Accumulate into y-spectrum with event weighting
+                   |
+                   v
+            YSpectrum dataclass
+            - y_bins: ndarray (keV/um, log-spaced)
+            - f_y: ndarray (frequency distribution)
+            - d_y: ndarray (dose distribution, d(y) = y*f(y)/y_F)
+            - y_F: float (frequency-mean lineal energy)
+            - y_D: float (dose-mean lineal energy)
 ```
 
-No new fields needed on `SiC4H_Parameters`. The existing `N_t` already parameterizes the TAT dark current model. Radiation damage increases N_t, and the irradiated value is computed in `radiation_damage.py` and passed through `create_sic_device()`.
+### Key Physics Decisions in the Pipeline
 
-### `device.py` -- Add Phi Parameter
+**Mean chord length:** For a rectangular SV (W x W x D), `l_bar = 4V/S` where V = volume, S = surface area. For 100x100x10 um: `l_bar = 4 * 100000 / 24000 = 16.7 um`. For 300x300x10 um: `l_bar = 4 * 900000 / 192000 = 18.75 um`. This is geometry-dependent and must be computed per structure via the `SVGeometry` dataclass.
 
-```python
-def create_sic_device(
-    ...,
-    Phi=0.0,            # NEW: proton fluence (cm^-2)
-    damage_params=None,  # NEW: RadiationDamageParams instance
-):
-    # Existing T-dependent params computed as before
+**CCE folding:** The y-spectrum must fold in the position-dependent CCE. If CCE < 1 at edge regions of the SV, the collected energy is less than deposited energy. This is the entire motivation for 2D simulation -- 1D assumes uniform CCE across the SV and cannot capture edge effects.
 
-    # If irradiated, apply damage to lifetime and doping
-    if Phi > 0 and damage_params is not None:
-        tau_n = degraded_lifetime(tau_n, Phi, damage_params.K_tau_n)
-        tau_p = degraded_lifetime(tau_p, Phi, damage_params.K_tau_p)
-        N_D_eff = effective_doping(N_D, Phi, damage_params.eta)
-        N_t_irradiated = compute_irradiated_N_t(N_t, Phi, damage_params)
-        # Use N_D_eff instead of N_D for doping profile
-        # Use degraded tau_n, tau_p for SRH params
-        # Use N_t_irradiated for TAT model
+**Tissue equivalence kappa:** Literature values for Si-to-tissue are kappa ~ 0.57 (muscle) or 0.54 (water). SiC has effective Z closer to tissue than Si (Z_eff_SiC ~ 10 vs Z_Si = 14 vs Z_tissue ~ 7.4), so kappa_SiC will be closer to 1.0 than kappa_Si. For the feasibility study, compute kappa from stopping power ratios (PSTAR/SRIM data). This is energy-dependent, not a simple constant.
 
-    # Store Phi in device_info for downstream reference
-    device_info["Phi"] = Phi
-    device_info["damage_params"] = damage_params
-```
-
-### `dark_current.py` -- No Code Changes
-
-The TAT model already reads `N_t` from `device_info["params"].N_t` or as an explicit override parameter in `setup_tat_model(device_info, N_t=N_t)`. When `create_sic_device` sets the irradiated `N_t` value, it flows through automatically.
-
-### `charge_collection.py` -- No Code Changes
-
-CCE computation reads `tau` and `mu` from devsim region parameters. Degraded values set by `create_sic_device` flow through automatically. The Hecht equation in `hecht_cce()` already accepts explicit `tau_e`, `tau_p` parameters.
-
-### `drift_diffusion.py` -- No Code Changes
-
-The DD solver consumes whatever parameters are set on the devsim device. USRH reads `taun`, `taup`, `n1`, `p1` from devsim parameters. Carrier currents read `mu_n`, `mu_p`. All set by `create_sic_device()`.
-
-## New Module: `fluence_sweep.py`
-
-Follows the exact pattern of `temperature_sweep.py`:
-
-```python
-def sweep_cce_vs_fluence(
-    fluences,
-    V_bias=-30.0,
-    T=300,
-    **device_kwargs,
-):
-    """Sweep fluence and extract CCE at each point.
-
-    For each Phi: creates DD device with irradiated params,
-    ramps to V_bias, computes CCE, cleans up device.
-    """
-    # Pattern identical to sweep_iv_vs_temperature()
-    # but varies Phi instead of T
-
-def sweep_dark_current_vs_fluence(
-    fluences,
-    V_eval=-30.0,
-    T=300,
-    **device_kwargs,
-):
-    """Dark current increase with accumulated damage."""
-
-def sweep_cv_vs_fluence(
-    fluences,
-    V_range,
-    T=300,
-    **device_kwargs,
-):
-    """C-V shift with fluence (carrier removal visualization)."""
-```
-
-## New Module: `annealing.py`
-
-```python
-def annealing_trajectory(
-    Phi,
-    T_anneal,
-    t_range,
-    damage_params=None,
-):
-    """Compute defect concentrations vs annealing time.
-
-    Returns time evolution of each defect species,
-    effective tau, effective N_D at each time point.
-    """
-
-def multi_step_annealing(
-    Phi,
-    annealing_steps,  # list of (T, duration) tuples
-    damage_params=None,
-):
-    """Multi-temperature annealing protocol."""
-```
+**Log-binning for y-spectra:** Microdosimetric spectra must be plotted on logarithmic y-axis with equal log-spaced bins. The frequency spectrum f(y) is redistributed into log bins, then the dose spectrum is computed as d(y) = y \* f(y) / y_F. This is standard microdosimetric practice (ICRU Report 36).
 
 ## Patterns to Follow
 
-### Pattern 1: Parameter Passthrough (Established)
+### Pattern 1: Fresh-Device-Per-Point (Existing, Extended to 2D)
 
-**What:** New parameters (Phi, damage_params) flow through the same `create_sic_device() -> devsim.set_parameter()` pipeline as T-dependent params.
-
-**When:** Always. This is the core architectural decision.
-
-**Why:** Keeps downstream modules (DD solver, CCE, dark current) completely unchanged. They consume devsim parameters regardless of origin.
+The existing "fluence-as-temperature" pattern creates a fresh devsim device for each sweep point, avoiding state leakage. Extend this to 2D for the CCE(LET) characterization runs:
 
 ```python
-# How T flows today (v1.1):
-create_sic_device(T=320)
-  -> intrinsic_concentration(320) -> n_i
-  -> srh_lifetime(320) -> tau
-  -> mobility_caughey_thomas_T(N_D, 320) -> mu
-  -> devsim.set_parameter(..., name="taun", value=tau)
-
-# How Phi will flow (v2.0):
-create_sic_device(T=300, Phi=1e13, damage_params=dmg)
-  -> srh_lifetime(300, Phi=1e13, damage_params=dmg) -> tau_degraded
-  -> effective_doping(N_D, 1e13, dmg.eta) -> N_D_eff
-  -> devsim.set_parameter(..., name="taun", value=tau_degraded)
-  # Everything downstream sees degraded params, no code changes needed
+def characterize_cce_vs_let(structure_config, bias_V, LET_values):
+    """Build CCE(LET) lookup table: one TCAD run per LET value."""
+    results = []
+    for LET in LET_values:
+        dev_name = f"cce_let_{uuid.uuid4().hex[:8]}"
+        device_info = create_dd_device_2d(
+            device_name=dev_name,
+            sv_width_cm=structure_config.width_cm,
+            sv_depth_cm=structure_config.depth_cm,
+            structure_type=structure_config.structure_type,
+        )
+        try:
+            ramp_bias(device_info, bias_V, contact="cathode")
+            G_xy = uniform_let_generation(LET, device_info)
+            Q = run_single_particle_transient(device_info, G_xy)
+            results.append({"LET": LET, "Q": Q, "CCE": Q / Q_ideal(LET)})
+        finally:
+            devsim.delete_device(device=dev_name)
+    return results
 ```
 
-### Pattern 2: Fresh Device Per Sweep Point (Established)
+### Pattern 2: Bias-First-Then-Generation (Existing, Critical for 2D)
 
-**What:** Each fluence point creates a new devsim device, extracts results, deletes device.
-
-**When:** For fluence sweeps (CCE vs Phi, dark current vs Phi).
-
-**Why:** devsim device state cannot be easily "reset" after parameter changes that affect mesh/doping. The existing `temperature_sweep.py` and `cce_vs_epi_thickness()` already use this pattern with UUID-based device names and try/finally cleanup.
+The existing convergence strategy: ramp bias to operating point first, then inject generation. Even more important in 2D because edge fields create steeper gradients and the solver needs a good initial guess:
 
 ```python
-# Established pattern from temperature_sweep.py:
-for T in temperatures:
-    dev_name = f"sweep_{uuid.uuid4().hex[:8]}"
-    device_info = create_dd_device(device_name=dev_name, T=T, ...)
-    try:
-        # ramp, extract, record
-    finally:
-        devsim.delete_device(device=dev_name)
+# CORRECT order (established in v1.0, mandatory for v3.0):
+ramp_bias(device_info, V_target=-50.0, contact="cathode")
+inject_ion_track(device_info, G_xy, pulse_duration=1e-9)
+# Transient from biased state
+
+# WRONG order (will diverge in 2D):
+inject_ion_track(device_info, G_xy, pulse_duration=1e-9)
+ramp_bias(device_info, V_target=-50.0)  # simultaneous ramp + generation = divergence
 ```
 
-### Pattern 3: Dataclass for Domain Parameters (Established)
+### Pattern 3: Layered Reader for MC Coupling
 
-**What:** Use a `@dataclass` for radiation damage parameters, mirroring `SiC4H_Parameters`.
+MC codes produce wildly different output formats. The coupling interface uses a layered architecture that isolates format parsing from physics:
 
-**When:** For the new `RadiationDamageParams`.
+```python
+# Layer 1: Format-specific readers (parse files into common dataclass)
+class CSVLETReader:
+    """Reads CSV with columns: LET_keV_um, weight, [particle_type]."""
+    def read(self, filepath: str) -> list[MCEvent]: ...
 
-**Why:** Consistent with the existing pattern. Allows easy override of individual parameters while keeping sensible defaults. Makes parameter provenance clear.
+class Geant4PhspReader:
+    """Reads IAEA .IAEAphsp binary (33 bytes/particle)."""
+    def read(self, filepath: str) -> list[MCEvent]: ...
 
-### Pattern 4: Backward Compatibility via Default Arguments
+# Layer 2: Physics conversion (format-independent)
+class IonTrackProfile:
+    """Convert MCEvent to G(x,y) on mesh."""
+    def __init__(self, event: MCEvent, device_info: dict):
+        self.dEdx_eV_cm = event.LET_keV_um * 1e4 * 1e3  # keV/um -> eV/cm
+        self.G_per_cm = self.dEdx_eV_cm / device_info["params"].E_pair_eV
 
-**What:** All existing function signatures keep working unchanged. New parameters default to `None` or `0.0`.
+    def project_on_mesh(self) -> np.ndarray:
+        """Return G values at mesh node positions."""
+        ...
+```
 
-**When:** For every modified function.
+**Start with CSV reader.** The Petringa group can export from Geant4/FLUKA to CSV. Binary readers are Phase 2 optimizations. CSV covers 100% of use cases for the feasibility study.
 
-**Why:** The 8 existing validated notebooks must continue to produce identical results. `Phi=0` must mean "pristine device" everywhere.
+### Pattern 4: Pre-Binned LET Mode (CCE Lookup Table)
+
+Running a full 2D transient for every MC event is computationally prohibitive. The practical approach:
+
+```
+Phase A: Characterize (expensive, done once per geometry+bias)
+    Run ~30-50 TCAD transients at log-spaced LET values (0.1 - 1000 keV/um)
+    -> Build CCE(LET) lookup table
+
+Phase B: Apply (fast, done for each MC dataset)
+    For each event: CCE = interp(event.LET, lookup)
+    E_collected = E_deposited * CCE
+    y = E_collected / (l_bar * rho)
+    Accumulate into spectrum
+```
+
+This separates the expensive computation (TCAD) from the statistical computation (spectrum building). A 2D transient takes ~5-30s; with 30 LET points, characterization takes ~3-15 minutes per geometry. Applying to 10K+ events then takes seconds.
+
+### Pattern 5: Dataclass for Structure Parameterization
+
+Alternative structures are parameterized through a configuration dataclass, avoiding argument proliferation:
+
+```python
+@dataclass
+class SVGeometry:
+    """Sensitive volume geometry specification."""
+    structure_type: str  # "planar" | "mesa" | "3d_electrode" | "stacked"
+    width_um: float      # SV lateral dimension, e.g., 100 or 300
+    depth_um: float      # SV depth (epi thickness), e.g., 10
+
+    # Mesa-specific
+    mesa_height_um: float = 0.0
+    mesa_sidewall_angle_deg: float = 90.0
+
+    # 3D electrode-specific
+    electrode_radius_um: float = 5.0
+    electrode_pitch_um: float = 50.0
+    electrode_depth_um: float = 10.0
+
+    # Stacked delta-E/E
+    n_stages: int = 1
+    stage_gap_um: float = 0.0
+
+    @property
+    def width_cm(self) -> float:
+        return self.width_um * 1e-4
+
+    @property
+    def depth_cm(self) -> float:
+        return self.depth_um * 1e-4
+
+    @property
+    def mean_chord_length_um(self) -> float:
+        """Mean chord length for convex body: l = 4V/S."""
+        W, D = self.width_um, self.depth_um
+        V = W * W * D  # um^3 (square cross-section)
+        S = 2 * (W * W + 2 * W * D)  # um^2
+        return 4 * V / S
+```
+
+Each structure type maps to a mesh generation function in `device2d.py`:
+
+| Structure         | Mesh Function                      | Key Mesh Feature                                               |
+| ----------------- | ---------------------------------- | -------------------------------------------------------------- |
+| Planar            | `create_sic_device_2d()`           | Standard p+/n-/n+ with lateral boundaries                      |
+| Mesa              | `create_mesa_device()`             | Etched region creates air/SiC interface at mesa sidewalls      |
+| 3D electrode      | `create_3d_electrode_device()`     | Columnar contacts penetrating epi, modeled as 2D cross-section |
+| Stacked delta-E/E | Two `create_sic_device_2d()` calls | Separate devices, coupled via shared boundary                  |
 
 ## Anti-Patterns to Avoid
 
-### Anti-Pattern 1: Modifying devsim Parameters In-Place for Fluence Steps
+### Anti-Pattern 1: Shared Device Factory with Dimension Branching
 
-**What:** Changing `tau`, `N_t`, `N_D` on an existing device via `devsim.set_parameter()` then re-solving.
+**What:** A single `create_device(dim="1D"/"2D", ...)` that branches internally.
+**Why bad:** The 1D path is validated against 14 notebooks. The 2D API (`add_2d_mesh_line` with `dir`, `add_2d_region` with box coords) shares zero code with 1D. A branching factory adds complexity without code reuse.
+**Instead:** Separate `device.py` (1D, frozen) and `device2d.py` (2D, new). Both produce `device_info` dicts with the same base contract.
 
-**Why bad:** Doping profile (`Donors`, `Acceptors`, `NetDoping`) is a node model expression set at device creation time. Changing N_D after creation requires re-creating the node model, which can conflict with existing model definitions. The existing pattern of fresh-device-per-point avoids this entirely.
+### Anti-Pattern 2: Modifying `generation_profiles.py` for 2D
 
-**Instead:** Create a new device for each fluence point (Pattern 2).
+**What:** Adding 2D ion track generation to the existing `generation_profiles.py`.
+**Why bad:** The existing module provides analytical 1D profiles (alpha Bragg curves, flat proton entrance dose). 2D ion track generation from MC events is fundamentally different: it maps particle trajectories onto mesh geometry. Mixing them creates a module with two unrelated responsibilities.
+**Instead:** 2D charge generation lives in `mc_coupling.py` (track projection onto mesh) and `single_particle.py` (injection into devsim).
 
-### Anti-Pattern 2: Separate Irradiated Device Creation Function
+### Anti-Pattern 3: Full 3D Simulation
 
-**What:** Creating `create_irradiated_sic_device()` as a separate function from `create_sic_device()`.
+**What:** Attempting true 3D devsim simulation for the microdosimeter.
+**Why bad:** PROJECT.md explicitly states "Full 3D device simulation" is out of scope. The computational cost is orders of magnitude higher. The Petringa SV geometries (100x100x10 um, 300x300x10 um) are planar structures where 2D cross-section captures the essential edge-effect physics.
+**Instead:** Model 3D electrode structures as 2D cross-sections. Model planar structures as 2D with symmetry assumptions.
 
-**Why bad:** Code duplication. Every future change to device setup must be made in two places. The physics of an irradiated device is the same as a pristine device -- just with different parameter values.
+### Anti-Pattern 4: Per-Event Device Creation for Large MC Sets
 
-**Instead:** Add `Phi` and `damage_params` to the existing `create_sic_device()` signature with backward-compatible defaults.
+**What:** Creating and destroying a full 2D devsim device for each of 10,000+ MC events.
+**Why bad:** 2D device creation + Poisson + DD setup + bias ramp takes ~2-10 seconds per device. At 10K events, that is 6-28 hours.
+**Instead:** Use the CCE(LET) lookup table pattern (Pattern 4). Run ~30-50 full TCAD transients to characterize device response, then apply the lookup to the full event set.
 
-### Anti-Pattern 3: Fluence-Dependent Expressions in devsim Models
+### Anti-Pattern 5: Storing Ion Track as devsim Expression String
 
-**What:** Encoding fluence dependence directly in devsim string expressions (e.g., `"1.0/(1.0/taun + K_tau * Phi)"`).
+**What:** Building a complex string expression for G(x,y) along the ion track direction.
+**Why bad:** devsim expression strings have limited function support and become unwieldy for arbitrary track geometries. A track at 30 degrees through a 10 um SV requires trigonometry in the expression.
+**Instead:** Compute G values at mesh node positions in numpy, then use `devsim.set_node_values()` to inject them. This is the same pattern already used for `RadGenRate` in `charge_collection.py`.
 
-**Why bad:** Unnecessary complexity. devsim parameters are scalar values set before solving. The fluence dependence should be computed in Python and the resulting scalar value set as a parameter. This is how T-dependence already works.
+## 2D Mesh Strategy
 
-**Instead:** Compute irradiated values in Python, pass scalars to devsim.
+### devsim 2D Mesh API (Verified)
 
-### Anti-Pattern 4: Storing Fluence State in a Global or Module Variable
-
-**What:** Using module-level `current_fluence` state.
-
-**Why bad:** The existing architecture is stateless -- each `create_sic_device()` call is independent. Fluence should be a parameter, not state.
-
-**Instead:** Pass `Phi` explicitly to every function that needs it.
-
-## Data Flow Diagram
-
-```
-User/Notebook
-    |
-    | Phi=1e13, T=300
-    v
-create_sic_device(Phi=1e13, T=300, damage_params=dmg)
-    |
-    |-- radiation_damage.degraded_lifetime(tau_0, Phi, K_tau) -> tau_irr
-    |-- radiation_damage.effective_doping(N_D_0, Phi, eta) -> N_D_eff
-    |-- radiation_damage.irradiated_trap_density(N_t_0, Phi, g_Z12) -> N_t_irr
-    |
-    |-- devsim.set_parameter("taun", tau_irr)
-    |-- devsim.set_parameter("taup", tau_p_irr)
-    |-- set_doping_profile(..., N_D=N_D_eff)  OR  set_graded_doping_profile(...)
-    |
-    v
-device_info dict
-    |-- "Phi": 1e13
-    |-- "damage_params": dmg
-    |-- "tau_n_irradiated": tau_irr
-    |-- "N_D_eff": N_D_eff
-    |
-    v
-setup_poisson() -> solve_equilibrium() -> setup_sic_drift_diffusion()
-    [All unchanged -- consume devsim parameters as before]
-    |
-    v
-ramp_bias() -> compute_cce_from_dd() / extract_dark_current_components()
-    [All unchanged]
-    |
-    v
-Results: CCE(Phi), I_dark(Phi), C-V(Phi)
-```
-
-## Interaction with Graded Doping Profile
-
-The existing graded doping profile (`N_D_junction`, `N_D_bulk`, `L_transition`) complicates carrier removal slightly. Two approaches:
-
-**Approach A (Recommended): Uniform carrier removal across epi.**
-Apply `N_D_eff(x) = N_D(x) - eta * Phi` at each point. This means the graded profile shifts down uniformly. Physically reasonable if defect introduction is uniform across the thin epi layer (proton range >> epi thickness for clinical beams).
+The devsim built-in 2D mesher uses structured rectangular meshes defined by mesh lines:
 
 ```python
-# In set_graded_doping_profile, replace N_D_junction and N_D_bulk:
-N_D_junction_eff = max(N_D_junction - eta * Phi, 0)
-N_D_bulk_eff = max(N_D_bulk - eta * Phi, 0)
+devsim.create_2d_mesh(mesh="sic_2d")
+# X-direction lines (lateral dimension)
+devsim.add_2d_mesh_line(mesh="sic_2d", dir="x", pos=0.0, ps=1e-4)
+devsim.add_2d_mesh_line(mesh="sic_2d", dir="x", pos=sv_width, ps=1e-4)
+# Y-direction lines (depth dimension)
+devsim.add_2d_mesh_line(mesh="sic_2d", dir="y", pos=0.0, ps=1e-5)
+devsim.add_2d_mesh_line(mesh="sic_2d", dir="y", pos=junction_pos, ps=1e-7)
+devsim.add_2d_mesh_line(mesh="sic_2d", dir="y", pos=total_depth, ps=1e-5)
+# Region as box
+devsim.add_2d_region(mesh="sic_2d", material="SiC", region="sic",
+                     xl=0, xh=sv_width, yl=0, yh=total_depth)
+# Contacts as coordinate ranges
+devsim.add_2d_contact(mesh="sic_2d", name="anode", region="sic",
+                      yl=0, yh=0, xl=0, xh=sv_width, bloat=1e-8,
+                      material="metal")
+devsim.add_2d_contact(mesh="sic_2d", name="cathode", region="sic",
+                      yl=total_depth, yh=total_depth, xl=0, xh=sv_width,
+                      bloat=1e-8, material="metal")
+devsim.finalize_mesh(mesh="sic_2d")
+devsim.create_device(mesh="sic_2d", device="sic_micro")
 ```
 
-**Approach B: Compensate at bulk level only.**
-Only reduce `N_D_bulk` since the junction region is thin. Less physical but simpler.
+For complex geometries (mesa sidewalls, 3D electrodes), the built-in mesher may be insufficient. devsim supports Gmsh v2.2 format import via `create_gmsh_mesh()`, `add_gmsh_region()`, `add_gmsh_contact()`. Use the built-in mesher for planar structures (Phase 1) and Gmsh for mesa/3D electrode structures (Phase 6) if needed.
 
-Use Approach A -- it is both more physical and trivial to implement since the graded doping parameters are already separated.
+### Mesh Refinement Zones (2D Planar)
+
+```
+y (depth)
+^
+|  anode contact (y = 0)
+|  +-----------------------------------------+
+|  |  p+ substrate (coarse mesh, ~100nm)      |
+|  +-----------------------------------------+  <- junction (fine mesh, ~1nm)
+|  |  n- epi (graded, fine near junction)     |
+|  |                                          |
+|  |  *** Sensitive Volume ***                |
+|  |                                          |
+|  +-----------------------------------------+
+|  |  n+ buffer (if present)                  |
+|  +-----------------------------------------+
+|  cathode contact (y = total_depth)
++-----------------------------------------------> x (lateral)
+   |<--- SV width --->|
+   x=0              x=W
+   (symmetry)       (edge: REFINE HERE
+                     for edge effects)
+```
+
+Critical refinement: the **lateral edges** (x near W) where fringing fields reduce CCE. This is the primary motivation for 2D over 1D.
+
+### Mesh Size Estimates
+
+| Geometry               | Approximate Nodes | Est. Solve Time | Notes                                   |
+| ---------------------- | ----------------: | --------------: | --------------------------------------- |
+| 1D Petringa (existing) |              ~200 |             <1s | Junction refinement only                |
+| 2D planar 100x10 um    |      ~2,000-5,000 |           2-10s | Refine junction + lateral edges         |
+| 2D planar 300x10 um    |     ~5,000-15,000 |           5-30s | Larger lateral extent                   |
+| 2D mesa 100x10 um      |      ~3,000-8,000 |           5-20s | Additional refinement at mesa sidewalls |
+
+### Coordinate Convention
+
+The existing 1D code uses x as the depth axis (x=0 at anode, x increasing into epi). For 2D, adopt:
+
+- **y = depth** (y=0 at top surface/anode, y increasing downward)
+- **x = lateral** (x=0 at center or left edge of SV)
+
+This matches the standard TCAD convention and avoids confusion with the 1D x-coordinate. The `junction_pos` field in `device_info` becomes a y-coordinate in 2D.
+
+## Interaction Between 2D Device and Existing Modules
+
+### Verified Dimension-Agnostic Modules
+
+The following existing functions operate exclusively through `device_name`/`region_name` strings and devsim equation-level APIs. They do NOT inspect mesh topology and will work on 2D devices:
+
+| Module                   | Function                      | Why It Works in 2D                                                                          |
+| ------------------------ | ----------------------------- | ------------------------------------------------------------------------------------------- |
+| `poisson.py`             | `setup_poisson()`             | Creates node/edge models by name; devsim handles dimensionality                             |
+| `poisson.py`             | `solve_equilibrium()`         | Calls `devsim.solve(type="dc")`; dimension-independent                                      |
+| `drift_diffusion.py`     | `setup_sic_drift_diffusion()` | Uses `CreateSolution`, `CreateNodeModel`, `CreateBernoulli`, etc. -- all dimension-agnostic |
+| `drift_diffusion.py`     | `ramp_bias()`                 | Sets contact bias parameter, calls `devsim.solve()`                                         |
+| `drift_diffusion.py`     | `extract_contact_current()`   | `devsim.get_contact_current()` works on any dimension                                       |
+| `charge_collection.py`   | `add_generation_to_dd()`      | Creates `RadGenRate` node model -- dimension-agnostic                                       |
+| `flash_recombination.py` | `add_auger_recombination()`   | Creates Auger models on node/edge level                                                     |
+| `transient.py`           | `TransientSolver`             | Wraps `devsim.solve(type="transient")`                                                      |
+
+### Functions That Need 2D Variants
+
+| Module                 | Function                              | Issue in 2D                                          | Solution                                                                          |
+| ---------------------- | ------------------------------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `poisson.py`           | `extract_depletion_width_numerical()` | Uses 1D field profile; concept changes in 2D         | Create `extract_depletion_region_2d()` that returns 2D depletion boundary contour |
+| `charge_collection.py` | `compute_cce_from_dd()`               | References `proton_generation_profile()` which is 1D | Create `compute_cce_2d()` that uses 2D generation profile                         |
+| `plotting.py`          | All plot functions                    | 1D line plots; 2D needs contour/heatmap plots        | New `plotting2d.py` module                                                        |
+
+### The `create_dd_device_2d` Convenience Wrapper
+
+Add to `drift_diffusion.py` (or a new `drift_diffusion_2d.py`):
+
+```python
+def create_dd_device_2d(structure_config=None, **kwargs):
+    """Create a 2D device with full DD setup.
+
+    Mirrors create_dd_device() but uses create_sic_device_2d().
+    """
+    from src.device2d import create_sic_device_2d
+    device_info = create_sic_device_2d(structure_config=structure_config, **kwargs)
+    setup_poisson(device_info)      # existing, works in 2D
+    solve_equilibrium(device_info)  # existing, works in 2D
+    setup_sic_drift_diffusion(device_info)  # existing, works in 2D
+    device_info["dd_initialized"] = True
+    return device_info
+```
 
 ## Build Order (Dependency-Driven)
 
-### Phase 1: Foundation -- `radiation_damage.py` + `sic_material.py` Changes
+```
+Phase 1: device2d.py + 2D electrostatic validation
+   |  Depends on: sic_material.py, poisson.py, drift_diffusion.py (all existing)
+   |  Validates: 2D electrostatics match 1D for wide (infinite-width-limit) device
+   |  Delivers: create_sic_device_2d(), create_dd_device_2d()
+   v
+Phase 2: 2D CCE and edge effect quantification
+   |  Depends on: Phase 1 + charge_collection.py (existing)
+   |  Validates: CCE vs position across SV, edge effect magnitude
+   |  Delivers: CCE(x) profile, edge-to-center CCE ratio
+   v
+Phase 3: single_particle.py + transient charge collection
+   |  Depends on: Phase 1 + transient.py (existing)
+   |  Validates: Current pulse from synthetic ion track, Q vs LET
+   |  Delivers: SingleParticleTransient, PulseResult
+   v
+Phase 4: mc_coupling.py (readers + converters)
+   |  Depends on: Phase 3 for IonTrackProfile -> G(x,y) validation
+   |  Validates: CSV reader + LET->generation conversion
+   |  Delivers: MCEvent, IonTrackProfile, CSVLETReader
+   v
+Phase 5: microdosimetry.py (spectra computation)
+   |  Depends on: Phase 3 + Phase 4
+   |  Validates: y-spectrum from known LET distribution, y_D, y_F
+   |  Delivers: YSpectrum, tissue equivalence correction
+   v
+Phase 6: Alternative structures (mesa, 3D electrode)
+   |  Depends on: Phase 1 (mesh generation) + Phase 5 (comparison metric)
+   |  Delivers: Structure comparison matrix (CCE, noise, resolution)
+   v
+Phase 7: Parametric optimization + feasibility report
+      Depends on: all above
+      Delivers: Publication-quality report with fabrication recommendations
+```
 
-**Rationale:** Pure physics with no devsim dependency. Fully testable with unit tests. Must exist before any device simulation can use irradiated parameters.
+**Rationale for ordering:**
 
-Build:
-
-1. `RadiationDamageParams` dataclass with literature values
-2. `defect_concentration(Phi, g)` -- trivial but establishes API
-3. `degraded_lifetime(tau_0, Phi, K_tau)` -- the workhorse function
-4. `effective_doping(N_D_0, Phi, eta)` with floor at 0
-5. Modify `sic_material.srh_lifetime()` to accept `Phi` (backward-compatible)
-
-Validation: Unit tests comparing against literature data points. At Phi=0, all functions return pristine values.
-
-### Phase 2: Device Integration -- `device.py` Changes
-
-**Rationale:** Connects radiation physics to devsim device creation. Requires Phase 1.
-
-Build:
-
-1. Add `Phi`, `damage_params` to `create_sic_device()` signature
-2. Wire degraded lifetime into devsim `taun`, `taup` parameters
-3. Wire effective doping into `set_doping_profile()` / `set_graded_doping_profile()`
-4. Store radiation state in `device_info` dict
-5. Propagate through `create_dd_device()` in `drift_diffusion.py`
-
-Validation: At Phi=0, all 8 existing notebooks produce identical results (regression test). At Phi>0, verify tau and N_D values match hand calculations.
-
-### Phase 3: CCE vs Fluence -- `fluence_sweep.py` + Notebook
-
-**Rationale:** The primary deliverable. Requires Phases 1-2.
-
-Build:
-
-1. `sweep_cce_vs_fluence()` following `temperature_sweep.py` pattern
-2. Hecht equation comparison with irradiated parameters
-3. Notebook: CCE vs Phi curves at multiple bias voltages
-4. Notebook: CCE vs bias at multiple fluence levels
-
-Validation: CCE should decrease monotonically with fluence. At Phi=0, matches existing CCE results. Compare Hecht analytical with DD numerical.
-
-### Phase 4: Dark Current vs Fluence
-
-**Rationale:** Second key observable. Requires Phases 1-2.
-
-Build:
-
-1. `sweep_dark_current_vs_fluence()`
-2. Irradiated `N_t` computation (trap density increases with fluence)
-3. Notebook: I_dark vs Phi at fixed bias
-4. Notebook: I-V curves at multiple fluence levels
-
-Validation: Dark current should increase with fluence. TAT component should grow fastest due to increased trap density and field enhancement.
-
-### Phase 5: Carrier Removal / C-V Shift
-
-**Rationale:** C-V is directly observable experimentally. Requires Phase 2.
-
-Build:
-
-1. `sweep_cv_vs_fluence()`
-2. Depletion width extraction at each fluence
-3. Notebook: C-V curves shifting with fluence
-4. Notebook: N_D_eff vs Phi showing carrier removal
-
-Validation: Depletion width should increase with fluence (lower effective doping). At Phi_c = N_D_0/eta, device should be fully compensated.
-
-### Phase 6: Annealing Kinetics -- `annealing.py` + Notebook
-
-**Rationale:** Most complex physics, least constrained by data. Build last.
-
-Build:
-
-1. `annealing_trajectory()` with Arrhenius kinetics
-2. `multi_step_annealing()` for thermal protocols
-3. Notebook: Defect recovery curves vs time at different T
-4. Notebook: CCE recovery after annealing
-
-Validation: Z1/2 should be essentially stable below 1200 C. Less stable defects (EH4) should show measurable recovery at 200-800 C.
-
-### Phase 7: Parametric Optimization + Publication Notebooks
-
-**Rationale:** Synthesis of all damage features.
-
-Build:
-
-1. Radiation hardness optimization (which epi thickness, doping, bias maximize CCE at target fluence)
-2. Publication-quality figures combining all damage effects
-3. Comparison with literature data where available
+- Phase 1 must come first: without 2D devices, nothing else works. 2D-vs-1D validation catches mesh/physics errors before downstream modules build on them.
+- Phase 2 validates CCE in 2D before single-particle work. If edge CCE is negligible (unlikely but possible for these aspect ratios), the 2D effort has different payoff than expected.
+- Phase 3 before Phase 4: the transient solver must work with synthetic tracks before we pipe MC events through it. Test with known LET values, verify Q = LET _ path_length / E_pair _ CCE.
+- Phase 4 before Phase 5: microdosimetry needs MC coupling to produce pulse height distributions.
+- Phase 6 late: alternative structures are geometry variants of Phase 1. The physics pipeline (Phases 3-5) is structure-agnostic by design.
+- Phase 7 last: synthesis requires all components.
 
 ## Scalability Considerations
 
-| Concern             | Current (v1.1)                            | With Radiation Damage (v2.0)                                        |
-| ------------------- | ----------------------------------------- | ------------------------------------------------------------------- |
-| Sweep time          | T-sweep: ~8 devices                       | Phi-sweep: ~10-20 devices per curve. Same pattern, linear scaling.  |
-| Memory              | Single device per sweep point, cleaned up | Same. UUID device names prevent collisions.                         |
-| Parameter space     | T x V                                     | T x V x Phi x annealing_time. 4D space may need selective sampling. |
-| Notebook complexity | 8 notebooks, each standalone              | 3-4 new notebooks. Keep modular -- one physics effect per notebook. |
+| Concern                | Feasibility Study (v3.0)           | Future Production | Notes                                  |
+| ---------------------- | ---------------------------------- | ----------------- | -------------------------------------- |
+| Events per spectrum    | 30-50 TCAD + lookup table          | Same              | Lookup table scales to any event count |
+| Structures to compare  | 3-5                                | 3-5               | Reasonable for parametric study        |
+| Parameter sweep points | ~50-100 (geometry x doping x bias) | ~1000             | Embarrassingly parallel per point      |
+| Memory per 2D solve    | ~50-100 MB                         | ~50-100 MB        | devsim is memory-efficient             |
+| Total compute time     | ~1-4 hours (serial)                | Parallelizable    | Each device is independent             |
+| Largest bottleneck     | 2D transient solves                | Same              | BDF1 with adaptive dt; ~5-30s each     |
 
 ## Sources
 
-- [Burin et al., "TCAD Simulations of Radiation Damage in 4H-SiC", arXiv:2407.16710](https://arxiv.org/html/2407.16710v1) -- Defect introduction rates (Z1/2: 5.0 cm^-1, EH6/7: 1.6 cm^-1, EH4: 2.4 cm^-1), capture cross-sections, TCAD methodology. Note: neutron irradiation; proton rates require NIEL scaling. HIGH confidence for model structure, MEDIUM confidence for exact proton values.
-- [Li et al., "TCAD modeling of radiation-induced defects in 4H-SiC diodes", arXiv:2407.11776](https://arxiv.org/html/2407.11776v1) -- Five-defect TCAD model validated with Sentaurus, forward/reverse I-V matching. HIGH confidence.
-- [Zhao et al., "Mechanisms of proton irradiation-induced defects on 4H-SiC PIN detectors", arXiv:2503.09016](https://arxiv.org/html/2503.09016v2) -- Proton-specific: lifetime degradation from 484 ns to 376 ns at 10^14 neq/cm^2, EH3 introduction rate 1.48 cm^-1, carrier removal to full compensation. HIGH confidence (direct proton data).
-- [In-situ Radiation Damage Study of SiC Detectors Under Clinical Proton Beams, arXiv:2510.11304](https://arxiv.org/abs/2510.11304) -- Donor removal rates 4.2-6.4 cm^-1 for 252.7 MeV protons. HIGH confidence.
-- [Carrier Lifetime Dependence on Temperature and Proton Irradiation in 4H-SiC, IEEE Access 2024](https://ieeexplore.ieee.org/document/10538275) -- Damage coefficient K_T with Arrhenius temperature dependence. MEDIUM confidence (specific K_T values behind paywall).
-- [Hazdra et al., "Radiation Defects and Carrier Lifetime in 4H-SiC Bipolar Devices", phys. stat. sol. (a) 2021](https://onlinelibrary.wiley.com/doi/abs/10.1002/pssa.202100218) -- Z1/Z2 as lifetime killer, DLTS characterization. HIGH confidence.
-- [Carrier removal rates in 4H-SiC power diodes, ScienceDirect 2023](https://www.sciencedirect.com/science/article/abs/pii/S136980012300464X) -- Predictive analytical model for carrier removal rates using NIEL concept. MEDIUM confidence.
-- Z1/2 annealing: stable below ~1200 C, migration onset at ~1400 C. EH4 and interstitials anneal at 200-800 C. MEDIUM confidence (synthesized from multiple sources).
+- [DEVSIM Meshing Documentation](https://devsim.net/meshing.html) -- 2D mesh API: `create_2d_mesh`, `add_2d_mesh_line`, `add_2d_region`, `add_2d_contact`, Gmsh integration (HIGH confidence, official docs)
+- [DEVSIM Examples](https://devsim.net/examples_short.html) -- cap2d.py 2D capacitor example, equation setup pattern (HIGH confidence, official docs)
+- [DEVSIM Command Reference](https://devsim.net/CommandReference.html) -- Full API reference (HIGH confidence, official docs)
+- [DEVSIM GitHub](https://github.com/devsim/devsim) -- Source code and examples (HIGH confidence)
+- [Correction factors Si to tissue in 12C therapy](https://pubmed.ncbi.nlm.nih.gov/28151733/) -- kappa ~ 0.57 for muscle, 0.54 for water (MEDIUM confidence, Si not SiC)
+- [Tissue equivalence correction in Si microdosimetry](https://ieeexplore.ieee.org/document/4723798/) -- kappa methodology for protons (MEDIUM confidence)
+- [Silicon 3D Microdosimeters for QA](https://www.mdpi.com/2076-3417/12/1/328) -- SOI microdosimeter TCAD design patterns (MEDIUM confidence)
+- [Microdosimetry principles and applications](https://pmc.ncbi.nlm.nih.gov/articles/PMC4747668/) -- y-spectrum computation, y_D, y_F definitions, log-binning (HIGH confidence)
+- [Geant4 IAEA phase-space interface](https://www-nds.iaea.org/phsp/Geant4/G4IAEAphsp_HowTo.pdf) -- Phase-space file format: 33 bytes/particle (HIGH confidence, IAEA official)
+- [SiC sensors in radiotherapy dosimetry](https://www.frontiersin.org/journals/sensors/articles/10.3389/fsens.2025.1622153/full) -- SiC tissue equivalence advantages over Si (MEDIUM confidence)
+- [CERN Introductory Lecture on Microdosimetry](https://indico.cern.ch/event/241122/contributions/525346/attachments/408668/567683/Colautti_Introductory_Lecture_on_Microdosimetry.pdf) -- Spectrum computation algorithm, calibration methods (HIGH confidence)
+- Existing codebase: `src/device.py`, `src/poisson.py`, `src/drift_diffusion.py`, `src/transient.py`, `src/charge_collection.py`, `src/generation_profiles.py`, `src/sic_material.py` -- all fully read (HIGH confidence)
