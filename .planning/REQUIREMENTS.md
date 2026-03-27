@@ -97,49 +97,49 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status  |
 | ----------- | ----- | ------- |
-| MESH-01     | -     | Pending |
-| MESH-02     | -     | Pending |
-| MESH-03     | -     | Pending |
-| MESH-04     | -     | Pending |
-| TRNS-01     | -     | Pending |
-| TRNS-02     | -     | Pending |
-| TRNS-03     | -     | Pending |
-| TRNS-04     | -     | Pending |
-| SPRT-01     | -     | Pending |
-| SPRT-02     | -     | Pending |
-| SPRT-03     | -     | Pending |
-| SPRT-04     | -     | Pending |
-| MCCP-01     | -     | Pending |
-| MCCP-02     | -     | Pending |
-| MCCP-03     | -     | Pending |
-| MCCP-04     | -     | Pending |
-| MDOS-01     | -     | Pending |
-| MDOS-02     | -     | Pending |
-| MDOS-03     | -     | Pending |
-| MDOS-04     | -     | Pending |
-| MDOS-05     | -     | Pending |
-| ALTS-01     | -     | Pending |
-| ALTS-02     | -     | Pending |
-| ALTS-03     | -     | Pending |
-| ALTS-04     | -     | Pending |
-| ALTS-05     | -     | Pending |
-| FEAS-01     | -     | Pending |
-| FEAS-02     | -     | Pending |
-| FEAS-03     | -     | Pending |
-| FEAS-04     | -     | Pending |
-| NBKV-01     | -     | Pending |
-| NBKV-02     | -     | Pending |
-| NBKV-03     | -     | Pending |
-| NBKV-04     | -     | Pending |
-| NBKV-05     | -     | Pending |
+| MESH-01     | 19    | Pending |
+| MESH-02     | 19    | Pending |
+| MESH-03     | 19    | Pending |
+| MESH-04     | 19    | Pending |
+| TRNS-01     | 20    | Pending |
+| TRNS-02     | 20    | Pending |
+| TRNS-03     | 20    | Pending |
+| TRNS-04     | 20    | Pending |
+| SPRT-01     | 21    | Pending |
+| SPRT-02     | 21    | Pending |
+| SPRT-03     | 21    | Pending |
+| SPRT-04     | 21    | Pending |
+| MCCP-01     | 22    | Pending |
+| MCCP-02     | 22    | Pending |
+| MCCP-03     | 22    | Pending |
+| MCCP-04     | 22    | Pending |
+| MDOS-01     | 23    | Pending |
+| MDOS-02     | 23    | Pending |
+| MDOS-03     | 23    | Pending |
+| MDOS-04     | 23    | Pending |
+| MDOS-05     | 23    | Pending |
+| ALTS-01     | 24    | Pending |
+| ALTS-02     | 24    | Pending |
+| ALTS-03     | 24    | Pending |
+| ALTS-04     | 24    | Pending |
+| ALTS-05     | 24    | Pending |
+| FEAS-01     | 25    | Pending |
+| FEAS-02     | 25    | Pending |
+| FEAS-03     | 25    | Pending |
+| FEAS-04     | 25    | Pending |
+| NBKV-01     | 20    | Pending |
+| NBKV-02     | 21    | Pending |
+| NBKV-03     | 23    | Pending |
+| NBKV-04     | 24    | Pending |
+| NBKV-05     | 25    | Pending |
 
 **Coverage:**
 
 - v3.0 requirements: 35 total
-- Mapped to phases: 0
-- Unmapped: 35 (awaiting roadmap)
+- Mapped to phases: 35
+- Unmapped: 0
 
 ---
 
 _Requirements defined: 2026-03-27_
-_Last updated: 2026-03-27 after initial definition_
+_Last updated: 2026-03-27 after roadmap creation_
