@@ -1,454 +1,405 @@
 # Domain Pitfalls
 
-**Domain:** Adding radiation damage modeling (v2.0) to a validated 1D 4H-SiC TCAD simulator
-**Researched:** 2026-03-24
-**Confidence:** HIGH for integration/regression pitfalls (verified against codebase), MEDIUM for physics model pitfalls (literature-sourced with cross-validation), LOW for some numerical edge cases (inferred from commercial TCAD reports, not verified in devsim)
+**Domain:** Adding 2D simulation, single-particle transients, MC coupling, and microdosimetric spectra to existing 1D 4H-SiC TCAD simulator (v3.0)
+**Researched:** 2026-03-27
+**Confidence:** HIGH for 1D-to-2D transition pitfalls (verified against devsim docs and codebase), MEDIUM for microdosimetry/MC coupling pitfalls (literature-sourced, cross-validated across multiple papers), LOW for some devsim 2D numerical edge cases (inferred from TCAD literature, limited devsim-specific 2D community reports)
 
 ---
 
 ## Critical Pitfalls
 
-Mistakes that cause silent physics errors, loss of the validated baseline, or wasted implementation effort.
+Mistakes that cause silent physics errors, require architecture rewrites, or invalidate the feasibility study conclusions.
 
-### Pitfall 1: Fluence=0 Does Not Reproduce Pristine Results (Regression Failure)
+### Pitfall 1: 1D Assumptions Hardcoded Throughout the Codebase
 
-**What goes wrong:** The radiation damage module introduces new terms into the SRH recombination model (modified lifetimes, additional trap levels, carrier removal). At fluence=0, ALL of these must reduce to exactly the v1.1 physics. But there are multiple ways this silently breaks:
+**What goes wrong:** The existing codebase has at least five deep 1D assumptions that silently produce wrong results if not addressed for 2D:
 
-1. **Additive trap levels that don't vanish.** If you add Z1/2 and EH6/7 as explicit SRH trap levels to replace the existing midgap-trap SRH model, the recombination rate changes even at zero defect concentration because the n1/p1 parameters shift from midgap (n1=p1=n_i) to Z1/2-level values (n1=n_i*exp((E_trap-E_i)/kT), p1=n_i*exp((E_i-E_trap)/kT)). These are different even when N_t=0 because the SRH rate expression U_SRH = (n*p - n_i^2) / [tau_p*(n+n1) + tau_n\*(p+p1)] depends on n1 and p1 in the denominator.
+1. **`create_sic_device()` creates a 1D mesh exclusively.** It uses `devsim.create_1d_mesh()` with `add_1d_mesh_line()` and `add_1d_region()`. The entire device setup pipeline (mesh, doping, contacts) is 1D-only. A 2D device requires `create_gmsh_mesh()` with imported Gmsh triangular meshes -- a completely different code path.
 
-2. **Lifetime model replacement.** The v1.1 code sets `taun` and `taup` as scalar region parameters via `srh_lifetime(T, carrier, params)`. If you replace these with a fluence-dependent formula tau(Phi) = 1/(1/tau_0 + K_tau\*Phi), at Phi=0 this returns tau_0. But tau_0 must EXACTLY equal the v1.1 values (tau_n=1e-9 s, tau_p=6e-7 s at 300K, with T-scaling). If tau_0 comes from a different source or is parameterized differently, you get a silent baseline shift.
+2. **Doping profiles are 1D functions of depth only.** The graded exponential profile `N_D(x) = N_D_junction * exp(-x/L_transition) + N_D_bulk` is parameterized along a single spatial axis. In 2D, doping must be a function of (x, y) with lateral uniformity in the epi but sharp transitions at mesa edges or guard rings.
 
-3. **Carrier removal modifying effective doping.** If N_eff(Phi) = N_D - c\*Phi is implemented by modifying the Donors node model, at Phi=0 it should return N_D. But if the implementation creates a new node model that replaces the existing graded doping profile, the graded profile calibration (N_D_junction=2.9e15, N_D_bulk=8.5e13, L_transition=1e-4) may be lost.
+3. **Generation profiles assume 1D depth dependence.** `proton_generation_profile()` and `alpha_generation_profile()` return G(x) as functions of depth. For single-particle events, the ion track is a narrow cylinder with radial extent (track radius ~50-500 nm depending on ion/energy), not a plane-wave.
 
-4. **Dark current model interaction.** The v1.1 Hurkx TAT model in `dark_current.py` already uses Z1/2 trap parameters (E_t=0.65 eV, N_t=2.2e13). Radiation damage introduces ADDITIONAL Z1/2 centers. If the damage module overwrites the existing N_t rather than adding to it, the calibrated 18 pA dark current breaks at fluence=0.
+4. **Contact equations assume 1D geometry.** The existing code sets contacts at mesh endpoints (anode at x=0, cathode at x=L). In 2D, contacts are lines (edges of the 2D mesh) and require different devsim API calls.
 
-**Why it happens:** The damage module touches the same physics (SRH recombination, doping, traps) that the v1.1 baseline depends on. Any non-additive modification breaks the baseline.
+5. **CCE computation assumes 1D current density.** `extract_contact_current()` returns J (A/cm^2) and multiplies by device area to get total current. In 2D, the current is per unit depth (A/cm for a planar 2D cross-section) or per radian (for cylindrical/axisymmetric), and the area interpretation changes fundamentally.
 
-**Consequences:** Loss of ALL v1.1 validated results: C-V R^2=0.998, CCE=100% at V>-40V, dark current calibration. You cannot publish v2.0 radiation damage results if the Phi=0 limit no longer matches experiment.
+**Why it happens:** The 1D codebase was correctly designed for its purpose; these are not bugs but scope limitations. The danger is assuming you can "just swap the mesh" and keep everything else.
+
+**Consequences:** Wrong CCE values by factors of 2-10x if area/symmetry assumptions are incorrect. Wrong doping profiles at structure edges. Wrong generation profiles that miss the track structure entirely.
 
 **Prevention:**
 
-1. Design the damage API as purely additive: `apply_radiation_damage(device, region, fluence)` modifies parameters on top of the existing v1.1 state. When fluence=0, this function does nothing (returns immediately).
-2. Lifetime degradation: do NOT replace the lifetime model. Instead, after the v1.1 device is fully created and validated, UPDATE the `taun`/`taup` parameters: `new_taun = 1/(1/old_taun + K_tau_n * fluence)`. This preserves v1.1 values at fluence=0 by construction.
-3. Carrier removal: create a NEW node model `Donors_eff` = `Donors - c_removal * fluence` and update the Poisson equation to use `Donors_eff`. At fluence=0, `Donors_eff` = `Donors` identically.
-4. **Mandatory regression test:** After implementing damage, run the FULL v1.1 test suite at fluence=0 and verify BIT-IDENTICAL results for C-V, I-V, CCE. Any deviation means the damage module is not properly decoupled.
+- Create a new `device_2d.py` module rather than modifying `device.py`. Keep the 1D path working for regression.
+- Audit every function that takes `device_info` dict for 1D assumptions: grep for `get_node_model_values` with hardcoded "x" coordinate, `1d_mesh`, contact names at endpoints.
+- Build a 2D validation notebook that reproduces 1D results for a "wide" 2D device (width >> depth) before adding edge effects.
+- Use devsim cylindrical coordinates (`cylindrical_node_volume`, `cylindrical_edge_couple`) for axisymmetric SV geometries to correctly integrate current.
 
-**Detection:** Run C-V at fluence=0 vs the v1.1 golden values. If R^2 drops below 0.998 or dark current changes by more than 1%, the damage module is leaking into the baseline.
+**Detection:** If the 2D CCE for a 1000 um wide SV does not match the 1D CCE within 1%, something is wrong with the 2D setup.
 
-**Phase:** Must be enforced from the very first implementation phase. Build the regression test BEFORE writing any damage code.
+**Phase mapping:** Must be addressed in Phase 1 (2D mesh and electrostatics). Every subsequent phase depends on this being correct.
 
 ---
 
-### Pitfall 2: Using Wrong Damage Constants (Orders of Magnitude Scatter in Literature)
+### Pitfall 2: Devsim 2D Mesh Quality Causing Convergence Failure
 
-**What goes wrong:** The literature on 4H-SiC radiation damage constants shows enormous scatter depending on irradiation conditions, and picking the wrong values can make your predictions wrong by 10x or more. Specific examples:
+**What goes wrong:** Devsim uses the finite volume method on triangular meshes in 2D. The control volume is constructed from perpendicular bisectors of triangle edges (the `EdgeCouple` model). This discretization has specific requirements:
 
-**Z1/2 introduction rates:**
+1. **Obtuse triangles create negative EdgeCouple values.** When a triangle has an obtuse angle, the perpendicular bisector of the edge opposite the obtuse angle falls outside the triangle. This produces a negative coupling coefficient, which is equivalent to a negative capacitance in the discretized Poisson equation. The Newton solver diverges or produces oscillating, unphysical potentials.
 
-- Burin et al. (2024, neutron): g_Z1/2 = 5.0 cm^-1
-- Luo et al. (2025, 80 MeV proton): g_EH3 = 1.48 cm^-1 (note: they found Z1/2 did NOT increase significantly under their conditions, contradicting other studies)
-- Total point defect introduction: ~19 cm^-1 (only 4% of SRIM-predicted primary vacancies -- massive discrepancy)
+2. **Devsim only supports triangles (no quads, no hybrid meshes).** The documentation explicitly states meshes "may only contain points, lines, triangles, and tetrahedra." If Gmsh generates quad elements (which it does by default in some algorithms), devsim silently ignores them or crashes.
 
-**Carrier removal rates:**
+3. **Gmsh format version mismatch.** Devsim reads Gmsh version 2.2 format only. Gmsh defaults to version 4.x. If you forget `-format msh2`, the mesh file is silently misread or rejected.
 
-- Moscatelli et al. (2006, proton): ~240-260 cm^-1 for protons in p-type
-- Recent SiC PIN diodes (2025, 253 MeV proton): 4.2-6.4 cm^-1 (linear donor removal)
-- The factor ~50x difference between these reflects different device types, proton energies, and whether carrier removal is measured from C-V (effective doping) or Hall effect (free carriers)
+4. **Junction refinement insufficient.** The p+/n- junction and depletion region edge require mesh spacing of ~10-50 nm to resolve the electric field gradient. At 100 um device width, this creates aspect ratios that challenge Delaunay meshing. Without explicit mesh grading, Gmsh either creates too many elements (millions, slow simulation) or too few at the junction (wrong fields).
 
-**Lifetime damage constants:**
+5. **Contact boundary must be a single line of nodes.** Devsim documentation states contacts should "encompass only one line of points." If the mesher creates multiple nodes at a contact edge or the contact boundary is not a connected line, the contact equation assembly fails silently.
 
-- Luo et al. (2025): 1/tau = a\*ln(Phi) + b (LOGARITHMIC, not linear) with a=2.4e4, b=1.9e6
-- Standard Si model: 1/tau = 1/tau_0 + K_tau\*Phi (LINEAR)
-- The functional form itself is disputed for SiC
+**Why it happens:** Gmsh is a general-purpose mesher not tuned for semiconductor FVM. The Delaunay requirement for acute triangles (Delaunay condition) is necessary but not sufficient for FVM; you need the stronger "circumcenter inside triangle" condition.
 
-**Why it happens:** Unlike silicon (50+ years of NIEL-scaling validation), 4H-SiC damage studies span only ~15 years, use different crystal qualities, different irradiation facilities, and different measurement techniques. The NIEL-scaling hypothesis (all displacement damage is equivalent when scaled by NIEL) is NOT validated for SiC to the same degree as for Si. Different defect types dominate at different fluence ranges and temperatures.
-
-**Consequences:** If you use g_Z1/2 = 5.0 cm^-1 (from neutron data) for proton irradiation of the Petringa detector, you may overestimate Z1/2 production. If you use the linear 1/tau model when the actual dependence is logarithmic, you overpredict degradation at high fluence and underpredict at low fluence.
+**Consequences:** Newton solver fails to converge, or converges to unphysical solutions with oscillating potentials near obtuse-triangle regions. Simulation time explodes with over-refined meshes.
 
 **Prevention:**
 
-1. Make ALL damage constants explicit, named parameters with clear provenance:
-   ```python
-   @dataclass
-   class DamageParameters:
-       g_Z12: float = 5.0       # cm^-1, Z1/2 introduction rate (Burin 2024, neutron)
-       g_EH67: float = 1.6      # cm^-1, EH6/7 introduction rate (Burin 2024)
-       c_removal: float = 5.3   # cm^-1, carrier removal rate (recent proton data)
-       K_tau_n: float = ...      # cm^2/s, electron lifetime damage constant
-       K_tau_p: float = ...      # cm^2/s, hole lifetime damage constant
-       source: str = "Burin2024_neutron"  # provenance tag
-   ```
-2. Implement BOTH linear and logarithmic lifetime degradation models behind a flag. Compare predictions.
-3. Document that damage constants are effective parameters tied to specific irradiation conditions. The Petringa detector uses 62 MeV protons; constants from neutron or high-energy proton studies are approximations.
-4. Show sensitivity analysis: vary each damage constant by 2x and plot the effect on CCE. This tells you which constants matter most and which are safely uncertain.
+- Use Gmsh's `Mesh.Algorithm = 5` (Delaunay for quads, but request triangles) or `Mesh.Algorithm = 6` (Frontal-Delaunay) which produces better-quality triangles.
+- Set `Mesh.RecombineAll = 0` to prevent quad generation.
+- Always export with `gmsh.option.setNumber("Mesh.MshFileVersion", 2.2)`.
+- Add explicit mesh grading: fine at junction (dx ~ 20 nm), medium in depletion region (dx ~ 200 nm), coarse in neutral epi (dx ~ 2 um), very coarse in substrate (dx ~ 5 um).
+- Verify mesh quality post-generation: compute minimum angle per triangle (reject meshes with min angle < 20 degrees). Use `gmsh.model.mesh.getElementQualities()` and reject if worst quality < 0.3.
+- For the microdosimeter SV (100x10 um), expect ~5000-20000 triangles. For 300x10 um, expect ~15000-60000. Anything over 100k suggests insufficient grading.
 
-**Detection:** If your CCE vs fluence predictions disagree with published data by more than a factor of 2-3, suspect wrong damage constants before suspecting wrong physics. Check: are you using constants from the right particle type, energy range, and device technology?
+**Detection:** Newton solver reports "linear solver failed" or "convergence failure" after mesh change. Check the mesh quality histogram first.
 
-**Phase:** Must be addressed in the first implementation phase. Create the DamageParameters dataclass with provenance tracking from day one.
+**Phase mapping:** Phase 1 (2D mesh generation). Get this right before any physics.
 
 ---
 
-### Pitfall 3: Treating SiC Defect Chemistry Like Silicon (Wrong Defects, Wrong Physics)
+### Pitfall 3: Single-Particle vs Beam-Average Generation Rate Confusion
 
-**What goes wrong:** The silicon radiation damage community uses a well-established "Hamburg model" with two effective trap levels (one donor-like, one acceptor-like) plus stable damage. Attempting to transplant this approach to 4H-SiC fails because:
+**What goes wrong:** The entire v1.0-v2.0 codebase uses beam-average generation rates (Gy/s converted to cm^-3 s^-1 uniformly across the device). Single-particle simulation is fundamentally different in three ways:
 
-1. **Different dominant defects.** In Si: V-O (A-center), V-V (divacancy), V-P (E-center). In 4H-SiC: Z1/2 (carbon vacancy at Ec-0.67 eV), EH6/7 (Ec-1.6 eV, possibly also carbon vacancy in different charge state), EH4 (cluster defect at Ec-1.03 eV). The Si defects have NO analogues in SiC.
+1. **Spatial scale mismatch.** A beam deposits energy uniformly across the device area. A single ion deposits energy along a narrow track (radius ~50-500 nm for protons, up to ~5 um for heavy ions). The generation rate along the track core can be 10^6 - 10^8 times higher than beam-average, triggering high-injection effects (plasma column) that do not occur in beam-average simulation.
 
-2. **Different compensation mechanism.** In Si, acceptor-like defects compensate n-type doping straightforwardly. In 4H-SiC, Z1/2 is a negative-U center (captures two electrons, with the second capture requiring MORE energy than the first). This means the standard Shockley-Read-Hall occupancy statistics (single-level, detailed balance) are WRONG for Z1/2. The defect has two charge states (0/2-), not the standard (0/-) of a simple acceptor.
+2. **Time scale mismatch.** Beam-average uses steady-state or pulse-averaged generation. A single ion traverses a 10 um SiC layer in ~0.3 ps (at ~10% speed of light for 60 MeV protons). The charge is deposited quasi-instantaneously. The transient solver must capture charge generation in < 1 ps, then drift/diffusion/recombination over ns-us timescales -- a 6-order dynamic range in a single simulation.
 
-3. **EH6/7 donor vs acceptor controversy.** Burin et al. (2024) model EH6/7 as a donor at Ec-1.6 eV. Other groups treat it as acceptor-like. The Burin model uses an electron capture cross-section of 9e-12 cm^2 for EH6/7, which is extraordinarily large (compare Z1/2 at 2e-14 cm^2). This 450x difference means EH6/7 can dominate recombination despite lower introduction rate. But if EH6/7 is actually donor-type, it ADDS to effective doping rather than compensating it. Getting the type wrong reverses the sign of the doping change.
+3. **Charge quantity.** A 60 MeV proton depositing ~2 keV/um in SiC (LET ~ 0.2 keV/um in water, scaled by density ratio) creates ~240 e-h pairs per um, or ~2400 pairs total in 10 um. This is ~3.8e-16 C. The induced current pulse has amplitude ~0.1-1 uA lasting ~1-10 ns. The v1.0 transient solver expects generation rates of 10^16-10^20 cm^-3 s^-1 (dose-rate regime); single-particle generation along the track core reaches 10^22-10^24 cm^-3 s^-1 but only in a tiny volume.
 
-4. **Annealing is completely different.** Si defects anneal at 60-80C (room temperature annealing is significant). SiC defects require much higher temperatures: Z1/2 is stable to ~1500C in some studies, while other radiation-induced defects (S1, S2) anneal at 300-425C. Room-temperature annealing in SiC is negligible for Z1/2 (unlike Si where it is a major effect).
+4. **Boundary condition differences.** In beam-average, generation is laterally uniform so 1D is valid. In single-particle, the ion track creates a radial carrier gradient that drives lateral diffusion. If the SV is small (100 um), carriers generated near the edge diffuse OUT of the sensitive volume, reducing collected charge. This is the "charge sharing" or "edge effect" that the 2D simulation is supposed to capture.
 
-**Why it happens:** Most TCAD radiation damage tutorials, textbooks, and example scripts assume silicon. The Si community has decades of standardized models. SiC models are still actively debated in the literature (2024-2025 papers still disagree on defect assignments and introduction rates).
+**Why it happens:** The conceptual leap from "beam deposits dose uniformly" to "one ion creates a narrow plasma column" is large. Code written for one regime silently produces wrong answers in the other.
 
-**Consequences:** Using Si-derived defect models produces qualitatively wrong predictions: wrong voltage at which CCE degrades, wrong fluence threshold for device failure, wrong annealing behavior.
+**Consequences:** If you apply beam-average generation profiles to a single-particle simulation, the CCE will be ~100% (no high-injection effects, no edge loss) -- exactly the wrong answer for microdosimetry. The whole point of v3.0 is to capture these single-particle effects.
 
 **Prevention:**
 
-1. Do NOT use the Hamburg model or any Si-specific defect parameterization.
-2. Use SiC-specific defect parameters from recent TCAD studies (Burin 2024, Luo 2025). Start with the Burin three-defect model (Z1/2 + EH6/7 + EH4) as the most complete published TCAD parameterization.
-3. For the negative-U behavior of Z1/2: as a first approximation, treat Z1/2 as a standard single-level acceptor at Ec-0.67 eV. The negative-U correction changes occupancy at intermediate Fermi levels but is secondary for carrier removal in fully depleted detectors where the Fermi level is pinned near midgap.
-4. Set annealing activation energies from SiC literature (not Si). For the Petringa detector at room temperature, assume NO annealing of Z1/2 unless explicitly studying thermal recovery.
+- Create a new `single_particle.py` module with explicit track-structure generation: G(r, z) = G_track(z) \* f_radial(r), where f_radial is typically a Gaussian or 1/r^2 (Katz model) with cutoff at delta-ray range.
+- Implement the track as a devsim node model evaluated at each mesh node's (x, y) coordinates relative to the ion impact point.
+- Use adaptive time-stepping: dt ~ 0.1 ps during deposition, growing to dt ~ 1 ns during collection, dt ~ 100 ns during tail.
+- Validate by integrating total generated charge and comparing to LET \* track_length / E_pair. Must match within 0.1%.
+- For the induced current pulse, integrate I(t) dt and verify it equals Q_generated \* CCE.
 
-**Detection:** If your simulation predicts significant CCE recovery at room temperature over hours-to-days timescales, you are using Si annealing parameters. SiC Z1/2 does not anneal at room temperature.
+**Detection:** If single-particle CCE equals beam-average CCE (both ~100%), the track structure is not being resolved. If total collected charge does not match LET-predicted charge within ~5%, something is wrong.
 
-**Phase:** Must be settled before ANY defect model implementation. Define the defect zoo and their parameters as the FIRST task.
+**Phase mapping:** Phase 3 (single-particle transients). Depends on Phase 1-2 (2D mesh and transport) being correct.
 
 ---
 
-### Pitfall 4: Carrier Removal Changing the Device Operating Point (Depletion Width Shift)
+### Pitfall 4: Microdosimetric Spectra Computation Errors
 
-**What goes wrong:** Carrier removal reduces effective doping: N_eff(Phi) = N_D - c\*Phi. For the Petringa detector with N_D_bulk = 8.5e13 cm^-3 and c = 5.3 cm^-1:
+**What goes wrong:** Computing lineal energy (y) spectra from simulated pulse heights has multiple failure modes:
 
-- At Phi = 1e13 p/cm^2: N_eff = 8.5e13 - 5.3e13 = 3.2e13 (62% reduction)
-- At Phi = 1.6e13 p/cm^2: N_eff = 8.5e13 - 8.5e13 = 0 (FULL DEPLETION AT ANY BIAS)
-- At Phi > 1.6e13 p/cm^2: N_eff goes negative (TYPE INVERSION from n-type to p-type)
+1. **Wrong sensitive volume definition.** Lineal energy y = epsilon / l_bar, where epsilon is the energy deposited in the sensitive volume and l_bar is the mean chord length. For a rectangular parallelepiped SV of dimensions a x b x c, l_bar = 4V/S = 4abc / (2(ab+ac+bc)). For a 100x100x10 um SV, l_bar = 19.6 um. Getting l_bar wrong scales ALL y-values by a constant factor, shifting the entire spectrum.
 
-This is a dramatic device-level change that cascades through everything:
+2. **Confusing deposited energy with collected charge.** The TCAD simulation gives collected charge Q_coll = CCE _ Q_generated. The deposited energy is epsilon = Q_generated _ E_pair / q (in keV). If you use Q_coll instead of Q_generated to compute y, you get y_measured = y_true \* CCE, which systematically underestimates y for events with CCE < 1 (edge events, high-LET tracks with recombination). This is physically correct for what the detector MEASURES, but wrong for computing true lineal energy.
 
-- Depletion width at -30V changes from ~10 um (pristine) to the full epi thickness (after partial compensation) to a new junction forming from the cathode side (after type inversion)
-- C-V characteristic shifts: capacitance flattens as full depletion is reached at lower voltage
-- Electric field profile changes shape: from triangular (one-sided junction) to trapezoidal to inverted
-- The Hecht equation validation (CCE vs bias) no longer applies because the field profile assumption changes
+3. **Logarithmic binning errors.** Microdosimetric spectra are conventionally plotted as y*d(y) vs log(y) (dose-weighted) or y*f(y) vs log(y) (frequency-weighted). The bins must be equally spaced in log(y), typically 50 bins per decade over 6 decades (0.01 to 10000 keV/um). Common errors:
+   - Using linear bins (compresses the high-y tail into one bin)
+   - Forgetting the y\*d(y) weighting (raw histogram is NOT the microdosimetric spectrum)
+   - Wrong normalization: integral of d(y) dy must equal 1 (dose distribution), integral of f(y) dy must equal 1 (frequency distribution)
+   - Confusing d(y) = y\*f(y) / y_F (dose distribution from frequency distribution)
 
-The critical fluence for the Petringa detector is remarkably LOW: ~1.6e13 p/cm^2. This is because the epi doping (8.5e13) is very low by SiC standards.
+4. **Insufficient statistics.** A single y-spectrum requires hundreds to thousands of simulated events. Each event is a full 2D transient simulation. At ~10-100 seconds per event, 1000 events = 3-30 hours. If you only simulate 50 events, the spectrum has huge statistical fluctuations and the dose-mean y_D is unreliable.
 
-**Why it happens:** The Petringa detector was designed for maximum sensitivity (low doping = wide depletion = more signal), not radiation hardness. Low initial doping means carrier removal reaches full compensation at lower fluence. Users who expect SiC to be "radiation hard" may not check whether their specific device geometry hits full compensation within the fluence range of interest.
+5. **Zero-energy events.** Ions that deposit energy outside the SV (miss events, or events where all charge diffuses away) contribute to f(y) at y=0. These must be handled explicitly -- either excluded (as in experimental TEPC practice) or included with a delta function at y=0. Getting this wrong biases y_F.
 
-**Consequences:**
+**Why it happens:** Microdosimetry has its own formalism (ICRU Report 36) that is unfamiliar to TCAD practitioners. The y\*d(y) representation is non-intuitive.
 
-1. **Numerical:** The solver may fail when N_eff crosses zero because the built-in potential and depletion approximations break down. The graded doping profile makes this worse: N_D_junction=2.9e15 is barely affected while N_D_bulk=8.5e13 is fully compensated, creating a non-monotonic effective doping profile.
-2. **Physical:** CCE predictions become unreliable if the simulation does not properly handle the transition from partially depleted to fully depleted to type-inverted regimes.
-3. **Validation:** Published CCE vs fluence curves for OTHER SiC detectors (different doping) cannot be directly compared.
+**Consequences:** Wrong y-spectra invalidate the entire feasibility study. If y_D is wrong by a factor of 2, the RBE prediction via MKM is wrong, and the microdosimeter design recommendations are unreliable.
 
 **Prevention:**
 
-1. Compute the critical fluence Phi_crit = N_D_bulk / c_removal = 8.5e13 / 5.3 = 1.6e13 p/cm^2 BEFORE running any simulations. This sets the fluence scale for your study.
-2. Handle the N_eff = 0 crossing explicitly. Below Phi_crit: standard depletion from junction. Above Phi_crit: the epi bulk is intrinsic or p-type, requiring different solver initialization.
-3. For the graded profile: compute N_eff(x, Phi) at each position. The junction-side doping (2.9e15) survives to much higher fluence (Phi_crit_junction = 2.9e15/5.3 = 5.5e14), so the profile becomes increasingly non-uniform.
-4. Monitor the Newton solver: if iterations increase sharply at a particular fluence, you are likely near the compensation point. Add finer fluence steps around Phi_crit.
+- Implement spectra computation in a dedicated `microdosimetry.py` module with explicit ICRU 36 formulas.
+- Compute l_bar analytically from SV geometry. Document the formula and validate against known geometries.
+- Separate "deposited energy" (from MC input) from "collected energy" (from TCAD CCE). Report both y_deposited and y_collected spectra.
+- Use 300 logarithmic bins (50/decade, 6 decades from 0.01 to 10^4 keV/um).
+- Validate against published SiC microdosimetric data from Petringa et al. (Microdosimetry.pdf).
+- Compute y_F and y_D with proper formulas: y_F = integral(y*f(y) dy), y_D = integral(y*d(y) dy) = integral(y^2 \* f(y) dy) / y_F.
+- Report statistical uncertainty: bootstrap resampling of events to get confidence intervals on y_D.
 
-**Detection:** Plot N_eff(x) at each fluence. When the minimum of N_eff(x) approaches zero, you are near the critical regime. If the solver diverges, this is almost certainly the cause.
+**Detection:** If integral(f(y) dy) is not 1.0 (within numerical precision), normalization is wrong. If y_D < y_F, something is wrong (y_D >= y_F always, by Jensen's inequality).
 
-**Phase:** Must be addressed in the carrier removal implementation phase. Compute Phi_crit for the Petringa device geometry as the FIRST step.
+**Phase mapping:** Phase 5 (microdosimetric spectra). Depends on Phase 3 (single-particle) and Phase 4 (MC coupling).
 
 ---
 
-### Pitfall 5: Dark Current Model Breaks Under Radiation Damage
+### Pitfall 5: Tissue-Equivalence Correction Factor (kappa) Applied Incorrectly
 
-**What goes wrong:** The v1.1 dark current model in `dark_current.py` was calibrated to match 18 pA at pristine conditions using an effective generation rate N_t = 2.2e13 cm^-3/s with Hurkx field enhancement. Under radiation damage, dark current INCREASES dramatically because:
+**What goes wrong:** SiC is not tissue-equivalent. The lineal energy measured in SiC must be converted to tissue-equivalent lineal energy. The standard approach uses a geometrical scaling factor kappa:
 
-1. Radiation-introduced defects (Z1/2, EH6/7) create additional generation-recombination centers in the depletion region
-2. The depletion width changes (Pitfall 4), changing the volume of the generation region
-3. The electric field profile changes, modifying the Hurkx field-enhancement factor
+1. **kappa for SiC is NOT the same as kappa for Si.** Published values for silicon are kappa ~ 0.57 (muscle) and 0.54 (water). SiC has different density (3.21 g/cm^3 vs Si 2.33 g/cm^3) and different stopping power ratios. The kappa for SiC must be computed from the ratio of mass electronic stopping powers: kappa_SiC = (S/rho)\_tissue / (S/rho)\_SiC, where S/rho is the mass stopping power. This ratio is energy-dependent and ion-species dependent.
 
-The calibrated N_t = 2.2e13 is an EFFECTIVE parameter that lumps together all generation mechanisms. When you add radiation-induced defects as SEPARATE SRH centers, you are double-counting: the pristine dark current already includes generation from the pre-existing Z1/2 centers (typical as-grown density ~10^12 cm^-3 in good epi).
+2. **Energy-dependent kappa treated as constant.** kappa varies with ion energy (and therefore with depth in the Bragg peak). For protons in the therapeutic range (60-250 MeV), the stopping power ratio between water and SiC varies by ~10-20% across the energy range. Using a single constant kappa introduces systematic error, especially at the Bragg peak where the stopping power changes rapidly.
 
-If you add radiation-induced Z1/2 with density g_Z1/2 \* Phi ON TOP of the calibrated effective N_t, the fluence=0 dark current will be too high (double-counting the pre-existing Z1/2).
+3. **Scaling dimensions vs scaling energy.** There are two approaches: (a) scale the SV dimensions by kappa to define a "tissue-equivalent SV" (geometric scaling), or (b) scale the measured energy deposition event-by-event using stopping power ratios (energy scaling). These are NOT equivalent for mixed radiation fields or near nuclear interaction thresholds. The energy-scaling approach is more physically correct but requires stopping power tables.
 
-**Why it happens:** The v1.1 dark current model was designed as an effective (phenomenological) model, not a physically decomposed model. It cannot cleanly separate pre-existing defects from radiation-induced defects.
+4. **Nuclear interactions ignored.** The kappa factor based on electronic stopping power does not account for nuclear interactions (fragmentation, secondary particles). For carbon ions and high-Z particles, nuclear interactions contribute significantly to the microdosimetric spectrum. SiC has different nuclear cross-sections than tissue.
 
-**Consequences:** Either the fluence=0 dark current is wrong (if you add radiation defects on top), or the fluence-dependent dark current increase is wrong (if you suppress the radiation contribution to avoid double-counting).
+**Why it happens:** The tissue equivalence correction literature is primarily for silicon microdosimeters. SiC-specific kappa values are not well-established, requiring computation from stopping power databases (SRIM/PSTAR).
+
+**Consequences:** Systematic bias in all tissue-equivalent y-spectra. If kappa is wrong by 15%, y_D is wrong by 15%, and RBE predictions are unreliable.
 
 **Prevention:**
 
-1. **Option A (recommended for v2.0):** Keep the v1.1 dark current model untouched at fluence=0. For the radiation-induced dark current INCREASE, add only the ADDITIONAL generation rate from radiation-introduced defects: delta_J_dark(Phi) = q _ integral[sigma_n _ v_th _ N_Z12_rad(Phi) _ n_i \* W(Phi)]. This gives J_dark(Phi) = J_dark(0) + delta_J_dark(Phi), preserving the calibrated baseline.
-2. **Option B (for later):** Rebuild the dark current model from scratch with explicit defect populations: N_Z12_total = N_Z12_pristine + g_Z12 \* Phi. This requires re-calibrating the pristine model with a physical (not effective) Z1/2 density, which is a bigger refactoring.
-3. Do NOT mix the effective N_t model with explicit radiation-induced defect populations in the same SRH expression.
+- Compute kappa_SiC from SRIM or PSTAR stopping power tables for each ion species and energy range used.
+- Implement energy-dependent kappa as a lookup table, not a single constant.
+- Document the stopping power sources and interpolation method.
+- Compare geometric-scaling and energy-scaling approaches. Report both.
+- For the feasibility study, present results with kappa uncertainty band (+/-10-15%) to show sensitivity.
+- Cross-validate: for protons, compare tissue-equivalent y-spectrum from SiC simulation with published TEPC measurements at the same beam energy.
 
-**Detection:** After adding radiation damage, check J_dark at fluence=0. It must still be ~18 pA (within the tolerance of the v1.1 calibration). If it doubled, you are double-counting.
+**Detection:** If kappa_SiC equals published kappa_Si values (0.57), it is likely wrong -- SiC is 38% denser than Si.
 
-**Phase:** Must be designed in the architecture phase, before implementing either carrier removal or dark current increase features.
+**Phase mapping:** Phase 5 (microdosimetric spectra). Must be addressed alongside spectrum computation.
 
 ---
 
 ## Moderate Pitfalls
 
-### Pitfall 6: Newton Solver Convergence Failure at High Damage Levels
+### Pitfall 6: MC Coupling Coordinate System and Units Mismatch
 
-**What goes wrong:** As fluence increases, multiple parameters change simultaneously (lifetime decreases, doping decreases, trap density increases). The Newton-Raphson solver in devsim can fail to converge because:
+**What goes wrong:** Geant4 and FLUKA use different coordinate systems, units, and output formats. Coupling to the TCAD simulation requires careful mapping:
 
-1. **Lifetime approaching zero:** If 1/tau = 1/tau_0 + K_tau\*Phi, at high Phi the lifetime becomes very short. When tau << transit time, the SRH recombination term dominates the continuity equations, making them stiff. The Jacobian condition number worsens.
+1. **Coordinate origin mismatch.** Geant4/FLUKA typically define the geometry with the beam entering from one direction. The TCAD simulation defines x=0 at the p+ contact (anode). If the MC simulation has the beam entering from the opposite side, all depth profiles are flipped.
 
-2. **Doping compensation near zero:** When N_eff approaches zero, the device transitions from a pn junction to a pi junction to a pp+ junction. The equilibrium carrier concentrations change by orders of magnitude. The initial guess (from the pristine or previous-fluence solution) may be far from the new solution.
+2. **Units mismatch.** Geant4 uses mm and MeV internally. FLUKA uses cm and GeV. The TCAD simulation uses cm (CGS). Energy deposition is often reported in MeV or keV; the TCAD needs generation rate in cm^-3 s^-1 or total e-h pairs. Missing a factor of 10 (mm to cm) produces 1000x error in volumetric quantities.
 
-3. **Multiple defect levels:** Each SRH trap level adds terms to the generation-recombination rate. With 3 defect species (Z1/2 + EH6/7 + EH4), the recombination model has 3 sets of (n1, p1, tau_n, tau_p) parameters. The Jacobian derivatives become complex, and any error in the analytical derivatives causes Newton to diverge.
+3. **LET vs energy deposition.** MC codes can output either LET (energy loss per unit path length, keV/um) or energy deposited in a volume (keV). These differ for thin detectors where delta-rays escape the SV. For a 10 um thick SiC layer, delta-ray escape can reduce deposited energy by 5-15% compared to LET \* thickness for high-energy protons.
 
-4. **devsim-specific:** The GTS TCAD team (Burin 2024) explicitly reported "multiple convergence issues" with 4H-SiC radiation damage simulations, requiring "disabling incomplete ionization" and "fine-tuning simulation grids separately for forward and reverse bias." These same issues will appear in devsim.
+4. **Phase-space file format variations.** Geant4 can output ROOT, CSV, or IAEA phase-space format. FLUKA uses its own binary format (USRBIN, USRBDX). There is no standard format. Each must be parsed differently.
 
-**Why it happens:** The pristine SiC device is numerically well-behaved because the physics is dominated by a simple pn junction with well-separated carrier concentrations. Radiation damage destroys this nice structure: low effective doping means p and n concentrations can be comparable throughout the device.
+5. **Normalization per primary vs per event.** MC outputs are typically normalized per primary particle. For microdosimetry, you need the energy deposited per individual ion traversal of the SV. If the MC geometry has different SV dimensions than the TCAD geometry, the normalization must be adjusted.
+
+**Why it happens:** MC codes and TCAD codes are developed by different communities with different conventions. There is no standard interface.
 
 **Prevention:**
 
-1. **Fluence ramping:** Do NOT jump from fluence=0 to fluence=1e14. Use the previous-fluence solution as the initial condition for the next fluence. Step in factors of 2-3x: 0, 1e11, 3e11, 1e12, 3e12, 1e13, 3e13, 1e14.
-2. **Tight convergence at low fluence, relaxed at high fluence:** Set abs_error and rel_error tolerance tighter for low fluence (where you need accuracy) and relax slightly at high fluence (where you need convergence).
-3. **Monitor Newton iterations:** If iterations exceed 50 at any fluence step, halve the fluence increment. If iterations exceed 100, the Jacobian derivatives are likely wrong.
-4. **Keep devsim's incomplete ionization active:** The GTS workaround of disabling incomplete ionization is specific to their solver. In devsim, incomplete ionization is handled at device creation time (pre-computed ionized fractions), not in the solver loop, so it should not cause convergence issues.
-5. **Start with a single effective defect level** before adding multiple trap levels. Debug convergence with the simplest model first.
+- Define an explicit intermediate format (e.g., CSV with columns: event_id, x_cm, y_cm, z_cm, dE_keV, particle_type, E_kinetic_MeV).
+- Write a dedicated `mc_import.py` module with format-specific parsers (Geant4 CSV, FLUKA USRBIN, pre-binned LET spectrum).
+- Include unit conversion functions with explicit input/output unit documentation.
+- Validate with a simple test case: monoenergetic proton at known energy, compare MC-predicted energy deposition with analytical Bethe-Bloch calculation.
+- Always check that the total energy deposited across all events matches the expected dose.
 
-**Detection:** Log Newton iteration count at each fluence step. A sudden increase (e.g., from 10 to 80 iterations) signals approaching a convergence boundary. Plot iteration count vs fluence to identify problematic regimes.
+**Detection:** If the mean energy deposited per event is off by exactly 10x, 100x, or 1000x, suspect a unit conversion error (mm/cm, MeV/keV).
 
-**Phase:** Must be handled during implementation. Build iteration monitoring into the damage simulation loop from the start.
+**Phase mapping:** Phase 4 (MC coupling). Can be developed in parallel with Phase 3.
 
 ---
 
-### Pitfall 7: Confusing Defect Introduction Rate with Carrier Removal Rate
+### Pitfall 7: 2D Edge Effects Misinterpreted Due to Wrong Symmetry Assumption
 
-**What goes wrong:** Two different quantities are used in the literature, often with the same symbol or similar names:
+**What goes wrong:** A 2D simulation represents a cross-section of the 3D device. The choice of symmetry (planar vs cylindrical/axisymmetric) changes the physics:
 
-1. **Defect introduction rate** g [cm^-1]: Number of defects per unit fluence. N_defect = g \* Phi. Measured by DLTS. Example: g_Z1/2 = 5.0 cm^-1 means 5 Z1/2 centers per neutron equivalent per cm^3.
+1. **Planar 2D (Cartesian).** The 2D cross-section is extruded to infinity in the z-direction. Current has units of A/cm (per unit depth). This is appropriate for wide strip-like detectors but WRONG for square SVs (100x100 um). A square SV has edge effects on all four sides; planar 2D only captures two.
 
-2. **Carrier removal rate** c [cm^-1]: Change in effective free carrier concentration per unit fluence. delta_N_eff = c \* Phi. Measured by C-V. Example: c = 5.3 cm^-1 means each proton/cm^2 removes 5.3 free electrons/cm^3.
+2. **Cylindrical 2D (axisymmetric).** The 2D cross-section is revolved around the r=0 axis. This gives a circular SV, not a square one. For a 100x100 um square SV, the equivalent circular SV has radius ~56.4 um (same area). The edge effects are different because a circle has uniform curvature while a square has corners with enhanced field crowding.
 
-These are NOT the same quantity. A single Z1/2 center (doubly-charged acceptor, negative-U) removes TWO electrons from the conduction band. Other defects may remove 0, 1, or 2 carriers depending on their charge state and position in the bandgap. The carrier removal rate is the NET effect of ALL defects combined:
+3. **Neither is exactly right.** A 100x100x10 um rectangular parallelepiped SV requires either full 3D simulation (out of scope) or careful interpretation of 2D results with correction factors.
 
-c = sum_i(charge_state_i \* g_i)
-
-If you use the Z1/2 introduction rate (5.0) as the carrier removal rate, you may underestimate carrier removal (because you miss contributions from other defects) OR overestimate it (because not all Z1/2 centers are doubly charged).
-
-**Why it happens:** Papers sometimes use "removal rate" loosely to mean either quantity. The symbols g, c, k, beta, and alpha are all used inconsistently across the literature.
-
-**Consequences:** Using g instead of c (or vice versa) in the effective doping formula gives the wrong critical fluence for full compensation, the wrong depletion width vs fluence, and the wrong CCE prediction.
+**Why it happens:** Devsim supports both Cartesian and cylindrical 2D coordinates. Choosing the wrong one, or not accounting for the difference, produces wrong area/volume calculations.
 
 **Prevention:**
 
-1. In the code, name variables explicitly: `g_Z12_introduction` vs `c_carrier_removal`. Never use ambiguous names like `damage_rate`.
-2. Use the carrier removal rate c (from C-V measurements) for effective doping: N_eff = N_D - c*Phi. Use introduction rates g (from DLTS) for trap densities: N_Z12 = g_Z12 * Phi.
-3. Do NOT derive c from g unless you have a validated model for the charge states of all defects. Use directly measured c values from recent proton irradiation studies (4.2-6.4 cm^-1 for ~250 MeV protons).
+- Use cylindrical (axisymmetric) 2D for the microdosimeter SV, as it captures radial edge effects and is closer to the real device behavior.
+- Use devsim's `cylindrical_node_volume()` and `cylindrical_edge_couple()` for correct integration in cylindrical coordinates.
+- Set `raxis_variable` and `raxis_zero` correctly when creating the cylindrical coordinate models.
+- Document the mapping: "TCAD simulates a circular SV of radius R; the physical SV is square with side L = R\*sqrt(pi)."
+- Run both Cartesian and cylindrical 2D for comparison. The CCE difference quantifies the symmetry uncertainty.
 
-**Detection:** If your simulated C-V shift with fluence disagrees with published C-V data by a factor of 2-5, check whether you confused g and c.
+**Detection:** If the total current from a 2D simulation does not scale correctly with device area when compared to 1D, the symmetry assumption is wrong.
 
-**Phase:** Must be clarified in the damage parameters definition phase. Add comments in the DamageParameters dataclass distinguishing the two concepts.
+**Phase mapping:** Phase 1-2 (2D mesh and transport). Decide early and document.
 
 ---
 
-### Pitfall 8: Assuming Linear Lifetime Degradation (1/tau = 1/tau_0 + K\*Phi)
+### Pitfall 8: Transient Solver Timestep Too Large for Ion Track Dynamics
 
-**What goes wrong:** The standard model for silicon (and most TCAD textbooks) uses a linear relationship between reciprocal lifetime and fluence:
+**What goes wrong:** The existing BDF1 transient solver uses adaptive time-stepping tuned for FLASH pulse dynamics (t_rise ~ 1 us, t_duration ~ 1 ms). Single-particle events have fundamentally different timescales:
 
-1/tau(Phi) = 1/tau_0 + K_tau \* Phi
+1. **Charge generation is quasi-instantaneous.** The ion traverses 10 um in ~0.3 ps. The charge must be injected into the simulation as an initial condition (t=0 excess carriers), not ramped up over the first timestep.
 
-Recent 4H-SiC data (Luo et al. 2025, 80 MeV protons) finds a LOGARITHMIC dependence instead:
+2. **Early drift phase (0-100 ps).** Carriers in the high-field depletion region drift at saturation velocity (~2e7 cm/s in SiC). The drift transit time across a 10 um depletion region is ~50 ps. The timestep must be ~1-5 ps to resolve this.
 
-1/tau = a \* ln(Phi) + b
+3. **Diffusion and collection phase (100 ps - 10 ns).** Carriers outside the depletion region diffuse toward the junction. The diffusion time scale is L^2/(2D) where D ~ 5 cm^2/s for electrons in SiC, giving ~10 ns for L ~ 10 um.
 
-The physical reason is not fully understood but may relate to defect clustering: at high fluence, new vacancies form clusters with existing vacancies rather than creating independent recombination centers, giving diminishing returns per additional displacement. Hazdra et al. (2021) similarly found non-linear lifetime behavior in 4H-SiC.
+4. **Plasma column collapse (~1-100 ps for heavy ions).** High-LET ions create a dense plasma column that shields the external electric field (funneling effect). The ambipolar diffusion of the plasma column occurs on ps timescales and requires very fine time resolution.
 
-The practical difference is large at high fluence:
+5. **BDF1 numerical diffusion.** BDF1 is first-order accurate in time. For sharp transients (step-function charge injection), BDF1 introduces numerical diffusion that smears the current pulse. The peak current is underestimated, and the pulse is broadened. BDF2 would be more accurate but the existing codebase chose BDF1 for unconditional stability at FLASH timescales.
 
-- Linear model at Phi=1e14: 1/tau = 1/tau_0 + K\*1e14 (very short lifetime)
-- Logarithmic model at Phi=1e14: 1/tau = a\*32.2 + b (much less degraded)
-
-The logarithmic model predicts the device remains functional to higher fluence than the linear model.
-
-**Why it happens:** The linear model is ingrained in the Si community and all TCAD textbooks. It is the default assumption.
-
-**Consequences:** Overpredicting CCE degradation at high fluence (linear model predicts more damage than actually occurs). This matters for radiation hardness claims -- you might conclude the device fails at 1e13 p/cm^2 when it actually survives to 1e14.
+**Why it happens:** The adaptive time-stepping in `transient.py` is tuned for ms-scale FLASH pulses, not ps-scale ion events.
 
 **Prevention:**
 
-1. Implement both models behind a parameter flag:
-   ```python
-   class DamageParameters:
-       lifetime_model: str = "linear"  # "linear" or "logarithmic"
-       K_tau_n: float = ...  # for linear model
-       a_tau: float = 2.4e4  # for logarithmic model (Luo 2025)
-       b_tau: float = 1.9e6  # for logarithmic model
-   ```
-2. Show both predictions in the CCE vs fluence plot with a band showing the difference.
-3. For the Petringa detector (62 MeV protons), neither model is directly validated. State this uncertainty explicitly.
+- Create a new adaptive timestep schedule for single-particle events: dt_initial ~ 0.1 ps, growing geometrically with factor 1.5-2x until dt ~ 1 ns.
+- Inject the initial carrier distribution as an excess concentration profile at t=0 (modify Electrons and Holes node values directly), not as a time-dependent generation rate.
+- Total simulation time: ~50-100 ns (enough for full charge collection in SiC at operating bias).
+- Validate by checking charge conservation: integral(I(t) dt) = CCE \* Q_generated.
+- Consider BDF2 for single-particle simulations where accuracy matters more than robustness (no sharp pulse edges to destabilize BDF2).
 
-**Detection:** If your predicted lifetime at Phi=1e14 is < 1 ps, suspect the linear model is overshooting. Physical SiC lifetimes at 1e14 n_eq/cm^2 are typically ~1-10 ns based on experimental data.
+**Detection:** If the current pulse has a rise time > 100 ps for a proton event, the time resolution is insufficient. If integral(I(t)) != expected collected charge within 1%, charge is being lost to numerical error.
 
-**Phase:** Implement in the lifetime degradation phase. LOW confidence on which model is correct for the Petringa conditions.
+**Phase mapping:** Phase 3 (single-particle transients).
 
 ---
 
-### Pitfall 9: Ignoring Position-Dependence of Damage in Thin Epi Layers
+### Pitfall 9: Mesa/Guard Ring Structure Mesh Singularities
 
-**What goes wrong:** The standard radiation damage model assumes UNIFORM damage throughout the device: defect density = g \* Phi everywhere. This is valid when the irradiating particles pass through the device without significant energy loss (as for high-energy protons through a 10-um epi layer). But there are two cases where position-dependence matters:
+**What goes wrong:** Alternative structures (mesa-etched SV, guard rings) introduce geometric features that are challenging to mesh:
 
-1. **Low-energy protons stopping in the device.** The Petringa detector uses 62 MeV protons for dosimetry. At this energy, the Bragg peak is at ~30 mm in water (~15 mm in SiC), far beyond the 10-um device. So for the primary beam, uniform damage is correct. BUT if the detector is used at the Bragg peak (for microdosimetry), the damage profile is highly non-uniform.
+1. **Sharp corners at mesa edges.** A mesa-etched SV has 90-degree corners where the etched sidewall meets the top surface. The electric field diverges at these corners (field crowding), requiring extremely fine mesh (~1-5 nm) at the corners. This creates orders-of-magnitude variation in element size within a single mesh.
 
-2. **Cumulative damage from the clinical beam itself.** The detector accumulates damage as it measures dose. At FLASH dose rates (20-230 Gy/s), the fluence rate is ~10^9-10^10 p/cm^2/s. Over a typical 100-session clinical use, total accumulated fluence may reach ~10^12-10^13 p/cm^2. This is within the range where carrier removal becomes significant.
+2. **Thin layers at mesa sidewall.** If the mesa sidewall has a passivation layer or surface charge, this requires an interface condition. Devsim interface models require nodes on both sides of the interface, which constrains the mesh topology.
 
-3. **The graded doping profile makes position matter even for uniform damage.** With N_D(x) varying from 2.9e15 to 8.5e13, uniform carrier removal (c\*Phi everywhere) has a vastly different fractional effect: 0.2% reduction at the junction vs 60% in the bulk at Phi=1e13.
+3. **Guard ring geometry.** A guard ring is a concentric p+ region around the SV. In 2D axisymmetric, this requires multiple regions with interfaces. Each interface requires conformal mesh (shared nodes) on the boundary.
 
-**Why it happens:** The uniform damage assumption simplifies the model. But the graded doping profile of the Petringa detector means even uniform damage has strongly position-dependent EFFECTS.
+4. **Re-entrant corners.** Where the guard ring trench meets the substrate, there are re-entrant corners that can trap the mesher in infinite refinement loops.
+
+**Why it happens:** Semiconductor device geometries have features spanning 4+ orders of magnitude (nm passivation to 100 um SV width). General-purpose meshers struggle with this.
 
 **Prevention:**
 
-1. For 62 MeV protons passing through the 10-um epi: uniform damage is justified. Document this assumption with a SRIM/TRIM calculation showing the NIEL is approximately constant across 10 um at this energy.
-2. When computing N_eff(x, Phi) = N_D(x) - c\*Phi, this is already position-dependent through N_D(x). Ensure the implementation uses the node model (position-dependent) not a scalar parameter (position-independent).
-3. For future extension to Bragg-peak irradiation: the damage profile must be computed from the NIEL(x) distribution, not assumed uniform.
+- Start with the simplest geometry (planar, no mesa) and add complexity incrementally.
+- Use Gmsh's `Field` mechanism for structured refinement near corners and interfaces.
+- Limit corner refinement to dx_min ~ 5-10 nm. Accept that the field at the mathematical corner is not resolved exactly -- it does not need to be for CCE computation.
+- Validate mesa structure by checking that the total enclosed charge (integral of rho over the SV volume) matches the expected value from doping.
+- Keep guard ring modeling as the last alternative structure, after mesa and 3D electrode cross-sections.
 
-**Detection:** Plot N_eff(x) at several fluences. If N_eff goes negative in the bulk while remaining positive near the junction, you have correctly captured the position-dependent effect of damage on the graded profile.
+**Detection:** Mesh generation takes > 60 seconds or produces > 200k elements for a single SV. Element quality histogram shows many elements with quality < 0.1.
 
-**Phase:** Address in the carrier removal implementation. Use node models, not scalar parameters.
+**Phase mapping:** Phase 6 (alternative structures). Do not attempt before basic 2D is validated.
 
 ---
 
-### Pitfall 10: Validating Against Wrong Experimental Data
+### Pitfall 10: Devsim Newton Solver Convergence Failure in 2D High-Injection
 
-**What goes wrong:** CCE vs fluence data for SiC detectors exists from several groups, but the experimental conditions vary enormously:
+**What goes wrong:** The Newton-Raphson solver in devsim may fail to converge for 2D single-particle simulations because:
 
-| Group             | Device    | Doping     | Epi thickness | Particle | Fluence range      |
-| ----------------- | --------- | ---------- | ------------- | -------- | ------------------ |
-| Burin (CERN RD50) | 50 um pad | ~10^14     | 50 um         | neutron  | 5e14-1e16 neq/cm^2 |
-| Luo (CSNS)        | PIN       | 5.2e13     | 100 um        | 80 MeV p | 1e11-1e14 neq/cm^2 |
-| Petringa (LNS)    | PIN       | 8.5e13     | 10 um         | 62 MeV p | ??? (unpublished)  |
-| SiC LGAD (2025)   | LGAD      | gain layer | thin          | proton   | 1e13-3e14 p/cm^2   |
+1. **Carrier concentration spans 20+ orders of magnitude.** In a 2D SiC device under bias, the carrier concentration ranges from n_i ~ 5e-9 cm^-3 (intrinsic, far from contacts) to > 10^18 cm^-3 (in the track core during deposition). The Jacobian matrix becomes extremely ill-conditioned.
 
-Each of these has different critical fluence, different CCE degradation curves, and different damage constants. You CANNOT validate the Petringa 10-um detector simulation against the Burin 50-um detector data without scaling corrections for:
+2. **Clamped exponentials interact with 2D mesh.** The existing `_EXP_CLAMP = 700` in `poisson.py` was validated for 1D. In 2D, the potential can vary more rapidly (e.g., at mesa corners), and the clamp may activate in regions where it should not, introducing discontinuities in the Jacobian.
 
-- Different epi thickness (affects charge collection geometry)
-- Different doping (affects critical fluence and depletion width)
-- Different irradiation particle/energy (affects NIEL and defect spectrum)
-- Different operating bias (affects field profile and CCE)
+3. **2D matrix is much larger.** A 1D mesh has ~500-1000 nodes; a 2D mesh has 5000-60000 nodes. The linear system is 3-5 orders of magnitude larger (3 unknowns per node: Potential, Electrons, Holes). Direct solvers may run out of memory; iterative solvers may fail to converge.
 
-**Why it happens:** Temptation to validate against the most accessible published data, which may not match the Petringa device.
+4. **Contact boundary condition stiffness.** In 2D, the contact boundary spans many nodes. If the mesh near the contact is non-uniform, the assembled contact equation has varying diagonal dominance, causing convergence issues.
 
-**Consequences:** Apparent agreement with the wrong experimental data gives false confidence. Disagreement with the wrong data triggers unnecessary model tuning.
+**Why it happens:** 2D semiconductor simulation is inherently harder than 1D due to the larger problem size, more complex geometry, and multi-dimensional carrier gradients.
 
 **Prevention:**
 
-1. Clearly document which published data your model is compared against and why (or why not).
-2. When comparing to data from different devices, normalize CCE to the device-specific parameters: CCE(V/V_fd, Phi/Phi_crit) where V_fd is full depletion voltage and Phi_crit is the critical fluence for that specific doping.
-3. The IDEAL validation is against Petringa group experimental data (if/when available). Until then, present model predictions as PREDICTIONS, not validated results.
-4. The Luo et al. data (N_D=5.2e13, 100 um, proton) is the closest match to the Petringa device in terms of doping level. Use this for qualitative comparison but note the 10x thickness difference.
+- Use devsim's built-in `MUMPS` direct solver for meshes up to ~30k nodes. Switch to iterative (GMRES with ILU preconditioner) only if memory is insufficient.
+- Start with Poisson-only solve to get equilibrium potential, then enable DD (exactly as in 1D, but verify it works in 2D).
+- Use voltage ramping with small steps (dV = 0.1 V) for reverse bias, as in the existing 1D code.
+- For transient simulations, use smaller dt when convergence fails (automatic dt reduction already exists in the transient solver).
+- Monitor the Newton iteration count. If > 20 iterations, the Jacobian is likely ill-conditioned -- reduce dt or check mesh quality.
 
-**Detection:** If your model matches one dataset perfectly but disagrees with another by 2x, you are likely over-fitting to the first dataset's specific conditions.
+**Detection:** `devsim.solve()` raises an exception or prints "convergence failure." Newton iteration count > 30 for a single timestep.
 
-**Phase:** Must be addressed when writing the validation notebooks. Define the comparison strategy upfront.
+**Phase mapping:** Phase 1-2 (2D electrostatics and transport). Will recur in Phase 3 (transient).
 
 ---
 
 ## Minor Pitfalls
 
-### Pitfall 11: Annealing Model Using Si Activation Energies
+### Pitfall 11: Event-by-Event Simulation Wall Time Explosion
 
-**What goes wrong:** Si radiation damage anneals significantly at room temperature (beneficial annealing timescale ~days at 20C, activation energy ~0.3-0.5 eV). Implementing the same model for SiC gives wrong annealing predictions because:
-
-- Z1/2 in SiC is thermally stable to ~1500C (activation energy for migration ~3-4 eV)
-- Radiation-induced S1, S2 centers anneal at 300-425C (still far above room temperature)
-- Thermally unstable defects (E1, E2, E3) transform into stable defects (Z1/2, S1, S2) at temperatures up to ~200C
-
-At the Petringa detector's operating temperature (30-40C), effectively NO annealing of the dominant Z1/2 defect occurs. Room-temperature annealing applies ONLY to the unstable intermediate defects, and even that saturates quickly.
+**What goes wrong:** A microdosimetric spectrum requires hundreds of events. Each event is a 2D transient simulation with ~100-1000 timesteps on a mesh of ~10k-50k nodes. A single event may take 30-300 seconds. 1000 events = 8-80 hours.
 
 **Prevention:**
 
-1. For room-temperature operation: do NOT implement Z1/2 annealing. It does not occur.
-2. For thermal annealing studies (elevated temperature): use activation energies specific to each SiC defect species, not Si-derived values. Z1/2 migration: Ea > 3 eV. EH6/7 similarly stable. Only shallow defects and interstitial-related defects anneal at moderate temperatures.
-3. If implementing annealing at all, make it optional and off by default for room-temperature simulations.
+- Profile early: run 10 events and extrapolate total time.
+- Use the coarsest mesh that reproduces 1D CCE within 2%.
+- Parallelize: events are independent, so use Python multiprocessing.
+- Consider a lookup table approach: simulate CCE as a function of ion impact position (r, z), then use the lookup table to process MC events without running TCAD for each one.
+- For the feasibility study, 100-300 events may be sufficient if binning is coarse (20 bins/decade instead of 50).
 
-**Phase:** Annealing implementation phase. Flag as LOW priority for the initial damage model.
+**Phase mapping:** Phase 5 (microdosimetric spectra). Design the lookup table approach in Phase 3.
 
 ---
 
-### Pitfall 12: Mesh Resolution Insufficient for Damage-Induced Field Spikes
+### Pitfall 12: Devsim Device Name Collision in Batch Simulations
 
-**What goes wrong:** When carrier removal creates non-uniform effective doping (especially with the graded profile), the electric field can develop sharp features at the boundary between compensated and uncompensated regions. The existing mesh was designed for the pristine graded profile and may not resolve these features.
+**What goes wrong:** The existing codebase uses `device_name="sic_diode"` as a default. Devsim is a global-state simulator: device names are global. If you create multiple devices (e.g., for parameter sweeps or event-by-event simulation) without unique names, later devices silently overwrite earlier ones.
 
 **Prevention:**
 
-1. Before running damage simulations, verify the mesh resolves the region where N_eff transitions from positive to near-zero. This may require adding mesh points in the epi bulk region.
-2. A simple check: run at a fluence just below Phi_crit, extract E(x), and verify it is smooth. If E(x) shows oscillations or discontinuities, the mesh is too coarse.
+- The existing code already uses `uuid` for unique names in some places (visible in `charge_collection.py`). Ensure ALL 2D device creation uses unique names.
+- Use `devsim.delete_device()` after each event simulation to free memory.
+- The v2.0 "fluence-as-temperature" pattern (fresh device per fluence point) is the correct approach; extend it to "fresh device per event."
 
-**Phase:** Address when implementing carrier removal. May need a `refine_mesh_for_damage()` utility.
+**Phase mapping:** Phase 3-5 (any batch simulation).
 
 ---
 
-### Pitfall 13: CCE Computation Method Incompatible with Damaged Device
+### Pitfall 13: Forgetting the Third Dimension in 2D Current Extraction
 
-**What goes wrong:** The v1.1 CCE computation in `charge_collection.py` uses the Hecht equation for analytical benchmarking (CCE = mu*tau*E/d^2 * [1-exp(-d^2/(mu*tau\*E))]). Under radiation damage, this equation requires updating:
-
-- tau becomes tau(Phi), much shorter
-- E becomes E(x, Phi), non-uniform due to doping change
-- d (collection distance) changes because depletion width changes
-
-But the Hecht equation assumes a UNIFORM electric field and a SINGLE carrier type. These assumptions break down more severely in the damaged device than in the pristine device.
+**What goes wrong:** In a 2D Cartesian simulation, `extract_contact_current()` returns current per unit depth (A/cm). To get total current for a square SV (100x100 um), you must multiply by the SV width (100 um = 0.01 cm). In a 2D cylindrical simulation, the current is already integrated over the azimuthal angle (2*pi), giving total current in A. Mixing up these conventions gives wrong CCE by a factor of (device_width) or (2*pi).
 
 **Prevention:**
 
-1. Use the drift-diffusion CCE (from the devsim solver) as the primary result. The Hecht equation becomes a rough cross-check, not a validation target.
-2. Update the Hecht equation parameters (tau, mu, E, d) consistently with the damage model, but present it clearly as an approximation.
-3. For severely damaged devices (Phi > Phi_crit), the Hecht equation is qualitatively wrong. Do not use it.
+- Document the current convention in every function that extracts current.
+- Create a wrapper function `extract_total_current_2d(device_info, symmetry="cylindrical")` that handles the conversion.
+- Validate: for a known LET, the total collected charge should match LET _ thickness / E_pair _ q \* CCE.
 
-**Phase:** Address when implementing CCE vs fluence notebooks.
+**Phase mapping:** Phase 2 (2D transport and CCE). Validate before proceeding.
 
 ---
 
-### Pitfall 14: Temperature-Damage Cross-Coupling Ignored
+### Pitfall 14: Pre-binned LET Spectra Lose Event-by-Event Correlation
 
-**What goes wrong:** The v1.1 temperature model and the v2.0 damage model are developed independently. But there are cross-couplings:
-
-- SRH lifetime depends on BOTH T and Phi: tau(T, Phi), not tau(T) \* f(Phi)
-- The damage constant K_tau itself may depend on temperature (Arrhenius-type, as found by the IEEE Access 2024 study)
-- Carrier removal may be temperature-dependent (defect charge states change with T)
-
-If you implement damage at T=300K only and then try to predict CCE(T, Phi), you may miss the T-dependence of the damage itself.
+**What goes wrong:** The MC coupling interface accepts two formats: (a) event-by-event phase-space files and (b) pre-binned LET spectra. Format (b) is simpler but loses the correlation between energy deposition and ion impact position. For microdosimetry, the position matters because edge events have different CCE than center events. Using pre-binned LET spectra with a single average CCE systematically underestimates the spectral width.
 
 **Prevention:**
 
-1. For the initial v2.0 implementation: damage at T=300K only is acceptable. Document the limitation.
-2. For later extension: the lifetime degradation should be parameterized as tau(T, Phi) = 1/[1/tau_0(T) + K_tau(T)*Phi] where K_tau(T) has its own T-dependence.
-3. This cross-coupling is a research question, not a solved problem. Flag for future phases.
+- Use event-by-event format whenever possible.
+- If using pre-binned LET spectra, convolve with a position-dependent CCE function (from the lookup table in Pitfall 11).
+- Document the limitation: "Pre-binned LET spectra assume position-independent CCE, which overestimates spectral resolution."
 
-**Phase:** Defer to after the basic damage model is validated at 300K.
+**Phase mapping:** Phase 4-5 (MC coupling and spectra computation).
 
 ---
 
 ## Phase-Specific Warnings
 
-| Phase Topic                      | Likely Pitfall                                                                        | Mitigation                                                               | Severity |
-| -------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | -------- |
-| Damage parameter definition      | Pitfall 2 (wrong constants), Pitfall 7 (g vs c confusion)                             | Explicit DamageParameters dataclass with provenance, separate g and c    | CRITICAL |
-| Defect model selection           | Pitfall 3 (SiC != Si), Pitfall 8 (linear vs log lifetime)                             | Use SiC-specific defects from Burin 2024; implement both lifetime models | CRITICAL |
-| Carrier removal implementation   | Pitfall 4 (operating point shift), Pitfall 9 (position-dependence), Pitfall 12 (mesh) | Compute Phi_crit first; use node models; check mesh resolution           | CRITICAL |
-| Fluence=0 regression             | Pitfall 1 (baseline break), Pitfall 5 (dark current double-counting)                  | Additive damage API; mandatory regression test; separate delta_J_dark    | CRITICAL |
-| Solver stability at high fluence | Pitfall 6 (Newton convergence)                                                        | Fluence ramping; iteration monitoring; start with single defect          | MODERATE |
-| Dark current vs fluence          | Pitfall 5 (double-counting)                                                           | Additive delta_J model; preserve v1.1 calibration at Phi=0               | MODERATE |
-| CCE validation                   | Pitfall 10 (wrong comparison data), Pitfall 13 (Hecht breakdown)                      | Use device-matched data; rely on DD solver not Hecht                     | MODERATE |
-| Annealing modeling               | Pitfall 11 (Si activation energies)                                                   | SiC-specific Ea; Z1/2 does not anneal at room T                          | MINOR    |
-| T-Phi cross-coupling             | Pitfall 14 (ignored coupling)                                                         | Defer; document limitation; 300K only for initial model                  | MINOR    |
+| Phase Topic                         | Likely Pitfall                                                             | Mitigation                                                         |
+| ----------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Phase 1: 2D mesh + electrostatics   | Mesh quality (P2), symmetry choice (P7), 1D assumptions (P1)               | Validate 2D vs 1D for wide device first                            |
+| Phase 2: 2D transport + CCE         | Current extraction units (P13), convergence (P10), edge effects (P7)       | Compare CCE_2D to CCE_1D for center-incident ion                   |
+| Phase 3: Single-particle transients | Generation rate confusion (P3), timestep (P8), device name collision (P12) | Validate total collected charge against LET prediction             |
+| Phase 4: MC coupling                | Coordinate/units mismatch (P6), event format (P14)                         | Test with monoenergetic proton, check energy conservation          |
+| Phase 5: Microdosimetric spectra    | Spectrum errors (P4), tissue equivalence (P5), statistics (P11)            | Validate y_F < y_D, check normalization, compare to published data |
+| Phase 6: Alternative structures     | Mesa mesh singularities (P9), convergence in complex geometries (P10)      | Start simple, add complexity incrementally                         |
 
 ---
 
 ## Sources
 
-- [Burin et al. (2024) - TCAD modeling of radiation-induced defects in 4H-SiC diodes](https://arxiv.org/abs/2407.11776) -- Three-defect model (Z1/2 + EH6/7 + EH4), introduction rates, convergence issues with GTS TCAD. MEDIUM confidence (neutron irradiation, not proton; 50 um device, not 10 um).
-- [Burin et al. (2025) - TCAD Simulations of Radiation Damage in 4H-SiC](https://arxiv.org/html/2407.16710v1) -- GTS framework convergence problems, negative capacitance at low fluence, literature parameter spread. MEDIUM confidence.
-- [Luo et al. (2025) - Mechanisms of proton irradiation-induced defects in 4H-SiC PIN detectors](https://arxiv.org/html/2503.09016) -- Logarithmic lifetime model, EH3 introduction rate 1.48 cm^-1, Z1/2 NOT dominant under 80 MeV proton. MEDIUM confidence (different proton energy from Petringa).
-- [In-situ radiation damage study of SiC detectors with clinical proton beams (2025)](https://arxiv.org/abs/2510.11304v2) -- Carrier removal rate 4.2-6.4 cm^-1 for ~253 MeV protons. MEDIUM confidence (closest to Petringa conditions but different energy).
-- [IEEE Access (2024) 10538275 - Carrier Lifetime Dependence on Temperature and Proton Irradiation in 4H-SiC](https://ieeexplore.ieee.org/document/10538275) -- Arrhenius T-dependence of damage constant K_tau, power-law lifetime-temperature relation with fluence-dependent exponent. MEDIUM confidence.
-- [Carrier removal rates in 4H-SiC power diodes (2023)](https://www.sciencedirect.com/science/article/abs/pii/S136980012300464X) -- Predictive analytical model for carrier removal using NIEL. MEDIUM confidence (power diodes, not detectors).
-- [Frontiers in Physics (2022) - SiC detectors review](https://www.frontiersin.org/journals/physics/articles/10.3389/fphy.2022.898833/full) -- Z1/2 as dominant recombination center, general SiC detector properties. HIGH confidence (review article).
-- [Hazdra et al. (2021) - Radiation Defects and Carrier Lifetime in 4H-SiC Bipolar Devices](https://onlinelibrary.wiley.com/doi/abs/10.1002/pssa.202100218) -- Non-linear lifetime degradation in SiC. MEDIUM confidence.
-- [Ioffe NSM 4H-SiC archive](https://www.ioffe.ru/SVA/NSM/Semicond/SiC/) -- Reference material parameters. HIGH confidence.
-- [Frontiers in Physics (2021) - TCAD Modeling of Surface Radiation Damage](https://www.frontiersin.org/journals/physics/articles/10.3389/fphy.2021.617322/full) -- General TCAD radiation damage modeling practices, effective trap models. MEDIUM confidence (Si-focused but methodology applicable).
-
----
-
-_Pitfalls research for: v2.0 milestone -- adding radiation damage modeling to validated 1D 4H-SiC TCAD simulator_
-_Researched: 2026-03-24_
+- [DEVSIM Manual -- Meshing](https://devsim.net/meshing.html) -- Gmsh format requirements, element type restrictions, contact boundary requirements (HIGH confidence)
+- [DEVSIM Manual -- Equations and Models](https://devsim.net/models.html) -- Cylindrical coordinate support, edge/element models, contact assembly (HIGH confidence)
+- [DEVSIM JOSS Paper](https://www.theoj.org/joss-papers/joss.03898/10.21105.joss.03898.pdf) -- Finite volume method, mesh requirements (HIGH confidence)
+- [Parisi et al. 2023 -- Microdosimetric distribution methodology](https://doi.org/10.1002/acm2.14049) -- Binning methods, spectral computation (MEDIUM confidence)
+- [PMC 9826416 -- Measurement uncertainty of microdosimetric quantities](https://pmc.ncbi.nlm.nih.gov/articles/PMC9826416/) -- Uncertainty sources, stopping power errors (MEDIUM confidence)
+- [Correction factors Si to tissue in 12C therapy](https://pubmed.ncbi.nlm.nih.gov/28151733/) -- kappa factor for silicon, geometric scaling (MEDIUM confidence)
+- [Tissue equivalence correction in Si microdosimetry for protons](https://www.researchgate.net/publication/224362522_Tissue_Equivalence_Correction_in_Silicon_Microdosimetry_for_Protons_Characteristic_of_the_LEO_Space_Environment) -- kappa = 0.57 for Si/muscle (MEDIUM confidence)
+- [IntechOpen -- Charge Collection Physical Modeling for SET](https://www.intechopen.com/chapters/51855) -- Single-event transient TCAD methodology, ion track models (MEDIUM confidence)
+- [Multi-scale modeling of single-event effects (Autran & Munteanu 2023)](https://amu.hal.science/hal-04333942/file/TNS_Review_TCAD_2023.pdf) -- Ion track structure, plasma column dynamics, TCAD convergence (MEDIUM confidence)
+- [GDSFactory DEVSIM plugin](https://gdsfactory.github.io/gplugins/notebooks/devsim_01_pin_waveguide.html) -- Gmsh-to-devsim 2D workflow example (MEDIUM confidence)
+- Project codebase analysis: `device.py`, `poisson.py`, `drift_diffusion.py`, `transient.py`, `charge_collection.py`, `generation_profiles.py` (HIGH confidence for 1D assumptions identification)
