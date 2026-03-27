@@ -1,8 +1,8 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.0
-milestone_name: Radiation Damage Modeling
-status: complete
+milestone: v3.0
+milestone_name: SiC Microdosimeter Design Study
+status: defining_requirements
 last_updated: "2026-03-27T00:00:00.000Z"
 progress:
   total_phases: 18
@@ -18,16 +18,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-27)
 
 **Core value:** Predict how CCE in 4H-SiC detectors degrades under proton irradiation, providing validated radiation damage predictions with design optimization guidance.
-**Current focus:** Planning next milestone (v3.0 Microdosimeter Design Study)
+**Current focus:** Defining requirements for v3.0 Microdosimeter Design Study
 
 ## Current Position
 
-Phase: 18 of 18 (Multi-Defect Parametric Optimization)
-Plan: 3 of 3 in current phase (3 complete)
-Status: v2.0 milestone complete — all phases shipped and archived
-Last activity: 2026-03-27 — Milestone v2.0 archived
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-27 — Milestone v3.0 started
 
-Progress: [██████████████████████████████] 100% (40/40 plans across all milestones)
+Progress: [░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
@@ -47,13 +47,14 @@ Progress: [███████████████████████
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions table.
-Recent decisions affecting future work:
+Recent decisions affecting current work:
 
-- [v2.0]: Fluence-as-temperature architecture pattern (fresh device per sweep point, no in-place mutation)
-- [v2.0]: Additive delta-J dark current model preserves v1.1 calibration exactly at fluence=0
+- [v3.0]: Full scope: all 7 tentative phases (2D mesh through feasibility report)
+- [v3.0]: Both SV geometries: 100x100x10 um and 300x300x10 um
+- [v3.0]: MC coupling: support both phase-space files and pre-binned LET spectra (flexible, any ion)
+- [v3.0]: All three alternative structures: mesa-etched, 3D electrode, stacked delta-E/E
+- [v2.0]: Fluence-as-temperature architecture pattern (fresh device per sweep point)
 - [v2.0]: Phi_crit ~4.86e13 cm⁻² for Petringa device; solver diverges near full compensation
-- [v2.0]: Trend comparison validation over point-by-point due to lack of digitized tabulated data
-- [v2.0]: Circular validation explicitly documented: defect params from Burin 2024
 
 ### Pending Todos
 
@@ -61,13 +62,12 @@ None.
 
 ### Blockers/Concerns
 
-None for v2.0 (complete). For v3.0:
-
 - 2D devsim mesh generation is a significant new capability requiring research
 - Geant4/FLUKA coupling interface design needs investigation before planning
+- Single-particle transient response is fundamentally different from beam-average (new physics regime)
 
 ## Session Continuity
 
 Last session: 2026-03-27
-Stopped at: Milestone v2.0 archived; ready for /gsd:new-milestone v3.0
+Stopped at: Defining requirements for v3.0
 Resume file: None

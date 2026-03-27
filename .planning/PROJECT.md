@@ -1,9 +1,18 @@
 # SiC TCAD Simulator — Petringa Group
 
-## Current State: v2.0 shipped, v3.0 planned
+## Current Milestone: v3.0 SiC Microdosimeter Design Study
 
-**Shipped:** v2.0 Radiation Damage Modeling (2026-03-26)
-**Next:** v3.0 SiC Microdosimeter Design Study (planned)
+**Goal:** Feasibility study and TCAD-based design of a novel 4H-SiC microdosimeter (100x100x10 um and 300x300x10 um sensitive volumes) for clinical proton/ion microdosimetry — including 2D simulation, Geant4/FLUKA coupling, alternative structure exploration, and parametric optimization with fabrication recommendations.
+
+**Target features:**
+
+- 2D devsim mesh generation and electrostatics (extend from 1D, validate against existing results)
+- 2D carrier transport with edge effects and CCE comparison to 1D
+- Single-particle transient charge collection (individual ion events, not beam average)
+- Monte Carlo coupling interface (import Geant4/FLUKA phase-space files or LET spectra for any ion species)
+- Microdosimetric spectra computation (lineal energy y-spectra, dose-mean y_D, tissue-equivalence correction)
+- Alternative structure exploration (mesa-etched SV, 3D electrodes, stacked delta-E/E)
+- Parametric optimization and publication-quality feasibility report
 
 ## What This Is
 
@@ -54,7 +63,24 @@ Predict how charge collection efficiency (CCE) in the SiC detector degrades unde
 
 ### Active
 
-(To be defined with `/gsd:new-milestone` for v3.0 Microdosimeter Design Study)
+- [ ] 2D devsim mesh generation for micro-scale SV geometries (100x100x10 um, 300x300x10 um)
+- [ ] 2D electrostatics validated against 1D for Petringa device
+- [ ] 2D carrier transport with edge field effects
+- [ ] 2D CCE comparison to 1D (quantify edge effects)
+- [ ] Single-particle transient charge generation along ion track
+- [ ] Induced current pulse and charge collection time
+- [ ] MC coupling: import Geant4 phase-space files and pre-binned LET spectra (any ion)
+- [ ] Event-by-event charge deposition simulation
+- [ ] Lineal energy (y) spectrum computation from pulse heights
+- [ ] Tissue-equivalence correction (kappa factor SiC -> tissue)
+- [ ] Dose-mean y_D and frequency-mean y_F computation
+- [ ] Mesa-etched sensitive volume structure in 2D
+- [ ] 3D electrode structure modeled as 2D cross-section
+- [ ] Stacked delta-E/E structure exploration
+- [ ] Comparative CCE/noise/resolution analysis across structures
+- [ ] Guard ring and edge termination modeling
+- [ ] Geometry x doping x bias parametric optimization for microdosimetric response
+- [ ] Publication-quality feasibility report with fabrication recommendations
 
 ### Deferred — v3.0 Microdosimeter Design Study
 
@@ -193,4 +219,4 @@ The FLASH paper (Petringa 2025, Physica Medica 138) characterizes the dosimetric
 
 ---
 
-_Last updated: 2026-03-27 after v2.0 milestone_
+_Last updated: 2026-03-27 after v3.0 milestone start_
