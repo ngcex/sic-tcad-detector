@@ -78,7 +78,12 @@ Full details: [milestones/v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md)
 2. User can solve 2D Poisson equation and obtain potential/E-field distributions that match 1D results within 1% at the device center for a wide device
 3. User can visualize 2D potential and electric field maps as tricontourf plots on the devsim triangular mesh
 4. Existing 1D device.py and all 14 validated notebooks remain untouched (no regression)
-   **Plans**: TBD
+   **Plans**: 2 plans
+
+Plans:
+
+- [ ] 19-01-PLAN.md — 2D mesh generation with graded epi doping (device2d.py)
+- [ ] 19-02-PLAN.md — 2D Poisson solve, 1D validation, and tricontourf visualization
 
 ### Phase 20: 2D Transport & CCE
 
@@ -183,7 +188,7 @@ Full details: [milestones/v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md)
 | 16. Carrier Removal & C-V Evolution        | v2.0      | 2/2            | Complete    | 2026-03-25 |
 | 17. Annealing Kinetics                     | v2.0      | 2/2            | Complete    | 2026-03-25 |
 | 18. Multi-Defect & Parametric Optimization | v2.0      | 3/3            | Complete    | 2026-03-26 |
-| 19. 2D Mesh & Electrostatics               | v3.0      | 0/TBD          | Not started | -          |
+| 19. 2D Mesh & Electrostatics               | v3.0      | 0/2            | Planned     | -          |
 | 20. 2D Transport & CCE                     | v3.0      | 0/TBD          | Not started | -          |
 | 21. Single-Particle Transient              | v3.0      | 0/TBD          | Not started | -          |
 | 22. Monte Carlo Coupling                   | v3.0      | 0/TBD          | Not started | -          |
