@@ -188,7 +188,7 @@ Plans:
 | 16. Carrier Removal & C-V Evolution        | v2.0      | 2/2            | Complete    | 2026-03-25 |
 | 17. Annealing Kinetics                     | v2.0      | 2/2            | Complete    | 2026-03-25 |
 | 18. Multi-Defect & Parametric Optimization | v2.0      | 3/3            | Complete    | 2026-03-26 |
-| 19. 2D Mesh & Electrostatics               | 2/2 | Complete   | 2026-03-29 | -          |
+| 19. 2D Mesh & Electrostatics               | 2/2 | Complete    | 2026-03-29 | -          |
 | 20. 2D Transport & CCE                     | v3.0      | 0/TBD          | Not started | -          |
 | 21. Single-Particle Transient              | v3.0      | 0/TBD          | Not started | -          |
 | 22. Monte Carlo Coupling                   | v3.0      | 0/TBD          | Not started | -          |
