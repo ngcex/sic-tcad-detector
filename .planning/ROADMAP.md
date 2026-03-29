@@ -97,7 +97,12 @@ Plans:
 3. User can generate a 2D CCE heatmap distinguishing active from dead regions across the SV cross-section
 4. User can compare 2D CCE to 1D CCE with a quantified active-to-geometric volume ratio
 5. Publication-quality notebook documents 2D electrostatics and CCE validation against 1D
-   **Plans**: TBD
+   **Plans**: 2 plans
+
+Plans:
+
+- [ ] 20-01-PLAN.md — 2D CCE computation module (charge_collection_2d.py) with lateral scan and heatmap
+- [ ] 20-02-PLAN.md — Publication notebook with electrostatics visualization and CCE analysis
 
 ### Phase 21: Single-Particle Transient
 
@@ -188,8 +193,8 @@ Plans:
 | 16. Carrier Removal & C-V Evolution        | v2.0      | 2/2            | Complete    | 2026-03-25 |
 | 17. Annealing Kinetics                     | v2.0      | 2/2            | Complete    | 2026-03-25 |
 | 18. Multi-Defect & Parametric Optimization | v2.0      | 3/3            | Complete    | 2026-03-26 |
-| 19. 2D Mesh & Electrostatics               | 2/2 | Complete    | 2026-03-29 | -          |
-| 20. 2D Transport & CCE                     | v3.0      | 0/TBD          | Not started | -          |
+| 19. 2D Mesh & Electrostatics               | v3.0      | 2/2            | Complete    | 2026-03-29 |
+| 20. 2D Transport & CCE                     | v3.0      | 0/2            | Planned     | -          |
 | 21. Single-Particle Transient              | v3.0      | 0/TBD          | Not started | -          |
 | 22. Monte Carlo Coupling                   | v3.0      | 0/TBD          | Not started | -          |
 | 23. Microdosimetric Spectra                | v3.0      | 0/TBD          | Not started | -          |
