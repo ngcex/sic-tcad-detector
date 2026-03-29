@@ -10,8 +10,8 @@ Requirements for microdosimeter design study milestone. Each maps to roadmap pha
 ### 2D Mesh & Electrostatics
 
 - [x] **MESH-01**: User can generate a 2D triangular mesh for a planar p+/n-/n+ SiC microdosimeter SV (100x100x10 um and 300x300x10 um geometries)
-- [ ] **MESH-02**: User can solve 2D Poisson equation on the generated mesh and obtain electric field and potential distributions validated against 1D results (within 1% at device center for a wide device)
-- [ ] **MESH-03**: User can visualize 2D potential and electric field maps using tricontourf on the devsim triangular mesh
+- [x] **MESH-02**: User can solve 2D Poisson equation on the generated mesh and obtain electric field and potential distributions validated against 1D results (within 1% at device center for a wide device)
+- [x] **MESH-03**: User can visualize 2D potential and electric field maps using tricontourf on the devsim triangular mesh
 - [x] **MESH-04**: User can apply graded epi doping profile in 2D (lateral uniformity, correct junction position) consistent with the validated 1D profile
 
 ### 2D Transport & CCE
@@ -98,8 +98,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement | Phase | Status  |
 | ----------- | ----- | ------- |
 | MESH-01     | 19    | Complete |
-| MESH-02     | 19    | Pending |
-| MESH-03     | 19    | Pending |
+| MESH-02     | 19    | Complete |
+| MESH-03     | 19    | Complete |
 | MESH-04     | 19    | Complete |
 | TRNS-01     | 20    | Pending |
 | TRNS-02     | 20    | Pending |
