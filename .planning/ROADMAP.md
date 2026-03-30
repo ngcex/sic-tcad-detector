@@ -115,7 +115,12 @@ Plans:
 2. User can extract the induced current pulse from a transient simulation with charge conservation validated (integral of I(t) = CCE \* Q_generated within 1%)
 3. User can generate a CCE(LET) lookup table from 30-50 TCAD transient simulations at log-spaced LET values
 4. Publication-quality notebook shows single-particle charge collection and CCE(LET) characterization
-   **Plans**: TBD
+   **Plans**: 2 plans
+
+Plans:
+
+- [ ] 21-01-PLAN.md — Single-particle transient module (single_particle.py) with ion track generation, transient simulation, and CCE(LET) table
+- [ ] 21-02-PLAN.md — Publication notebook with current pulse analysis and CCE(LET) characterization
 
 ### Phase 22: Monte Carlo Coupling
 
@@ -194,8 +199,8 @@ Plans:
 | 17. Annealing Kinetics                     | v2.0      | 2/2            | Complete    | 2026-03-25 |
 | 18. Multi-Defect & Parametric Optimization | v2.0      | 3/3            | Complete    | 2026-03-26 |
 | 19. 2D Mesh & Electrostatics               | v3.0      | 2/2            | Complete    | 2026-03-29 |
-| 20. 2D Transport & CCE                     | 2/2 | Complete    | 2026-03-30 | -          |
-| 21. Single-Particle Transient              | v3.0      | 0/TBD          | Not started | -          |
+| 20. 2D Transport & CCE                     | v3.0      | 2/2            | Complete    | 2026-03-30 |
+| 21. Single-Particle Transient              | v3.0      | 0/2            | Planned     | -          |
 | 22. Monte Carlo Coupling                   | v3.0      | 0/TBD          | Not started | -          |
 | 23. Microdosimetric Spectra                | v3.0      | 0/TBD          | Not started | -          |
 | 24. Alternative Structures                 | v3.0      | 0/TBD          | Not started | -          |
