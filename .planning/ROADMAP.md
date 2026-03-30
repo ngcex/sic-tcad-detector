@@ -58,7 +58,7 @@ Full details: [milestones/v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md)
 **Depends on:** v2.0 complete (radiation damage physics for hardness assessment)
 
 - [x] **Phase 19: 2D Mesh & Electrostatics** - 2D devsim mesh generation and Poisson solver for micro-scale SV geometries, validated against 1D (completed 2026-03-29)
-- [ ] **Phase 20: 2D Transport & CCE** - Drift-diffusion in 2D with edge effect quantification and CCE validation against 1D
+- [x] **Phase 20: 2D Transport & CCE** - Drift-diffusion in 2D with edge effect quantification and CCE validation against 1D (completed 2026-03-30)
 - [ ] **Phase 21: Single-Particle Transient** - Individual ion track charge collection with transient current pulses and CCE(LET) lookup table
 - [ ] **Phase 22: Monte Carlo Coupling** - Import Geant4/FLUKA energy deposition data and convert to charge generation profiles on 2D mesh
 - [ ] **Phase 23: Microdosimetric Spectra** - Lineal energy spectra, tissue-equivalence correction, and dose-mean y_D computation
@@ -194,7 +194,7 @@ Plans:
 | 17. Annealing Kinetics                     | v2.0      | 2/2            | Complete    | 2026-03-25 |
 | 18. Multi-Defect & Parametric Optimization | v2.0      | 3/3            | Complete    | 2026-03-26 |
 | 19. 2D Mesh & Electrostatics               | v3.0      | 2/2            | Complete    | 2026-03-29 |
-| 20. 2D Transport & CCE                     | 1/2 | In Progress|  | -          |
+| 20. 2D Transport & CCE                     | 2/2 | Complete   | 2026-03-30 | -          |
 | 21. Single-Particle Transient              | v3.0      | 0/TBD          | Not started | -          |
 | 22. Monte Carlo Coupling                   | v3.0      | 0/TBD          | Not started | -          |
 | 23. Microdosimetric Spectra                | v3.0      | 0/TBD          | Not started | -          |
