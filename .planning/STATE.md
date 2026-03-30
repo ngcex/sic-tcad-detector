@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: SiC Microdosimeter Design Study
-status: unknown
-last_updated: "2026-03-30T10:38:11.697Z"
+status: in-progress
+last_updated: "2026-03-30T11:25:00Z"
 progress:
   total_phases: 14
   completed_phases: 14
   total_plans: 31
-  completed_plans: 31
+  completed_plans: 32
 ---
 
 # Project State
@@ -18,24 +18,24 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-27)
 
 **Core value:** TCAD-based feasibility study for a novel 4H-SiC microdosimeter -- first open-source 2D simulation with microdosimetric spectra computation and design optimization guidance
-**Current focus:** Phase 19 - 2D Mesh & Electrostatics
+**Current focus:** Phase 21 - Single-Particle Transient
 
 ## Current Position
 
-Phase: 19 (1 of 7 in v3.0) — 2D Mesh & Electrostatics [COMPLETE]
-Plan: 2 of 2 in current phase [COMPLETE]
-Status: Phase 19 complete, ready for Phase 20
-Last activity: 2026-03-29 — Completed 19-02 (2D Poisson solve & visualization)
+Phase: 21 (3 of 7 in v3.0) — Single-Particle Transient [IN PROGRESS]
+Plan: 1 of 2 in current phase [COMPLETE]
+Status: Plan 21-01 complete, ready for 21-02 (notebook)
+Last activity: 2026-03-30 — Completed 21-01 (single_particle.py module + tests)
 
-Progress: [██░░░░░░░░] ~14% (v3.0, 2 of ~14 plans)
+Progress: [█████░░░░░] ~43% (v3.0, 6 of ~14 plans)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 43 (v1.0: 20, v1.1: 7, v2.0: 13, v3.0: 3)
+- Total plans completed: 46 (v1.0: 20, v1.1: 7, v2.0: 13, v3.0: 6)
 - Average duration: ~14 min
-- Total execution time: ~9 hours
+- Total execution time: ~10 hours
 
 **Recent Trend:**
 
@@ -60,6 +60,11 @@ Recent decisions affecting current work:
 - [19-02]: E-field 2D visualization via scipy LinearNDInterpolator + np.gradient on regular grid
 - [19-02]: validate_2d_vs_1d uses center-slice potential gradient for E-field comparison
 - [19-02]: poisson.py confirmed dimension-agnostic (works on 1D and 2D without modification)
+- [20-01]: \_robust_dc_solve with fallback to relaxed tolerances for 2D DD convergence
+- [20-01]: Delete 2D device before creating 1D device to avoid devsim global solver coupling
+- [21-01]: charge_error=1e10 required for all devsim BDF1 transient solves (disables step rejection)
+- [21-01]: Robust transient_dc init with fallback to relaxed tolerances for 2D devices
+- [21-01]: Generation-pulse injection: G/dt_inject for one BDF1 step, then zero gen and collect
 
 ### Pending Todos
 
@@ -73,6 +78,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-29
-Stopped at: Completed 19-02-PLAN.md (Phase 19 complete)
+Last session: 2026-03-30
+Stopped at: Completed 21-01-PLAN.md (single_particle.py module + tests)
 Resume file: None
