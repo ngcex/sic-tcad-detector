@@ -154,12 +154,22 @@ def simulate_single_particle(
     # Step 1: Initialize transient state with zero generation
     zeros = np.zeros(n_nodes)
     add_generation_to_dd(device_info, zeros)
-    devsim.solve(
-        type="transient_dc",
-        absolute_error=1e10,
-        relative_error=1e-10,
-        maximum_iterations=30,
-    )
+    try:
+        devsim.solve(
+            type="transient_dc",
+            absolute_error=1e10,
+            relative_error=1e-10,
+            maximum_iterations=30,
+        )
+    except devsim.error:
+        # 2D devices may need relaxed tolerances for transient_dc init
+        logger.info("transient_dc failed at strict tolerances, retrying relaxed")
+        devsim.solve(
+            type="transient_dc",
+            absolute_error=1e12,
+            relative_error=1e-8,
+            maximum_iterations=100,
+        )
     logger.debug("Transient state initialized (transient_dc with zero gen)")
 
     # Step 2: Record dark current
@@ -177,6 +187,7 @@ def simulate_single_particle(
             absolute_error=1e10,
             relative_error=1e-8,
             maximum_iterations=100,
+            charge_error=1e10,
         )
     except devsim.error:
         logger.warning("Injection step failed at standard tolerances, retrying relaxed")
@@ -186,6 +197,7 @@ def simulate_single_particle(
             absolute_error=1e12,
             relative_error=1e-6,
             maximum_iterations=200,
+            charge_error=1e10,
         )
 
     I_after_inject = extract_contact_current(device_info, contact)
@@ -213,6 +225,7 @@ def simulate_single_particle(
                 absolute_error=1e10,
                 relative_error=1e-8,
                 maximum_iterations=100,
+                charge_error=1e10,
             )
         except devsim.error:
             # Retry with relaxed tolerances
@@ -223,6 +236,7 @@ def simulate_single_particle(
                     absolute_error=1e12,
                     relative_error=1e-6,
                     maximum_iterations=200,
+                    charge_error=1e10,
                 )
             except devsim.error:
                 logger.warning(f"BDF1 step failed at t={t:.3e} s, terminating early")
