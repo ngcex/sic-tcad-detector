@@ -352,3 +352,71 @@ def validate_2d_vs_1d(device_info_2d, device_info_1d):
         "efield_max_rel_error": float(efield_err),
         "pass": passed,
     }
+
+
+def plot_cce_heatmap_2d(
+    device_info, cce_map, ax=None, levels=50, cmap="RdYlGn", mirror=True
+):
+    """Plot 2D CCE heatmap on the device mesh.
+
+    Parameters
+    ----------
+    device_info : dict
+        2D device info dict (from create_sic_2d_device or create_2d_dd_device).
+    cce_map : array_like
+        CCE values at each mesh node (from cce_heatmap_2d).
+    ax : matplotlib Axes, optional
+        Axes to plot on. If None, creates new figure.
+    levels : int
+        Number of contour levels.
+    cmap : str
+        Colormap. RdYlGn shows dead (red) -> active (green).
+    mirror : bool
+        If True, mirror about x=0 to show full device (not just half).
+
+    Returns
+    -------
+    ax : matplotlib.axes.Axes
+    """
+    import devsim
+
+    device = device_info["device_name"]
+    region = device_info["region_name"]
+
+    x_cm = np.array(
+        devsim.get_node_model_values(device=device, region=region, name="x")
+    )
+    y_cm = np.array(
+        devsim.get_node_model_values(device=device, region=region, name="y")
+    )
+    cce_vals = np.asarray(cce_map, dtype=float)
+
+    x_um = x_cm * _CM_TO_UM
+    y_um = y_cm * _CM_TO_UM
+
+    if mirror:
+        # Concatenate original and mirrored (negated x) points
+        x_full = np.concatenate([x_um, -x_um])
+        y_full = np.concatenate([y_um, y_um])
+        cce_full = np.concatenate([cce_vals, cce_vals])
+    else:
+        x_full = x_um
+        y_full = y_um
+        cce_full = cce_vals
+
+    # Build Delaunay triangulation from combined points
+    tri = mtri.Triangulation(x_full, y_full)
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(10, 5))
+
+    tcf = ax.tricontourf(tri, cce_full, levels=levels, cmap=cmap, vmin=0, vmax=1)
+    ax.get_figure().colorbar(tcf, ax=ax, label="CCE")
+
+    ax.set_xlabel("Lateral position (um)")
+    ax.set_ylabel("Depth (um)")
+    ax.set_title("2D Charge Collection Efficiency")
+    ax.set_aspect("equal")
+    ax.invert_yaxis()
+
+    return ax
