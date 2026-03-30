@@ -47,6 +47,25 @@ Q = 1.602e-19  # C, elementary charge
 _ALPHA_RANGE_CM = 15e-4  # 15 um
 
 
+def _robust_dc_solve():
+    """Solve DC with fallback to relaxed tolerances on convergence failure."""
+    try:
+        devsim.solve(
+            type="dc",
+            absolute_error=1e10,
+            relative_error=1e-10,
+            maximum_iterations=40,
+        )
+    except devsim.error:
+        devsim.solve(
+            type="dc",
+            absolute_error=1e12,
+            relative_error=1e-8,
+            maximum_iterations=100,
+        )
+        logger.info("DC solve converged with relaxed tolerances")
+
+
 def integrate_over_mesh_2d(device_info, node_values):
     """Integrate a per-node scalar field over the 2D triangular mesh.
 
@@ -243,12 +262,7 @@ def cce_lateral_scan(
 
         # Inject generation, solve, extract CCE
         add_generation_to_dd(device_info, generation)
-        devsim.solve(
-            type="dc",
-            absolute_error=1e10,
-            relative_error=1e-10,
-            maximum_iterations=40,
-        )
+        _robust_dc_solve()
         cce = compute_cce_2d(device_info, generation, contact)
         cce_values.append(cce)
 
@@ -259,12 +273,7 @@ def cce_lateral_scan(
         # Reset generation to zero and re-solve to restore baseline
         zero_gen = np.zeros_like(x_nodes)
         add_generation_to_dd(device_info, zero_gen)
-        devsim.solve(
-            type="dc",
-            absolute_error=1e10,
-            relative_error=1e-10,
-            maximum_iterations=40,
-        )
+        _robust_dc_solve()
 
     cce_values = np.array(cce_values)
     edge_to_center = cce_values[-1] / cce_values[0] if cce_values[0] > 0 else 0.0
@@ -400,12 +409,7 @@ def compare_cce_2d_vs_1d(half_width_um=50.0, V_bias=50.0, gen_rate=1e18):
 
         # Compute 2D CCE (full area, uniform generation)
         add_generation_to_dd(device_info_2d, gen_2d)
-        devsim.solve(
-            type="dc",
-            absolute_error=1e10,
-            relative_error=1e-10,
-            maximum_iterations=40,
-        )
+        _robust_dc_solve()
         cce_2d_full = compute_cce_2d(device_info_2d, gen_2d)
 
         # Reset generation before lateral scan
@@ -414,15 +418,18 @@ def compare_cce_2d_vs_1d(half_width_um=50.0, V_bias=50.0, gen_rate=1e18):
         )
         zero_gen = np.zeros_like(x_nodes_2d)
         add_generation_to_dd(device_info_2d, zero_gen)
-        devsim.solve(
-            type="dc",
-            absolute_error=1e10,
-            relative_error=1e-10,
-            maximum_iterations=40,
-        )
+        _robust_dc_solve()
 
         # Lateral scan for edge effects
         lateral_scan = cce_lateral_scan(device_info_2d, n_points=10, gen_rate=gen_rate)
+
+        # Save 2D results and delete 2D device before creating 1D device.
+        # devsim.solve() is global across all loaded devices, so the 2D device
+        # (with residual DD state from lateral scan) causes convergence failure
+        # when the 1D device tries its initial equilibrium solve.
+        half_width_cm = device_info_2d["half_width_cm"]
+        devsim.delete_device(device=device_info_2d["device_name"])
+        device_info_2d = None  # Prevent double-delete in finally
 
         # --- 1D device ---
         dev_id_1d = uuid.uuid4().hex[:8]
@@ -444,19 +451,14 @@ def compare_cce_2d_vs_1d(half_width_um=50.0, V_bias=50.0, gen_rate=1e18):
         gen_1d = np.where(x_nodes_1d >= junction_1d, gen_rate, 0.0)
 
         add_generation_to_dd(device_info_1d, gen_1d)
-        devsim.solve(
-            type="dc",
-            absolute_error=1e10,
-            relative_error=1e-10,
-            maximum_iterations=40,
-        )
+        _robust_dc_solve()
         cce_1d = compute_cce_from_dd(device_info_1d, gen_1d)
 
         # Active-to-geometric ratio from lateral scan
         # = integral(CCE(x) dx) / (half_width * CCE_center)
         x_lat = lateral_scan["x_positions_cm"]
         cce_lat = lateral_scan["cce_values"]
-        half_width_cm = device_info_2d["half_width_cm"]
+        # half_width_cm was saved before 2D device deletion
         cce_center = cce_lat[0]
 
         if cce_center > 0 and half_width_cm > 0:
