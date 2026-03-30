@@ -200,7 +200,7 @@ Plans:
 | 18. Multi-Defect & Parametric Optimization | v2.0      | 3/3            | Complete    | 2026-03-26 |
 | 19. 2D Mesh & Electrostatics               | v3.0      | 2/2            | Complete    | 2026-03-29 |
 | 20. 2D Transport & CCE                     | v3.0      | 2/2            | Complete    | 2026-03-30 |
-| 21. Single-Particle Transient              | v3.0      | 0/2            | Planned     | -          |
+| 21. Single-Particle Transient              | 1/2 | In Progress|  | -          |
 | 22. Monte Carlo Coupling                   | v3.0      | 0/TBD          | Not started | -          |
 | 23. Microdosimetric Spectra                | v3.0      | 0/TBD          | Not started | -          |
 | 24. Alternative Structures                 | v3.0      | 0/TBD          | Not started | -          |

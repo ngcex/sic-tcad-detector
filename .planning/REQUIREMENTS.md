@@ -23,10 +23,10 @@ Requirements for microdosimeter design study milestone. Each maps to roadmap pha
 
 ### Single-Particle Transient
 
-- [ ] **SPRT-01**: User can inject a single ion track as a charge generation profile along the particle trajectory in the 2D mesh
-- [ ] **SPRT-02**: User can run a transient simulation of single-particle charge collection and extract the induced current pulse and total collected charge
-- [ ] **SPRT-03**: User can validate charge conservation (integral of current pulse equals CCE times generated charge within 1%)
-- [ ] **SPRT-04**: User can build a CCE(LET) lookup table from ~30-50 TCAD transient simulations at log-spaced LET values for a given geometry
+- [x] **SPRT-01**: User can inject a single ion track as a charge generation profile along the particle trajectory in the 2D mesh
+- [x] **SPRT-02**: User can run a transient simulation of single-particle charge collection and extract the induced current pulse and total collected charge
+- [x] **SPRT-03**: User can validate charge conservation (integral of current pulse equals CCE times generated charge within 1%)
+- [x] **SPRT-04**: User can build a CCE(LET) lookup table from ~30-50 TCAD transient simulations at log-spaced LET values for a given geometry
 
 ### Monte Carlo Coupling
 
@@ -105,10 +105,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TRNS-02     | 20    | Pending |
 | TRNS-03     | 20    | Pending |
 | TRNS-04     | 20    | Pending |
-| SPRT-01     | 21    | Pending |
-| SPRT-02     | 21    | Pending |
-| SPRT-03     | 21    | Pending |
-| SPRT-04     | 21    | Pending |
+| SPRT-01     | 21    | Complete |
+| SPRT-02     | 21    | Complete |
+| SPRT-03     | 21    | Complete |
+| SPRT-04     | 21    | Complete |
 | MCCP-01     | 22    | Pending |
 | MCCP-02     | 22    | Pending |
 | MCCP-03     | 22    | Pending |
