@@ -489,3 +489,56 @@ def compare_cce_2d_vs_1d(half_width_um=50.0, V_bias=50.0, gen_rate=1e18):
                 devsim.delete_device(device=device_info_1d["device_name"])
             except Exception:
                 pass
+
+
+def cce_vs_bias_lateral(half_width_um=50.0, biases=None, n_points=5, gen_rate=1e18):
+    """Compute lateral CCE profiles at multiple bias voltages.
+
+    Shows how edge effects evolve from partial to full depletion.
+    At low bias (partial depletion), carriers in the undepleted region
+    must diffuse to the depletion edge for collection, creating
+    position-dependent CCE.  At full depletion, drift dominates
+    and CCE is uniform.
+
+    Parameters
+    ----------
+    half_width_um : float
+        Half-width of 2D SV in micrometers.
+    biases : list of float or None
+        Bias voltages to scan (V, positive). Default: [5, 10, 20, 30, 50].
+    n_points : int
+        Number of lateral positions per scan.
+    gen_rate : float
+        Generation rate (cm^-3 s^-1).
+
+    Returns
+    -------
+    result : dict
+        Dictionary with keys:
+        - "biases": list of bias voltages
+        - "scans": list of cce_lateral_scan results (one per bias)
+        - "half_width_um": half-width used
+    """
+    if biases is None:
+        biases = [5.0, 10.0, 20.0, 30.0, 50.0]
+
+    scans = []
+    for V in biases:
+        logger.info(f"Bias scan: V={V:.0f}V, half_width={half_width_um:.0f}um")
+        device_info = None
+        try:
+            device_info = create_2d_dd_device(half_width_um=half_width_um, V_bias=V)
+            scan = cce_lateral_scan(device_info, n_points=n_points, gen_rate=gen_rate)
+            scans.append(scan)
+        finally:
+            if device_info is not None:
+                try:
+                    devsim.delete_device(device=device_info["device_name"])
+                except Exception:
+                    pass
+
+    return {
+        "biases": biases,
+        "scans": scans,
+        "half_width_um": half_width_um,
+    }
