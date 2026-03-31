@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: SiC Microdosimeter Design Study
 status: unknown
-last_updated: "2026-03-31T16:41:48.725Z"
+last_updated: "2026-03-31T23:03:08Z"
 progress:
   total_phases: 19
   completed_phases: 16
-  total_plans: 35
-  completed_plans: 35
+  total_plans: 36
+  completed_plans: 36
 ---
 
 # Project State
@@ -18,22 +18,22 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-27)
 
 **Core value:** TCAD-based feasibility study for a novel 4H-SiC microdosimeter -- first open-source 2D simulation with microdosimetric spectra computation and design optimization guidance
-**Current focus:** Phase 22 - Monte Carlo Coupling
+**Current focus:** Phase 23 - Microdosimetric Spectra
 
 ## Current Position
 
-Phase: 22 (4 of 7 in v3.0) — Monte Carlo Coupling [PHASE COMPLETE]
-Plan: 2 of 2 in current phase [COMPLETE]
-Status: Phase 22 complete -- mc_coupling module + notebook 17 demonstration
-Last activity: 2026-03-31 — Plan 22-02 executed, notebook 17 with 4 figures approved
+Phase: 23 (5 of 7 in v3.0) — Microdosimetric Spectra
+Plan: 1 of 2 in current phase [COMPLETE]
+Status: Plan 23-01 complete -- microdosimetry.py module + 25 tests pass
+Last activity: 2026-03-31 — Plan 23-01 executed, microdosimetry module with tissue-equivalence correction
 
-Progress: [████████░░] ~64% (v3.0, 9 of ~14 plans)
+Progress: [████████░░] ~71% (v3.0, 10 of ~14 plans)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 49 (v1.0: 20, v1.1: 7, v2.0: 13, v3.0: 9)
+- Total plans completed: 50 (v1.0: 20, v1.1: 7, v2.0: 13, v3.0: 10)
 - Average duration: ~14 min
 - Total execution time: ~10 hours
 
@@ -72,6 +72,9 @@ Recent decisions affecting current work:
 - [22-01]: process_mc_ensemble filters zero-energy events with logging rather than raising errors
 - [22-02]: Demo CCE curve added for visual comparison when real CCE table is flat at full depletion
 - [22-02]: 2000 synthetic events with bimodal distribution (proton + heavy-ion) for mixed-field demonstration
+- [23-01]: PSTAR water stopping powers bundled as CSV (37 points, 0.1-1000 MeV) for kappa computation
+- [23-01]: SiC stopping powers from Bethe-Bloch scaling of SRIM data, ~1.7x water values
+- [23-01]: Constant kappa fallback (0.58) with warning when no energy-dependent table provided
 
 ### Pending Todos
 
@@ -81,10 +84,10 @@ None.
 
 - Geant4 TTree naming conventions from INFN-LNS group unknown -- need sample ROOT file before Phase 22
 - devsim cylindrical coordinate API has limited community examples -- verify at Phase 19 start
-- SiC-specific kappa tissue-equivalence factor not published -- must compute from SRIM/PSTAR before Phase 23
+- SiC-specific kappa tissue-equivalence factor computed from PSTAR/SRIM stopping power ratios in Phase 23-01
 
 ## Session Continuity
 
 Last session: 2026-03-31
-Stopped at: Completed 22-02-PLAN.md (Phase 22 complete)
+Stopped at: Completed 23-01-PLAN.md
 Resume file: None
