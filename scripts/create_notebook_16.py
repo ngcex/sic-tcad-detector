@@ -319,10 +319,12 @@ for r in val_results:
           f"{r['CCE']:>8.4f} | {r['t_col_ns']:>10.2f}")
 print("=" * 80)
 
-# Check conservation: all CCE values should be in [0.5, 1.05]
-all_valid = all(0.5 <= r['CCE'] <= 1.05 for r in val_results)
+# Check conservation: all CCE values should be in [0.5, 1.02]
+# Note: small overcollection (< 2%) is a numerical artifact of the
+# BDF1 generation-pulse method (displacement current in early steps).
+all_valid = all(0.5 <= r['CCE'] <= 1.02 for r in val_results)
 print(f"\\nCharge conservation check: {'PASS' if all_valid else 'FAIL'}")
-print(f"All CCE values in [0.5, 1.05]: {all_valid}")
+print(f"All CCE values in [0.5, 1.02]: {all_valid}")
 """
 )
 
@@ -498,12 +500,17 @@ md(
    drift-dominated collection, with 95% collection times typically < 50 ns
    at 50 V bias.
 
-3. **Charge conservation validated:** CCE values are stable in [0.5, 1.05]
-   across the tested LET range (1 -- 500 keV/um), confirming the generation-pulse
-   injection method conserves charge.
+3. **Charge conservation validated:** CCE values are stable across the tested
+   LET range (1 -- 500 keV/um).  The CCE(LET) table clips values to [0, 1]
+   since overcollection is a numerical artifact of the generation-pulse BDF1
+   method (displacement current during early post-injection steps).  Raw CCE
+   before clipping is ≤ 1.007 at 50 V, confirming good charge conservation.
 
-4. **CCE(LET) is relatively flat** near 1.0 at full depletion (50 V),
-   consistent with the strong drift field sweeping all carriers.
+4. **CCE(LET) is flat at 1.0** at full depletion (50 V), consistent with
+   the linear drift-diffusion model: all carriers are swept by the strong
+   drift field regardless of track density.  Note that high-injection plasma
+   effects (Auger recombination, field screening) are not captured by the
+   linear DD model and would reduce CCE at very high LET in experiment.
 
 5. **Size independence at center:** Both 100 um and 300 um SVs show similar
    CCE at center injection, confirming that edge effects are negligible for
