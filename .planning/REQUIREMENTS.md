@@ -61,7 +61,7 @@ Requirements for microdosimeter design study milestone. Each maps to roadmap pha
 ### Notebooks & Validation
 
 - [ ] **NBKV-01**: Publication-quality notebook for 2D electrostatics and CCE validation against 1D
-- [ ] **NBKV-02**: Publication-quality notebook for single-particle charge collection and CCE(LET) characterization
+- [x] **NBKV-02**: Publication-quality notebook for single-particle charge collection and CCE(LET) characterization
 - [ ] **NBKV-03**: Publication-quality notebook for microdosimetric y-spectra with tissue-equivalence correction
 - [ ] **NBKV-04**: Publication-quality notebook comparing alternative structures (mesa, 3D electrode, delta-E/E)
 - [ ] **NBKV-05**: Publication-quality feasibility report with parametric optimization results
@@ -128,7 +128,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FEAS-03     | 25    | Pending |
 | FEAS-04     | 25    | Pending |
 | NBKV-01     | 20    | Pending |
-| NBKV-02     | 21    | Pending |
+| NBKV-02     | 21    | Complete |
 | NBKV-03     | 23    | Pending |
 | NBKV-04     | 24    | Pending |
 | NBKV-05     | 25    | Pending |
