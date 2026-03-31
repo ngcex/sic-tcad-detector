@@ -280,10 +280,11 @@ class TestChargeConservation:
             cce = Q_col / Q_gen
 
             # CCE should be physically reasonable: 0.5 to ~1.0 for SiC at 50V
-            # Allow up to 1.05 for numerical integration overshoot
+            # Allow up to 1.02 for residual displacement current artifact
+            # in early post-injection BDF1 steps.
             assert (
-                0.5 <= cce <= 1.05
-            ), f"CCE={cce:.4f} out of expected range [0.5, 1.05]"
+                0.5 <= cce <= 1.02
+            ), f"CCE={cce:.4f} out of expected range [0.5, 1.02]"
 
             # Charge conservation: the CCE ratio should be self-consistent
             # (this is really testing that the integral is done correctly)

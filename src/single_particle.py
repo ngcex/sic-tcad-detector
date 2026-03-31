@@ -204,10 +204,15 @@ def simulate_single_particle(
     logger.debug(f"Current after injection: {I_after_inject:.4e} A/cm")
 
     # Step 4: Zero generation and time-step loop
+    # Recording starts AFTER injection to avoid displacement current artifact.
+    # During the injection BDF1 step, extract_contact_current includes both
+    # conduction and displacement current (dD/dt) from the field readjusting
+    # to the injected charge.  Including this in the integral causes CCE > 1.
+    # The post-injection current is pure carrier drift/diffusion collection.
     add_generation_to_dd(device_info, zeros)
 
-    times = [dt_inject]
-    currents = [I_after_inject]
+    times = []
+    currents = []
     t = dt_inject
 
     I_peak = I_after_inject
@@ -260,7 +265,7 @@ def simulate_single_particle(
     times = np.array(times)
     currents = np.array(currents)
 
-    # Q_collected = integral(|I| - |I_dark|) dt, using absolute values
+    # Q_collected = integral(|I| - |I_dark|) dt, post-injection only
     Q_collected = float(np.trapezoid(np.abs(currents) - np.abs(I_dark), times))
 
     logger.info(
@@ -374,7 +379,12 @@ def build_cce_let_table(
             sim_result = simulate_single_particle(device_info, generation)
 
             Q_col = sim_result["Q_collected"]
-            cce = Q_col / Q_gen if Q_gen > 0 else float("nan")
+            cce_raw = Q_col / Q_gen if Q_gen > 0 else float("nan")
+            # Clip CCE to [0, 1]: overcollection (CCE > 1) is a numerical
+            # artifact of the generation-pulse BDF1 method (displacement
+            # current during early post-injection steps).  Physical CCE
+            # cannot exceed unity in the linear DD model.
+            cce = float(np.clip(cce_raw, 0.0, 1.0))
 
             pulse_info = analyze_current_pulse(
                 sim_result["times"], sim_result["currents"], sim_result["I_dark"]
