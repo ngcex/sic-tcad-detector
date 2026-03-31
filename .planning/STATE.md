@@ -3,11 +3,11 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: SiC Microdosimeter Design Study
 status: unknown
-last_updated: "2026-03-31T16:27:41.000Z"
+last_updated: "2026-03-31T16:41:48.725Z"
 progress:
-  total_phases: 15
-  completed_phases: 15
-  total_plans: 33
+  total_phases: 19
+  completed_phases: 16
+  total_plans: 35
   completed_plans: 35
 ---
 
