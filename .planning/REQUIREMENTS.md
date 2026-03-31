@@ -37,11 +37,11 @@ Requirements for microdosimeter design study milestone. Each maps to roadmap pha
 
 ### Microdosimetric Spectra
 
-- [ ] **MDOS-01**: User can compute lineal energy y = epsilon / l_bar for each event using the mean chord length of the SV geometry
-- [ ] **MDOS-02**: User can compute frequency distribution f(y) and dose distribution d(y) on 300 log-spaced bins (50/decade) following ICRU Report 36
-- [ ] **MDOS-03**: User can compute frequency-mean y_F and dose-mean y_D from the spectra with normalization validation (integral f(y)dy = 1, y_D >= y_F)
-- [ ] **MDOS-04**: User can apply energy-dependent tissue-equivalence correction (kappa_SiC computed from SRIM/PSTAR stopping power tables) to convert SiC y-spectra to tissue-equivalent y-spectra
-- [ ] **MDOS-05**: User can generate publication-quality y\*d(y) vs log(y) spectrum plots consistent with microdosimetry conventions
+- [x] **MDOS-01**: User can compute lineal energy y = epsilon / l_bar for each event using the mean chord length of the SV geometry
+- [x] **MDOS-02**: User can compute frequency distribution f(y) and dose distribution d(y) on 300 log-spaced bins (50/decade) following ICRU Report 36
+- [x] **MDOS-03**: User can compute frequency-mean y_F and dose-mean y_D from the spectra with normalization validation (integral f(y)dy = 1, y_D >= y_F)
+- [x] **MDOS-04**: User can apply energy-dependent tissue-equivalence correction (kappa_SiC computed from SRIM/PSTAR stopping power tables) to convert SiC y-spectra to tissue-equivalent y-spectra
+- [x] **MDOS-05**: User can generate publication-quality y\*d(y) vs log(y) spectrum plots consistent with microdosimetry conventions
 
 ### Alternative Structures
 
@@ -113,11 +113,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MCCP-02     | 22    | Complete |
 | MCCP-03     | 22    | Complete |
 | MCCP-04     | 22    | Complete |
-| MDOS-01     | 23    | Pending  |
-| MDOS-02     | 23    | Pending  |
-| MDOS-03     | 23    | Pending  |
-| MDOS-04     | 23    | Pending  |
-| MDOS-05     | 23    | Pending  |
+| MDOS-01     | 23    | Complete |
+| MDOS-02     | 23    | Complete |
+| MDOS-03     | 23    | Complete |
+| MDOS-04     | 23    | Complete |
+| MDOS-05     | 23    | Complete |
 | ALTS-01     | 24    | Pending  |
 | ALTS-02     | 24    | Pending  |
 | ALTS-03     | 24    | Pending  |
