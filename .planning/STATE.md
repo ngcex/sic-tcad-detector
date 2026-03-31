@@ -23,17 +23,17 @@ See: .planning/PROJECT.md (updated 2026-03-27)
 ## Current Position
 
 Phase: 21 (3 of 7 in v3.0) — Single-Particle Transient [IN PROGRESS]
-Plan: 1 of 2 in current phase [COMPLETE]
-Status: Plan 21-01 complete, ready for 21-02 (notebook)
-Last activity: 2026-03-30 — Completed 21-01 (single_particle.py module + tests)
+Plan: 2 of 2 in current phase [AWAITING HUMAN VERIFY]
+Status: Plan 21-02 Task 1 complete, Task 2 awaiting human verification
+Last activity: 2026-03-31 — Completed 21-02 Task 1 (notebook 16 executed)
 
-Progress: [█████░░░░░] ~43% (v3.0, 6 of ~14 plans)
+Progress: [██████░░░░] ~50% (v3.0, 7 of ~14 plans)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 46 (v1.0: 20, v1.1: 7, v2.0: 13, v3.0: 6)
+- Total plans completed: 47 (v1.0: 20, v1.1: 7, v2.0: 13, v3.0: 7)
 - Average duration: ~14 min
 - Total execution time: ~10 hours
 
@@ -65,6 +65,8 @@ Recent decisions affecting current work:
 - [21-01]: charge_error=1e10 required for all devsim BDF1 transient solves (disables step rejection)
 - [21-01]: Robust transient_dc init with fallback to relaxed tolerances for 2D devices
 - [21-01]: Generation-pulse injection: G/dt_inject for one BDF1 step, then zero gen and collect
+- [21-02]: 300um SV LET sweep reduced to 10 points (from 15) due to ~3x longer sim time on larger mesh
+- [21-02]: CCE ~1.01 at 50V full depletion is numerically valid (1% overcollection from generation-pulse method)
 
 ### Pending Todos
 
@@ -78,6 +80,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-30
-Stopped at: Completed 21-01-PLAN.md (single_particle.py module + tests)
+Last session: 2026-03-31
+Stopped at: 21-02-PLAN.md Task 1 complete, Task 2 checkpoint (human-verify) pending
 Resume file: None
