@@ -133,7 +133,12 @@ Plans:
 2. User can import energy deposition events from Geant4 ROOT files using uproot
 3. User can convert MC energy deposition events to charge generation profiles on the 2D devsim mesh
 4. User can process 1000+ MC events through the CCE(LET) lookup table to produce a pulse height distribution
-   **Plans**: TBD
+   **Plans**: 2 plans
+
+Plans:
+
+- [ ] 22-01-PLAN.md — MC coupling module (mc_coupling.py) with CSV/ROOT importers, batch CCE lookup, and pulse height distribution
+- [ ] 22-02-PLAN.md — Publication notebook with MC coupling pipeline demonstration and PHD visualization
 
 ### Phase 23: Microdosimetric Spectra
 
@@ -200,8 +205,8 @@ Plans:
 | 18. Multi-Defect & Parametric Optimization | v2.0      | 3/3            | Complete    | 2026-03-26 |
 | 19. 2D Mesh & Electrostatics               | v3.0      | 2/2            | Complete    | 2026-03-29 |
 | 20. 2D Transport & CCE                     | v3.0      | 2/2            | Complete    | 2026-03-30 |
-| 21. Single-Particle Transient              | v3.0      | Complete    | 2026-03-31 | 2026-03-31 |
-| 22. Monte Carlo Coupling                   | v3.0      | 0/TBD          | Not started | -          |
+| 21. Single-Particle Transient              | v3.0      | Complete       | 2026-03-31  | 2026-03-31 |
+| 22. Monte Carlo Coupling                   | v3.0      | 0/2            | Planning    | -          |
 | 23. Microdosimetric Spectra                | v3.0      | 0/TBD          | Not started | -          |
 | 24. Alternative Structures                 | v3.0      | 0/TBD          | Not started | -          |
 | 25. Optimization & Feasibility Report      | v3.0      | 0/TBD          | Not started | -          |
