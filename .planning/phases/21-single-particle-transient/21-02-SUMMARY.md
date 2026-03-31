@@ -56,7 +56,7 @@ completed: 2026-03-31
 - **Duration:** ~3.5 hours (dominated by notebook execution: 20+10 transient simulations)
 - **Started:** 2026-03-30T13:12:20Z
 - **Completed:** 2026-03-31T00:20:00Z
-- **Tasks:** 1 of 2 (Task 2 awaits human verification)
+- **Tasks:** 2 of 2
 - **Files modified:** 4
 
 ## Accomplishments
@@ -73,7 +73,8 @@ completed: 2026-03-31
 Each task was committed atomically:
 
 1. **Task 1: Create notebook 16 with single-particle CCE analysis** - `b516a54` (feat)
-2. **Task 2: Human verification of notebook 16 figures and science** - awaiting checkpoint
+   - Fix commits: `6133c6c` (fix: exclude injection step from Q_collected, clip CCE), `1d53bd4` (fix: regenerate notebook with CCE fix)
+2. **Task 2: Human verification of notebook 16 figures and science** - APPROVED
 
 ## Files Created/Modified
 
@@ -117,7 +118,7 @@ None - no external service configuration required.
 
 - CCE(LET) lookup tables ready for Phase 22 Monte Carlo coupling
 - `load_cce_let_table` provides log-linear interpolation function for scoring MC events
-- Awaiting human verification of notebook figures and science (Task 2 checkpoint)
+- Human verification APPROVED -- notebook figures and science confirmed publication-quality
 
 ## Self-Check: PASSED
 
