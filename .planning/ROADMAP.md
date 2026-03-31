@@ -152,7 +152,12 @@ Plans:
 3. User can apply energy-dependent tissue-equivalence correction (kappa_SiC from stopping power tables) to convert SiC y-spectra to tissue-equivalent y-spectra
 4. User can generate publication-quality y\*d(y) vs log(y) spectrum plots following microdosimetry conventions
 5. Publication-quality notebook documents microdosimetric y-spectra with tissue-equivalence correction
-   **Plans**: TBD
+   **Plans**: 2 plans
+
+Plans:
+
+- [ ] 23-01-PLAN.md — Microdosimetry module (microdosimetry.py) with y-spectra, f(y)/d(y), kappa correction, and tests
+- [ ] 23-02-PLAN.md — Publication notebook with microdosimetric spectra and tissue-equivalence demonstration
 
 ### Phase 24: Alternative Structures
 
@@ -206,7 +211,7 @@ Plans:
 | 19. 2D Mesh & Electrostatics               | v3.0      | 2/2            | Complete    | 2026-03-29 |
 | 20. 2D Transport & CCE                     | v3.0      | 2/2            | Complete    | 2026-03-30 |
 | 21. Single-Particle Transient              | v3.0      | Complete       | 2026-03-31  | 2026-03-31 |
-| 22. Monte Carlo Coupling                   | 2/2 | Complete    | 2026-03-31 | -          |
-| 23. Microdosimetric Spectra                | v3.0      | 0/TBD          | Not started | -          |
+| 22. Monte Carlo Coupling                   | 2/2       | Complete       | 2026-03-31  | -          |
+| 23. Microdosimetric Spectra                | v3.0      | 0/2            | Planned     | -          |
 | 24. Alternative Structures                 | v3.0      | 0/TBD          | Not started | -          |
 | 25. Optimization & Feasibility Report      | v3.0      | 0/TBD          | Not started | -          |
