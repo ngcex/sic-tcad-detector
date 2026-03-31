@@ -60,7 +60,7 @@ Full details: [milestones/v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md)
 - [x] **Phase 19: 2D Mesh & Electrostatics** - 2D devsim mesh generation and Poisson solver for micro-scale SV geometries, validated against 1D (completed 2026-03-29)
 - [x] **Phase 20: 2D Transport & CCE** - Drift-diffusion in 2D with edge effect quantification and CCE validation against 1D (completed 2026-03-30)
 - [x] **Phase 21: Single-Particle Transient** - Individual ion track charge collection with transient current pulses and CCE(LET) lookup table (completed 2026-03-31)
-- [ ] **Phase 22: Monte Carlo Coupling** - Import Geant4/FLUKA energy deposition data and convert to charge generation profiles on 2D mesh
+- [x] **Phase 22: Monte Carlo Coupling** - Import Geant4/FLUKA energy deposition data and convert to charge generation profiles on 2D mesh (completed 2026-03-31)
 - [ ] **Phase 23: Microdosimetric Spectra** - Lineal energy spectra, tissue-equivalence correction, and dose-mean y_D computation
 - [ ] **Phase 24: Alternative Structures** - Mesa-etched, 3D electrode, stacked delta-E/E, and guard ring structure exploration
 - [ ] **Phase 25: Optimization & Feasibility Report** - Parametric optimization and publication-quality feasibility study with fabrication guidance
@@ -206,7 +206,7 @@ Plans:
 | 19. 2D Mesh & Electrostatics               | v3.0      | 2/2            | Complete    | 2026-03-29 |
 | 20. 2D Transport & CCE                     | v3.0      | 2/2            | Complete    | 2026-03-30 |
 | 21. Single-Particle Transient              | v3.0      | Complete       | 2026-03-31  | 2026-03-31 |
-| 22. Monte Carlo Coupling                   | 1/2 | In Progress|  | -          |
+| 22. Monte Carlo Coupling                   | 2/2 | Complete   | 2026-03-31 | -          |
 | 23. Microdosimetric Spectra                | v3.0      | 0/TBD          | Not started | -          |
 | 24. Alternative Structures                 | v3.0      | 0/TBD          | Not started | -          |
 | 25. Optimization & Feasibility Report      | v3.0      | 0/TBD          | Not started | -          |

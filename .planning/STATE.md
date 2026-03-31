@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: SiC Microdosimeter Design Study
 status: unknown
-last_updated: "2026-03-31T16:07:15.000Z"
+last_updated: "2026-03-31T16:27:41.000Z"
 progress:
   total_phases: 15
   completed_phases: 15
   total_plans: 33
-  completed_plans: 34
+  completed_plans: 35
 ---
 
 # Project State
@@ -22,18 +22,18 @@ See: .planning/PROJECT.md (updated 2026-03-27)
 
 ## Current Position
 
-Phase: 22 (4 of 7 in v3.0) — Monte Carlo Coupling
-Plan: 1 of 2 in current phase [COMPLETE]
-Status: Plan 22-01 complete -- mc_coupling.py module and tests created
-Last activity: 2026-03-31 — Plan 22-01 executed, 23 tests pass
+Phase: 22 (4 of 7 in v3.0) — Monte Carlo Coupling [PHASE COMPLETE]
+Plan: 2 of 2 in current phase [COMPLETE]
+Status: Phase 22 complete -- mc_coupling module + notebook 17 demonstration
+Last activity: 2026-03-31 — Plan 22-02 executed, notebook 17 with 4 figures approved
 
-Progress: [███████░░░] ~57% (v3.0, 8 of ~14 plans)
+Progress: [████████░░] ~64% (v3.0, 9 of ~14 plans)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 48 (v1.0: 20, v1.1: 7, v2.0: 13, v3.0: 8)
+- Total plans completed: 49 (v1.0: 20, v1.1: 7, v2.0: 13, v3.0: 9)
 - Average duration: ~14 min
 - Total execution time: ~10 hours
 
@@ -70,6 +70,8 @@ Recent decisions affecting current work:
 - [22-01]: column_map keys are standard names, values are source names -- consistent across CSV and ROOT loaders
 - [22-01]: uproot imported lazily inside ROOT functions so module works without uproot for CSV-only workflows
 - [22-01]: process_mc_ensemble filters zero-energy events with logging rather than raising errors
+- [22-02]: Demo CCE curve added for visual comparison when real CCE table is flat at full depletion
+- [22-02]: 2000 synthetic events with bimodal distribution (proton + heavy-ion) for mixed-field demonstration
 
 ### Pending Todos
 
@@ -84,5 +86,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-31
-Stopped at: Completed 22-01-PLAN.md
+Stopped at: Completed 22-02-PLAN.md (Phase 22 complete)
 Resume file: None
