@@ -16,10 +16,10 @@ Requirements for microdosimeter design study milestone. Each maps to roadmap pha
 
 ### 2D Transport & CCE
 
-- [ ] **TRNS-01**: User can solve 2D drift-diffusion equations and extract total current from 2D device contacts
-- [ ] **TRNS-02**: User can compute CCE as a function of lateral position across the SV, quantifying edge-to-center CCE ratio for both SV sizes
-- [ ] **TRNS-03**: User can generate a 2D CCE heatmap showing active vs dead regions across the SV cross-section
-- [ ] **TRNS-04**: User can compare 2D CCE to 1D CCE and quantify the edge effect contribution (active-to-geometric volume ratio)
+- [x] **TRNS-01**: User can solve 2D drift-diffusion equations and extract total current from 2D device contacts
+- [x] **TRNS-02**: User can compute CCE as a function of lateral position across the SV, quantifying edge-to-center CCE ratio for both SV sizes
+- [x] **TRNS-03**: User can generate a 2D CCE heatmap showing active vs dead regions across the SV cross-section
+- [x] **TRNS-04**: User can compare 2D CCE to 1D CCE and quantify the edge effect contribution (active-to-geometric volume ratio)
 
 ### Single-Particle Transient
 
@@ -60,7 +60,7 @@ Requirements for microdosimeter design study milestone. Each maps to roadmap pha
 
 ### Notebooks & Validation
 
-- [ ] **NBKV-01**: Publication-quality notebook for 2D electrostatics and CCE validation against 1D
+- [x] **NBKV-01**: Publication-quality notebook for 2D electrostatics and CCE validation against 1D
 - [x] **NBKV-02**: Publication-quality notebook for single-particle charge collection and CCE(LET) characterization
 - [ ] **NBKV-03**: Publication-quality notebook for microdosimetric y-spectra with tissue-equivalence correction
 - [ ] **NBKV-04**: Publication-quality notebook comparing alternative structures (mesa, 3D electrode, delta-E/E)
@@ -95,43 +95,43 @@ Explicitly excluded. Documented to prevent scope creep.
 
 Which phases cover which requirements. Updated during roadmap creation.
 
-| Requirement | Phase | Status  |
-| ----------- | ----- | ------- |
+| Requirement | Phase | Status   |
+| ----------- | ----- | -------- |
 | MESH-01     | 19    | Complete |
 | MESH-02     | 19    | Complete |
 | MESH-03     | 19    | Complete |
 | MESH-04     | 19    | Complete |
-| TRNS-01     | 20    | Pending |
-| TRNS-02     | 20    | Pending |
-| TRNS-03     | 20    | Pending |
-| TRNS-04     | 20    | Pending |
+| TRNS-01     | 20    | Complete |
+| TRNS-02     | 20    | Complete |
+| TRNS-03     | 20    | Complete |
+| TRNS-04     | 20    | Complete |
 | SPRT-01     | 21    | Complete |
 | SPRT-02     | 21    | Complete |
 | SPRT-03     | 21    | Complete |
 | SPRT-04     | 21    | Complete |
-| MCCP-01     | 22    | Pending |
-| MCCP-02     | 22    | Pending |
-| MCCP-03     | 22    | Pending |
-| MCCP-04     | 22    | Pending |
-| MDOS-01     | 23    | Pending |
-| MDOS-02     | 23    | Pending |
-| MDOS-03     | 23    | Pending |
-| MDOS-04     | 23    | Pending |
-| MDOS-05     | 23    | Pending |
-| ALTS-01     | 24    | Pending |
-| ALTS-02     | 24    | Pending |
-| ALTS-03     | 24    | Pending |
-| ALTS-04     | 24    | Pending |
-| ALTS-05     | 24    | Pending |
-| FEAS-01     | 25    | Pending |
-| FEAS-02     | 25    | Pending |
-| FEAS-03     | 25    | Pending |
-| FEAS-04     | 25    | Pending |
-| NBKV-01     | 20    | Pending |
+| MCCP-01     | 22    | Pending  |
+| MCCP-02     | 22    | Pending  |
+| MCCP-03     | 22    | Pending  |
+| MCCP-04     | 22    | Pending  |
+| MDOS-01     | 23    | Pending  |
+| MDOS-02     | 23    | Pending  |
+| MDOS-03     | 23    | Pending  |
+| MDOS-04     | 23    | Pending  |
+| MDOS-05     | 23    | Pending  |
+| ALTS-01     | 24    | Pending  |
+| ALTS-02     | 24    | Pending  |
+| ALTS-03     | 24    | Pending  |
+| ALTS-04     | 24    | Pending  |
+| ALTS-05     | 24    | Pending  |
+| FEAS-01     | 25    | Pending  |
+| FEAS-02     | 25    | Pending  |
+| FEAS-03     | 25    | Pending  |
+| FEAS-04     | 25    | Pending  |
+| NBKV-01     | 20    | Complete |
 | NBKV-02     | 21    | Complete |
-| NBKV-03     | 23    | Pending |
-| NBKV-04     | 24    | Pending |
-| NBKV-05     | 25    | Pending |
+| NBKV-03     | 23    | Pending  |
+| NBKV-04     | 24    | Pending  |
+| NBKV-05     | 25    | Pending  |
 
 **Coverage:**
 
