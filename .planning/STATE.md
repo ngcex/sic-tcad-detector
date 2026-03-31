@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: SiC Microdosimeter Design Study
 status: unknown
-last_updated: "2026-03-31T13:51:09.188Z"
+last_updated: "2026-03-31T16:07:15.000Z"
 progress:
   total_phases: 15
   completed_phases: 15
   total_plans: 33
-  completed_plans: 33
+  completed_plans: 34
 ---
 
 # Project State
@@ -18,22 +18,22 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-27)
 
 **Core value:** TCAD-based feasibility study for a novel 4H-SiC microdosimeter -- first open-source 2D simulation with microdosimetric spectra computation and design optimization guidance
-**Current focus:** Phase 21 - Single-Particle Transient
+**Current focus:** Phase 22 - Monte Carlo Coupling
 
 ## Current Position
 
-Phase: 21 (3 of 7 in v3.0) — Single-Particle Transient [COMPLETE]
-Plan: 2 of 2 in current phase [COMPLETE]
-Status: Phase 21 complete -- all plans finished, human-verified
-Last activity: 2026-03-31 — Plan 21-02 human-approved, Phase 21 complete
+Phase: 22 (4 of 7 in v3.0) — Monte Carlo Coupling
+Plan: 1 of 2 in current phase [COMPLETE]
+Status: Plan 22-01 complete -- mc_coupling.py module and tests created
+Last activity: 2026-03-31 — Plan 22-01 executed, 23 tests pass
 
-Progress: [██████░░░░] ~50% (v3.0, 7 of ~14 plans)
+Progress: [███████░░░] ~57% (v3.0, 8 of ~14 plans)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 47 (v1.0: 20, v1.1: 7, v2.0: 13, v3.0: 7)
+- Total plans completed: 48 (v1.0: 20, v1.1: 7, v2.0: 13, v3.0: 8)
 - Average duration: ~14 min
 - Total execution time: ~10 hours
 
@@ -67,6 +67,9 @@ Recent decisions affecting current work:
 - [21-01]: Generation-pulse injection: G/dt_inject for one BDF1 step, then zero gen and collect
 - [21-02]: 300um SV LET sweep reduced to 10 points (from 15) due to ~3x longer sim time on larger mesh
 - [21-02]: CCE ~1.01 at 50V full depletion is numerically valid (1% overcollection from generation-pulse method)
+- [22-01]: column_map keys are standard names, values are source names -- consistent across CSV and ROOT loaders
+- [22-01]: uproot imported lazily inside ROOT functions so module works without uproot for CSV-only workflows
+- [22-01]: process_mc_ensemble filters zero-energy events with logging rather than raising errors
 
 ### Pending Todos
 
@@ -81,5 +84,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-31
-Stopped at: Completed 21-02-PLAN.md (Phase 21 complete)
+Stopped at: Completed 22-01-PLAN.md
 Resume file: None
