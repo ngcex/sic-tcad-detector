@@ -30,10 +30,10 @@ Requirements for microdosimeter design study milestone. Each maps to roadmap pha
 
 ### Monte Carlo Coupling
 
-- [ ] **MCCP-01**: User can import energy deposition data from CSV files (columns: position, energy deposited per step) for any ion species
-- [ ] **MCCP-02**: User can import energy deposition data from Geant4 ROOT files using uproot (TTree with position and energy branches)
-- [ ] **MCCP-03**: User can convert MC energy deposition events to ion track charge generation profiles on the 2D devsim mesh
-- [ ] **MCCP-04**: User can process an ensemble of MC events (1000+) using the CCE(LET) lookup table to build a pulse height distribution
+- [x] **MCCP-01**: User can import energy deposition data from CSV files (columns: position, energy deposited per step) for any ion species
+- [x] **MCCP-02**: User can import energy deposition data from Geant4 ROOT files using uproot (TTree with position and energy branches)
+- [x] **MCCP-03**: User can convert MC energy deposition events to ion track charge generation profiles on the 2D devsim mesh
+- [x] **MCCP-04**: User can process an ensemble of MC events (1000+) using the CCE(LET) lookup table to build a pulse height distribution
 
 ### Microdosimetric Spectra
 
@@ -109,10 +109,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SPRT-02     | 21    | Complete |
 | SPRT-03     | 21    | Complete |
 | SPRT-04     | 21    | Complete |
-| MCCP-01     | 22    | Pending  |
-| MCCP-02     | 22    | Pending  |
-| MCCP-03     | 22    | Pending  |
-| MCCP-04     | 22    | Pending  |
+| MCCP-01     | 22    | Complete |
+| MCCP-02     | 22    | Complete |
+| MCCP-03     | 22    | Complete |
+| MCCP-04     | 22    | Complete |
 | MDOS-01     | 23    | Pending  |
 | MDOS-02     | 23    | Pending  |
 | MDOS-03     | 23    | Pending  |
