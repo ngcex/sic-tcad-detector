@@ -63,7 +63,7 @@ Full details: [milestones/v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md)
 - [x] **Phase 22: Monte Carlo Coupling** - Import Geant4/FLUKA energy deposition data and convert to charge generation profiles on 2D mesh (completed 2026-03-31)
 - [x] **Phase 23: Microdosimetric Spectra** - Lineal energy spectra, tissue-equivalence correction, and dose-mean y_D computation (completed 2026-04-01)
 - [x] **Phase 24: Alternative Structures** - Mesa-etched, 3D electrode, stacked delta-E/E, and guard ring structure exploration (completed 2026-04-01)
-- [ ] **Phase 25: Optimization & Feasibility Report** - Parametric optimization and publication-quality feasibility study with fabrication guidance
+- [x] **Phase 25: Optimization & Feasibility Report** - Parametric optimization and publication-quality feasibility study with fabrication guidance (completed 2026-04-01)
 
 ## Phase Details
 
@@ -224,4 +224,4 @@ Plans:
 | 22. Monte Carlo Coupling                   | 2/2       | Complete       | 2026-03-31  | -          |
 | 23. Microdosimetric Spectra                | 2/2       | Complete       | 2026-04-01  | -          |
 | 24. Alternative Structures                 | 2/2       | Complete       | 2026-04-01  | -          |
-| 25. Optimization & Feasibility Report      | 1/2 | In Progress|  | -          |
+| 25. Optimization & Feasibility Report      | 2/2 | Complete   | 2026-04-01 | -          |

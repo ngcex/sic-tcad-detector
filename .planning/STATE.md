@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: SiC Microdosimeter Design Study
 status: in-progress
-last_updated: "2026-04-01T10:52:18Z"
+last_updated: "2026-04-01T10:59:35Z"
 progress:
   total_phases: 19
-  completed_phases: 18
+  completed_phases: 19
   total_plans: 41
-  completed_plans: 40
+  completed_plans: 41
 ---
 
 # Project State
@@ -22,18 +22,18 @@ See: .planning/PROJECT.md (updated 2026-03-27)
 
 ## Current Position
 
-Phase: 25 (7 of 8 in v3.0) — Optimization & Feasibility
-Plan: 1 of 2 in current phase [COMPLETE]
-Status: Plan 25-01 complete -- optimization.py with sweep, noise floor, and scoring
-Last activity: 2026-04-01 — Plan 25-01 executed, optimization module created
+Phase: 25 (7 of 8 in v3.0) — Optimization & Feasibility [COMPLETE]
+Plan: 2 of 2 in current phase [COMPLETE]
+Status: Phase 25 complete -- feasibility report notebook with optimization, noise, and scoring
+Last activity: 2026-04-01 — Plan 25-02 executed, feasibility report notebook created
 
-Progress: [█████████░] ~93% (v3.0, 14 of ~15 plans)
+Progress: [██████████] ~100% (v3.0, 15 of ~15 plans)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 54 (v1.0: 20, v1.1: 7, v2.0: 13, v3.0: 14)
+- Total plans completed: 55 (v1.0: 20, v1.1: 7, v2.0: 13, v3.0: 15)
 - Average duration: ~14 min
 - Total execution time: ~10 hours
 
@@ -85,6 +85,9 @@ Recent decisions affecting current work:
 - [25-01]: Shot noise only for noise floor estimation (readout electronics excluded, documented)
 - [25-01]: Min-max normalization with 0.5 fallback for equal metrics in score_structures
 - [25-01]: Pure computation tests only for devsim-dependent optimization functions
+- [25-02]: 26-cell feasibility report with 7 figures; reduced sweep grid (36 configs, fixed epi)
+- [25-02]: Guard ring confirmed as recommended first upgrade (consistent with Phase 24)
+- [25-02]: Kappa data limitation and graded doping needs documented per project memory
 
 ### Pending Todos
 
@@ -99,5 +102,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-04-01
-Stopped at: Completed 25-01-PLAN.md
+Stopped at: Completed 25-02-PLAN.md
 Resume file: None

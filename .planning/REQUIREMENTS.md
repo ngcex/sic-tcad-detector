@@ -56,7 +56,7 @@ Requirements for microdosimeter design study milestone. Each maps to roadmap pha
 - [x] **FEAS-01**: User can sweep SV dimensions, doping, and bias voltage to optimize microdosimetric response (CCE uniformity, spectral resolution)
 - [x] **FEAS-02**: User can generate a comparative analysis matrix (planar vs mesa vs 3D electrode vs delta-E/E) for CCE uniformity, noise floor, spectral resolution, and fabrication complexity
 - [x] **FEAS-03**: User can estimate noise floor and minimum detectable lineal energy from dark current and signal pulse amplitude
-- [ ] **FEAS-04**: User can generate a publication-quality feasibility report notebook with optimal geometry recommendations and fabrication guidance
+- [x] **FEAS-04**: User can generate a publication-quality feasibility report notebook with optimal geometry recommendations and fabrication guidance
 
 ### Notebooks & Validation
 
@@ -64,7 +64,7 @@ Requirements for microdosimeter design study milestone. Each maps to roadmap pha
 - [x] **NBKV-02**: Publication-quality notebook for single-particle charge collection and CCE(LET) characterization
 - [x] **NBKV-03**: Publication-quality notebook for microdosimetric y-spectra with tissue-equivalence correction
 - [x] **NBKV-04**: Publication-quality notebook comparing alternative structures (mesa, 3D electrode, delta-E/E)
-- [ ] **NBKV-05**: Publication-quality feasibility report with parametric optimization results
+- [x] **NBKV-05**: Publication-quality feasibility report with parametric optimization results
 
 ## Future Requirements
 
@@ -126,12 +126,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FEAS-01     | 25    | Complete |
 | FEAS-02     | 25    | Complete |
 | FEAS-03     | 25    | Complete |
-| FEAS-04     | 25    | Pending  |
+| FEAS-04     | 25    | Complete |
 | NBKV-01     | 20    | Complete |
 | NBKV-02     | 21    | Complete |
 | NBKV-03     | 23    | Complete |
 | NBKV-04     | 24    | Complete |
-| NBKV-05     | 25    | Pending  |
+| NBKV-05     | 25    | Complete |
 
 **Coverage:**
 
