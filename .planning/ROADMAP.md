@@ -189,7 +189,12 @@ Plans:
 2. User can generate a comparative analysis matrix (planar vs mesa vs 3D electrode vs delta-E/E) scoring CCE uniformity, noise floor, spectral resolution, and fabrication complexity
 3. User can estimate noise floor and minimum detectable lineal energy from dark current and signal pulse amplitude
 4. Publication-quality feasibility report notebook presents optimal geometry recommendations with fabrication guidance
-   **Plans**: TBD
+   **Plans**: 2 plans
+
+Plans:
+
+- [ ] 25-01-PLAN.md — Optimization module (optimization.py) with parametric sweep, noise floor, and structure scoring
+- [ ] 25-02-PLAN.md — Publication-quality feasibility report notebook with optimization results and fabrication guidance
 
 ## Progress
 
@@ -218,5 +223,5 @@ Plans:
 | 21. Single-Particle Transient              | v3.0      | Complete       | 2026-03-31  | 2026-03-31 |
 | 22. Monte Carlo Coupling                   | 2/2       | Complete       | 2026-03-31  | -          |
 | 23. Microdosimetric Spectra                | 2/2       | Complete       | 2026-04-01  | -          |
-| 24. Alternative Structures                 | 2/2 | Complete    | 2026-04-01 | -          |
-| 25. Optimization & Feasibility Report      | v3.0      | 0/TBD          | Not started | -          |
+| 24. Alternative Structures                 | 2/2       | Complete       | 2026-04-01  | -          |
+| 25. Optimization & Feasibility Report      | v3.0      | 0/2            | Not started | -          |
