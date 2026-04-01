@@ -53,9 +53,9 @@ Requirements for microdosimeter design study milestone. Each maps to roadmap pha
 
 ### Optimization & Feasibility
 
-- [ ] **FEAS-01**: User can sweep SV dimensions, doping, and bias voltage to optimize microdosimetric response (CCE uniformity, spectral resolution)
-- [ ] **FEAS-02**: User can generate a comparative analysis matrix (planar vs mesa vs 3D electrode vs delta-E/E) for CCE uniformity, noise floor, spectral resolution, and fabrication complexity
-- [ ] **FEAS-03**: User can estimate noise floor and minimum detectable lineal energy from dark current and signal pulse amplitude
+- [x] **FEAS-01**: User can sweep SV dimensions, doping, and bias voltage to optimize microdosimetric response (CCE uniformity, spectral resolution)
+- [x] **FEAS-02**: User can generate a comparative analysis matrix (planar vs mesa vs 3D electrode vs delta-E/E) for CCE uniformity, noise floor, spectral resolution, and fabrication complexity
+- [x] **FEAS-03**: User can estimate noise floor and minimum detectable lineal energy from dark current and signal pulse amplitude
 - [ ] **FEAS-04**: User can generate a publication-quality feasibility report notebook with optimal geometry recommendations and fabrication guidance
 
 ### Notebooks & Validation
@@ -123,9 +123,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ALTS-03     | 24    | Complete |
 | ALTS-04     | 24    | Complete |
 | ALTS-05     | 24    | Complete |
-| FEAS-01     | 25    | Pending  |
-| FEAS-02     | 25    | Pending  |
-| FEAS-03     | 25    | Pending  |
+| FEAS-01     | 25    | Complete |
+| FEAS-02     | 25    | Complete |
+| FEAS-03     | 25    | Complete |
 | FEAS-04     | 25    | Pending  |
 | NBKV-01     | 20    | Complete |
 | NBKV-02     | 21    | Complete |
