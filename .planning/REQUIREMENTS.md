@@ -45,10 +45,10 @@ Requirements for microdosimeter design study milestone. Each maps to roadmap pha
 
 ### Alternative Structures
 
-- [ ] **ALTS-01**: User can generate a 2D mesh for a mesa-etched SiC microdosimeter SV (trench-isolated pillar on substrate)
-- [ ] **ALTS-02**: User can generate a 2D mesh for a 3D electrode structure modeled as a 2D axisymmetric cross-section (central n+ column)
-- [ ] **ALTS-03**: User can generate a 2D mesh for a stacked delta-E/E telescope (thin delta-E layer + thick E-stop layer)
-- [ ] **ALTS-04**: User can model guard ring and edge termination geometry and quantify parasitic charge collection
+- [x] **ALTS-01**: User can generate a 2D mesh for a mesa-etched SiC microdosimeter SV (trench-isolated pillar on substrate)
+- [x] **ALTS-02**: User can generate a 2D mesh for a 3D electrode structure modeled as a 2D axisymmetric cross-section (central n+ column)
+- [x] **ALTS-03**: User can generate a 2D mesh for a stacked delta-E/E telescope (thin delta-E layer + thick E-stop layer)
+- [x] **ALTS-04**: User can model guard ring and edge termination geometry and quantify parasitic charge collection
 - [ ] **ALTS-05**: User can run the full microdosimetry pipeline (CCE, y-spectrum) for each alternative structure
 
 ### Optimization & Feasibility
@@ -118,10 +118,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MDOS-03     | 23    | Complete |
 | MDOS-04     | 23    | Complete |
 | MDOS-05     | 23    | Complete |
-| ALTS-01     | 24    | Pending  |
-| ALTS-02     | 24    | Pending  |
-| ALTS-03     | 24    | Pending  |
-| ALTS-04     | 24    | Pending  |
+| ALTS-01     | 24    | Complete |
+| ALTS-02     | 24    | Complete |
+| ALTS-03     | 24    | Complete |
+| ALTS-04     | 24    | Complete |
 | ALTS-05     | 24    | Pending  |
 | FEAS-01     | 25    | Pending  |
 | FEAS-02     | 25    | Pending  |
