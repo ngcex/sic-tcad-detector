@@ -858,7 +858,10 @@ def create_delta_e_e_device(
       - E-stop layer (thick, for total energy measurement)
 
     Each layer has its own contact pair for independent readout:
-      de_anode, de_cathode, estop_anode, estop_cathode.
+      de_anode (top), estop_cathode (bottom).
+    The interface between layers provides current continuity. No contacts
+    are placed at the interface boundary (contacts would prevent devsim
+    interface creation).
 
     Returns device_info with ``structure_type="delta_e_e"``, plus
     ``region_name_de``, ``region_name_e``, ``delta_e_thickness_cm``,
@@ -984,13 +987,15 @@ def create_delta_e_e_device(
         name="de_interface",
         region0=region_name_de,
         region1=region_name_e,
+        xl=0,
+        xh=half_width_cm,
         yl=de_total,
         yh=de_total,
         bloat=1e-10,
     )
 
     # -- Contacts --
-    # Delta-E contacts
+    # Delta-E anode at top surface
     devsim.add_2d_contact(
         mesh=mesh_name,
         name="de_anode",
@@ -1000,25 +1005,8 @@ def create_delta_e_e_device(
         yh=0,
         bloat=1e-10,
     )
-    devsim.add_2d_contact(
-        mesh=mesh_name,
-        name="de_cathode",
-        material="metal",
-        region=region_name_de,
-        yl=de_total,
-        yh=de_total,
-        bloat=1e-10,
-    )
-    # E-stop contacts
-    devsim.add_2d_contact(
-        mesh=mesh_name,
-        name="estop_anode",
-        material="metal",
-        region=region_name_e,
-        yl=de_total,
-        yh=de_total,
-        bloat=1e-10,
-    )
+    # E-stop cathode at bottom surface
+    # (no contacts at interface -- would prevent devsim interface creation)
     devsim.add_2d_contact(
         mesh=mesh_name,
         name="estop_cathode",
@@ -1299,7 +1287,7 @@ def create_guard_ring_device(
     )
 
     # -- Guard ring: additional p+ doping overlay --
-    # Add guard ring acceptor contribution at (gr_inner < x < gr_outer, y < gr_depth)
+    # Guard ring acceptor contribution at (gr_inner < x < gr_outer, y < gr_depth)
     devsim.node_model(
         device=device_name,
         region=region_name,
@@ -1309,12 +1297,12 @@ def create_guard_ring_device(
             f"* step({gr_depth_cm} - y)"
         ),
     )
-    # Update total Acceptors to include guard ring contribution
+    # Redefine Acceptors: substrate doping + guard ring doping (no self-reference)
     devsim.node_model(
         device=device_name,
         region=region_name,
         name="Acceptors",
-        equation="Acceptors + Acceptors_GR",
+        equation=f"{N_A_ionized} * step({junction_pos} - y) + Acceptors_GR",
     )
     # Recalculate NetDoping
     devsim.node_model(
