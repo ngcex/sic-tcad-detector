@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: SiC Microdosimeter Design Study
-status: unknown
-last_updated: "2026-04-01T08:08:44.291Z"
+status: in-progress
+last_updated: "2026-04-01T10:52:18Z"
 progress:
   total_phases: 19
   completed_phases: 18
-  total_plans: 39
-  completed_plans: 39
+  total_plans: 41
+  completed_plans: 40
 ---
 
 # Project State
@@ -18,22 +18,22 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-27)
 
 **Core value:** TCAD-based feasibility study for a novel 4H-SiC microdosimeter -- first open-source 2D simulation with microdosimetric spectra computation and design optimization guidance
-**Current focus:** Phase 24 - Alternative Structures
+**Current focus:** Phase 25 - Optimization & Feasibility
 
 ## Current Position
 
-Phase: 24 (6 of 8 in v3.0) — Alternative Structures [COMPLETE]
-Plan: 2 of 2 in current phase [COMPLETE]
-Status: Phase 24 complete -- all alternative structures implemented and compared in notebook 19
-Last activity: 2026-04-01 — Plan 24-02 executed, notebook 19 with 5-structure comparison
+Phase: 25 (7 of 8 in v3.0) — Optimization & Feasibility
+Plan: 1 of 2 in current phase [COMPLETE]
+Status: Plan 25-01 complete -- optimization.py with sweep, noise floor, and scoring
+Last activity: 2026-04-01 — Plan 25-01 executed, optimization module created
 
-Progress: [█████████░] ~87% (v3.0, 13 of ~15 plans)
+Progress: [█████████░] ~93% (v3.0, 14 of ~15 plans)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 53 (v1.0: 20, v1.1: 7, v2.0: 13, v3.0: 13)
+- Total plans completed: 54 (v1.0: 20, v1.1: 7, v2.0: 13, v3.0: 14)
 - Average duration: ~14 min
 - Total execution time: ~10 hours
 
@@ -82,6 +82,9 @@ Recent decisions affecting current work:
 - [24-01]: Cylindrical coordinate lifecycle: create, activate, physics, delete, restore_cartesian_coords
 - [24-02]: CCE ratio scaling for spectral comparison across structures (faster than full transient per structure)
 - [24-02]: Guard ring recommended as first practical upgrade over planar for Petringa group
+- [25-01]: Shot noise only for noise floor estimation (readout electronics excluded, documented)
+- [25-01]: Min-max normalization with 0.5 fallback for equal metrics in score_structures
+- [25-01]: Pure computation tests only for devsim-dependent optimization functions
 
 ### Pending Todos
 
@@ -96,5 +99,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-04-01
-Stopped at: Completed 24-02-PLAN.md (Phase 24 complete)
+Stopped at: Completed 25-01-PLAN.md
 Resume file: None
