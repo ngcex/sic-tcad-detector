@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: SiC Microdosimeter Design Study
 status: in-progress
-last_updated: "2026-04-01T07:56:28.000Z"
+last_updated: "2026-04-01T08:03:36.000Z"
 progress:
   total_phases: 20
-  completed_phases: 17
+  completed_phases: 18
   total_plans: 39
-  completed_plans: 38
+  completed_plans: 39
 ---
 
 # Project State
@@ -22,18 +22,18 @@ See: .planning/PROJECT.md (updated 2026-03-27)
 
 ## Current Position
 
-Phase: 24 (6 of 8 in v3.0) — Alternative Structures [IN PROGRESS]
-Plan: 1 of 2 in current phase [COMPLETE]
-Status: Plan 24-01 complete -- 4 alternative structure mesh builders with Poisson validation
-Last activity: 2026-04-01 — Plan 24-01 executed, alternative_structures.py with mesa/3D/delta-E/E/guard ring
+Phase: 24 (6 of 8 in v3.0) — Alternative Structures [COMPLETE]
+Plan: 2 of 2 in current phase [COMPLETE]
+Status: Phase 24 complete -- all alternative structures implemented and compared in notebook 19
+Last activity: 2026-04-01 — Plan 24-02 executed, notebook 19 with 5-structure comparison
 
-Progress: [████████░░] ~82% (v3.0, 12 of ~15 plans)
+Progress: [█████████░] ~87% (v3.0, 13 of ~15 plans)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 52 (v1.0: 20, v1.1: 7, v2.0: 13, v3.0: 12)
+- Total plans completed: 53 (v1.0: 20, v1.1: 7, v2.0: 13, v3.0: 13)
 - Average duration: ~14 min
 - Total execution time: ~10 hours
 
@@ -80,6 +80,8 @@ Recent decisions affecting current work:
 - [24-01]: devsim cannot have contacts at interface boundary -- delta-E/E uses 2 contacts with interface continuity
 - [24-01]: Guard ring acceptor doping via explicit expression to avoid devsim cyclic model dependency
 - [24-01]: Cylindrical coordinate lifecycle: create, activate, physics, delete, restore_cartesian_coords
+- [24-02]: CCE ratio scaling for spectral comparison across structures (faster than full transient per structure)
+- [24-02]: Guard ring recommended as first practical upgrade over planar for Petringa group
 
 ### Pending Todos
 
@@ -94,5 +96,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-04-01
-Stopped at: Completed 24-01-PLAN.md
+Stopped at: Completed 24-02-PLAN.md (Phase 24 complete)
 Resume file: None

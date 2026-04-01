@@ -49,7 +49,7 @@ Requirements for microdosimeter design study milestone. Each maps to roadmap pha
 - [x] **ALTS-02**: User can generate a 2D mesh for a 3D electrode structure modeled as a 2D axisymmetric cross-section (central n+ column)
 - [x] **ALTS-03**: User can generate a 2D mesh for a stacked delta-E/E telescope (thin delta-E layer + thick E-stop layer)
 - [x] **ALTS-04**: User can model guard ring and edge termination geometry and quantify parasitic charge collection
-- [ ] **ALTS-05**: User can run the full microdosimetry pipeline (CCE, y-spectrum) for each alternative structure
+- [x] **ALTS-05**: User can run the full microdosimetry pipeline (CCE, y-spectrum) for each alternative structure
 
 ### Optimization & Feasibility
 
@@ -63,7 +63,7 @@ Requirements for microdosimeter design study milestone. Each maps to roadmap pha
 - [x] **NBKV-01**: Publication-quality notebook for 2D electrostatics and CCE validation against 1D
 - [x] **NBKV-02**: Publication-quality notebook for single-particle charge collection and CCE(LET) characterization
 - [x] **NBKV-03**: Publication-quality notebook for microdosimetric y-spectra with tissue-equivalence correction
-- [ ] **NBKV-04**: Publication-quality notebook comparing alternative structures (mesa, 3D electrode, delta-E/E)
+- [x] **NBKV-04**: Publication-quality notebook comparing alternative structures (mesa, 3D electrode, delta-E/E)
 - [ ] **NBKV-05**: Publication-quality feasibility report with parametric optimization results
 
 ## Future Requirements
@@ -122,7 +122,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ALTS-02     | 24    | Complete |
 | ALTS-03     | 24    | Complete |
 | ALTS-04     | 24    | Complete |
-| ALTS-05     | 24    | Pending  |
+| ALTS-05     | 24    | Complete |
 | FEAS-01     | 25    | Pending  |
 | FEAS-02     | 25    | Pending  |
 | FEAS-03     | 25    | Pending  |
@@ -130,7 +130,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | NBKV-01     | 20    | Complete |
 | NBKV-02     | 21    | Complete |
 | NBKV-03     | 23    | Complete |
-| NBKV-04     | 24    | Pending  |
+| NBKV-04     | 24    | Complete |
 | NBKV-05     | 25    | Pending  |
 
 **Coverage:**
