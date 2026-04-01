@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: SiC Microdosimeter Design Study
-status: unknown
-last_updated: "2026-04-01T06:43:36.742Z"
+status: in-progress
+last_updated: "2026-04-01T07:56:28.000Z"
 progress:
-  total_phases: 19
+  total_phases: 20
   completed_phases: 17
-  total_plans: 37
-  completed_plans: 37
+  total_plans: 39
+  completed_plans: 38
 ---
 
 # Project State
@@ -18,22 +18,22 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-27)
 
 **Core value:** TCAD-based feasibility study for a novel 4H-SiC microdosimeter -- first open-source 2D simulation with microdosimetric spectra computation and design optimization guidance
-**Current focus:** Phase 23 - Microdosimetric Spectra
+**Current focus:** Phase 24 - Alternative Structures
 
 ## Current Position
 
-Phase: 23 (5 of 7 in v3.0) — Microdosimetric Spectra [COMPLETE]
-Plan: 2 of 2 in current phase [COMPLETE]
-Status: Phase 23 complete -- notebook 18 with 4 publication-quality microdosimetric spectra figures
-Last activity: 2026-04-01 — Plan 23-02 executed, notebook 18 microdosimetric spectra pipeline
+Phase: 24 (6 of 8 in v3.0) — Alternative Structures [IN PROGRESS]
+Plan: 1 of 2 in current phase [COMPLETE]
+Status: Plan 24-01 complete -- 4 alternative structure mesh builders with Poisson validation
+Last activity: 2026-04-01 — Plan 24-01 executed, alternative_structures.py with mesa/3D/delta-E/E/guard ring
 
-Progress: [████████░░] ~79% (v3.0, 11 of ~14 plans)
+Progress: [████████░░] ~82% (v3.0, 12 of ~15 plans)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 51 (v1.0: 20, v1.1: 7, v2.0: 13, v3.0: 11)
+- Total plans completed: 52 (v1.0: 20, v1.1: 7, v2.0: 13, v3.0: 12)
 - Average duration: ~14 min
 - Total execution time: ~10 hours
 
@@ -77,6 +77,9 @@ Recent decisions affecting current work:
 - [23-01]: Constant kappa fallback (0.58) with warning when no energy-dependent table provided
 - [23-02]: 22-cell notebook structure for full microdosimetric pipeline: MC events -> lineal energy -> spectra -> tissue equivalence
 - [23-02]: 4 publication-quality figures: y*d(y), y*f(y), SiC vs tissue overlay, bar chart comparison
+- [24-01]: devsim cannot have contacts at interface boundary -- delta-E/E uses 2 contacts with interface continuity
+- [24-01]: Guard ring acceptor doping via explicit expression to avoid devsim cyclic model dependency
+- [24-01]: Cylindrical coordinate lifecycle: create, activate, physics, delete, restore_cartesian_coords
 
 ### Pending Todos
 
@@ -91,5 +94,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-04-01
-Stopped at: Completed 23-02-PLAN.md (Phase 23 complete)
+Stopped at: Completed 24-01-PLAN.md
 Resume file: None
