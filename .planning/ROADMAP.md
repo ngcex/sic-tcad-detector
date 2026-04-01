@@ -212,6 +212,6 @@ Plans:
 | 20. 2D Transport & CCE                     | v3.0      | 2/2            | Complete    | 2026-03-30 |
 | 21. Single-Particle Transient              | v3.0      | Complete       | 2026-03-31  | 2026-03-31 |
 | 22. Monte Carlo Coupling                   | 2/2       | Complete       | 2026-03-31  | -          |
-| 23. Microdosimetric Spectra                | 2/2 | Complete   | 2026-04-01 | -          |
+| 23. Microdosimetric Spectra                | 2/2 | Complete    | 2026-04-01 | -          |
 | 24. Alternative Structures                 | v3.0      | 0/TBD          | Not started | -          |
 | 25. Optimization & Feasibility Report      | v3.0      | 0/TBD          | Not started | -          |
