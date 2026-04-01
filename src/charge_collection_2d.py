@@ -113,7 +113,9 @@ def integrate_over_mesh_2d(device_info, node_values):
     return float(np.sum(v_avg * areas))
 
 
-def create_2d_dd_device(half_width_um=50.0, V_bias=50.0, device_name=None):
+def create_2d_dd_device(
+    half_width_um=50.0, V_bias=50.0, device_name=None, **device_kwargs
+):
     """Create a 2D device with full drift-diffusion setup and bias applied.
 
     Convenience wrapper that calls create_sic_2d_device, sets up Poisson,
@@ -128,6 +130,9 @@ def create_2d_dd_device(half_width_um=50.0, V_bias=50.0, device_name=None):
         Reverse bias voltage to apply at cathode (V, positive value).
     device_name : str or None
         Device name.  If None, generates a unique name via uuid4.
+    **device_kwargs
+        Additional keyword arguments forwarded to create_sic_2d_device
+        (e.g., epi_thickness_cm, N_D_bulk, N_D_junction, L_transition, T).
 
     Returns
     -------
@@ -140,6 +145,7 @@ def create_2d_dd_device(half_width_um=50.0, V_bias=50.0, device_name=None):
     device_info = create_sic_2d_device(
         device_name=device_name,
         half_width_um=half_width_um,
+        **device_kwargs,
     )
     setup_poisson(device_info)
     solve_equilibrium(device_info)
