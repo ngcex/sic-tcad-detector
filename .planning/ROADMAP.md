@@ -62,7 +62,7 @@ Full details: [milestones/v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md)
 - [x] **Phase 21: Single-Particle Transient** - Individual ion track charge collection with transient current pulses and CCE(LET) lookup table (completed 2026-03-31)
 - [x] **Phase 22: Monte Carlo Coupling** - Import Geant4/FLUKA energy deposition data and convert to charge generation profiles on 2D mesh (completed 2026-03-31)
 - [x] **Phase 23: Microdosimetric Spectra** - Lineal energy spectra, tissue-equivalence correction, and dose-mean y_D computation (completed 2026-04-01)
-- [ ] **Phase 24: Alternative Structures** - Mesa-etched, 3D electrode, stacked delta-E/E, and guard ring structure exploration
+- [x] **Phase 24: Alternative Structures** - Mesa-etched, 3D electrode, stacked delta-E/E, and guard ring structure exploration (completed 2026-04-01)
 - [ ] **Phase 25: Optimization & Feasibility Report** - Parametric optimization and publication-quality feasibility study with fabrication guidance
 
 ## Phase Details
@@ -218,5 +218,5 @@ Plans:
 | 21. Single-Particle Transient              | v3.0      | Complete       | 2026-03-31  | 2026-03-31 |
 | 22. Monte Carlo Coupling                   | 2/2       | Complete       | 2026-03-31  | -          |
 | 23. Microdosimetric Spectra                | 2/2       | Complete       | 2026-04-01  | -          |
-| 24. Alternative Structures                 | 1/2 | In Progress|  | -          |
+| 24. Alternative Structures                 | 2/2 | Complete   | 2026-04-01 | -          |
 | 25. Optimization & Feasibility Report      | v3.0      | 0/TBD          | Not started | -          |
