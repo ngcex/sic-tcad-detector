@@ -224,4 +224,4 @@ Plans:
 | 22. Monte Carlo Coupling                   | 2/2       | Complete       | 2026-03-31  | -          |
 | 23. Microdosimetric Spectra                | 2/2       | Complete       | 2026-04-01  | -          |
 | 24. Alternative Structures                 | 2/2       | Complete       | 2026-04-01  | -          |
-| 25. Optimization & Feasibility Report      | 2/2 | Complete   | 2026-04-01 | -          |
+| 25. Optimization & Feasibility Report      | 2/2 | Complete    | 2026-04-01 | -          |
