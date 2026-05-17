@@ -78,7 +78,7 @@ Full details: [milestones/v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md)
 - **TIER 3 (Phases 31-32)** — New devsim physics, sequential (Phase 31 prerequisite for Phase 33)
 - **TIER 4 (Phases 33-34)** — Stretch goal and milestone audit/synthesis
 
-- [ ] **Phase 26: Graded Doping 2D Calibration** — Fix `device2d.py` reverse-bias solver failure with re-calibrated graded epi doping profile in 2D _(TIER 1, unblocker)_
+- [ ] **Phase 26: Graded Doping 2D Calibration** — Fix `device2d.py` reverse-bias solver failure with re-calibrated graded epi doping profile in 2D _(TIER 1, unblocker)_ — **4 plans planned**
 - [ ] **Phase 27: PSTAR+SRIM Stopping Power & Real κ** — Tabulated proton stopping power data with energy-dependent tissue-equivalence κ(E) _(TIER 1, unblocker)_
 - [ ] **Phase 28: Geant4 ROOT Integration with Golden Fixture** — RootSchemaMap + synthetic Geant4 fixture closing the MCCP-02 gap _(TIER 1, unblocker)_
 - [ ] **Phase 29: Complete Noise Analysis** — Shot + Johnson + 1/f McWhorter noise, ENC/NEE bands, y*min figure-of-merit *(TIER 2, depends on Phase 26)\_
@@ -230,7 +230,14 @@ Plans:
 2. User can compute a 2D C-V curve over the full bias range and observe agreement with the validated 1D C-V (R² ≥ 0.99) at the device center
 3. User can run `reset_devsim()` between consecutive 2D device builds (including alt-structures) and confirm no global-state leakage via a regression test that runs alt-structures then planar in sequence
 4. All 20 existing v3.0 notebooks continue to execute unchanged with zero regression (baseline-frozen comparison)
-   **Plans**: TBD
+   **Plans**: 4 plans
+
+Plans:
+
+- [ ] 26-01-PLAN.md — 1D-vs-2D diagnostic + v3.0 baseline freeze + pytest skeletons (3 tasks)
+- [ ] 26-02-PLAN.md — Cylindrical-state reset utility (src/devsim_reset.py) + 2D-aware W extractor + wire smoothness/reset-leak tests (3 tasks)
+- [ ] 26-03-PLAN.md — calibrate_graded_doping_2d + diagnosis-gated runner script + wire reverse-bias/C-V tests (3 tasks)
+- [ ] 26-04-PLAN.md — wire v3.0 baseline regression tests + end-to-end 20-notebook sweep (2 tasks)
 
 ### Phase 27: PSTAR+SRIM Stopping Power & Real κ
 
@@ -365,7 +372,7 @@ Plans:
 | 23. Microdosimetric Spectra                     | v3.0      | 2/2            | Complete    | 2026-04-01 |
 | 24. Alternative Structures                      | v3.0      | 2/2            | Complete    | 2026-04-01 |
 | 25. Optimization & Feasibility Report           | v3.0      | 2/2            | Complete    | 2026-04-01 |
-| 26. Graded Doping 2D Calibration                | v4.0      | 0/0            | Not started | -          |
+| 26. Graded Doping 2D Calibration                | v4.0      | 0/4            | Planned     | -          |
 | 27. PSTAR+SRIM Stopping Power & Real κ          | v4.0      | 0/0            | Not started | -          |
 | 28. Geant4 ROOT Integration with Golden Fixture | v4.0      | 0/0            | Not started | -          |
 | 29. Complete Noise Analysis                     | v4.0      | 0/0            | Not started | -          |
