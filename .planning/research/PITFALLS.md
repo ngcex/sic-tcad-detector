@@ -1,405 +1,446 @@
-# Domain Pitfalls
+# v4.0 Pitfalls — Adding New Physics to Existing SiC TCAD Simulator
 
-**Domain:** Adding 2D simulation, single-particle transients, MC coupling, and microdosimetric spectra to existing 1D 4H-SiC TCAD simulator (v3.0)
-**Researched:** 2026-03-27
-**Confidence:** HIGH for 1D-to-2D transition pitfalls (verified against devsim docs and codebase), MEDIUM for microdosimetry/MC coupling pitfalls (literature-sourced, cross-validated across multiple papers), LOW for some devsim 2D numerical edge cases (inferred from TCAD literature, limited devsim-specific 2D community reports)
+**Domain:** Integration of devsim 3D mesh, real ROOT/Geant4 import, PSTAR+SRIM tabulated kappa, noise analysis, anisotropic mobility, build-up over-response, and azimuthal response into an existing 20-notebook, 27-module Python/devsim codebase.
 
----
+**Researched:** 2026-05-17
+**Overall confidence:** MEDIUM-HIGH (HIGH for devsim/uproot/gmsh mechanics from official docs; MEDIUM for SiC-specific Hooge α and anisotropy numerics from literature ranges)
 
-## Critical Pitfalls
-
-Mistakes that cause silent physics errors, require architecture rewrites, or invalidate the feasibility study conclusions.
-
-### Pitfall 1: 1D Assumptions Hardcoded Throughout the Codebase
-
-**What goes wrong:** The existing codebase has at least five deep 1D assumptions that silently produce wrong results if not addressed for 2D:
-
-1. **`create_sic_device()` creates a 1D mesh exclusively.** It uses `devsim.create_1d_mesh()` with `add_1d_mesh_line()` and `add_1d_region()`. The entire device setup pipeline (mesh, doping, contacts) is 1D-only. A 2D device requires `create_gmsh_mesh()` with imported Gmsh triangular meshes -- a completely different code path.
-
-2. **Doping profiles are 1D functions of depth only.** The graded exponential profile `N_D(x) = N_D_junction * exp(-x/L_transition) + N_D_bulk` is parameterized along a single spatial axis. In 2D, doping must be a function of (x, y) with lateral uniformity in the epi but sharp transitions at mesa edges or guard rings.
-
-3. **Generation profiles assume 1D depth dependence.** `proton_generation_profile()` and `alpha_generation_profile()` return G(x) as functions of depth. For single-particle events, the ion track is a narrow cylinder with radial extent (track radius ~50-500 nm depending on ion/energy), not a plane-wave.
-
-4. **Contact equations assume 1D geometry.** The existing code sets contacts at mesh endpoints (anode at x=0, cathode at x=L). In 2D, contacts are lines (edges of the 2D mesh) and require different devsim API calls.
-
-5. **CCE computation assumes 1D current density.** `extract_contact_current()` returns J (A/cm^2) and multiplies by device area to get total current. In 2D, the current is per unit depth (A/cm for a planar 2D cross-section) or per radian (for cylindrical/axisymmetric), and the area interpretation changes fundamentally.
-
-**Why it happens:** The 1D codebase was correctly designed for its purpose; these are not bugs but scope limitations. The danger is assuming you can "just swap the mesh" and keep everything else.
-
-**Consequences:** Wrong CCE values by factors of 2-10x if area/symmetry assumptions are incorrect. Wrong doping profiles at structure edges. Wrong generation profiles that miss the track structure entirely.
-
-**Prevention:**
-
-- Create a new `device_2d.py` module rather than modifying `device.py`. Keep the 1D path working for regression.
-- Audit every function that takes `device_info` dict for 1D assumptions: grep for `get_node_model_values` with hardcoded "x" coordinate, `1d_mesh`, contact names at endpoints.
-- Build a 2D validation notebook that reproduces 1D results for a "wide" 2D device (width >> depth) before adding edge effects.
-- Use devsim cylindrical coordinates (`cylindrical_node_volume`, `cylindrical_edge_couple`) for axisymmetric SV geometries to correctly integrate current.
-
-**Detection:** If the 2D CCE for a 1000 um wide SV does not match the 1D CCE within 1%, something is wrong with the 2D setup.
-
-**Phase mapping:** Must be addressed in Phase 1 (2D mesh and electrostatics). Every subsequent phase depends on this being correct.
+> Supersedes the v3.0 PITFALLS.md (1D→2D transition). v3.0 pitfalls that remain operationally relevant are folded into the integration risk map below.
 
 ---
 
-### Pitfall 2: Devsim 2D Mesh Quality Causing Convergence Failure
+## Quick Reference — Pitfall Severity Matrix
 
-**What goes wrong:** Devsim uses the finite volume method on triangular meshes in 2D. The control volume is constructed from perpendicular bisectors of triangle edges (the `EdgeCouple` model). This discretization has specific requirements:
-
-1. **Obtuse triangles create negative EdgeCouple values.** When a triangle has an obtuse angle, the perpendicular bisector of the edge opposite the obtuse angle falls outside the triangle. This produces a negative coupling coefficient, which is equivalent to a negative capacitance in the discretized Poisson equation. The Newton solver diverges or produces oscillating, unphysical potentials.
-
-2. **Devsim only supports triangles (no quads, no hybrid meshes).** The documentation explicitly states meshes "may only contain points, lines, triangles, and tetrahedra." If Gmsh generates quad elements (which it does by default in some algorithms), devsim silently ignores them or crashes.
-
-3. **Gmsh format version mismatch.** Devsim reads Gmsh version 2.2 format only. Gmsh defaults to version 4.x. If you forget `-format msh2`, the mesh file is silently misread or rejected.
-
-4. **Junction refinement insufficient.** The p+/n- junction and depletion region edge require mesh spacing of ~10-50 nm to resolve the electric field gradient. At 100 um device width, this creates aspect ratios that challenge Delaunay meshing. Without explicit mesh grading, Gmsh either creates too many elements (millions, slow simulation) or too few at the junction (wrong fields).
-
-5. **Contact boundary must be a single line of nodes.** Devsim documentation states contacts should "encompass only one line of points." If the mesher creates multiple nodes at a contact edge or the contact boundary is not a connected line, the contact equation assembly fails silently.
-
-**Why it happens:** Gmsh is a general-purpose mesher not tuned for semiconductor FVM. The Delaunay requirement for acute triangles (Delaunay condition) is necessary but not sufficient for FVM; you need the stronger "circumcenter inside triangle" condition.
-
-**Consequences:** Newton solver fails to converge, or converges to unphysical solutions with oscillating potentials near obtuse-triangle regions. Simulation time explodes with over-refined meshes.
-
-**Prevention:**
-
-- Use Gmsh's `Mesh.Algorithm = 5` (Delaunay for quads, but request triangles) or `Mesh.Algorithm = 6` (Frontal-Delaunay) which produces better-quality triangles.
-- Set `Mesh.RecombineAll = 0` to prevent quad generation.
-- Always export with `gmsh.option.setNumber("Mesh.MshFileVersion", 2.2)`.
-- Add explicit mesh grading: fine at junction (dx ~ 20 nm), medium in depletion region (dx ~ 200 nm), coarse in neutral epi (dx ~ 2 um), very coarse in substrate (dx ~ 5 um).
-- Verify mesh quality post-generation: compute minimum angle per triangle (reject meshes with min angle < 20 degrees). Use `gmsh.model.mesh.getElementQualities()` and reject if worst quality < 0.3.
-- For the microdosimeter SV (100x10 um), expect ~5000-20000 triangles. For 300x10 um, expect ~15000-60000. Anything over 100k suggests insufficient grading.
-
-**Detection:** Newton solver reports "linear solver failed" or "convergence failure" after mesh change. Check the mesh quality histogram first.
-
-**Phase mapping:** Phase 1 (2D mesh generation). Get this right before any physics.
-
----
-
-### Pitfall 3: Single-Particle vs Beam-Average Generation Rate Confusion
-
-**What goes wrong:** The entire v1.0-v2.0 codebase uses beam-average generation rates (Gy/s converted to cm^-3 s^-1 uniformly across the device). Single-particle simulation is fundamentally different in three ways:
-
-1. **Spatial scale mismatch.** A beam deposits energy uniformly across the device area. A single ion deposits energy along a narrow track (radius ~50-500 nm for protons, up to ~5 um for heavy ions). The generation rate along the track core can be 10^6 - 10^8 times higher than beam-average, triggering high-injection effects (plasma column) that do not occur in beam-average simulation.
-
-2. **Time scale mismatch.** Beam-average uses steady-state or pulse-averaged generation. A single ion traverses a 10 um SiC layer in ~0.3 ps (at ~10% speed of light for 60 MeV protons). The charge is deposited quasi-instantaneously. The transient solver must capture charge generation in < 1 ps, then drift/diffusion/recombination over ns-us timescales -- a 6-order dynamic range in a single simulation.
-
-3. **Charge quantity.** A 60 MeV proton depositing ~2 keV/um in SiC (LET ~ 0.2 keV/um in water, scaled by density ratio) creates ~240 e-h pairs per um, or ~2400 pairs total in 10 um. This is ~3.8e-16 C. The induced current pulse has amplitude ~0.1-1 uA lasting ~1-10 ns. The v1.0 transient solver expects generation rates of 10^16-10^20 cm^-3 s^-1 (dose-rate regime); single-particle generation along the track core reaches 10^22-10^24 cm^-3 s^-1 but only in a tiny volume.
-
-4. **Boundary condition differences.** In beam-average, generation is laterally uniform so 1D is valid. In single-particle, the ion track creates a radial carrier gradient that drives lateral diffusion. If the SV is small (100 um), carriers generated near the edge diffuse OUT of the sensitive volume, reducing collected charge. This is the "charge sharing" or "edge effect" that the 2D simulation is supposed to capture.
-
-**Why it happens:** The conceptual leap from "beam deposits dose uniformly" to "one ion creates a narrow plasma column" is large. Code written for one regime silently produces wrong answers in the other.
-
-**Consequences:** If you apply beam-average generation profiles to a single-particle simulation, the CCE will be ~100% (no high-injection effects, no edge loss) -- exactly the wrong answer for microdosimetry. The whole point of v3.0 is to capture these single-particle effects.
-
-**Prevention:**
-
-- Create a new `single_particle.py` module with explicit track-structure generation: G(r, z) = G_track(z) \* f_radial(r), where f_radial is typically a Gaussian or 1/r^2 (Katz model) with cutoff at delta-ray range.
-- Implement the track as a devsim node model evaluated at each mesh node's (x, y) coordinates relative to the ion impact point.
-- Use adaptive time-stepping: dt ~ 0.1 ps during deposition, growing to dt ~ 1 ns during collection, dt ~ 100 ns during tail.
-- Validate by integrating total generated charge and comparing to LET \* track_length / E_pair. Must match within 0.1%.
-- For the induced current pulse, integrate I(t) dt and verify it equals Q_generated \* CCE.
-
-**Detection:** If single-particle CCE equals beam-average CCE (both ~100%), the track structure is not being resolved. If total collected charge does not match LET-predicted charge within ~5%, something is wrong.
-
-**Phase mapping:** Phase 3 (single-particle transients). Depends on Phase 1-2 (2D mesh and transport) being correct.
+| ID  | Pitfall                                                                                | Severity | Phase                         |
+| --- | -------------------------------------------------------------------------------------- | -------- | ----------------------------- |
+| P01 | gmsh MSH 4.x format unreadable by devsim — must export MSH2                            | HIGH     | Phase 3D-mesh                 |
+| P02 | 3D mesh node count blows memory/runtime — naive uniform refinement intractable         | HIGH     | Phase 3D-mesh                 |
+| P03 | Cylindrical-axis parameters leak globally and break planar 2D devices                  | HIGH     | Phase 3D-mesh + integration   |
+| P04 | gmsh physical groups silently lost on export → no contacts, equilibrium fails          | HIGH     | Phase 3D-mesh                 |
+| P05 | devsim hybrid meshes (hex/prism + tet) not supported — only tet/tri/line/point         | HIGH     | Phase 3D-mesh                 |
+| P06 | uproot loads entire ROOT TTree into RAM if `.array()` called without iterate           | HIGH     | Phase ROOT-integration        |
+| P07 | Geant4 ROOT branch names are not standardized — no fixed schema across applications    | HIGH     | Phase ROOT-integration        |
+| P08 | Synthetic ROOT fixture written by uproot may differ in compression/baskets from G4     | MEDIUM   | Phase ROOT-integration        |
+| P09 | ROOT energy-deposition units ambiguous (MeV vs keV vs eV) per Geant4 application       | HIGH     | Phase ROOT-integration        |
+| P10 | PSTAR ⇄ SRIM unit mismatch: MeV·cm²/g (PSTAR) vs eV/Å (SRIM default)                   | HIGH     | Phase kappa-tabulated         |
+| P11 | Energy-range gaps: PSTAR ≥1 keV protons; below requires SRIM/extrapolation             | MEDIUM   | Phase kappa-tabulated         |
+| P12 | Kappa flat-line artifact from over-smoothed/coarse-binned dE/dx tables (memory bug)    | HIGH     | Phase kappa-tabulated         |
+| P13 | Hooge α for 4H-SiC spans 2e-5 to 1e-3 — hard-coded value invalidates noise predictions | HIGH     | Phase noise-analysis          |
+| P14 | Double-counting shot + G-R: trap occupancy already contributes via SRH dark current    | HIGH     | Phase noise-analysis          |
+| P15 | Confusing ENC (e⁻ rms) with NEE (eV FWHM) — factor 2.355·ε_pair difference             | HIGH     | Phase noise-analysis          |
+| P16 | 1/f corner depends on shaping time τ_shape; quoting bare S_v misleads                  | MEDIUM   | Phase noise-analysis          |
+| P17 | devsim scalar mobility models cannot represent tensor μ*‖/μ*⊥ natively                 | HIGH     | Phase anisotropic-mobility    |
+| P18 | c-axis ≠ mesh y-axis by default — must define crystallographic frame explicitly        | HIGH     | Phase anisotropic-mobility    |
+| P19 | Mesh orientation mismatch silently inverts μ*‖ and μ*⊥ → wrong sign on field effects   | HIGH     | Phase anisotropic-mobility    |
+| P20 | Hardcoded `device2d` name in 20 notebooks will collide with 3D/anisotropic devices     | HIGH     | Phase integration (cross-cut) |
+| P21 | New modules importing `from src.poisson import *` may shadow updated APIs              | MEDIUM   | Phase integration (cross-cut) |
+| P22 | devsim version bump for 3D may break 2D cylindrical-axis equilibrium fallback          | MEDIUM   | Phase 3D-mesh + integration   |
+| P23 | Mock ROOT module (current v3.0) and real uproot reader silently produce different y    | HIGH     | Phase ROOT-integration        |
+| P24 | Notebook 14 (validation) freezes regression baselines — must re-snap after physics     | MEDIUM   | Phase integration (cross-cut) |
+| P25 | Azimuthal sweep on 2D Cartesian device only approximates 3D — angle definition trap    | MEDIUM   | Phase azimuthal               |
+| P26 | Build-up over-response near surface depends on dead-layer thickness assumption         | MEDIUM   | Phase build-up                |
+| P27 | Graded epi profile in 2D: doping function must be evaluated at devsim NODE not MESH    | HIGH     | Phase graded-doping           |
+| P28 | Anisotropic Poisson permittivity (ε*‖=9.7, ε*⊥≈10.03 in 4H-SiC) often ignored          | MEDIUM   | Phase anisotropic-mobility    |
+| P29 | Cache `__pycache__/*.pyc` already-stale modules can silently re-import old physics     | LOW      | Phase integration (cross-cut) |
+| P30 | 3D tetrahedral elements use different `node_volume_model` than 2D cylindrical          | HIGH     | Phase 3D-mesh                 |
 
 ---
 
-### Pitfall 4: Microdosimetric Spectra Computation Errors
+## Critical Pitfalls (HIGH severity)
 
-**What goes wrong:** Computing lineal energy (y) spectra from simulated pulse heights has multiple failure modes:
+### P01 — gmsh MSH 4.x format unreadable by devsim
 
-1. **Wrong sensitive volume definition.** Lineal energy y = epsilon / l_bar, where epsilon is the energy deposited in the sensitive volume and l_bar is the mean chord length. For a rectangular parallelepiped SV of dimensions a x b x c, l_bar = 4V/S = 4abc / (2(ab+ac+bc)). For a 100x100x10 um SV, l_bar = 19.6 um. Getting l_bar wrong scales ALL y-values by a constant factor, shifting the entire spectrum.
-
-2. **Confusing deposited energy with collected charge.** The TCAD simulation gives collected charge Q_coll = CCE _ Q_generated. The deposited energy is epsilon = Q_generated _ E_pair / q (in keV). If you use Q_coll instead of Q_generated to compute y, you get y_measured = y_true \* CCE, which systematically underestimates y for events with CCE < 1 (edge events, high-LET tracks with recombination). This is physically correct for what the detector MEASURES, but wrong for computing true lineal energy.
-
-3. **Logarithmic binning errors.** Microdosimetric spectra are conventionally plotted as y*d(y) vs log(y) (dose-weighted) or y*f(y) vs log(y) (frequency-weighted). The bins must be equally spaced in log(y), typically 50 bins per decade over 6 decades (0.01 to 10000 keV/um). Common errors:
-   - Using linear bins (compresses the high-y tail into one bin)
-   - Forgetting the y\*d(y) weighting (raw histogram is NOT the microdosimetric spectrum)
-   - Wrong normalization: integral of d(y) dy must equal 1 (dose distribution), integral of f(y) dy must equal 1 (frequency distribution)
-   - Confusing d(y) = y\*f(y) / y_F (dose distribution from frequency distribution)
-
-4. **Insufficient statistics.** A single y-spectrum requires hundreds to thousands of simulated events. Each event is a full 2D transient simulation. At ~10-100 seconds per event, 1000 events = 3-30 hours. If you only simulate 50 events, the spectrum has huge statistical fluctuations and the dose-mean y_D is unreliable.
-
-5. **Zero-energy events.** Ions that deposit energy outside the SV (miss events, or events where all charge diffuses away) contribute to f(y) at y=0. These must be handled explicitly -- either excluded (as in experimental TEPC practice) or included with a delta function at y=0. Getting this wrong biases y_F.
-
-**Why it happens:** Microdosimetry has its own formalism (ICRU Report 36) that is unfamiliar to TCAD practitioners. The y\*d(y) representation is non-intuitive.
-
-**Consequences:** Wrong y-spectra invalidate the entire feasibility study. If y_D is wrong by a factor of 2, the RBE prediction via MKM is wrong, and the microdosimeter design recommendations are unreliable.
-
+**What goes wrong:** gmsh ≥4 defaults to MSH 4.1 format. devsim parser errors out: `ERROR: MeshFormat 4.1 0 8 not supported`. The existing project has never used external gmsh meshes; all 2D meshes go through `create_2d_mesh`.
+**Why it happens:** devsim's MSH reader was written for MSH 2.x; MSH 4.x has different physical-group encoding and an Entities section devsim cannot parse.
+**Consequences:** 3D mesh import fails before any physics; blocks the entire 3D phase.
 **Prevention:**
 
-- Implement spectra computation in a dedicated `microdosimetry.py` module with explicit ICRU 36 formulas.
-- Compute l_bar analytically from SV geometry. Document the formula and validate against known geometries.
-- Separate "deposited energy" (from MC input) from "collected energy" (from TCAD CCE). Report both y_deposited and y_collected spectra.
-- Use 300 logarithmic bins (50/decade, 6 decades from 0.01 to 10^4 keV/um).
-- Validate against published SiC microdosimetric data from Petringa et al. (Microdosimetry.pdf).
-- Compute y_F and y_D with proper formulas: y_F = integral(y*f(y) dy), y_D = integral(y*d(y) dy) = integral(y^2 \* f(y) dy) / y_F.
-- Report statistical uncertainty: bootstrap resampling of events to get confidence intervals on y_D.
+- Always call `gmsh.option.setNumber("Mesh.MshFileVersion", 2.2)` before `gmsh.write(...)`, **or** invoke gmsh CLI with `-format msh2`.
+- Add a guard in the new `device3d.py`: read the first line of the .msh file and reject anything not starting with `2.` of MeshFormat.
+- Pin gmsh version in `pyproject.toml` and document the MSH2 requirement in `docs/3d-mesh.md`.
+  **Detection:** Parser raises immediately; covered by a minimal smoke test that creates a 2-tetrahedron mesh and round-trips through `devsim.create_gmsh_mesh(file=...)`.
+  **Source confidence:** HIGH (devsim forum thread "Opening MSH files", gmsh reference manual).
 
-**Detection:** If integral(f(y) dy) is not 1.0 (within numerical precision), normalization is wrong. If y_D < y_F, something is wrong (y_D >= y_F always, by Jensen's inequality).
+### P02 — 3D mesh node-count explosion
 
-**Phase mapping:** Phase 5 (microdosimetric spectra). Depends on Phase 3 (single-particle) and Phase 4 (MC coupling).
+**What goes wrong:** A naive 300×300×10 µm SV meshed at the 0.5 µm resolution currently used in 2D yields ~360 M tetrahedra — out of memory on most workstations and weeks of solve time. Even 100×100×10 µm at 1 µm resolution is ~3 M tets, borderline tractable.
+**Why it happens:** Drift-diffusion solver memory scales as O(N) for Jacobian factors but the LU factorization devsim falls back to scales O(N^1.5–N^2). 3D Jacobians explode versus 2D.
+**Consequences:** Phase grinds to halt; team blames "devsim is slow" rather than meshing.
+**Prevention:**
+
+- Use **graded meshes**: 0.2–0.5 µm in the SCR/junction region, 2–5 µm in the bulk, 10 µm in the substrate. devsim's `create_3d_mesh` (or gmsh `Field` with Threshold) supports this.
+- Set a hard node-count budget per phase: 3D smoke test ≤200 k nodes, production runs ≤1 M nodes.
+- Solve in **cylindrical 2D** (already used in `alternative_structures.py`) for any structure with axisymmetry — avoid full 3D unless azimuthal-asymmetric (e.g., guard-ring corner) is the science question.
+- Use devsim's **superlu_dist or umfpack** parallel solver if available; document in STACK.md.
+  **Detection:** Print `len(devsim.get_node_model_values(...))` after meshing; warn if >1 M nodes.
+
+### P03 — Cylindrical-axis parameters leak globally
+
+**What goes wrong:** The existing `alternative_structures.py` sets `devsim.set_parameter(name="raxis_zero", value=0.0)` for the 3D-electrode axisymmetric run. These parameters are devsim **global**, not per-device. When a subsequent planar 2D device runs in the same Python session (e.g., a notebook running multiple structures in series, or a sweep over geometries in `optimization.py`), the planar mesh is silently re-interpreted as cylindrical with a vertical axis — Poisson assembly weights are wrong, solver may "converge" to nonsense.
+**Why it happens:** The v3.0 mitigation note in this milestone explicitly mentions "Cylindrical coordinate lifecycle — must delete/restore for each use". The current `reset_devsim()` in `optimization.py` resets device state but not these global parameters.
+**Consequences:** Silent numerical errors in any notebook that mixes cylindrical and planar structures.
+**Prevention:**
+
+- Extend `reset_devsim()` to explicitly delete `raxis_variable`, `raxis_zero`, `node_volume_model`, `edge_couple_model`, `element_edge_couple_model`, and `surface_area_model` via `devsim.set_parameter(name=..., value="")` or the equivalent unset call.
+- Wrap cylindrical setup in a context manager: `with cylindrical_axis(raxis_variable="x"): solve(...)` that restores prior state on exit.
+- Add an assertion in the 2D planar mesh creation: `assert devsim.get_parameter("raxis_variable") in (None, "")`.
+  **Detection:** Add a regression test that runs notebook 19 (alternative structures) **followed by** notebook 15 (planar 2D) in one process and checks CCE agreement with isolated run.
+
+### P04 — gmsh physical-group silent loss
+
+**What goes wrong:** Mesh exports without explicit physical groups; devsim receives a mesh with no named regions or contacts; `create_contact_from_interface` raises or — worse — silently treats the entire boundary as Dirichlet.
+**Why it happens:** gmsh's "Save all elements" (`Mesh.SaveAll=1`) discards physical-group definitions in MSH2 format. The default GUI checkbox can flip this without warning.
+**Consequences:** Equilibrium fails or solves with wrong boundary conditions; debugging may take days.
+**Prevention:**
+
+- **Always** generate meshes programmatically (`pygmsh` or raw gmsh Python API), never via GUI.
+- Define a single canonical Python helper `build_3d_mesh(geometry_spec)` that asserts `Mesh.SaveAll == 0` and names every physical group: `"sic_bulk"`, `"anode"`, `"cathode"`, `"guard_ring"`, etc.
+- After mesh creation, parse the .msh file and assert at least the expected number of physical groups exist before invoking `create_gmsh_mesh`.
+  **Detection:** Smoke test asserts `devsim.get_contact_list(device="dev3d") == ["anode", "cathode"]`.
+  **Source confidence:** HIGH (gmsh reference manual, multiple forum threads).
+
+### P05 — devsim supports only point/line/triangle/tetrahedron
+
+**What goes wrong:** gmsh by default may produce hexahedra or prisms (especially via `Mesh.RecombineAll=1` or extruded meshes). devsim rejects these.
+**Why it happens:** devsim's finite-volume discretization is implemented for simplices only.
+**Consequences:** Mesh creation error or — if devsim doesn't validate — wrong volumes/edge couples computed silently.
+**Prevention:**
+
+- Force tetrahedral output: `gmsh.option.setNumber("Mesh.RecombineAll", 0)`; `gmsh.option.setNumber("Mesh.Algorithm3D", 1)` (Delaunay).
+- Add a post-mesh assertion that scans element types in the .msh file for codes other than 1 (line), 2 (triangle), 4 (tetrahedron), 15 (point).
+  **Source confidence:** HIGH (devsim docs, "Meshing" chapter).
+
+### P06 — uproot loads entire TTree into RAM
+
+**What goes wrong:** Calling `tree["edep"].array()` reads the **whole branch** into a numpy/awkward array. A Geant4 FLASH simulation can easily produce a 50–500 GB ROOT file with millions of events; this OOMs the Python process.
+**Why it happens:** uproot's `.array()` is convenient and matches the v3.0 mock-CSV API; developers transfer the pattern without realizing the scale difference.
+**Consequences:** Notebook crashes or — worse — runs swap for hours.
+**Prevention:**
+
+- Use `uproot.iterate(file, step_size="100 MB")` or `tree.iterate(filter_name=..., step_size=...)` to chunk through events.
+- Document a "ROOT loader" function in `src/mc_coupling.py` that **always** iterates; only call `.array()` on tiny test fixtures.
+- Set a soft size limit: if file > 1 GB, refuse `.array()` and force the iterate path.
+- Use `library="np"` to avoid awkward overhead when columns are flat.
+  **Detection:** Add a synthetic 200 MB fixture in `tests/` and assert peak RSS during read stays below 500 MB.
+  **Source confidence:** HIGH (uproot docs, multiple scikit-hep discussion threads).
+
+### P07 — No standard Geant4 ROOT TTree schema
+
+**What goes wrong:** Geant4 does **not** prescribe TTree/branch names. Every user's `SensitiveDetector::ProcessHits` chooses its own. Different sub-communities use `edep`, `eDep`, `EDep`, `HitEdep`, `Step_edep`, `et[]`, `Harm_FT_hit_edep`, etc. The synthetic fixture you ship may not match the file the Petringa group eventually delivers.
+**Why it happens:** Geant4 ROOT output is application-specific; the analysis manager wraps `TFile`/`TTree` but does not enforce a schema.
+**Consequences:** Code that "works" on the synthetic fixture fails opaquely on the real Geant4 file.
+**Prevention:**
+
+- **Decouple parser from schema**: define an internal canonical schema (`event_id`, `pid`, `edep_MeV`, `x_um`, `y_um`, `z_um`, `step_length_um`) in `src/mc_coupling.py`.
+- Implement a **branch-mapping layer**: `RootSchemaMap` dataclass with user-provided dict `{"edep_MeV": "Hits.energyDeposit"}`; the loader reads via this map.
+- Ship 2–3 schema presets (`geant4_analysis_manager`, `edep_sim`, `g4sbs_style`) and a generic "introspect and prompt" mode.
+- Document the canonical schema in `docs/root-schema.md` and require the group to fill the mapping before integration.
+  **Detection:** Loader prints the detected branch names and the active mapping; refuse to proceed if any required canonical field has no source.
+  **Source confidence:** MEDIUM (multiple G4 community examples confirm divergence; no official standard found).
+
+### P09 — Energy-deposition units ambiguous
+
+**What goes wrong:** Geant4 internal energy unit is **MeV**, but applications often store **keV** or **eV** in ROOT for convenience. A factor 1000 or 1e6 error in `edep` silently produces y-spectra shifted by orders of magnitude.
+**Why it happens:** ROOT branches are typed (`float`/`double`) with no unit metadata.
+**Consequences:** Tissue-equivalent y_D off by 10^3; would be caught only by sanity-checking against published spectra.
+**Prevention:**
+
+- Store unit in `RootSchemaMap` (`edep_unit: "MeV" | "keV" | "eV"`); normalize to MeV on read.
+- Sanity-check after load: assert mean `edep` for 62 MeV protons in 10 µm SiC is in [10 keV, 5 MeV]; warn outside this range.
+- Document expected unit explicitly in fixture metadata.
+  **Detection:** First-event assertion in `process_mc_ensemble`.
+
+### P10 — PSTAR vs SRIM unit mismatch
+
+**What goes wrong:** PSTAR tables: `MeV·cm²/g` (mass stopping power). SRIM `SR.exe` output: `MeV/(mg/cm²)` (numerically same as PSTAR but with a 10⁻³ factor in different conventions) AND a separate column in `eV/Å` (linear stopping power). Mixing without conversion produces κ off by ρ_SiC (3.21 g/cm³) ≈ factor 3.
+**Why it happens:** PSTAR and SRIM use different default conventions; SRIM is configurable per-run; existing v3.0 code uses analytic κ scaling and so has never confronted this.
+**Consequences:** Kappa correction wrong by factor 3 → tissue-equivalent y_D wrong by factor 3 → wrong RBE predictions.
+**Prevention:**
+
+- Build a `StoppingPowerTable` class in `src/stopping_power.py` that stores **internal canonical units**: linear stopping `MeV/cm` and mass stopping `MeV·cm²/g`.
+- Parsers `from_pstar(path)`, `from_srim(path)` declare source units explicitly and convert.
+- Unit-test the parsers against the published 100 MeV proton in SiC value (≈3.6 MeV·cm²/g) within 5%.
+- Compare PSTAR and SRIM at 5–10 calibration energies; flag if ratio deviates from 1.0 by >10% (could indicate density-effect or shell-correction disagreement, also a real physics issue at high energies).
+  **Detection:** Cross-check unit test with hardcoded reference values.
+  **Source confidence:** HIGH (NIST PSTAR documentation, SRIM module pages confirm differing conventions).
+
+### P12 — Kappa flat-line from coarse tables
+
+**What goes wrong:** Per the user's memory `project_kappa_flat.md`, "stopping power CSV data produces unrealistically flat kappa". This already happened with the current placeholder data. Root cause: too few interpolation points across the Bragg peak; cubic spline smears the peak; ratio S_SiC/S_water becomes nearly constant.
+**Why it happens:** Coarse sampling + over-smoothed interpolation eliminates the energy-dependent ratio that **is** κ.
+**Consequences:** "Tissue equivalence works perfectly" — a false positive that hides the science.
+**Prevention:**
+
+- Use **log-log interpolation** (energy & stopping both in log space) — this is the convention in radiation transport.
+- Sample PSTAR/SRIM at no fewer than **50 energies per decade** across the proton energy range of interest (10 keV–250 MeV).
+- Validate the κ curve has expected shape: rising near Bragg peak (E≲1 MeV/u in water), tending to a constant at high energy.
+- Plot κ(E) early in the notebook and require visual inspection before downstream use.
+  **Detection:** Assert `np.std(kappa(E_test)) > 0.05` for E_test spanning 0.1–10 MeV.
+  **Source confidence:** HIGH (project memory `project_kappa_flat.md`; standard radiation-transport practice).
+
+### P13 — Hooge α range for 4H-SiC
+
+**What goes wrong:** Literature values for the Hooge parameter in 4H-SiC span **2×10⁻⁵** (high-quality MOSFET) to **~10⁻³** (lower-quality material, bulk samples). The 1/f noise spectral density scales linearly with α. Hard-coding a single value misrepresents the achievable noise floor by up to 50×.
+**Why it happens:** Hooge α depends strongly on material defect density, surface preparation, and contact quality. The Petringa detector is bulk epitaxial p-n, closer to the diode/Schottky regime than MOSFET.
+**Consequences:** Minimum detectable energy off by up to √50 ≈ 7×.
+**Prevention:**
+
+- Make `hooge_alpha` an explicit parameter of the noise model, **never** hardcode.
+- Provide three presets: `"sic_best"=2e-5`, `"sic_typical"=1e-4`, `"sic_worst"=1e-3` with literature references.
+- Run the v4.0 noise analysis as a **sensitivity band**, not a single number; report ENC for the range of α.
+- Document explicitly that experimental calibration is required to pin α for this device.
+  **Detection:** Sensitivity sweep in the noise notebook plots ENC vs α; fitted experimental ENC (if available) selects α post-hoc.
+  **Source confidence:** HIGH (multiple 4H-SiC noise measurement papers; range cited consistently).
+
+### P14 — Double-counting shot + G-R noise
+
+**What goes wrong:** Shot noise variance: `S_I = 2qI_dark`. If I_dark is computed from SRH+TAT (which include trap-generation), and you then **add** a separate G-R noise term from those same traps, you count their fluctuations twice.
+**Why it happens:** Reviewers/textbooks present noise terms additively; physical reality is that the trap occupancy fluctuates and contributes to **both** the mean current (already in I_dark) and the variance (already in shot noise if computed correctly).
+**Consequences:** Overestimates total noise → underestimates detector sensitivity.
+**Prevention:**
+
+- Treat shot noise + 1/f as the **two-term** model for v4.0; defer separate G-R only if there is a clean Lorentzian feature in measured spectra.
+- If G-R is added, **subtract** the trap-contribution from I_dark in the shot-noise formula so it appears only once.
+- Document the noise model assumptions in `src/noise.py` docstring.
+  **Detection:** Unit test: turn off traps (low N_t) and verify shot noise = 2qI_dark exactly; turn on traps and verify total noise rises by less than 2× (not 4× as double-counting would give).
+  **Source confidence:** MEDIUM (general detector-noise theory; explicit double-count warning common in radiation-detector textbooks).
+
+### P15 — ENC vs NEE confusion
+
+**What goes wrong:** ENC (Equivalent Noise Charge) is in **electrons rms**. NEE (Noise Equivalent Energy) is in **eV FWHM**. Conversion: `NEE_FWHM_eV = 2.355 · ENC_rms · ε_pair_eV` where ε_pair = 8.4 eV for 4H-SiC. Confusing them gives factor 2.355·8.4 ≈ 20× errors.
+**Why it happens:** Both are "noise" expressed in different physical units; people use whichever the textbook in front of them uses.
+**Consequences:** Reporting "ENC = 50 eV" or "NEE = 30 electrons" — both nonsensical — surfaces in figures and papers.
+**Prevention:**
+
+- Type-annotate the noise API: `enc_electrons_rms: float` and `nee_ev_fwhm: float` are distinct return types.
+- Provide explicit conversion functions `enc_to_nee(enc, eps_pair=8.4, fwhm=True)` with docstring stating the 2.355 factor.
+- Plot labels must include both units explicitly.
+  **Detection:** Add docstring example and a unit test: ENC=100 e⁻ rms → NEE = 100·2.355·8.4 = 1977 eV FWHM ≈ 2 keV.
+  **Source confidence:** HIGH (standard radiation-detection electronics; cross-checked against detector textbooks).
+
+### P17 — devsim has no native tensor mobility
+
+**What goes wrong:** devsim's built-in mobility models (`devsim.simple_dd_solve`, `BeerMobility`, etc.) are **scalar**: `J_n = q·μ_n·n·E + q·D_n·∇n`. There is no API for `μ_n` as a tensor with different `μ_‖` and `μ_⊥` components.
+**Why it happens:** devsim follows the standard scalar-isotropic drift-diffusion form; anisotropic mobility requires user-supplied equations.
+**Consequences:** Cannot directly model 4H-SiC's c-axis anisotropy without rewriting the DD assembly.
+**Prevention:**
+
+- Use devsim's `edge_model` and `edge_from_node_model` to define separate `mu_parallel` and `mu_perp` quantities at each edge, then build a **custom J_n** model that projects the edge-local field onto the c-axis direction: `J_n_edge = q · (μ_‖ · (E·ĉ)·ĉ + μ_⊥ · (E - (E·ĉ)·ĉ)) · n_avg`.
+- Use the devsim community's "anisotropic driving force" model (Hahn/Schoenmaker formulation) as reference; cite the Selberherr group's papers in the implementation docstring.
+- Validate against an isotropic limit: set `μ_‖ = μ_⊥` and check the new code reproduces the standard scalar result within 0.1%.
+  **Detection:** Smoke test for isotropic limit; comparison with published 4H-SiC vertical vs lateral mobility measurements.
+  **Source confidence:** HIGH for devsim API limitation (forum threads on custom_equation); MEDIUM for the specific anisotropic formulation (multiple competing models in literature).
+
+### P18 — c-axis vs mesh-axis alignment
+
+**What goes wrong:** Existing 2D meshes use y as depth (epitaxial growth direction), which **is** the c-axis for typical 4H-SiC wafers on the standard (0001) orientation. Future meshes (mesa with sidewall, off-axis cut wafers, 3D electrodes) may have c-axis at an angle to mesh y. If the anisotropic mobility code assumes c = ŷ unconditionally, results are wrong for any non-standard geometry.
+**Why it happens:** "Everyone uses (0001) wafers" — except when they don't (4° off-axis is standard for 4H-SiC epi growth; some research devices use a-plane).
+**Consequences:** Subtle 5–20% errors that match no published data and are very hard to debug.
+**Prevention:**
+
+- Make c-axis direction an **explicit input** to the anisotropic mobility setup: `c_axis = np.array([cos(theta), sin(theta), 0])`.
+- Default to `ŷ` with a clear docstring; require the user to override for non-standard orientations.
+- Add `c_axis_direction` to `device_info` dict so all downstream modules see it consistently.
+  **Detection:** Run a 1D test with c-axis aligned to current flow vs perpendicular; verify the ratio matches μ*‖/μ*⊥ ≈ 1.2 (4H-SiC, electrons).
+
+### P19 — μ*‖/μ*⊥ sign/role swap
+
+**What goes wrong:** The 4H-SiC convention: μ*‖ refers to mobility **along the c-axis**; in 4H-SiC, electron μ*⊥ (perpendicular to c) is actually **larger** than μ\_‖ by ~20%. Inverting the labeling silently changes the predicted device behavior for vertical vs lateral current flow.
+**Why it happens:** Literature is inconsistent; "parallel" sometimes means parallel to current rather than parallel to c-axis.
+**Consequences:** Vertical (c-axis) and lateral (basal plane) device responses get flipped.
+**Prevention:**
+
+- Adopt one convention explicitly and document it: **μ*‖ = mobility parallel to c-axis; μ*⊥ = mobility in the basal plane**.
+- Validate against published 4H-SiC measurements: μ*⊥/μ*‖ ≈ 1.2 for electrons at 300K (Schaffer et al., common reference).
+- Provide named parameters `mu_n_c_axis` and `mu_n_basal_plane`, not `mu_n_parallel/perp`.
+  **Detection:** Unit test reproduces the published 1.2 ratio.
+
+### P20 — Hardcoded device names across 20 notebooks
+
+**What goes wrong:** v3.0 notebooks use literal strings `"device2d"`, `"mesa2d"`, etc. for devsim device names. v4.0 will add `"device3d"`, `"device_aniso"`, `"device_graded"`. If a notebook is run twice in the same kernel, or two structures are loaded in the same session, devsim raises "device already exists" errors or — if `delete_device` is missing — leaks state.
+**Why it happens:** devsim devices are global by name; v3.0's `reset_devsim()` handles this for known names but not for new ones.
+**Consequences:** Notebook-level integration fragility — re-running a cell breaks the kernel state.
+**Prevention:**
+
+- Replace hardcoded names with UUIDs or factory function: `device_name = make_unique_device_name("3d")` → returns `"3d_<uuid8>"`.
+- Extend `reset_devsim()` to enumerate **all** devices via `devsim.get_device_list()` and delete each, not a hard-coded list.
+- Document the pattern in the v4.0 onboarding doc.
+  **Detection:** Run any notebook twice in one kernel; should produce identical results without error.
+
+### P23 — Mock vs real ROOT yield different y-spectra
+
+**What goes wrong:** The current v3.0 mock CSV reader and the new uproot reader should produce identical `(event_id, pid, edep, position)` tuples for matching inputs. In practice, ordering, dtype (float32 vs float64), and event-vs-step granularity differ. Resulting y-spectra disagree, and it is not clear which is "right".
+**Why it happens:** Mock ships with a CSV intentionally simplified; real Geant4 output has per-step records that must be aggregated per event.
+**Consequences:** Validation notebook 17 silently changes results when switching from mock to real reader; the change goes uncommitted as "noise".
+**Prevention:**
+
+- Build a **golden fixture**: a 1000-event synthetic file containing both a CSV (mock format) and a ROOT file (real format) representing the same physical events.
+- Add a regression test that the two readers produce y-spectra agreeing within Poisson statistics (KS test p > 0.01).
+- Keep the mock reader available and document it as "deprecated; use uproot path for v4.0+".
+  **Detection:** Cross-reader regression test against the golden fixture.
+
+### P27 — Graded doping at node, not mesh, evaluation
+
+**What goes wrong:** When the existing graded-doping helper (currently 1D) is extended to 2D, calling `doping_function(x, y)` on the **mesh-line coordinates** instead of the **devsim node coordinates** leads to interpolation artifacts at fine mesh transitions. devsim assembly expects per-node values.
+**Why it happens:** In 1D the two coincide; in 2D with non-uniform mesh refinement they differ at refinement boundaries.
+**Consequences:** Spurious doping gradients along refinement transitions, producing fake space-charge layers.
+**Prevention:**
+
+- Always evaluate doping via `devsim.node_model(device, region, name="Donors", equation="<func of x,y>")` — devsim handles the per-node coordinate sampling.
+- Never compute Python-side doping arrays and inject via `set_node_values` unless the caller is responsible for matching node ordering exactly.
+- Document the pattern in the new graded-doping module.
+  **Detection:** Compare 1D depletion width at the centerline of a 2D graded device to the equivalent 1D simulation; should match within 1%.
+
+### P30 — 3D vs 2D-cylindrical model-name divergence
+
+**What goes wrong:** 2D cylindrical mode (already in `alternative_structures.py`) uses `cylindrical_node_volume`, `cylindrical_edge_couple`, `cylindrical_surface_area`. 3D Cartesian uses the **default** `node_volume`, `edge_couple`, `surface_area`. If the 3D setup forgets to **reset** the global model-name parameters (`node_volume_model`, `edge_couple_model`, etc.) to defaults, 3D will inherit cylindrical model names and the assembly will be wrong.
+**Why it happens:** Same global-state issue as P03 but for different parameters; very easy to miss.
+**Consequences:** 3D assembly weights silently wrong.
+**Prevention:**
+
+- Include `node_volume_model`, `edge_couple_model`, `element_edge_couple_model`, `surface_area_model` in the extended `reset_devsim()` cleanup.
+- Add an explicit `setup_3d_cartesian_volumes(device, region)` that sets these to the defaults `node_volume`, `edge_couple`, `surface_area` at the start of each 3D simulation.
+  **Detection:** Smoke-test 3D depletion width against analytic value for a uniform p-n junction.
 
 ---
 
-### Pitfall 5: Tissue-Equivalence Correction Factor (kappa) Applied Incorrectly
+## Moderate Pitfalls (MEDIUM severity)
 
-**What goes wrong:** SiC is not tissue-equivalent. The lineal energy measured in SiC must be converted to tissue-equivalent lineal energy. The standard approach uses a geometrical scaling factor kappa:
+### P08 — Synthetic uproot fixture differs from real Geant4 output
 
-1. **kappa for SiC is NOT the same as kappa for Si.** Published values for silicon are kappa ~ 0.57 (muscle) and 0.54 (water). SiC has different density (3.21 g/cm^3 vs Si 2.33 g/cm^3) and different stopping power ratios. The kappa for SiC must be computed from the ratio of mass electronic stopping powers: kappa_SiC = (S/rho)\_tissue / (S/rho)\_SiC, where S/rho is the mass stopping power. This ratio is energy-dependent and ion-species dependent.
+uproot writes simpler basket structures than ROOT C++. As long as branch dtypes and names match the schema, this is cosmetic; but compression algorithm (lz4 vs zstd) and basket-splitting may differ. Use uproot's `compression=uproot.LZ4(level=4)` to match Geant4 defaults. Test against any small real-G4 file available **before** declaring synthetic fixture canonical.
 
-2. **Energy-dependent kappa treated as constant.** kappa varies with ion energy (and therefore with depth in the Bragg peak). For protons in the therapeutic range (60-250 MeV), the stopping power ratio between water and SiC varies by ~10-20% across the energy range. Using a single constant kappa introduces systematic error, especially at the Bragg peak where the stopping power changes rapidly.
+### P11 — PSTAR energy-range gaps
 
-3. **Scaling dimensions vs scaling energy.** There are two approaches: (a) scale the SV dimensions by kappa to define a "tissue-equivalent SV" (geometric scaling), or (b) scale the measured energy deposition event-by-event using stopping power ratios (energy scaling). These are NOT equivalent for mixed radiation fields or near nuclear interaction thresholds. The energy-scaling approach is more physically correct but requires stopping power tables.
+PSTAR proton tables start at 1 keV. Below this (relevant for end-of-track in microdosimetry), use SRIM (covers 10 eV–1 MeV) or extrapolate carefully in log-log space. Document the energy-coverage map of each source in `src/stopping_power.py`. Above 10 GeV use ICRU-49 or PSTAR's high-energy extension.
 
-4. **Nuclear interactions ignored.** The kappa factor based on electronic stopping power does not account for nuclear interactions (fragmentation, secondary particles). For carbon ions and high-Z particles, nuclear interactions contribute significantly to the microdosimetric spectrum. SiC has different nuclear cross-sections than tissue.
+### P16 — 1/f corner is shaping-time dependent
 
-**Why it happens:** The tissue equivalence correction literature is primarily for silicon microdosimeters. SiC-specific kappa values are not well-established, requiring computation from stopping power databases (SRIM/PSTAR).
+S_v(f) ~ 1/f integrated over the shaper passband gives an ENC contribution that depends on τ_shape: short τ_shape filters more 1/f. Quote noise as a function of τ_shape, not a single scalar. The v4.0 noise notebook should produce an ENC vs τ_shape "noise corner" plot.
 
-**Consequences:** Systematic bias in all tissue-equivalent y-spectra. If kappa is wrong by 15%, y_D is wrong by 15%, and RBE predictions are unreliable.
+### P21 — Wildcard imports shadowing
 
-**Prevention:**
+Existing modules use mostly explicit imports; if v4.0 modules introduce `from src.poisson import *` they may overwrite functions when new modules are added. Audit imports at the start of v4.0; enforce no-wildcard via a flake8/ruff rule.
 
-- Compute kappa_SiC from SRIM or PSTAR stopping power tables for each ion species and energy range used.
-- Implement energy-dependent kappa as a lookup table, not a single constant.
-- Document the stopping power sources and interpolation method.
-- Compare geometric-scaling and energy-scaling approaches. Report both.
-- For the feasibility study, present results with kappa uncertainty band (+/-10-15%) to show sensitivity.
-- Cross-validate: for protons, compare tissue-equivalent y-spectrum from SiC simulation with published TEPC measurements at the same beam energy.
+### P22 — devsim version bump
 
-**Detection:** If kappa_SiC equals published kappa_Si values (0.57), it is likely wrong -- SiC is 38% denser than Si.
+Upgrading devsim from the current version for new 3D features may change default solver settings or model-name conventions. Pin devsim version in `pyproject.toml`; bump in a dedicated PR with full notebook re-run.
 
-**Phase mapping:** Phase 5 (microdosimetric spectra). Must be addressed alongside spectrum computation.
+### P24 — Validation regression baselines
 
----
+Notebook 14 (validation) snapshots reference CCE/dark-current values from v3.0. Adding new physics (graded doping, anisotropic mobility) will shift baselines. Decide: do we **freeze v3.0 baselines** (and run v4.0 physics in addition) or **rebaseline**? Document the decision; "I broke the regression test but it's fine" is a code smell.
 
-## Moderate Pitfalls
+### P25 — Azimuthal sweep angle definition
 
-### Pitfall 6: MC Coupling Coordinate System and Units Mismatch
+"Azimuthal" can mean (a) beam incident angle vs detector normal, (b) detector rotation around its own axis, (c) projection of a 3D simulation onto 2D slices. Each gives different physics. Define explicitly in the phase plan.
 
-**What goes wrong:** Geant4 and FLUKA use different coordinate systems, units, and output formats. Coupling to the TCAD simulation requires careful mapping:
+### P26 — Build-up over-response dead-layer assumption
 
-1. **Coordinate origin mismatch.** Geant4/FLUKA typically define the geometry with the beam entering from one direction. The TCAD simulation defines x=0 at the p+ contact (anode). If the MC simulation has the beam entering from the opposite side, all depth profiles are flipped.
+The "build-up region" depends on the assumed dead-layer thickness, surface recombination velocity, and oxide presence. Existing v3.0 surface-recombination model is calibrated to dark current; using it directly for build-up over-response may double-correct. Decouple the two physics calibrations.
 
-2. **Units mismatch.** Geant4 uses mm and MeV internally. FLUKA uses cm and GeV. The TCAD simulation uses cm (CGS). Energy deposition is often reported in MeV or keV; the TCAD needs generation rate in cm^-3 s^-1 or total e-h pairs. Missing a factor of 10 (mm to cm) produces 1000x error in volumetric quantities.
+### P28 — Anisotropic permittivity
 
-3. **LET vs energy deposition.** MC codes can output either LET (energy loss per unit path length, keV/um) or energy deposited in a volume (keV). These differ for thin detectors where delta-rays escape the SV. For a 10 um thick SiC layer, delta-ray escape can reduce deposited energy by 5-15% compared to LET \* thickness for high-energy protons.
-
-4. **Phase-space file format variations.** Geant4 can output ROOT, CSV, or IAEA phase-space format. FLUKA uses its own binary format (USRBIN, USRBDX). There is no standard format. Each must be parsed differently.
-
-5. **Normalization per primary vs per event.** MC outputs are typically normalized per primary particle. For microdosimetry, you need the energy deposited per individual ion traversal of the SV. If the MC geometry has different SV dimensions than the TCAD geometry, the normalization must be adjusted.
-
-**Why it happens:** MC codes and TCAD codes are developed by different communities with different conventions. There is no standard interface.
-
-**Prevention:**
-
-- Define an explicit intermediate format (e.g., CSV with columns: event_id, x_cm, y_cm, z_cm, dE_keV, particle_type, E_kinetic_MeV).
-- Write a dedicated `mc_import.py` module with format-specific parsers (Geant4 CSV, FLUKA USRBIN, pre-binned LET spectrum).
-- Include unit conversion functions with explicit input/output unit documentation.
-- Validate with a simple test case: monoenergetic proton at known energy, compare MC-predicted energy deposition with analytical Bethe-Bloch calculation.
-- Always check that the total energy deposited across all events matches the expected dose.
-
-**Detection:** If the mean energy deposited per event is off by exactly 10x, 100x, or 1000x, suspect a unit conversion error (mm/cm, MeV/keV).
-
-**Phase mapping:** Phase 4 (MC coupling). Can be developed in parallel with Phase 3.
+4H-SiC: ε*‖ ≈ 9.7, ε*⊥ ≈ 10.03 (small but nonzero anisotropy). The current code uses ε=9.7 scalar. For consistency with anisotropic mobility, also make ε a tensor — or document the simplification explicitly.
 
 ---
 
-### Pitfall 7: 2D Edge Effects Misinterpreted Due to Wrong Symmetry Assumption
+## Minor Pitfalls (LOW severity)
 
-**What goes wrong:** A 2D simulation represents a cross-section of the 3D device. The choice of symmetry (planar vs cylindrical/axisymmetric) changes the physics:
+### P29 — Stale `.pyc` files
 
-1. **Planar 2D (Cartesian).** The 2D cross-section is extruded to infinity in the z-direction. Current has units of A/cm (per unit depth). This is appropriate for wide strip-like detectors but WRONG for square SVs (100x100 um). A square SV has edge effects on all four sides; planar 2D only captures two.
-
-2. **Cylindrical 2D (axisymmetric).** The 2D cross-section is revolved around the r=0 axis. This gives a circular SV, not a square one. For a 100x100 um square SV, the equivalent circular SV has radius ~56.4 um (same area). The edge effects are different because a circle has uniform curvature while a square has corners with enhanced field crowding.
-
-3. **Neither is exactly right.** A 100x100x10 um rectangular parallelepiped SV requires either full 3D simulation (out of scope) or careful interpretation of 2D results with correction factors.
-
-**Why it happens:** Devsim supports both Cartesian and cylindrical 2D coordinates. Choosing the wrong one, or not accounting for the difference, produces wrong area/volume calculations.
-
-**Prevention:**
-
-- Use cylindrical (axisymmetric) 2D for the microdosimeter SV, as it captures radial edge effects and is closer to the real device behavior.
-- Use devsim's `cylindrical_node_volume()` and `cylindrical_edge_couple()` for correct integration in cylindrical coordinates.
-- Set `raxis_variable` and `raxis_zero` correctly when creating the cylindrical coordinate models.
-- Document the mapping: "TCAD simulates a circular SV of radius R; the physical SV is square with side L = R\*sqrt(pi)."
-- Run both Cartesian and cylindrical 2D for comparison. The CCE difference quantifies the symmetry uncertainty.
-
-**Detection:** If the total current from a 2D simulation does not scale correctly with device area when compared to 1D, the symmetry assumption is wrong.
-
-**Phase mapping:** Phase 1-2 (2D mesh and transport). Decide early and document.
+The git status shows many `__pycache__/*.pyc` as modified. If physics modules are restructured, stale `.pyc` can shadow new sources on `python -m` invocations across environments. Add `__pycache__/` to a CI clean step, and document `find . -name "__pycache__" -exec rm -rf {} +` in the v4.0 onboarding.
 
 ---
 
-### Pitfall 8: Transient Solver Timestep Too Large for Ion Track Dynamics
+## Integration Risk Map (cross-cutting, 20 existing notebooks)
 
-**What goes wrong:** The existing BDF1 transient solver uses adaptive time-stepping tuned for FLASH pulse dynamics (t_rise ~ 1 us, t_duration ~ 1 ms). Single-particle events have fundamentally different timescales:
-
-1. **Charge generation is quasi-instantaneous.** The ion traverses 10 um in ~0.3 ps. The charge must be injected into the simulation as an initial condition (t=0 excess carriers), not ramped up over the first timestep.
-
-2. **Early drift phase (0-100 ps).** Carriers in the high-field depletion region drift at saturation velocity (~2e7 cm/s in SiC). The drift transit time across a 10 um depletion region is ~50 ps. The timestep must be ~1-5 ps to resolve this.
-
-3. **Diffusion and collection phase (100 ps - 10 ns).** Carriers outside the depletion region diffuse toward the junction. The diffusion time scale is L^2/(2D) where D ~ 5 cm^2/s for electrons in SiC, giving ~10 ns for L ~ 10 um.
-
-4. **Plasma column collapse (~1-100 ps for heavy ions).** High-LET ions create a dense plasma column that shields the external electric field (funneling effect). The ambipolar diffusion of the plasma column occurs on ps timescales and requires very fine time resolution.
-
-5. **BDF1 numerical diffusion.** BDF1 is first-order accurate in time. For sharp transients (step-function charge injection), BDF1 introduces numerical diffusion that smears the current pulse. The peak current is underestimated, and the pulse is broadened. BDF2 would be more accurate but the existing codebase chose BDF1 for unconditional stability at FLASH timescales.
-
-**Why it happens:** The adaptive time-stepping in `transient.py` is tuned for ms-scale FLASH pulses, not ps-scale ion events.
-
-**Prevention:**
-
-- Create a new adaptive timestep schedule for single-particle events: dt_initial ~ 0.1 ps, growing geometrically with factor 1.5-2x until dt ~ 1 ns.
-- Inject the initial carrier distribution as an excess concentration profile at t=0 (modify Electrons and Holes node values directly), not as a time-dependent generation rate.
-- Total simulation time: ~50-100 ns (enough for full charge collection in SiC at operating bias).
-- Validate by checking charge conservation: integral(I(t) dt) = CCE \* Q_generated.
-- Consider BDF2 for single-particle simulations where accuracy matters more than robustness (no sharp pulse edges to destabilize BDF2).
-
-**Detection:** If the current pulse has a rise time > 100 ps for a proton event, the time resolution is insufficient. If integral(I(t)) != expected collected charge within 1%, charge is being lost to numerical error.
-
-**Phase mapping:** Phase 3 (single-particle transients).
-
----
-
-### Pitfall 9: Mesa/Guard Ring Structure Mesh Singularities
-
-**What goes wrong:** Alternative structures (mesa-etched SV, guard rings) introduce geometric features that are challenging to mesh:
-
-1. **Sharp corners at mesa edges.** A mesa-etched SV has 90-degree corners where the etched sidewall meets the top surface. The electric field diverges at these corners (field crowding), requiring extremely fine mesh (~1-5 nm) at the corners. This creates orders-of-magnitude variation in element size within a single mesh.
-
-2. **Thin layers at mesa sidewall.** If the mesa sidewall has a passivation layer or surface charge, this requires an interface condition. Devsim interface models require nodes on both sides of the interface, which constrains the mesh topology.
-
-3. **Guard ring geometry.** A guard ring is a concentric p+ region around the SV. In 2D axisymmetric, this requires multiple regions with interfaces. Each interface requires conformal mesh (shared nodes) on the boundary.
-
-4. **Re-entrant corners.** Where the guard ring trench meets the substrate, there are re-entrant corners that can trap the mesher in infinite refinement loops.
-
-**Why it happens:** Semiconductor device geometries have features spanning 4+ orders of magnitude (nm passivation to 100 um SV width). General-purpose meshers struggle with this.
-
-**Prevention:**
-
-- Start with the simplest geometry (planar, no mesa) and add complexity incrementally.
-- Use Gmsh's `Field` mechanism for structured refinement near corners and interfaces.
-- Limit corner refinement to dx_min ~ 5-10 nm. Accept that the field at the mathematical corner is not resolved exactly -- it does not need to be for CCE computation.
-- Validate mesa structure by checking that the total enclosed charge (integral of rho over the SV volume) matches the expected value from doping.
-- Keep guard ring modeling as the last alternative structure, after mesa and 3D electrode cross-sections.
-
-**Detection:** Mesh generation takes > 60 seconds or produces > 200k elements for a single SV. Element quality histogram shows many elements with quality < 0.1.
-
-**Phase mapping:** Phase 6 (alternative structures). Do not attempt before basic 2D is validated.
-
----
-
-### Pitfall 10: Devsim Newton Solver Convergence Failure in 2D High-Injection
-
-**What goes wrong:** The Newton-Raphson solver in devsim may fail to converge for 2D single-particle simulations because:
-
-1. **Carrier concentration spans 20+ orders of magnitude.** In a 2D SiC device under bias, the carrier concentration ranges from n_i ~ 5e-9 cm^-3 (intrinsic, far from contacts) to > 10^18 cm^-3 (in the track core during deposition). The Jacobian matrix becomes extremely ill-conditioned.
-
-2. **Clamped exponentials interact with 2D mesh.** The existing `_EXP_CLAMP = 700` in `poisson.py` was validated for 1D. In 2D, the potential can vary more rapidly (e.g., at mesa corners), and the clamp may activate in regions where it should not, introducing discontinuities in the Jacobian.
-
-3. **2D matrix is much larger.** A 1D mesh has ~500-1000 nodes; a 2D mesh has 5000-60000 nodes. The linear system is 3-5 orders of magnitude larger (3 unknowns per node: Potential, Electrons, Holes). Direct solvers may run out of memory; iterative solvers may fail to converge.
-
-4. **Contact boundary condition stiffness.** In 2D, the contact boundary spans many nodes. If the mesh near the contact is non-uniform, the assembled contact equation has varying diagonal dominance, causing convergence issues.
-
-**Why it happens:** 2D semiconductor simulation is inherently harder than 1D due to the larger problem size, more complex geometry, and multi-dimensional carrier gradients.
-
-**Prevention:**
-
-- Use devsim's built-in `MUMPS` direct solver for meshes up to ~30k nodes. Switch to iterative (GMRES with ILU preconditioner) only if memory is insufficient.
-- Start with Poisson-only solve to get equilibrium potential, then enable DD (exactly as in 1D, but verify it works in 2D).
-- Use voltage ramping with small steps (dV = 0.1 V) for reverse bias, as in the existing 1D code.
-- For transient simulations, use smaller dt when convergence fails (automatic dt reduction already exists in the transient solver).
-- Monitor the Newton iteration count. If > 20 iterations, the Jacobian is likely ill-conditioned -- reduce dt or check mesh quality.
-
-**Detection:** `devsim.solve()` raises an exception or prints "convergence failure." Newton iteration count > 30 for a single timestep.
-
-**Phase mapping:** Phase 1-2 (2D electrostatics and transport). Will recur in Phase 3 (transient).
-
----
-
-## Minor Pitfalls
-
-### Pitfall 11: Event-by-Event Simulation Wall Time Explosion
-
-**What goes wrong:** A microdosimetric spectrum requires hundreds of events. Each event is a 2D transient simulation with ~100-1000 timesteps on a mesh of ~10k-50k nodes. A single event may take 30-300 seconds. 1000 events = 8-80 hours.
-
-**Prevention:**
-
-- Profile early: run 10 events and extrapolate total time.
-- Use the coarsest mesh that reproduces 1D CCE within 2%.
-- Parallelize: events are independent, so use Python multiprocessing.
-- Consider a lookup table approach: simulate CCE as a function of ion impact position (r, z), then use the lookup table to process MC events without running TCAD for each one.
-- For the feasibility study, 100-300 events may be sufficient if binning is coarse (20 bins/decade instead of 50).
-
-**Phase mapping:** Phase 5 (microdosimetric spectra). Design the lookup table approach in Phase 3.
-
----
-
-### Pitfall 12: Devsim Device Name Collision in Batch Simulations
-
-**What goes wrong:** The existing codebase uses `device_name="sic_diode"` as a default. Devsim is a global-state simulator: device names are global. If you create multiple devices (e.g., for parameter sweeps or event-by-event simulation) without unique names, later devices silently overwrite earlier ones.
-
-**Prevention:**
-
-- The existing code already uses `uuid` for unique names in some places (visible in `charge_collection.py`). Ensure ALL 2D device creation uses unique names.
-- Use `devsim.delete_device()` after each event simulation to free memory.
-- The v2.0 "fluence-as-temperature" pattern (fresh device per fluence point) is the correct approach; extend it to "fresh device per event."
-
-**Phase mapping:** Phase 3-5 (any batch simulation).
-
----
-
-### Pitfall 13: Forgetting the Third Dimension in 2D Current Extraction
-
-**What goes wrong:** In a 2D Cartesian simulation, `extract_contact_current()` returns current per unit depth (A/cm). To get total current for a square SV (100x100 um), you must multiply by the SV width (100 um = 0.01 cm). In a 2D cylindrical simulation, the current is already integrated over the azimuthal angle (2*pi), giving total current in A. Mixing up these conventions gives wrong CCE by a factor of (device_width) or (2*pi).
-
-**Prevention:**
-
-- Document the current convention in every function that extracts current.
-- Create a wrapper function `extract_total_current_2d(device_info, symmetry="cylindrical")` that handles the conversion.
-- Validate: for a known LET, the total collected charge should match LET _ thickness / E_pair _ q \* CCE.
-
-**Phase mapping:** Phase 2 (2D transport and CCE). Validate before proceeding.
-
----
-
-### Pitfall 14: Pre-binned LET Spectra Lose Event-by-Event Correlation
-
-**What goes wrong:** The MC coupling interface accepts two formats: (a) event-by-event phase-space files and (b) pre-binned LET spectra. Format (b) is simpler but loses the correlation between energy deposition and ion impact position. For microdosimetry, the position matters because edge events have different CCE than center events. Using pre-binned LET spectra with a single average CCE systematically underestimates the spectral width.
-
-**Prevention:**
-
-- Use event-by-event format whenever possible.
-- If using pre-binned LET spectra, convolve with a position-dependent CCE function (from the lookup table in Pitfall 11).
-- Document the limitation: "Pre-binned LET spectra assume position-independent CCE, which overestimates spectral resolution."
-
-**Phase mapping:** Phase 4-5 (MC coupling and spectra computation).
+| Notebook range                  | Risk from v4.0                                              | Mitigation                                                 |
+| ------------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------- |
+| 01–08 (1D)                      | None expected — 1D pipeline unchanged                       | Smoke-run all eight at start and end of each v4.0 phase    |
+| 09–14 (rad damage)              | Validation baseline shifts if SRH params change             | Freeze validation baselines; run rad-damage notebooks last |
+| 15–17 (2D, single particle, MC) | Cylindrical-axis leakage (P03), device-name collision (P20) | Extend `reset_devsim()`; UUID device names                 |
+| 18 (microdosim)                 | κ change (P10–P12) shifts y_D; intentional but must rerun   | Re-snap reference y_D values once, document in CHANGELOG   |
+| 19 (alt structures)             | 3D-electrode now an axisymmetric special case of 3D         | Keep axisymmetric path; do **not** auto-replace with 3D    |
+| 20 (feasibility)                | Noise floor changes by up to 50× depending on α             | Use sensitivity band, not single number                    |
 
 ---
 
 ## Phase-Specific Warnings
 
-| Phase Topic                         | Likely Pitfall                                                             | Mitigation                                                         |
-| ----------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| Phase 1: 2D mesh + electrostatics   | Mesh quality (P2), symmetry choice (P7), 1D assumptions (P1)               | Validate 2D vs 1D for wide device first                            |
-| Phase 2: 2D transport + CCE         | Current extraction units (P13), convergence (P10), edge effects (P7)       | Compare CCE_2D to CCE_1D for center-incident ion                   |
-| Phase 3: Single-particle transients | Generation rate confusion (P3), timestep (P8), device name collision (P12) | Validate total collected charge against LET prediction             |
-| Phase 4: MC coupling                | Coordinate/units mismatch (P6), event format (P14)                         | Test with monoenergetic proton, check energy conservation          |
-| Phase 5: Microdosimetric spectra    | Spectrum errors (P4), tissue equivalence (P5), statistics (P11)            | Validate y_F < y_D, check normalization, compare to published data |
-| Phase 6: Alternative structures     | Mesa mesh singularities (P9), convergence in complex geometries (P10)      | Start simple, add complexity incrementally                         |
+| Phase                    | Highest-severity pitfall to address first | Required artifact                                                                                           |
+| ------------------------ | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Graded doping (2D)       | P27                                       | Per-node doping helper in `src/device2d.py`; comparison plot vs uniform                                     |
+| ROOT/Geant4 integration  | P06, P07, P09                             | Branch-mapping layer, iterate-based loader, unit normalization, golden fixture                              |
+| Kappa from PSTAR+SRIM    | P10, P12                                  | Unit-tested parsers; log-log interpolation; sanity-check κ(E) plot                                          |
+| Noise analysis           | P13, P14, P15                             | α-sensitivity band; unified shot/1f model with double-counting test; ENC↔NEE conversion API                 |
+| Build-up over-response   | P26                                       | Decoupled dead-layer model with explicit calibration parameter                                              |
+| Azimuthal response       | P25                                       | Explicit angle-definition document; 2D approx vs 3D check                                                   |
+| Anisotropic mobility     | P17, P18, P19                             | Custom edge model; c-axis-direction parameter; isotropic-limit test                                         |
+| Full 3D simulation       | P01, P02, P04, P05, P30                   | MSH2 enforcement; graded mesh; physical-group assertions; tet-only validator; default-volume model reset    |
+| Integration / regression | P03, P20, P22, P24                        | Extended `reset_devsim()` for all globals; UUID device names; pinned devsim version; baseline freeze policy |
+
+---
+
+## Recommended phase ordering (pitfall-driven)
+
+1. **Graded doping** — small, contained, addresses known v3.0 bug; low integration risk. (P27)
+2. **PSTAR+SRIM κ** — independent of devsim; addresses known v3.0 bug (flat κ). (P10–P12)
+3. **ROOT/Geant4** — independent of devsim; can be done in parallel with #2. (P06–P09, P23)
+4. **Noise analysis** — uses v3.0 dark current; adds on top. (P13–P16)
+5. **Build-up over-response** — uses 2D infra already in place. (P26)
+6. **Anisotropic mobility (2D)** — first physics that changes devsim assembly; needs custom edge model. (P17–P19, P28)
+7. **Azimuthal sweep** — 2D parametric run, no new infra. (P25)
+8. **3D mesh + solve** — most invasive; needs all global-state mitigations in place. (P01–P05, P30)
+9. **Integration & re-baselining** — across all 20 notebooks. (P03, P20, P22, P24)
+
+This ordering puts low-risk wins first, defers the highest-risk (3D) to the end when all the integration mitigations (`reset_devsim` extension, UUID names, version pin) are already in place.
 
 ---
 
 ## Sources
 
-- [DEVSIM Manual -- Meshing](https://devsim.net/meshing.html) -- Gmsh format requirements, element type restrictions, contact boundary requirements (HIGH confidence)
-- [DEVSIM Manual -- Equations and Models](https://devsim.net/models.html) -- Cylindrical coordinate support, edge/element models, contact assembly (HIGH confidence)
-- [DEVSIM JOSS Paper](https://www.theoj.org/joss-papers/joss.03898/10.21105.joss.03898.pdf) -- Finite volume method, mesh requirements (HIGH confidence)
-- [Parisi et al. 2023 -- Microdosimetric distribution methodology](https://doi.org/10.1002/acm2.14049) -- Binning methods, spectral computation (MEDIUM confidence)
-- [PMC 9826416 -- Measurement uncertainty of microdosimetric quantities](https://pmc.ncbi.nlm.nih.gov/articles/PMC9826416/) -- Uncertainty sources, stopping power errors (MEDIUM confidence)
-- [Correction factors Si to tissue in 12C therapy](https://pubmed.ncbi.nlm.nih.gov/28151733/) -- kappa factor for silicon, geometric scaling (MEDIUM confidence)
-- [Tissue equivalence correction in Si microdosimetry for protons](https://www.researchgate.net/publication/224362522_Tissue_Equivalence_Correction_in_Silicon_Microdosimetry_for_Protons_Characteristic_of_the_LEO_Space_Environment) -- kappa = 0.57 for Si/muscle (MEDIUM confidence)
-- [IntechOpen -- Charge Collection Physical Modeling for SET](https://www.intechopen.com/chapters/51855) -- Single-event transient TCAD methodology, ion track models (MEDIUM confidence)
-- [Multi-scale modeling of single-event effects (Autran & Munteanu 2023)](https://amu.hal.science/hal-04333942/file/TNS_Review_TCAD_2023.pdf) -- Ion track structure, plasma column dynamics, TCAD convergence (MEDIUM confidence)
-- [GDSFactory DEVSIM plugin](https://gdsfactory.github.io/gplugins/notebooks/devsim_01_pin_waveguide.html) -- Gmsh-to-devsim 2D workflow example (MEDIUM confidence)
-- Project codebase analysis: `device.py`, `poisson.py`, `drift_diffusion.py`, `transient.py`, `charge_collection.py`, `generation_profiles.py` (HIGH confidence for 1D assumptions identification)
+- [devsim Meshing chapter](https://devsim.net/meshing.html)
+- [devsim forum — Opening MSH files](https://forum.devsim.org/t/opening-msh-files/92)
+- [devsim forum — custom_equation usage](https://forum.devsim.org/t/how-to-use-the-function-custom-equation/69)
+- [DEVSIM: A TCAD Semiconductor Device Simulator (JOSS)](https://www.theoj.org/joss-papers/joss.03898/10.21105.joss.03898.pdf)
+- [Gmsh Reference Manual](https://gmsh.info/dev/doc/texinfo/gmsh.pdf)
+- [uproot TTree documentation](https://uproot.readthedocs.io/en/stable/uproot.behaviors.TTree.TTree.html)
+- [uproot discussion — TTree performance](https://github.com/scikit-hep/uproot5/discussions/1106)
+- [NIST PSTAR database — units and description](https://physics.nist.gov/PhysRefData/Star/Text/PSTAR.html)
+- [NIST PSTAR/ASTAR program description](https://physics.nist.gov/PhysRefData/Star/Text/programs.html)
+- [SRIM Stopping and Range](http://www.srim.org/SRIM-Module.htm)
+- [1/f noise in forward biased high voltage 4H-SiC Schottky diodes (Sciencedirect)](https://www.sciencedirect.com/science/article/abs/pii/S0038110114000458)
+- [4H-SiC MOSFETs with Si-like low-frequency noise characteristics](https://www.researchgate.net/publication/231042858_4H-SiC_MOSFETs_with_Si-like_low-frequency_noise_characteristics)
+- [Anisotropic drift diffusion model for 4H-, 6H-SiC devices simulation](https://ieeexplore.ieee.org/document/5378258)
+- [Extended Anisotropic Mobility Model for 4H/6H-SiC Devices (TU Wien)](https://in4.iue.tuwien.ac.at/pdfs/sispad1997/00621364.pdf)
+- [A New Anisotropic Driving Force Model for SiC Device Simulations](https://www.techrxiv.org/doi/full/10.36227/techrxiv.24319273.v1)
+- [edep-sim ROOT output (example Geant4-based application)](https://github.com/ClarkMcGrew/edep-sim)
+- Project memory: `project_kappa_flat.md` (stopping-power data produces unrealistic flat κ).
+- Project memory: `project_doping_profile.md` (uniform N_D fails at reverse bias; need graded epi).
+
+---
+
+## Confidence Assessment
+
+| Area                                          | Confidence  | Notes                                                                                 |
+| --------------------------------------------- | ----------- | ------------------------------------------------------------------------------------- |
+| devsim 3D/gmsh mechanics                      | HIGH        | Official devsim docs + forum threads + gmsh manual all consistent                     |
+| devsim global-state interactions              | HIGH        | Direct evidence from existing v3.0 mitigations in this milestone                      |
+| uproot lazy/iterate API                       | HIGH        | uproot official docs                                                                  |
+| Geant4 ROOT schema (lack of)                  | MEDIUM      | Multiple G4 examples confirm divergence; no official standard exists                  |
+| PSTAR/SRIM unit conventions                   | HIGH        | NIST + SRIM docs explicit                                                             |
+| κ flat-line issue                             | HIGH        | Direct project memory evidence                                                        |
+| Hooge α range for 4H-SiC                      | MEDIUM-HIGH | Multiple SiC noise measurement papers cited                                           |
+| ENC vs NEE distinction                        | HIGH        | Standard detector-physics textbooks                                                   |
+| Anisotropic mobility implementation in devsim | MEDIUM      | Multiple papers describe formulation; specific devsim recipe inferred, not documented |
+| Anisotropic c-axis labeling conv.             | MEDIUM      | Literature uses inconsistent conventions; we recommend a project-internal convention  |
+| Integration risk to 20 notebooks              | HIGH        | Direct file/code inspection of v3.0 codebase                                          |
+
+---
+
+## Open Questions for Phase Planning
+
+- Will the Petringa group provide a real Geant4 ROOT file before the ROOT-integration phase ships, or must the phase deliver against the synthetic fixture only? (Affects whether P07/P09 can be empirically validated.)
+- Is full 3D actually required for the v4.0 paper, or does cylindrical-axisymmetric 2D cover the science? (3D phase has the highest risk-to-reward; cutting it would simplify v4.0 substantially.)
+- What experimental noise data is available to pin Hooge α? (Without this, the noise notebook is necessarily a sensitivity study, not a calibrated prediction.)
+- What baseline policy: freeze v3.0 regression values or rebaseline at v4.0? (Affects notebook 14 design.)
