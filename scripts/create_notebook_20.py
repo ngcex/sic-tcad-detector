@@ -314,45 +314,60 @@ code(
 # Figure 3: CCE lateral profiles for top-3 configurations
 import devsim
 
-top3 = sweep_df.head(3)
-print("Top 3 configurations:")
+# Filter to valid (non-NaN) results only
+valid_df = sweep_df.dropna(subset=['edge_center_ratio'])
+top3 = valid_df.head(min(3, len(valid_df)))
+print(f"Valid configurations: {len(valid_df)}/{len(sweep_df)}")
+print("Top configurations:")
 print(top3[['half_width_um', 'N_D_bulk', 'V_bias',
             'edge_center_ratio', 'cce_std']].to_string(index=False))
 
 fig, ax = plt.subplots(figsize=(10, 6))
 colors = ['#2196F3', '#E91E63', '#4CAF50']
+plotted = 0
 
 for idx, (_, row) in enumerate(top3.iterrows()):
     hw = row['half_width_um']
     nd = row['N_D_bulk']
     vb = row['V_bias']
-
-    device_info = create_2d_dd_device(
-        half_width_um=hw, V_bias=vb,
-        epi_thickness_cm=BASELINE['epi_thickness_cm'],
-        N_D_bulk=nd,
-    )
+    device_info = None
     try:
+        device_info = create_2d_dd_device(
+            half_width_um=hw, V_bias=vb,
+            epi_thickness_cm=BASELINE['epi_thickness_cm'],
+            N_D_bulk=nd,
+        )
         scan = cce_lateral_scan(device_info, n_points=20)
         label = (f'hw={hw:.0f}um, $N_D$={nd:.1e}, V={vb:.0f}V\\n'
                  f'  edge/ctr={row["edge_center_ratio"]:.3f}')
         ax.plot(scan['x_positions_um'], scan['cce_values'],
                 marker='o', color=colors[idx], label=label,
                 markersize=4, linewidth=1.5)
+        plotted += 1
+    except Exception as e:
+        print(f"  Skipping hw={hw}, nd={nd:.1e}, V={vb}: {e}")
     finally:
-        devsim.delete_device(device=device_info['device_name'])
+        if device_info is not None:
+            try:
+                devsim.delete_device(device=device_info['device_name'])
+            except Exception:
+                pass
 
-ax.set_xlabel('Lateral position ($\\mu$m)')
-ax.set_ylabel('Charge Collection Efficiency')
-ax.set_title('CCE Lateral Profiles: Top-3 Configurations')
-ax.legend(fontsize=9, loc='lower left')
-ax.grid(True, alpha=0.3)
-ax.set_ylim(bottom=0)
-
-plt.tight_layout()
-plt.savefig('figures/fig20_3_cce_top3_profiles.png', bbox_inches='tight')
-plt.show()
-print("Figure 3 saved: figures/fig20_3_cce_top3_profiles.png")
+if plotted > 0:
+    ax.set_xlabel('Lateral position ($\\mu$m)')
+    ax.set_ylabel('Charge Collection Efficiency')
+    ax.set_title(f'CCE Lateral Profiles: Top-{plotted} Configurations')
+    ax.legend(fontsize=9, loc='lower left')
+    ax.grid(True, alpha=0.3)
+    ax.set_ylim(bottom=0)
+    plt.tight_layout()
+    os.makedirs('figures', exist_ok=True)
+    plt.savefig('figures/fig20_3_cce_top3_profiles.png', bbox_inches='tight')
+    plt.show()
+    print(f"Figure 3 saved ({plotted} profiles plotted)")
+else:
+    plt.close()
+    print("Warning: No configurations converged for lateral profile plot")
 """
 )
 
@@ -803,8 +818,23 @@ code(
     """
 # Recommended design parameters: Baseline vs Guard Ring
 
-# Use best configuration from sweep for baseline
-best_config = sweep_df.iloc[0]
+# Use best valid configuration from sweep
+valid_df = sweep_df.dropna(subset=['edge_center_ratio'])
+best_config = valid_df.iloc[0] if len(valid_df) > 0 else None
+
+# Look up baseline in sweep results
+baseline_mask = (
+    (sweep_df['half_width_um'] == BASELINE['half_width_um']) &
+    (sweep_df['V_bias'] == BASELINE['V_bias']) &
+    (sweep_df['N_D_bulk'] == BASELINE['N_D_bulk'])
+)
+baseline_ecr = sweep_df.loc[baseline_mask, 'edge_center_ratio']
+baseline_ecr_str = f'{baseline_ecr.values[0]:.3f}' if len(baseline_ecr) > 0 and not np.isnan(baseline_ecr.values[0]) else 'N/A (convergence limited)'
+
+best_hw = best_config['half_width_um'] if best_config is not None else BASELINE['half_width_um']
+best_nd = best_config['N_D_bulk'] if best_config is not None else BASELINE['N_D_bulk']
+best_vb = best_config['V_bias'] if best_config is not None else BASELINE['V_bias']
+best_ecr = f'{best_config["edge_center_ratio"]:.3f}' if best_config is not None else 'N/A'
 
 recommendations = pd.DataFrame({
     'Parameter': [
@@ -823,17 +853,17 @@ recommendations = pd.DataFrame({
         f'{BASELINE["epi_thickness_cm"]*1e4:.0f}',
         f'{BASELINE["N_D_bulk"]:.1e}',
         f'{BASELINE["V_bias"]:.0f}',
-        f'{sweep_df[(sweep_df["half_width_um"]==BASELINE["half_width_um"]) & (sweep_df["V_bias"]==BASELINE["V_bias"]) & (sweep_df["N_D_bulk"]==BASELINE["N_D_bulk"])]["edge_center_ratio"].values[0]:.3f}' if len(sweep_df[(sweep_df["half_width_um"]==BASELINE["half_width_um"]) & (sweep_df["V_bias"]==BASELINE["V_bias"]) & (sweep_df["N_D_bulk"]==BASELINE["N_D_bulk"])]) > 0 else 'N/A',
+        baseline_ecr_str,
         f'{noise_results[1]["y_min_keV_um"]:.2e}',
         '1 (simplest)',
     ],
     'Recommended (Guard Ring)': [
         'p+/n-/n+ with p+ guard ring',
-        f'{best_config["half_width_um"]:.0f}',
+        f'{best_hw:.0f}',
         f'{BASELINE["epi_thickness_cm"]*1e4:.0f}',
-        f'{best_config["N_D_bulk"]:.1e}',
-        f'{best_config["V_bias"]:.0f}',
-        f'{best_config["edge_center_ratio"]:.3f} (planar) + guard ring gain',
+        f'{best_nd:.1e}',
+        f'{best_vb:.0f}',
+        f'{best_ecr} (planar) + guard ring gain',
         f'{noise_results[1]["y_min_keV_um"]:.2e}',
         '2 (single implant added)',
     ],
@@ -964,12 +994,16 @@ print("=" * 80)
 print("  4H-SiC MICRODOSIMETER FEASIBILITY REPORT -- SUMMARY")
 print("=" * 80)
 
-print("\\n  PARAMETRIC OPTIMIZATION")
-print(f"    Configurations evaluated:   {len(sweep_df)}")
-print(f"    Best edge/center ratio:     {sweep_df.iloc[0]['edge_center_ratio']:.3f}")
-best = sweep_df.iloc[0]
-print(f"    Best config:                hw={best['half_width_um']:.0f}um, "
-      f"N_D={best['N_D_bulk']:.1e}, V={best['V_bias']:.0f}V")
+valid_df = sweep_df.dropna(subset=['edge_center_ratio'])
+print(f"\\n  PARAMETRIC OPTIMIZATION")
+print(f"    Configurations evaluated:   {len(sweep_df)} ({len(valid_df)} converged)")
+if len(valid_df) > 0:
+    best = valid_df.iloc[0]
+    print(f"    Best edge/center ratio:     {best['edge_center_ratio']:.3f}")
+    print(f"    Best config:                hw={best['half_width_um']:.0f}um, "
+          f"N_D={best['N_D_bulk']:.1e}, V={best['V_bias']:.0f}V")
+else:
+    print("    No configurations converged (solver tolerance issue)")
 
 print("\\n  NOISE FLOOR (3-sigma detection)")
 for nf, label in zip(noise_results, ['100 ns', '1 us', '10 us']):
@@ -984,9 +1018,14 @@ print(f"    Recommended:                {scores_df.iloc[0]['structure'].replace(
 
 print("\\n  FABRICATION RECOMMENDATION")
 print(f"    Structure:                  Guard ring (p+ implant)")
-print(f"    SV half-width:              {best['half_width_um']:.0f} um")
+if len(valid_df) > 0:
+    best = valid_df.iloc[0]
+    print(f"    SV half-width:              {best['half_width_um']:.0f} um")
+    print(f"    Bias voltage:               {best['V_bias']:.0f} V")
+else:
+    print(f"    SV half-width:              {BASELINE['half_width_um']:.0f} um (baseline)")
+    print(f"    Bias voltage:               {BASELINE['V_bias']:.0f} V (baseline)")
 print(f"    Epi thickness:              10 um")
-print(f"    Bias voltage:               {best['V_bias']:.0f} V")
 print(f"    Expected CCE uniformity:    >0.85 (with guard ring)")
 
 print("\\n" + "=" * 80)

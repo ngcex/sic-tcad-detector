@@ -93,6 +93,16 @@ def microdosimetric_sweep(
         grid = grid[:max_configs]
         total = len(grid)
 
+    # Save solver settings before sweep — reset_devsim() clears them
+    try:
+        _saved_solver = devsim.get_parameter(name="direct_solver")
+    except Exception:
+        _saved_solver = "custom"
+    try:
+        _saved_callback = devsim.get_parameter(name="solver_callback")
+    except Exception:
+        _saved_callback = None
+
     records = []
     for i, (hw, epi, nd, vb) in enumerate(grid):
         logger.info(f"Sweep {i + 1}/{total}: hw={hw}, epi={epi}, nd={nd:.1e}, vb={vb}")
@@ -135,6 +145,17 @@ def microdosimetric_sweep(
                     "cce_std": np.nan,
                 }
             )
+            # Reset devsim global state after failure to prevent
+            # contamination of subsequent configurations (a failed
+            # ramp_bias can leave solver state that causes all later
+            # equilibrium solves to diverge).
+            try:
+                devsim.reset_devsim()
+                devsim.set_parameter(name="direct_solver", value=_saved_solver)
+                if _saved_callback is not None:
+                    devsim.set_parameter(name="solver_callback", value=_saved_callback)
+            except Exception:
+                pass
         finally:
             if device_info is not None:
                 try:
