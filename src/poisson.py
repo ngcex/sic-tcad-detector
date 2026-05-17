@@ -122,6 +122,10 @@ def setup_poisson(device_info):
 def solve_equilibrium(device_info):
     """Solve the Poisson equation at 0V (thermal equilibrium).
 
+    Uses a three-stage fallback: tight → relaxed → aggressive tolerances.
+    The aggressive stage is needed for 2D meshes in parametric sweeps where
+    prior device state may affect convergence.
+
     Parameters
     ----------
     device_info : dict
@@ -149,8 +153,17 @@ def solve_equilibrium(device_info):
                 maximum_iterations=100,
             )
             logger.info("Equilibrium solve converged (relaxed)")
-        except devsim.error as e:
-            raise RuntimeError(f"Equilibrium solve failed to converge: {e}") from e
+        except devsim.error:
+            try:
+                devsim.solve(
+                    type="dc",
+                    absolute_error=1e14,
+                    relative_error=1e-6,
+                    maximum_iterations=200,
+                )
+                logger.info("Equilibrium solve converged (aggressive)")
+            except devsim.error as e:
+                raise RuntimeError(f"Equilibrium solve failed to converge: {e}") from e
 
 
 def ramp_voltage(
