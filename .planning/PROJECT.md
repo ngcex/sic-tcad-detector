@@ -1,18 +1,19 @@
 # SiC TCAD Simulator — Petringa Group
 
-## Current Milestone: v3.0 SiC Microdosimeter Design Study
+## Current Milestone: v4.0 Scientific Validation & Extended Physics
 
-**Goal:** Feasibility study and TCAD-based design of a novel 4H-SiC microdosimeter (100x100x10 um and 300x300x10 um sensitive volumes) for clinical proton/ion microdosimetry — including 2D simulation, Geant4/FLUKA coupling, alternative structure exploration, and parametric optimization with fabrication recommendations.
+**Goal:** Portare i risultati di v3.0 a livello paper-ready e aggiungere le capacità fisiche mancanti — doping 2D corretto, ROOT/Geant4 integration testata, kappa calibrato, noise analysis, build-up over-response, risposta azimutale, mobilità anisotropa e simulazione 3D — per un toolkit completo usabile dal gruppo INFN-LNS.
 
 **Target features:**
 
-- 2D devsim mesh generation and electrostatics (extend from 1D, validate against existing results)
-- 2D carrier transport with edge effects and CCE comparison to 1D
-- Single-particle transient charge collection (individual ion events, not beam average)
-- Monte Carlo coupling interface (import Geant4/FLUKA phase-space files or LET spectra for any ion species)
-- Microdosimetric spectra computation (lineal energy y-spectra, dose-mean y_D, tissue-equivalence correction)
-- Alternative structure exploration (mesa-etched SV, 3D electrodes, stacked delta-E/E)
-- Parametric optimization and publication-quality feasibility report
+- Graded epi doping profile in 2D (fix N_D uniforme che fallisce a reverse bias realistico)
+- ROOT/Geant4 integration reale con file sintetico Geant4-compatibile come test fixture
+- Kappa tissue-equivalence da tabelle PSTAR+SRIM tabulati (non scaling analitico)
+- Noise analysis completa (shot noise + rumore 1/f da trappole + soglia minima energia rilevabile)
+- Build-up over-response 2D (campo elettrico near-surface, zona di non raccolta, correzione)
+- Risposta azimutale (sweep angolare in 2D con approssimazione 3D)
+- Modello mobilità anisotropo (c-axis vs a-axis, tensore 2D in devsim)
+- Simulazione 3D completa per geometrie che richiedono mesh full-3D
 
 ## What This Is
 
@@ -60,27 +61,33 @@ Predict how charge collection efficiency (CCE) in the SiC detector degrades unde
 - ✓ Three-defect Burin model vs single-effective-defect comparison — v2.0
 - ✓ Validation against published 4H-SiC irradiation data (trend comparison) — v2.0
 - ✓ 14 publication-quality Jupyter notebooks — v2.0
+- ✓ 2D devsim mesh generation for micro-scale SV geometries (100x100x10 um, 300x300x10 um) — v3.0
+- ✓ 2D electrostatics validated against 1D for Petringa device — v3.0
+- ✓ 2D carrier transport with edge field effects — v3.0
+- ✓ 2D CCE comparison to 1D (quantify edge effects) — v3.0
+- ✓ Single-particle transient charge generation along ion track — v3.0
+- ✓ Induced current pulse and charge collection time — v3.0
+- ✓ MC coupling: import Geant4 phase-space files and pre-binned LET spectra (CSV mock) — v3.0
+- ✓ Event-by-event charge deposition simulation — v3.0
+- ✓ Lineal energy (y) spectrum computation from pulse heights — v3.0
+- ✓ Tissue-equivalence correction (kappa factor SiC -> tissue, analytic scaling) — v3.0
+- ✓ Dose-mean y_D and frequency-mean y_F computation — v3.0
+- ✓ Mesa-etched, 3D electrode, stacked delta-E/E, guard ring structure exploration — v3.0
+- ✓ Comparative CCE/noise/resolution analysis across structures — v3.0
+- ✓ Geometry x doping x bias parametric optimization for microdosimetric response — v3.0
+- ✓ Publication-quality feasibility report with fabrication recommendations — v3.0
+- ✓ 20 publication-quality Jupyter notebooks — v3.0
 
 ### Active
 
-- [ ] 2D devsim mesh generation for micro-scale SV geometries (100x100x10 um, 300x300x10 um)
-- [ ] 2D electrostatics validated against 1D for Petringa device
-- [ ] 2D carrier transport with edge field effects
-- [ ] 2D CCE comparison to 1D (quantify edge effects)
-- [ ] Single-particle transient charge generation along ion track
-- [ ] Induced current pulse and charge collection time
-- [ ] MC coupling: import Geant4 phase-space files and pre-binned LET spectra (any ion)
-- [ ] Event-by-event charge deposition simulation
-- [ ] Lineal energy (y) spectrum computation from pulse heights
-- [ ] Tissue-equivalence correction (kappa factor SiC -> tissue)
-- [ ] Dose-mean y_D and frequency-mean y_F computation
-- [ ] Mesa-etched sensitive volume structure in 2D
-- [ ] 3D electrode structure modeled as 2D cross-section
-- [ ] Stacked delta-E/E structure exploration
-- [ ] Comparative CCE/noise/resolution analysis across structures
-- [ ] Guard ring and edge termination modeling
-- [ ] Geometry x doping x bias parametric optimization for microdosimetric response
-- [ ] Publication-quality feasibility report with fabrication recommendations
+- [ ] Graded epi doping profile in 2D (fix N_D uniforme che fallisce a reverse bias realistico)
+- [ ] ROOT/Geant4 integration reale con file sintetico Geant4-compatibile come test fixture
+- [ ] Kappa tissue-equivalence da tabelle PSTAR+SRIM tabulati (non scaling analitico)
+- [ ] Noise analysis completa: shot noise + rumore 1/f da trappole + soglia minima energia rilevabile
+- [ ] Build-up over-response 2D: campo elettrico near-surface, zona non raccolta, correzione
+- [ ] Risposta azimutale: sweep angolare geometrie 2D con estensione a mesh 3D
+- [ ] Modello mobilità anisotropo: c-axis vs a-axis, tensore 2D in devsim
+- [ ] Simulazione 3D completa per geometrie che richiedono mesh full-3D (devsim 3D mesh)
 
 ### Deferred — v3.0 Microdosimeter Design Study
 
@@ -117,12 +124,12 @@ Predict how charge collection efficiency (CCE) in the SiC detector degrades unde
 - Alternative structure exploration (mesa, 3D, stacked)
 - Parametric optimization and feasibility report
 
-### Deferred — Other (v4+)
+### Deferred — Other (v5+)
 
-- Build-up over-response analysis (2D field distribution near surface)
-- Azimuthal response simulation (3D CCE vs angle)
-- Anisotropic mobility model (c-axis vs a-axis)
-- Noise analysis (shot noise, 1/f noise from traps)
+- Full 3D azimuthal sweep with beam divergence modeling
+- Anisotropic mobility in 3D geometry
+- Real Geant4 ROOT file integration (pending sample from INFN-LNS)
+- RBE calculation via MKM model from y-spectra
 
 ### Out of Scope
 
@@ -130,20 +137,20 @@ Predict how charge collection efficiency (CCE) in the SiC detector degrades unde
 - Commercial TCAD (Silvaco/Synopsys) — this project uses open-source tools only
 - Real-time clinical dosimetry software — this is a research simulation tool
 - GUI application — Jupyter notebooks sufficient for research group
-- Full 3D device simulation — 2D sufficient for planar/mesa structures; 3D electrode modeled as 2D cross-section
+- Full Monte Carlo particle transport runs inside this tool — importiamo risultati da Geant4/FLUKA esterni
 
 ## Context
 
-### Current State (v2.0 shipped)
+### Current State (v3.0 shipped)
 
-- ~15,400 LOC Python across `src/` package
-- Tech stack: Python 3, devsim, numpy/scipy/matplotlib, Jupyter notebooks
-- 14 validated Jupyter notebooks (material params, I-V/C-V, CCE, FLASH, parametric, T-dependence, dark current, transient, radiation damage overview, CCE vs fluence, dark current + C-V evolution, multi-defect comparison, parametric optimization, literature validation)
-- Complete radiation damage pipeline: defect introduction → lifetime degradation → CCE/dark current/C-V prediction → annealing recovery
-- Three-defect Burin model (Z1/2 + EH6/7 + EH4) with per-defect NIEL scaling across proton energies
+- ~20,000+ LOC Python across `src/` package (27 modules)
+- Tech stack: Python 3, devsim, gmsh, uproot, numpy/scipy/matplotlib, Jupyter notebooks
+- 20 validated Jupyter notebooks (v1.0–v3.0 pipeline)
+- Complete 2D simulation pipeline: mesh → electrostatics → transport → CCE → single-particle transient → MC coupling → microdosimetric spectra → optimization
+- Alternative structures: planar, mesa, 3D electrode, stacked delta-E/E, guard ring
+- Parametric optimization with noise floor estimation and multi-criteria scoring
+- Tech debt known: N_D uniforme fallisce a reverse bias in 2D; kappa da scaling analitico (non tabulato); ROOT mock-only
 - Phi_crit ~4.86e13 cm⁻² for Petringa device (full doping compensation threshold)
-- Uncertainty quantification via damage constant scatter (0.5x–2x envelope)
-- Validated against published Rafí 2024, Moscatelli 2016, and Brodar 2022 irradiation data (trend comparison)
 
 ### Device Parameters (from group papers)
 
@@ -219,4 +226,4 @@ The FLASH paper (Petringa 2025, Physica Medica 138) characterizes the dosimetric
 
 ---
 
-_Last updated: 2026-03-27 after v3.0 milestone start_
+_Last updated: 2026-05-17 after v4.0 milestone start_
