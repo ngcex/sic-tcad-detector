@@ -49,6 +49,46 @@ _Q_SI = 1.602e-19  # C (also J/eV)
 _K_B_EV = 8.617e-5  # eV/K
 
 
+def nt_temperature_scale(T, params=None):
+    """Temperature scaling factor for the effective generation rate N_t.
+
+    Audit C8 fix. The dominant dark-current term is depletion-region
+    generation, whose classical SRH form scales with the intrinsic carrier
+    concentration:
+
+        G_gen(T) ∝ n_i(T) ∝ exp(-E_g / 2kT)   (activation energy E_a = E_g/2)
+
+    We therefore make the effective rate temperature-dependent as
+
+        N_t_eff(T) = N_t * n_i(T) / n_i(300)
+
+    This is anchored so the factor is EXACTLY 1.0 at 300 K, preserving the
+    existing ~18 pA calibration at 300 K / -30 V by construction, while giving
+    the physically correct activation energy for T-dependent leakage. The n_i(T)
+    used is the project's calibrated intrinsic_concentration (anchored to
+    params.n_i_300), keeping it consistent with the n_i the rest of the device
+    model uses.
+
+    Parameters
+    ----------
+    T : float
+        Temperature (K).
+    params : SiC4H_Parameters, optional
+        Material parameters (defaults to SiC4H_Parameters()).
+
+    Returns
+    -------
+    float
+        Dimensionless scale factor, 1.0 at T=300 K.
+    """
+    from src.sic_material import SiC4H_Parameters, intrinsic_concentration
+
+    if params is None:
+        params = SiC4H_Parameters()
+    n_i_T = intrinsic_concentration(T, params)[0]
+    return n_i_T / params.n_i_300
+
+
 def setup_tat_model(device_info, E_t=None, m_t=None, N_t=None):
     """Add TAT-based dark current generation to drift-diffusion equations.
 
@@ -139,15 +179,15 @@ def setup_tat_model(device_info, E_t=None, m_t=None, N_t=None):
     # Built-in field at junction is ~70 kV/cm; use half as reference
     E_ref = 3.5e4  # V/cm
 
-    # AUDIT C8 (2026-06): G0_TAT = N_t is TEMPERATURE-INDEPENDENT. Because this
-    # term dominates the dark current, the model has the WRONG activation energy
-    # for Z1/2-limited SiC leakage -- it will not reproduce J_dark(T). Any
-    # temperature-coefficient result built on this is invalid (see also C7: the
-    # temperature_sweep device uses midgap-SRH-only and omits this term entirely).
-    # Fix requires G0_TAT(T) ~ exp(-E_a/kT) tied to the Z1/2 level, then
-    # re-calibration of the prefactor. Not done here (needs recalibration).
-    # Store G0_TAT = N_t as generation rate parameter
-    devsim.set_parameter(device=device, region=region, name="G0_TAT", value=N_t)
+    # AUDIT C8 fix: make the effective generation rate temperature-dependent.
+    # Classical depletion-region generation scales as G ∝ n_i(T) ∝ exp(-E_g/2kT),
+    # so N_t_eff(T) = N_t * n_i(T)/n_i(300). The factor is 1.0 at 300 K, so the
+    # existing 18 pA calibration at 300 K is preserved by construction; at other
+    # temperatures the leakage now carries the correct E_a = E_g/2 activation.
+    T_scale = nt_temperature_scale(T, params)
+    N_t_eff = N_t * T_scale
+    # Store G0_TAT = N_t_eff as generation rate parameter
+    devsim.set_parameter(device=device, region=region, name="G0_TAT", value=N_t_eff)
     devsim.set_parameter(device=device, region=region, name="E_ref_TAT", value=E_ref)
 
     # Standard SRH with Z1/2 trap level (for component decomposition)
@@ -182,8 +222,9 @@ def setup_tat_model(device_info, E_t=None, m_t=None, N_t=None):
 
     device_info["tat_initialized"] = True
     logger.info(
-        f"TAT model setup: E_t={E_t} eV, m_t={m_t} m0, N_t={N_t:.1e} cm^-3/s, "
-        f"n1_tat={n1_tat:.2e}, p1_tat={p1_tat:.2e}"
+        f"TAT model setup: E_t={E_t} eV, m_t={m_t} m0, "
+        f"N_t={N_t:.1e} cm^-3/s, T={T:.1f}K, T_scale={T_scale:.3f}, "
+        f"N_t_eff={N_t_eff:.2e} cm^-3/s, n1_tat={n1_tat:.2e}, p1_tat={p1_tat:.2e}"
     )
 
 
