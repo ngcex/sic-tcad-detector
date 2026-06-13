@@ -38,6 +38,12 @@ logger = logging.getLogger(__name__)
 # Physical constants
 Q_ELECTRON = 1.602e-19  # C, elementary charge
 
+# Headroom over the physical CCE ceiling (1.0) attributable to finite-step
+# trapezoidal-quadrature error on the collection-current pulse. Observed error
+# is ~0.6%; an excess beyond this tolerance signals a real bug, not numerics
+# (audit C4). Kept equal to the transient.py tolerance for symmetry.
+_QUADRATURE_TOL = 0.05
+
 
 def ion_track_generation_2d(
     device_info, LET_keV_um, x_ion_cm=0.0, track_sigma_cm=1e-4, E_pair_eV=7.8
@@ -203,12 +209,19 @@ def simulate_single_particle(
     I_after_inject = extract_contact_current(device_info, contact)
     logger.debug(f"Current after injection: {I_after_inject:.4e} A/cm")
 
-    # Step 4: Zero generation and time-step loop
-    # Recording starts AFTER injection to avoid displacement current artifact.
-    # During the injection BDF1 step, extract_contact_current includes both
-    # conduction and displacement current (dD/dt) from the field readjusting
-    # to the injected charge.  Including this in the integral causes CCE > 1.
-    # The post-injection current is pure carrier drift/diffusion collection.
+    # Step 4: Zero generation and time-step loop.
+    # Recording starts AFTER the injection step. The first BDF1 step (the 1 ps
+    # injection pulse) is numerically noisy and dominated by the fast field
+    # readjustment to the freshly injected charge; its contact-current sample is
+    # not representative of steady carrier collection. Because injection is
+    # effectively instantaneous (1 ps) while collection takes ~ns, essentially
+    # no real charge is collected during the excluded window (carriers drift a
+    # negligible distance in 1 ps), so excluding it does not under-count.
+    # NOTE: extract_contact_current reads ONLY the continuity-equation
+    # (conduction) contact current -- it does NOT include displacement current
+    # (dD/dt lives in the Poisson/PotentialEquation, which is never queried).
+    # The residual CCE>1 seen downstream is trapezoidal-quadrature error, not
+    # displacement current (see the CCE clip comment in the table builder, C4).
     add_generation_to_dd(device_info, zeros)
 
     times = []
@@ -380,10 +393,21 @@ def build_cce_let_table(
 
             Q_col = sim_result["Q_collected"]
             cce_raw = Q_col / Q_gen if Q_gen > 0 else float("nan")
-            # Clip CCE to [0, 1]: overcollection (CCE > 1) is a numerical
-            # artifact of the generation-pulse BDF1 method (displacement
-            # current during early post-injection steps).  Physical CCE
-            # cannot exceed unity in the linear DD model.
+            # Physical ceiling: CCE cannot exceed 1 in a linear DD detector.
+            # AUDIT C4: the residual CCE>1 here is finite-step TRAPEZOIDAL
+            # QUADRATURE error on the collection-current pulse (~0.6% for the
+            # default ~40-step transient), NOT displacement current as the
+            # previous comment claimed -- extract_contact_current reads only the
+            # continuity-equation (conduction) contact current, and the measured
+            # CCE_raw (~1.006) matches the analytical Hecht ceiling (0.996) to
+            # within quadrature error. Enforce the bound, but warn if the excess
+            # is too large to be quadrature (would signal a real bug).
+            if not np.isnan(cce_raw) and cce_raw > 1.0 + _QUADRATURE_TOL:
+                logger.warning(
+                    f"LET={LET:.1f}: CCE_raw={cce_raw:.4f} exceeds physical "
+                    f"ceiling by >{_QUADRATURE_TOL:.0%}; likely a bug, not "
+                    f"quadrature error (Q_col={Q_col:.3e}, Q_gen={Q_gen:.3e})."
+                )
             cce = float(np.clip(cce_raw, 0.0, 1.0))
 
             pulse_info = analyze_current_pulse(

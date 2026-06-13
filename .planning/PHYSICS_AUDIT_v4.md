@@ -185,3 +185,36 @@ an independently validated prediction.
 
 **C7/C8 now resolved.** Remaining open criticals: C2/C3 (FLASH plasma physics),
 C4 (transient BDF1 CCE clip), C5 (EH6/7 sigma value), C6 (NIEL data).
+
+---
+
+## 9. Fix log addendum — C4 transient/single-particle CCE>1 (2026-06-13)
+
+Systematic debugging (root-cause first) found the audit's "BDF1 displacement
+current" hypothesis was WRONG and identified TWO distinct root causes:
+
+- **single_particle.py**: CCE_raw ~1.006 is finite-step TRAPEZOIDAL QUADRATURE
+  error (~0.6%) on the ~40-point collection-current pulse. Physical CCE is
+  correctly ~1.0 (analytical Hecht = 0.996). Verified `extract_contact_current`
+  reads ONLY the continuity-equation (conduction) contact current; displacement
+  current (dD/dt) lives in the PotentialEquation and is never queried, so the
+  old "displacement current" comment was incorrect. The injection-window
+  exclusion does not under-count (instantaneous 1 ps injection vs ~ns
+  collection; ~0 charge collected in the excluded window).
+- **transient.py**: NORMALIZATION bug. Q_generated used plateau-only
+  (q*G*t_duration) while Q_collected integrates the full rise+plateau+fall
+  waveform. Fixed with generated_charge_trapezoidal_pulse() =
+  q*G*(t_rise/2 + t_duration + t_fall/2). At default pulses the old error was
+  ~0.1%, but up to +50-100% for fast pulses (t_rise ~ t_duration) -- a real bug
+  the [0,2] clip was masking.
+
+Fix (TDD, double-audited physics + over-eng, both CORRECT):
+- New pure helper generated_charge_trapezoidal_pulse + 3 unit tests.
+- Both blind clips replaced with physical-ceiling enforcement (clip to [0,1])
+  + a logged warning if CCE_raw exceeds 1 + _QUADRATURE_TOL (5%) -- larger
+  excess signals a real bug, not numerics, and is no longer silently swallowed.
+- Corrected the wrong displacement-current comment/docstring.
+- Added a [0,1] regression assertion to test_transient_cce_matches_steady_state.
+
+**C4 resolved.** Remaining open criticals: C2/C3 (FLASH plasma physics, effort L),
+C5 (EH6/7 sigma value -- needs Burin Table I), C6 (NIEL -- needs SR-NIEL data).
