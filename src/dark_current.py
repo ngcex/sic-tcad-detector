@@ -139,6 +139,13 @@ def setup_tat_model(device_info, E_t=None, m_t=None, N_t=None):
     # Built-in field at junction is ~70 kV/cm; use half as reference
     E_ref = 3.5e4  # V/cm
 
+    # AUDIT C8 (2026-06): G0_TAT = N_t is TEMPERATURE-INDEPENDENT. Because this
+    # term dominates the dark current, the model has the WRONG activation energy
+    # for Z1/2-limited SiC leakage -- it will not reproduce J_dark(T). Any
+    # temperature-coefficient result built on this is invalid (see also C7: the
+    # temperature_sweep device uses midgap-SRH-only and omits this term entirely).
+    # Fix requires G0_TAT(T) ~ exp(-E_a/kT) tied to the Z1/2 level, then
+    # re-calibration of the prefactor. Not done here (needs recalibration).
     # Store G0_TAT = N_t as generation rate parameter
     devsim.set_parameter(device=device, region=region, name="G0_TAT", value=N_t)
     devsim.set_parameter(device=device, region=region, name="E_ref_TAT", value=E_ref)
