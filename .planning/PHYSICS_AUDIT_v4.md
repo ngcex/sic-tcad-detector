@@ -150,3 +150,38 @@ FOR the audit's C7 finding, not a regression from the fixes.
 `test_generation_profiles::test_dose_rate_conversion_value`,
 `test_single_particle::test_generation_integral_matches_expected` (+2 tautological
 LET tests) updated to the corrected constant.
+
+---
+
+## 8. Fix log addendum — C7/C8 dark-current temperature dependence (2026-06-13)
+
+Implemented (TDD, double-audited for physics + over-engineering, both PASS):
+
+- **C8** `dark_current.nt_temperature_scale(T)` = n_i(T)/n_i(300); `setup_tat_model`
+  now sets `G0_TAT = N_t * nt_temperature_scale(T)`. Generation current scales as
+  n_i(T) ∝ exp(-E_g/2kT) (E_a = E_g/2 ≈ 1.63 eV), the correct activation energy
+  for generation-dominated reverse leakage in wide-gap SiC. Factor is exactly
+  1.0 at 300 K, so the ~18 pA calibration is preserved by construction.
+- **C7** `sweep_iv_vs_temperature(use_tat=True)` (default) now builds the device
+  via `create_dark_current_device` (TAT + SRV), so I_reverse reflects real
+  generation instead of midgap-SRH solver noise. The C7 xfail test is restored
+  to a normal passing test.
+
+Verification:
+- I(T)=[4.1e-11, 3.7e-10, 3.1e-9] A at 290/300/310 K — monotonic, ~9x/10K,
+  apparent E_a = 1.64 eV (after T^1.5 prefactor removal) ≈ E_g/2. Correct.
+- Physics auditor independently confirmed generation (∝n_i, E_a=E_g/2) dominates
+  diffusion (∝n_i², E_a=E_g) in SiC precisely because n_i is tiny.
+- Auditor caveat (apparent E_a could drift if the embedded SRH-Z1/2 term, which
+  has E_a~2.67 eV, became comparable) checked and CLEARED: TAT/SRH component
+  ratio is 8398/8480/8560 at 290/300/310 K — TAT dominates by ~8500x and the
+  ratio is nearly flat, so the E_g/2 slope is clean across the sweep. No runtime
+  guard added (margin is overwhelming).
+
+Honest framing: this is one-point calibration (N_t at 300 K) plus a
+physically-motivated temperature EXTRAPOLATION (slope fixed by E_a=E_g/2). The
+absolute magnitude at 300 K is fitted; the I(T) shape is a model assumption, not
+an independently validated prediction.
+
+**C7/C8 now resolved.** Remaining open criticals: C2/C3 (FLASH plasma physics),
+C4 (transient BDF1 CCE clip), C5 (EH6/7 sigma value), C6 (NIEL data).
