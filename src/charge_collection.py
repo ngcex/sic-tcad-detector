@@ -80,10 +80,20 @@ def hecht_cce(
 
     Notes
     -----
-    CCE = (lambda_e/d)*(1-exp(-d/lambda_e)) + (lambda_h/d)*(1-exp(-d/lambda_h))
+    Two-carrier Hecht for charge generated UNIFORMLY through the active region,
+    averaged over the generation depth x in [0, d]:
 
-    where lambda_e = mu_e * tau_e * |V| / d (electron drift length),
-    and similarly for holes.
+        CCE = (le/d) - (le/d)^2*(1-exp(-d/le))
+            + (lh/d) - (lh/d)^2*(1-exp(-d/lh))
+
+    where le = mu_e*tau_e*|V|/d (electron drift length), lh similarly for holes.
+    This is the depth-average of the single-pair induced charge
+        q(x)/q0 = (le/d)*(1-exp(-(d-x)/le)) + (lh/d)*(1-exp(-x/lh)),
+    in which each electron-hole pair contributes ONCE. In the long-drift limit
+    (le, lh >> d) each carrier term -> 1/2, so CCE -> 1.0 without clipping.
+
+    The earlier form (le/d)*(1-exp(-d/le)) + (lh/d)*(1-exp(-d/lh)) double-counted
+    each pair (each term -> 1, CCE -> 2.0, then clipped). See audit C1.
 
     For 4H-SiC at V=40V, d=10um: lambda_e ~ 380 um >> d, so CCE -> 1.0.
     """
@@ -118,16 +128,17 @@ def hecht_cce(
     lambda_e = mu_e * tau_e * V / d
     lambda_h = mu_p * tau_p * V / d
 
-    # Avoid division by zero at V=0 (lambda=0)
+    # Depth-averaged single-pair Hecht: each carrier term is intrinsically <= 1/2,
+    # so the e+h sum is bounded by 1 without clipping (audit C1).
+    # Avoid division by zero at V=0 (lambda=0).
     with np.errstate(divide="ignore", invalid="ignore"):
-        cce_e = np.where(
-            lambda_e > 0, (lambda_e / d) * (1.0 - np.exp(-d / lambda_e)), 0.0
-        )
-        cce_h = np.where(
-            lambda_h > 0, (lambda_h / d) * (1.0 - np.exp(-d / lambda_h)), 0.0
-        )
+        re = lambda_e / d
+        rh = lambda_h / d
+        cce_e = np.where(lambda_e > 0, re - re**2 * (1.0 - np.exp(-d / lambda_e)), 0.0)
+        cce_h = np.where(lambda_h > 0, rh - rh**2 * (1.0 - np.exp(-d / lambda_h)), 0.0)
 
     cce = cce_e + cce_h
+    # Defensive clip only (formula is already bounded to [0, 1]).
     return np.clip(cce, 0.0, 1.0)
 
 

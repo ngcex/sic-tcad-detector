@@ -40,7 +40,7 @@ Q_ELECTRON = 1.602e-19  # C, elementary charge
 
 
 def ion_track_generation_2d(
-    device_info, LET_keV_um, x_ion_cm=0.0, track_sigma_cm=1e-4, E_pair_eV=8.4
+    device_info, LET_keV_um, x_ion_cm=0.0, track_sigma_cm=1e-4, E_pair_eV=7.8
 ):
     """Create 2D generation profile for a single ion track.
 
@@ -60,7 +60,7 @@ def ion_track_generation_2d(
     track_sigma_cm : float
         Gaussian radial width of track (cm). Default: 1e-4 (1 um).
     E_pair_eV : float
-        Electron-hole pair creation energy (eV). Default: 8.4 (4H-SiC).
+        Electron-hole pair creation energy (eV). Default: 7.8 (4H-SiC).
 
     Returns
     -------

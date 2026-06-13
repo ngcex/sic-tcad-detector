@@ -21,7 +21,9 @@ A Python-based TCAD simulation toolkit for modeling the electrical, thermal, tra
 
 ## Core Value
 
-Predict how charge collection efficiency (CCE) in the SiC detector degrades under ultra-high dose-rate (FLASH) conditions, providing the first TCAD-based explanation of plasma recombination effects in SiC dosimeters — a gap no existing paper has filled.
+Predict how charge collection efficiency (CCE) in the SiC detector degrades under ultra-high dose-rate (FLASH) conditions — a gap no existing paper has filled.
+
+> **Status caveat (physics audit, 2026-06):** The TCAD "plasma recombination" explanation is **not yet implemented**. The current FLASH module (`flash_recombination.py`) adds only an Auger term, which is quantitatively negligible at 20–230 Gy/s; the genuine high-injection physics (e-h plasma field screening, ambipolar transport, conductivity modulation) and radiative recombination are not in the equations. Until that physics is added and validated, FLASH dose-rate results are exploratory bounds, not a predictive explanation. See `.planning/PHYSICS_AUDIT_v4.md` (C2/C3).
 
 ## Requirements
 
