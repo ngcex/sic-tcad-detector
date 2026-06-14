@@ -17,7 +17,12 @@ from src.drift_diffusion import create_dd_device, ramp_bias, extract_contact_cur
 from src.charge_collection import add_generation_to_dd
 from src.flash_recombination import add_auger_recombination, cce_vs_dose_rate
 from src.generation_profiles import proton_generation_profile
-from src.transient import TransientSolver, pulse_envelope, adaptive_dt
+from src.transient import (
+    TransientSolver,
+    pulse_envelope,
+    adaptive_dt,
+    generated_charge_trapezoidal_pulse,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -128,6 +133,51 @@ def test_adaptive_dt_bounds():
         dt = adaptive_dt(t, t_rise, t_duration, t_fall, dt_min, dt_max)
         assert dt >= dt_min, f"dt={dt} < dt_min={dt_min} at t={t}"
         assert dt <= dt_max, f"dt={dt} > dt_max={dt_max} at t={t}"
+
+
+# ---------------------------------------------------------------------------
+# Generated-charge bookkeeping (audit C4: CCE>1 normalization)
+# ---------------------------------------------------------------------------
+
+
+def test_generated_charge_counts_full_envelope():
+    """Generated charge must integrate the WHOLE trapezoidal envelope.
+
+    Audit C4: the old code normalized CCE by q*G_total*t_duration (plateau
+    only), omitting the charge generated during rise and fall. The correct
+    generated charge is q*G_total*(t_rise/2 + t_duration + t_fall/2), the area
+    under the trapezoidal envelope. Omitting rise/fall makes the denominator too
+    small and inflates CCE above 1 (the bug the [0,2] clip was masking).
+    """
+    q = 1.602e-19
+    G_total = 1.0e15  # cm^-3 s^-1 integrated over x -> cm^-2 s^-1 (per-area rate)
+    t_rise, t_duration, t_fall = 2e-6, 1e-3, 3e-6
+
+    Q = generated_charge_trapezoidal_pulse(G_total, t_rise, t_duration, t_fall, q=q)
+    expected = q * G_total * (t_rise / 2 + t_duration + t_fall / 2)
+    assert Q == pytest.approx(expected, rel=1e-12)
+
+
+def test_generated_charge_exceeds_plateau_only():
+    """Full-envelope charge must be strictly larger than the plateau-only value."""
+    q = 1.602e-19
+    G_total = 1.0e15
+    t_rise, t_duration, t_fall = 5e-4, 1e-3, 5e-4  # rise/fall comparable to plateau
+    Q_full = generated_charge_trapezoidal_pulse(
+        G_total, t_rise, t_duration, t_fall, q=q
+    )
+    Q_plateau_only = q * G_total * t_duration
+    # rise+fall add (t_rise+t_fall)/2 = 5e-4 s of generation on top of 1e-3 plateau
+    assert Q_full > Q_plateau_only
+    assert Q_full == pytest.approx(Q_plateau_only * 1.5, rel=1e-12)
+
+
+def test_generated_charge_reduces_to_plateau_when_no_ramps():
+    """With zero rise/fall the envelope is a pure rectangle (plateau only)."""
+    q = 1.602e-19
+    G_total = 2.0e15
+    Q = generated_charge_trapezoidal_pulse(G_total, 0.0, 1e-3, 0.0, q=q)
+    assert Q == pytest.approx(q * G_total * 1e-3, rel=1e-12)
 
 
 # ---------------------------------------------------------------------------
@@ -255,6 +305,14 @@ def test_transient_cce_matches_steady_state():
         E_MeV=62,
     )
     steady_state_cce = ss_result["cce_values"][0]
+
+    # Physical ceiling (audit C4): CCE must not exceed 1 once the generated
+    # charge is normalized over the full pulse envelope. Guards against a
+    # re-regression of the plateau-only normalization bug.
+    assert 0.0 <= transient_cce <= 1.0, (
+        f"Transient CCE ({transient_cce:.4f}) outside physical [0, 1] range "
+        f"-- normalization/window regression (C4)?"
+    )
 
     # Transient should be within 20% of steady-state
     deviation = abs(transient_cce - steady_state_cce)

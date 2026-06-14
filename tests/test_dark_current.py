@@ -16,10 +16,12 @@ from src.dark_current import (
     dark_current_sweep,
     setup_tat_model,
     setup_surface_recombination,
+    nt_temperature_scale,
     _compute_node_efield,
     _compute_gamma_factors,
 )
 from src.drift_diffusion import create_dd_device, ramp_bias, extract_contact_current
+from src.sic_material import SiC4H_Parameters, intrinsic_concentration
 
 
 # ---------------------------------------------------------------------------
@@ -260,6 +262,53 @@ class TestDarkCurrentCalibration:
                     f"|I| at V={result['voltages'][i]:.0f}V ({I_mag[i]:.2e}) "
                     f"decreased from V={result['voltages'][i-1]:.0f}V ({I_mag[i-1]:.2e})"
                 )
+
+
+# ---------------------------------------------------------------------------
+# TestNtTemperatureScaling (audit C8: N_t(T) generation activation energy)
+# ---------------------------------------------------------------------------
+
+
+class TestNtTemperatureScaling:
+    """Effective generation rate N_t must scale with n_i(T) (E_a = E_g/2).
+
+    Fixes audit C8: the dominant dark-current term was temperature-independent,
+    giving the wrong activation energy for Z1/2-limited SiC leakage. The
+    classical depletion-generation model gives G ∝ n_i(T) ∝ exp(-E_g/2kT).
+    """
+
+    def test_scale_is_unity_at_300K(self):
+        """At 300K the scale factor must be exactly 1 (preserves 18 pA calibration)."""
+        assert nt_temperature_scale(300.0) == pytest.approx(1.0, rel=1e-12)
+
+    def test_scale_matches_ni_ratio(self):
+        """N_t(T)/N_t(300) must equal n_i(T)/n_i(300) (E_a = E_g/2)."""
+        params = SiC4H_Parameters()
+        for T in (290.0, 305.0, 313.0, 350.0):
+            ni_T = intrinsic_concentration(T, params)[0]
+            expected = ni_T / params.n_i_300
+            assert nt_temperature_scale(T, params) == pytest.approx(expected, rel=1e-9)
+
+    def test_scale_increases_with_temperature(self):
+        """Higher T -> larger generation rate (leakage rises with T)."""
+        s290 = nt_temperature_scale(290.0)
+        s310 = nt_temperature_scale(310.0)
+        assert s310 > s290 > 0.0
+
+    def test_activation_energy_is_half_bandgap(self):
+        """Arrhenius slope of N_t(T) should be ~E_g/2 (~1.63 eV for SiC)."""
+        k_B = 8.617e-5  # eV/K
+        T1, T2 = 300.0, 320.0
+        s1 = nt_temperature_scale(T1)
+        s2 = nt_temperature_scale(T2)
+        # ln(s2/s1) = -(E_a/k)(1/T2 - 1/T1)  =>  E_a = -k ln(s2/s1)/(1/T2-1/T1)
+        E_a = -k_B * np.log(s2 / s1) / (1.0 / T2 - 1.0 / T1)
+        # E_g/2 ~ 1.63 eV. The apparent Arrhenius slope is slightly HIGHER because
+        # n_i carries a T^1.5 prefactor (+~1.5kT ~ 0.04 eV) and E_g(T) decreases
+        # with T (Varshni). Expected ~1.63 + 0.04 + curvature ~ 1.67-1.71 eV.
+        assert (
+            1.55 <= E_a <= 1.75
+        ), f"Apparent activation energy {E_a:.3f} eV not ~E_g/2"
 
 
 # ---------------------------------------------------------------------------

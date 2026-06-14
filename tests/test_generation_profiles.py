@@ -24,21 +24,14 @@ class TestDoseRateConversion:
     """Tests for dose_rate_to_generation."""
 
     def test_dose_rate_conversion_value(self):
-        """1 Gy/s in SiC should produce ~2.39e21 pairs/cm^3/s.
+        """1 Gy/s in SiC should produce ~2.57e15 pairs/cm^3/s.
 
-        G = 1.0 * 3.21 * 1e4 / (8.4 * 1.602e-12)
-          = 3.21e4 / 1.34568e-11
-          = 2.385e15  -- wait, let's recompute:
-          = 3.21 * 1e4 / (8.4 * 1.602e-12)
-          = 32100 / 1.34568e-11
-          = 2.385e15
-
-        Actually: 1e4 erg/g * 3.21 g/cm^3 = 3.21e4 erg/cm^3
-        E_pair = 8.4 eV * 1.602e-12 erg/eV = 1.34568e-11 erg
-        G = 3.21e4 / 1.34568e-11 = 2.385e15 cm^-3 s^-1
+        1e4 erg/g * 3.21 g/cm^3 = 3.21e4 erg/cm^3
+        E_pair = 7.8 eV * 1.602e-12 erg/eV = 1.24956e-11 erg  (measured W-value)
+        G = 3.21e4 / 1.24956e-11 = 2.569e15 cm^-3 s^-1
         """
         G = dose_rate_to_generation(1.0)
-        expected = 3.21 * 1e4 / (8.4 * 1.602e-12)
+        expected = 3.21 * 1e4 / (7.8 * 1.602e-12)
         assert abs(G - expected) / expected < 1e-10
 
     def test_dose_rate_linearity(self):

@@ -2,17 +2,35 @@
 
 At conventional dose rates, Shockley-Read-Hall (SRH) recombination dominates
 carrier loss in 4H-SiC detectors. Under FLASH dose rates (20-230 Gy/s),
-carrier densities can become high enough that Auger recombination -- which
-scales as n^3 at high injection -- becomes significant. This additional
-recombination channel reduces the charge collection efficiency (CCE),
-contributing to the observed dose-rate-dependent response in SiC dosimeters.
+carrier densities rise; this module adds the bulk Auger channel -- which scales
+as n^3 at high injection -- to the drift-diffusion equations.
 
 The Auger recombination rate is:
     R_Auger = (C_n * n + C_p * p) * (n * p - n_i^2)
 
 where C_n and C_p are the Auger coefficients for electron- and hole-initiated
-processes, respectively. For 4H-SiC, C_n = 5e-31 cm^6/s and C_p = 2e-31 cm^6/s
-(Ioffe NSM Archive).
+processes. For 4H-SiC, C_n = 5e-31 cm^6/s and C_p = 2e-31 cm^6/s (Ioffe NSM).
+
+SCOPE AND HONEST LIMITATIONS (audit C2/C3, 2026-06):
+    This module is a SENSITIVITY / continuation study, NOT a validated model of
+    FLASH "plasma recombination". Two caveats must accompany any result derived
+    from it:
+
+    1. At steady-state generation rates corresponding to 20-230 Gy/s, the
+       carrier densities reached are far too low for Auger (n^3) to measurably
+       reduce CCE -- the Auger term here is quantitatively negligible (orders of
+       magnitude below SRH). Any dose-rate dependence of CCE produced by the
+       Auger term alone is not physically significant.
+    2. The genuine high-injection FLASH physics -- e-h plasma screening of the
+       collecting field, ambipolar transport, conductivity modulation, track
+       funnelling -- is NOT implemented here. Radiative recombination (coeff. B
+       in sic_material) is likewise NOT wired into the equations despite being
+       defined. Reproducing a measured FLASH CCE roll-off requires that physics.
+
+    Therefore the project's "first TCAD explanation of plasma recombination in
+    SiC under FLASH" claim is NOT supported by this code as written. Treat
+    outputs as exploratory bounds, not predictions, until the plasma/ambipolar
+    model is added and validated.
 
 This module provides:
 - add_auger_recombination: extend DD equations with Auger model and Jacobian

@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 def sweep_iv_vs_temperature(
     temperatures,
     V_reverse=-30,
+    use_tat=True,
     **device_kwargs,
 ):
     """Sweep temperature and extract reverse-bias leakage current at each T.
@@ -43,6 +44,14 @@ def sweep_iv_vs_temperature(
         Array of temperatures (K) to sweep.
     V_reverse : float
         Reverse bias voltage (V, negative). Default -30V.
+    use_tat : bool
+        If True (default), build the device with the calibrated TAT/N_t
+        dark-current generation model (with the audit-C8 temperature scaling
+        N_t(T) ∝ n_i(T)). This is REQUIRED for a physically meaningful leakage
+        current: a plain midgap-SRH DD device has no real generation mechanism
+        for SiC (n_i ~ 1e-8), so its reverse current is solver residual
+        (~1e-12..1e-25 A), not physics (audit C7). Set False only to inspect the
+        legacy midgap-only behavior.
     **device_kwargs
         Additional keyword arguments for create_dd_device
         (e.g., epi_thickness_cm, doping_profile, N_D_junction, etc.).
@@ -56,6 +65,7 @@ def sweep_iv_vs_temperature(
     import devsim
 
     from src.drift_diffusion import create_dd_device, extract_contact_current, ramp_bias
+    from src.dark_current import create_dark_current_device
 
     temperatures = np.asarray(temperatures, dtype=float)
     params = SiC4H_Parameters()
@@ -76,7 +86,14 @@ def sweep_iv_vs_temperature(
         kwargs.update(device_kwargs)
 
         try:
-            device_info = create_dd_device(**kwargs)
+            if use_tat:
+                # Calibrated TAT/N_t generation model with C8 temperature scaling.
+                # create_dark_current_device builds the DD device then layers TAT
+                # and surface recombination on top (same path as the 300 K
+                # calibration), so the reverse current reflects real generation.
+                device_info = create_dark_current_device(**kwargs)
+            else:
+                device_info = create_dd_device(**kwargs)
 
             # Ramp to reverse bias: cathode voltage = -V_reverse
             cathode_V = -V_reverse

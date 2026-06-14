@@ -175,22 +175,22 @@ class TestLETConversion:
     """Test LET to pairs/cm conversion."""
 
     def test_let_1_keV_um(self):
-        """LET=1 keV/um should give ~1.19e6 pairs/cm."""
+        """LET=1 keV/um should give ~1.28e6 pairs/cm (E_pair=7.8 eV)."""
         # pairs/cm = LET * 1e3 / E_pair * 1e4
-        # = 1.0 * 1e3 / 8.4 * 1e4 = 1e7 / 8.4 = ~1.19e6
+        # = 1.0 * 1e3 / 7.8 * 1e4 = 1e7 / 7.8 = ~1.28e6
         LET = 1.0
-        E_pair = 8.4
+        E_pair = 7.8
         pairs_per_cm = LET * 1e3 / E_pair * 1e4
 
-        expected = 1e7 / 8.4  # ~1.190e6
+        expected = 1e7 / 7.8  # ~1.282e6
         assert abs(pairs_per_cm - expected) / expected < 1e-10
 
     def test_let_100_keV_um(self):
-        """LET=100 keV/um should give ~1.19e8 pairs/cm."""
+        """LET=100 keV/um should give ~1.28e8 pairs/cm (E_pair=7.8 eV)."""
         LET = 100.0
-        E_pair = 8.4
+        E_pair = 7.8
         pairs_per_cm = LET * 1e3 / E_pair * 1e4
-        expected = 100.0 * 1e7 / 8.4
+        expected = 100.0 * 1e7 / 7.8
         assert abs(pairs_per_cm - expected) / expected < 1e-10
 
 
@@ -216,7 +216,7 @@ class TestIonTrackGeneration:
             )
 
             LET = 10.0  # keV/um
-            E_pair = 8.4  # eV
+            E_pair = 7.8  # eV (production default; ion_track_generation_2d uses 7.8)
 
             generation, Q_gen = ion_track_generation_2d(device_info, LET, x_ion_cm=0.0)
 
@@ -226,9 +226,9 @@ class TestIonTrackGeneration:
             assert Q_gen > 0, "Q_generated must be positive"
 
             # Analytical estimate: pairs/cm * epi_thickness * q
-            # pairs/cm = 10 * 1e7 / 8.4 ~ 1.19e7
+            # pairs/cm = 10 * 1e7 / 7.8 ~ 1.28e7
             # epi = 10e-4 cm
-            # Q_expected ~ 1.19e7 * 10e-4 * 1.602e-19 ~ 1.91e-15 C/cm
+            # Q_expected ~ 1.28e7 * 10e-4 * 1.602e-19 ~ 2.05e-15 C/cm
             # But Gaussian lateral integral over half-device may capture
             # less than full track -- depends on sigma vs half_width.
             # With sigma=1um and half_width=50um, integral should be ~50% of full
