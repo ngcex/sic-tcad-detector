@@ -91,7 +91,9 @@ class SiC4H_Parameters:
 
     # --- Bulk material properties ---
     rho: float = 3.21  # g/cm^3, density (Ioffe NSM Archive)
-    E_pair_eV: float = 8.4  # eV, electron-hole pair creation energy (4H-SiC)
+    E_pair_eV: float = (
+        7.8  # eV, electron-hole pair creation energy (4H-SiC), measured W-value (Lebedev; ~7.7-7.8 eV)
+    )
 
 
 def compute_ni(T=300):
@@ -128,17 +130,23 @@ def compute_ni(T=300):
     m0 = 9.109e-31  # kg
 
     # 4H-SiC parameters
-    m_e = 0.77 * m0  # DOS effective mass, electrons
+    # NOTE: m_e_dos = 0.77 m0 is the TOTAL conduction-band DOS effective mass,
+    # i.e. the valley multiplicity M_c is already folded into this value
+    # (m_dos = M_c^(2/3) * m_single). Multiplying by M_c again double-counts
+    # the valleys; the standard 2-spin prefactor alone reproduces the literature
+    # NC_300 = 1.69e19 cm^-3 (Ioffe NSM). See audit C/M4.
+    m_e = 0.77 * m0  # total DOS effective mass, electrons (valleys included)
     m_h = 1.0 * m0  # DOS effective mass, holes
-    M_c = 3  # conduction band minima
 
     # Varshni bandgap: E_g(T) = E_g(0) - alpha*T^2/(T+beta)
-    E_g = 3.265 - 6.5e-4 * T**2 / (T + 1300.0)
+    # Use the calibrated E_g(0) consistent with bandgap() so n_i(T) has a single
+    # self-consistent temperature slope (audit M5).
+    E_g = 3.2965625 - 6.5e-4 * T**2 / (T + 1300.0)
 
     # Effective density of states
-    # NC = 2 * Mc * (2*pi*m_e*kB_J*T / h^2)^(3/2)  [m^-3, then convert to cm^-3]
+    # NC = 2 * (2*pi*m_e*kB_J*T / h^2)^(3/2)  [m^-3, then convert to cm^-3]
     kT_J = k_B * T * 1.602e-19  # eV -> J
-    NC = 2 * M_c * (2 * np.pi * m_e * kT_J / h**2) ** 1.5 * 1e-6  # m^-3 -> cm^-3
+    NC = 2 * (2 * np.pi * m_e * kT_J / h**2) ** 1.5 * 1e-6  # m^-3 -> cm^-3
     NV = 2 * (2 * np.pi * m_h * kT_J / h**2) ** 1.5 * 1e-6
 
     n_i = np.sqrt(NC * NV) * np.exp(-E_g / (2 * k_B * T))

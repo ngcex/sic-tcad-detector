@@ -52,7 +52,7 @@ def dose_rate_to_generation(dose_rate_Gy_s, rho_g_cm3=RHO_SIC, E_pair_eV=E_PAIR_
     rho_g_cm3 : float
         Material density (g/cm^3). Default: 3.21 (4H-SiC).
     E_pair_eV : float
-        Electron-hole pair creation energy (eV). Default: 8.4 (4H-SiC).
+        Electron-hole pair creation energy (eV). Default: 7.8 (4H-SiC).
 
     Returns
     -------
@@ -91,7 +91,7 @@ def alpha_generation_profile(
     total_energy_eV : float
         Total kinetic energy of alpha particle (eV). Default: 5.486e6 (Am-241).
     E_pair_eV : float
-        Electron-hole pair creation energy (eV). Default: 8.4 (4H-SiC).
+        Electron-hole pair creation energy (eV). Default: 7.8 (4H-SiC).
 
     Returns
     -------

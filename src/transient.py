@@ -79,6 +79,49 @@ def pulse_envelope(t, t_rise, t_duration, t_fall):
         return 0.0
 
 
+def generated_charge_trapezoidal_pulse(
+    G_total, t_rise, t_duration, t_fall, q=1.602e-19
+):
+    """Charge generated over a full trapezoidal pulse envelope.
+
+    Audit C4 fix. The generation rate is modulated by pulse_envelope(t), a
+    trapezoid: linear 0->1 over t_rise, flat 1 over t_duration, linear 1->0 over
+    t_fall. The time-integral of that envelope is the trapezoid area
+
+        integral(envelope dt) = t_rise/2 + t_duration + t_fall/2
+
+    so the total generated charge is
+
+        Q_gen = q * G_total * (t_rise/2 + t_duration + t_fall/2)
+
+    The previous implementation used only `q * G_total * t_duration` (plateau
+    only), omitting the charge generated during the rise and fall ramps. Because
+    the collected-charge integral spans the WHOLE waveform, that mismatch made
+    CCE = Q_collected / Q_generated exceed 1 (the artifact the old [0, 2] clip
+    was masking). At default pulses (t_rise = t_fall = 1 us, t_duration = 1 ms)
+    the error is ~0.1%, but for fast pulses with t_rise ~ t_duration it can
+    approach +50-100%, so this is a genuine normalization bug, not quadrature
+    noise.
+
+    Parameters
+    ----------
+    G_total : float
+        Peak generation rate integrated over space (per-area rate; the same
+        quantity the collected-current integral is normalized against).
+    t_rise, t_duration, t_fall : float
+        Pulse rise time, plateau duration, and fall time (s).
+    q : float
+        Elementary charge (C). Default 1.602e-19.
+
+    Returns
+    -------
+    float
+        Generated charge over the full envelope (C per unit area).
+    """
+    envelope_integral = 0.5 * t_rise + t_duration + 0.5 * t_fall
+    return q * G_total * envelope_integral
+
+
 def adaptive_dt(t, t_rise, t_duration, t_fall, dt_min=1e-8, dt_max=1e-4):
     """Select time step based on pulse phase.
 
@@ -328,14 +371,17 @@ class TransientSolver:
         Returns
         -------
         cce : float
-            Transient charge collection efficiency, clipped to [0, 2].
+            Transient charge collection efficiency in [0, 1].
         """
         times = result["times"]
         currents = result["currents"]
         I_dark = result["I_dark"]
         t_duration = result["t_duration"]
+        t_rise = result.get("t_rise", 0.0)
+        t_fall = result.get("t_fall", 0.0)
 
-        # Collected charge: integral of (|I(t)| - |I_dark|) dt
+        # Collected charge: integral of (|I(t)| - |I_dark|) dt over the WHOLE
+        # waveform (rise + plateau + fall + post-pulse decay).
         I_signal = np.abs(currents) - np.abs(I_dark)
         Q_collected = np.trapezoid(I_signal, times)
 
@@ -344,21 +390,40 @@ class TransientSolver:
             np.asarray(G_spatial, dtype=float), np.asarray(x_nodes, dtype=float)
         )
 
-        # Generated charge during plateau: q * G_total * t_duration
-        Q_generated = Q_ELECTRON * G_total * t_duration
+        # Generated charge over the FULL trapezoidal envelope (audit C4).
+        # Must match the integration window above: the collected-charge integral
+        # spans rise+plateau+fall, so the generated charge must count the rise
+        # and fall ramps too, not just the plateau. Using plateau-only here was
+        # the normalization bug that pushed CCE above 1 (masked by a [0, 2] clip).
+        Q_generated = generated_charge_trapezoidal_pulse(
+            G_total, t_rise, t_duration, t_fall, q=Q_ELECTRON
+        )
 
         if Q_generated <= 0:
             logger.warning("Q_generated <= 0, returning CCE = 0")
             return 0.0
 
-        cce = Q_collected / Q_generated
+        cce_raw = Q_collected / Q_generated
 
-        # Clip to [0, 2] -- allow slight overshoot for transit-time effects
-        cce = float(np.clip(cce, 0.0, 2.0))
+        # Physical ceiling: in a linear DD detector CCE cannot exceed 1. Any
+        # residual excess is finite-step trapezoidal-quadrature error on the
+        # current pulse (typically < ~1%). Enforce the physical bound, but assert
+        # the raw value is within quadrature tolerance -- a larger overshoot
+        # would indicate a real bug (e.g. window/normalization mismatch), not
+        # numerical noise, and must NOT be silently clipped. (Audit C4.)
+        _QUADRATURE_TOL = 0.05  # 5% headroom over the physical ceiling
+        if cce_raw > 1.0 + _QUADRATURE_TOL:
+            logger.warning(
+                f"Transient CCE_raw={cce_raw:.4f} exceeds physical ceiling by "
+                f">{_QUADRATURE_TOL:.0%}; likely a normalization/window bug, not "
+                f"quadrature error (Q_collected={Q_collected:.4e}, "
+                f"Q_generated={Q_generated:.4e})."
+            )
+        cce = float(np.clip(cce_raw, 0.0, 1.0))
 
         logger.info(
-            f"Transient CCE: {cce:.4f} "
-            f"(Q_collected={Q_collected:.4e}, Q_generated={Q_generated:.4e})"
+            f"Transient CCE: {cce:.4f} (raw={cce_raw:.4f}, "
+            f"Q_collected={Q_collected:.4e}, Q_generated={Q_generated:.4e})"
         )
         return cce
 

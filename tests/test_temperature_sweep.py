@@ -97,8 +97,16 @@ class TestSweepIV:
         assert set(df.columns) == expected_cols
 
     @pytest.mark.slow
+    @pytest.mark.slow
     def test_iv_current_increases_with_temperature(self):
-        """Reverse leakage current should increase with temperature (n_i dominates)."""
+        """Reverse leakage current should increase with temperature.
+
+        With the TAT/N_t dark-current model now wired into the sweep (use_tat=True
+        default) and its C8 temperature scaling N_t(T) ∝ n_i(T) ∝ exp(-E_g/2kT),
+        the reverse generation current is real (~pA) and rises monotonically with
+        T. This replaces the former midgap-SRH-only device whose current was
+        solver noise (audit C7/C8 resolved).
+        """
         df = sweep_iv_vs_temperature([290, 300, 310], V_reverse=-30)
 
         I_values = df.sort_values("T")["I_reverse"].values

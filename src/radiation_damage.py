@@ -78,7 +78,15 @@ class RadiationDamageParams:
     # --- EH6/7 center ---
     eta_EH67: float = 1.6  # cm^-1, introduction rate
     E_EH67: float = 1.60  # eV below Ec
-    sigma_n_EH67: float = 9e-12  # cm^2, electron capture cross-section
+    # AUDIT C5 (2026-06): 9e-12 cm^2 is physically implausible (~1000x larger
+    # than every other trap here and than typical SiC capture cross-sections
+    # ~1e-14..1e-16 cm^2). It dominates electron K_tau and is almost certainly a
+    # transcription error from Burin et al. 2024. NOT corrected here because the
+    # exact paper value must be confirmed (likely 9e-15 or 9e-16). Do NOT trust
+    # EH6/7-driven lifetime/CCE-vs-fluence results until verified against Table I.
+    sigma_n_EH67: float = (
+        9e-12  # cm^2, electron capture cross-section [SUSPECT: see C5]
+    )
     sigma_p_EH67: float = 3.8e-14  # cm^2, hole capture cross-section
     type_EH67: str = "donor"
 
