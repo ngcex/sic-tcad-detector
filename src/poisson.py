@@ -416,6 +416,127 @@ def extract_depletion_width_numerical(device_info):
     return min(max(W, 0.0), epi_thickness)
 
 
+def extract_depletion_width_2d_center(device_info, center_x_tol_cm=1e-6):
+    """Extract the center-column depletion width from a 2D device.
+
+    The 1D ``extract_depletion_width_numerical`` reads ``x`` as the depth axis
+    (1D convention) and therefore returns the WRONG W for a 2D device, where
+    ``x`` is lateral and ``y`` is depth. This function mirrors the 1D
+    depletion-edge logic but along the ``y`` axis, restricted to the
+    symmetry-plane center column (``|x| < center_x_tol_cm``, since ``x = 0`` is
+    the symmetry plane in the 2D modules).
+
+    The depletion width is measured from the metallurgical junction
+    (``y = junction_pos``) into the n-epi (``y > junction_pos``), as the first
+    point where the electron concentration recovers to 50% of the local donor
+    concentration (handling the graded profile correctly).
+
+    Parameters
+    ----------
+    device_info : dict
+        2D device info dict. Must have ``dimension == 2`` and the keys
+        ``device_name``, ``region_name``, ``junction_pos``, ``epi_thickness_cm``.
+    center_x_tol_cm : float
+        Half-width of the center-column selection band around ``x = 0`` (cm).
+
+    Returns
+    -------
+    W : float
+        Center-column depletion width (cm), clamped to [0, epi_thickness].
+
+    Raises
+    ------
+    ValueError
+        If ``device_info["dimension"]`` is not 2, or if no nodes fall within
+        ``center_x_tol_cm`` of the symmetry plane.
+    """
+    dimension = device_info.get("dimension")
+    if dimension != 2:
+        raise ValueError(
+            "extract_depletion_width_2d_center requires a 2D device "
+            f"(dimension == 2); got dimension={dimension!r}"
+        )
+
+    device = device_info["device_name"]
+    region = device_info["region_name"]
+    junction_pos = device_info["junction_pos"]
+    epi_thickness = device_info["epi_thickness_cm"]
+
+    x_nodes = np.array(
+        devsim.get_node_model_values(device=device, region=region, name="x")
+    )
+    y_nodes = np.array(
+        devsim.get_node_model_values(device=device, region=region, name="y")
+    )
+    donors = np.array(
+        devsim.get_node_model_values(device=device, region=region, name="Donors")
+    )
+
+    # Prefer Electrons (DD solution) over IntrinsicElectrons (Poisson-only),
+    # mirroring the 1D extractor.
+    try:
+        n_elec = np.array(
+            devsim.get_node_model_values(device=device, region=region, name="Electrons")
+        )
+    except Exception:
+        n_elec = np.array(
+            devsim.get_node_model_values(
+                device=device, region=region, name="IntrinsicElectrons"
+            )
+        )
+
+    # Select the center column (symmetry plane at x = 0).
+    center_mask = np.abs(x_nodes) < center_x_tol_cm
+    if not np.any(center_mask):
+        raise ValueError(
+            "no nodes within center_x_tol_cm of the symmetry plane "
+            f"(min |x| = {np.min(np.abs(x_nodes)):.3e} cm, "
+            f"tol = {center_x_tol_cm:.3e} cm)"
+        )
+
+    y_c = y_nodes[center_mask]
+    n_c = n_elec[center_mask]
+    d_c = donors[center_mask]
+
+    # Sort by depth (y ascending).
+    order = np.argsort(y_c)
+    y_c = y_c[order]
+    n_c = n_c[order]
+    d_c = d_c[order]
+
+    # Restrict to the n-side (y >= junction_pos).
+    n_mask = y_c >= junction_pos
+    y_n = y_c[n_mask]
+    n_n = n_c[n_mask]
+    donors_n = d_c[n_mask]
+
+    if len(n_n) == 0:
+        return 0.0
+
+    # Depletion edge: first point where n recovers to 50% of local Donors.
+    ratio = np.where(donors_n > 0, n_n / donors_n, 0.0)
+    above = ratio >= 0.5
+
+    if not np.any(above):
+        return float(epi_thickness)
+
+    idx = np.where(above)[0][0]
+
+    if idx > 0:
+        y0, y1 = y_n[idx - 1], y_n[idx]
+        r0, r1 = ratio[idx - 1], ratio[idx]
+        if r1 != r0:
+            frac = (0.5 - r0) / (r1 - r0)
+            edge = y0 + frac * (y1 - y0)
+        else:
+            edge = y_n[idx]
+    else:
+        edge = y_n[idx]
+
+    W = float(edge - junction_pos)
+    return min(max(W, 0.0), float(epi_thickness))
+
+
 def voltage_sweep(device_info, voltages=None):
     """High-level function: solve Poisson at multiple bias voltages.
 
