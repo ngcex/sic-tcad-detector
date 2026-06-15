@@ -38,9 +38,9 @@ from src.incomplete_ionization import ionized_acceptor_concentration
 logger = logging.getLogger(__name__)
 
 # Calibrated graded doping defaults (same as device.py)
-_N_D_JUNCTION_DEFAULT = 2.9e15  # cm^-3, near junction
-_N_D_BULK_DEFAULT = 8.5e13  # cm^-3, deep epi bulk
-_L_TRANSITION_DEFAULT = 1e-4  # cm, characteristic decay length
+_N_D_JUNCTION_DEFAULT = 2.931417e+15  # cm^-3, calibrated Plan 26-03
+_N_D_BULK_DEFAULT = 8.823059e+13  # cm^-3, calibrated Plan 26-03
+_L_TRANSITION_DEFAULT = 9.872267e-05  # cm, calibrated Plan 26-03
 
 # Physical constants (CGS)
 EPS_0 = 8.854e-14  # F/cm, vacuum permittivity
