@@ -190,3 +190,132 @@ class TestMeshStructure:
         assert x.max() <= half_width_cm + 1e-12
         assert y.min() >= -buffer - 1e-12
         assert y.max() <= total_depth + buffer + 1e-12
+
+
+# ---------------------------------------------------------------------------
+# Phase 26 / CONS-01 skeleton test classes.
+#
+# These hold the test surface in place BEFORE implementation. Every body is
+# decorated @pytest.mark.xfail(strict=True) so they collect (proving the surface
+# exists) but cannot produce a false green. Plans 02-04 replace the xfail bodies
+# with real assertions, flipping xfail -> pass:
+#   - Plan 02 adds the 2D-aware W extractor + reset_devsim_fully() + node helpers
+#     -> wires TestCalibrationCV, TestResetStateLeak, TestGradedDopingSmoothness
+#   - Plan 03 calibrates the 2D defaults
+#     -> wires TestReverseBiasConvergence and TestCalibrationCV assertions
+# ---------------------------------------------------------------------------
+
+
+class TestReverseBiasConvergence:
+    """Phase 26 / CONS-01 SC#1: 2D device converges at -15, -30, -50 V on both SV sizes.
+
+    Plan 03 replaces xfail with real assertions after calibration completes.
+    """
+
+    @pytest.mark.slow
+    @pytest.mark.xfail(reason="Plan 03 wires this after calibration", strict=True)
+    def test_converges_at_minus_15V_100um(self):
+        from src.charge_collection_2d import create_2d_dd_device
+
+        dev = create_2d_dd_device(
+            device_name=_unique_name(), half_width_um=50, V_bias=15.0
+        )
+        assert dev["dd_initialized"] is True
+
+    @pytest.mark.slow
+    @pytest.mark.xfail(reason="Plan 03 wires this after calibration", strict=True)
+    def test_converges_at_minus_30V_100um(self):
+        from src.charge_collection_2d import create_2d_dd_device
+
+        dev = create_2d_dd_device(
+            device_name=_unique_name(), half_width_um=50, V_bias=30.0
+        )
+        assert dev["dd_initialized"] is True
+
+    @pytest.mark.slow
+    @pytest.mark.xfail(reason="Plan 03 wires this after calibration", strict=True)
+    def test_converges_at_minus_50V_100um(self):
+        from src.charge_collection_2d import create_2d_dd_device
+
+        dev = create_2d_dd_device(
+            device_name=_unique_name(), half_width_um=50, V_bias=50.0
+        )
+        assert dev["dd_initialized"] is True
+
+    @pytest.mark.slow
+    @pytest.mark.xfail(reason="Plan 03 wires this after calibration", strict=True)
+    def test_converges_at_minus_15V_300um(self):
+        from src.charge_collection_2d import create_2d_dd_device
+
+        dev = create_2d_dd_device(
+            device_name=_unique_name(), half_width_um=150, V_bias=15.0
+        )
+        assert dev["dd_initialized"] is True
+
+    @pytest.mark.slow
+    @pytest.mark.xfail(reason="Plan 03 wires this after calibration", strict=True)
+    def test_converges_at_minus_30V_300um(self):
+        from src.charge_collection_2d import create_2d_dd_device
+
+        dev = create_2d_dd_device(
+            device_name=_unique_name(), half_width_um=150, V_bias=30.0
+        )
+        assert dev["dd_initialized"] is True
+
+    @pytest.mark.slow
+    @pytest.mark.xfail(reason="Plan 03 wires this after calibration", strict=True)
+    def test_converges_at_minus_50V_300um(self):
+        from src.charge_collection_2d import create_2d_dd_device
+
+        dev = create_2d_dd_device(
+            device_name=_unique_name(), half_width_um=150, V_bias=50.0
+        )
+        assert dev["dd_initialized"] is True
+
+
+class TestCalibrationCV:
+    """Phase 26 / CONS-01 SC#2: 2D C-V at device center matches 1D C-V with R^2 >= 0.99.
+
+    Plan 02 introduces the 2D-aware W extractor; Plan 03 wires this with real
+    assertions once the calibrated defaults are in place.
+    """
+
+    @pytest.mark.slow
+    @pytest.mark.xfail(
+        reason="Plan 02 adds 2D W extractor; Plan 03 wires assertion", strict=True
+    )
+    def test_2d_vs_1d_cv_centerline(self):
+        # Will compare cv_sweep on 2D center column vs cv_sweep on 1D twin
+        # at V in [0, -5, -10, -15, -20, -30 V] and assert R^2(W_2d_center, W_1d) >= 0.99
+        raise NotImplementedError("Plan 03 wires the R^2 assertion")
+
+
+class TestResetStateLeak:
+    """Phase 26 / CONS-01 SC#3: reset_devsim_fully() clears alt-structure cylindrical globals.
+
+    Plan 02 implements `src/devsim_reset.py` and wires this test.
+    """
+
+    @pytest.mark.slow
+    @pytest.mark.xfail(reason="Plan 02 implements reset_devsim_fully()", strict=True)
+    def test_reset_after_alt_structures(self):
+        # Will: (1) build planar 2D, capture I_dark_ref; (2) reset_devsim_fully();
+        # (3) build cylindrical 3D-electrode, run brief solve; (4) reset_devsim_fully();
+        # (5) build planar 2D again, capture I_dark_after; (6) assert |I_dark_after - I_dark_ref|/I_dark_ref < 1e-3
+        raise NotImplementedError("Plan 02 wires the cylindrical-leak canary")
+
+
+class TestGradedDopingSmoothness:
+    """Phase 26 / PITFALLS P27: graded doping is evaluated at devsim nodes (smooth across mesh).
+
+    Plan 02 wires this test once the 2D-aware extractor is available.
+    """
+
+    @pytest.mark.xfail(
+        reason="Plan 02 wires this after node-extraction helpers exist", strict=True
+    )
+    def test_graded_doping_smoothness_no_kinks(self):
+        # Build a 2D device, extract Donors(y) at center column (x ~= 0),
+        # compute discrete second-difference; assert max |d2N/dy2| / mean(N) is finite
+        # and there are no points where N changes by > 50% between adjacent nodes
+        raise NotImplementedError("Plan 02 wires the smoothness assertion")
