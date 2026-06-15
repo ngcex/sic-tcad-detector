@@ -305,17 +305,107 @@ class TestResetStateLeak:
         raise NotImplementedError("Plan 02 wires the cylindrical-leak canary")
 
 
+class TestExtractDepletionWidth2DCenter:
+    """Phase 26 / Plan 02: center-column W extractor for 2D devices.
+
+    The 1D extract_depletion_width_numerical reads x as depth; 2D modules use
+    y as depth. These tests lock the new dimension-aware extractor.
+    """
+
+    def test_importable(self):
+        from src.poisson import extract_depletion_width_2d_center  # noqa: F401
+
+    def test_raises_on_1d_device(self):
+        from src.poisson import extract_depletion_width_2d_center
+
+        with pytest.raises(ValueError):
+            extract_depletion_width_2d_center({"dimension": 1})
+
+    @pytest.mark.slow
+    def test_equilibrium_W_within_band_of_1d_twin(self):
+        from src.charge_collection_2d import create_2d_dd_device
+        from src.poisson import extract_depletion_width_2d_center
+
+        dev = create_2d_dd_device(
+            device_name=_unique_name(),
+            half_width_um=50.0,
+            V_bias=0.0,
+            doping_profile="graded",
+        )
+        W0 = extract_depletion_width_2d_center(dev)
+        # 1D-twin equilibrium W ~= 1.7e-4 cm; loose +/-30% band (v3.0 profile
+        # is unrefitted in 2D — Plan 03 tightens it).
+        assert 0.7 * 1.7e-4 <= W0 <= 1.3 * 1.7e-4, f"W0={W0}"
+
+    @pytest.mark.slow
+    def test_W_expands_under_reverse_bias(self):
+        from src.charge_collection_2d import create_2d_dd_device
+        from src.poisson import extract_depletion_width_2d_center
+
+        dev0 = create_2d_dd_device(
+            device_name=_unique_name(),
+            half_width_um=50.0,
+            V_bias=0.0,
+            doping_profile="graded",
+        )
+        W0 = extract_depletion_width_2d_center(dev0)
+        dev5 = create_2d_dd_device(
+            device_name=_unique_name(),
+            half_width_um=50.0,
+            V_bias=5.0,
+            doping_profile="graded",
+        )
+        W5 = extract_depletion_width_2d_center(dev5)
+        assert W5 > W0, f"W5={W5} should exceed W0={W0} under reverse bias"
+
+
 class TestGradedDopingSmoothness:
     """Phase 26 / PITFALLS P27: graded doping is evaluated at devsim nodes (smooth across mesh).
 
     Plan 02 wires this test once the 2D-aware extractor is available.
     """
 
-    @pytest.mark.xfail(
-        reason="Plan 02 wires this after node-extraction helpers exist", strict=True
-    )
     def test_graded_doping_smoothness_no_kinks(self):
-        # Build a 2D device, extract Donors(y) at center column (x ~= 0),
-        # compute discrete second-difference; assert max |d2N/dy2| / mean(N) is finite
-        # and there are no points where N changes by > 50% between adjacent nodes
-        raise NotImplementedError("Plan 02 wires the smoothness assertion")
+        import numpy as np
+        from src.charge_collection_2d import create_2d_dd_device
+        from src.poisson import extract_depletion_width_2d_center
+
+        dev = create_2d_dd_device(
+            device_name=_unique_name(),
+            half_width_um=50.0,
+            V_bias=0.0,
+            doping_profile="graded",
+        )
+
+        # The 2D-aware extractor must return a sane in-range W.
+        W0 = extract_depletion_width_2d_center(dev)
+        assert W0 > 0.0
+        assert W0 < dev["epi_thickness_cm"]
+
+        device = dev["device_name"]
+        region = dev["region_name"]
+        x = np.array(
+            devsim.get_node_model_values(device=device, region=region, name="x")
+        )
+        y = np.array(
+            devsim.get_node_model_values(device=device, region=region, name="y")
+        )
+        donors = np.array(
+            devsim.get_node_model_values(device=device, region=region, name="Donors")
+        )
+
+        # Center column (x ~= 0), sorted by depth, restricted to the n-epi.
+        center = np.abs(x) < 1e-6
+        xc, yc, dc = x[center], y[center], donors[center]
+        order = np.argsort(yc)
+        yc, dc = yc[order], dc[order]
+        in_epi = (yc > dev["junction_pos"]) & (dc > 0)
+        d_in = dc[in_epi]
+
+        assert len(d_in) >= 4, f"expected >=4 center-column epi nodes, got {len(d_in)}"
+
+        # No >50% relative jump between adjacent center-column donor nodes (P27).
+        rel_jumps = np.abs(np.diff(d_in)) / d_in[:-1]
+        assert (
+            np.max(rel_jumps) < 0.5
+        ), f"graded donor profile has a >50% jump: max={np.max(rel_jumps):.3f}"
