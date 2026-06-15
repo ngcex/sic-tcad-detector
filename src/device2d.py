@@ -465,3 +465,247 @@ def create_sic_2d_device(
         "half_width_cm": half_width_cm,
         "dimension": 2,
     }
+
+
+def calibrate_graded_doping_2d(
+    target_W_data=None,
+    half_width_um=50.0,
+    epi_thickness_cm=10e-4,
+    substrate_thickness_cm=1e-4,
+    N_A=1e19,
+    T=300,
+    x0=None,
+    maxiter=80,
+    V_target_for_convergence_only=-50.0,
+    divergence_penalty=1e3,
+):
+    """Calibrate the 2D graded epi doping profile (CONS-01).
+
+    This is the 2D analog of ``src/device.py:calibrate_graded_doping``
+    (lines 468-637): it fits ``{N_D_junction, N_D_bulk, L_transition}`` with the
+    same Nelder-Mead simplex, the same parameter bounds, and the same
+    sum-of-squared-relative-error cost against the validated Petringa 1D-twin
+    C-V targets. Two things differ from the 1D version:
+
+    1. Trial devices are built with
+       :func:`src.charge_collection_2d.create_2d_dd_device` (full 2D DD setup)
+       instead of the 1D ``create_dd_device``, and the depletion width is read
+       at the symmetry-plane center column with
+       :func:`src.poisson.extract_depletion_width_2d_center` (NOT the 1D
+       depletion-width extractor, which reads ``x`` as depth and would return
+       the wrong W for a 2D mesh).
+    2. The cost blends the three Petringa W targets (0, -10, -30 V — equal
+       weights, preserving v3.0 behaviour at low bias per PITFALLS P24) with a
+       *hard convergence penalty* (``divergence_penalty``, default 1e3) added
+       whenever the solver fails to ramp all the way to
+       ``V_target_for_convergence_only`` (default -50 V). This extends the
+       operating envelope to the full clinical reverse-bias range without
+       distorting the validated low-bias fit.
+
+    The calibration target is the 2D solver reproducing its own validated 1D
+    twin's C-V at the device center (RESEARCH.md Assumption A2 / success
+    criterion #2), NOT an external 2D dataset.
+
+    Between every trial, :func:`src.devsim_reset.reset_devsim_fully` is called
+    (PITFALLS P03/P30) to clear all devsim global state — including the
+    cylindrical-axis assembly globals — so trials cannot contaminate each other.
+    Unique ``uuid4`` device names avoid name collisions (PITFALLS P20).
+
+    Parameters
+    ----------
+    target_W_data : dict or None
+        Mapping of reverse-bias voltage (V, negative) to target depletion width
+        (cm). Default ``{0.0: 1.7e-4, -10.0: 9.5e-4, -30.0: 9.73e-4}`` (the
+        validated Petringa 1D targets).
+    half_width_um : float
+        Half-width of the sensitive volume in micrometers (50 -> 100 um SV).
+    epi_thickness_cm, substrate_thickness_cm, N_A, T : float
+        Forwarded to ``create_2d_dd_device`` for every trial build.
+    x0 : array_like or None
+        Initial simplex guess ``[N_D_junction, N_D_bulk, L_transition]``.
+        Default ``[2.9e15, 8.5e13, 1e-4]`` (the v3.0 1D-calibrated values).
+    maxiter : int
+        Maximum Nelder-Mead iterations.
+    V_target_for_convergence_only : float
+        Extended reverse-bias target (V, negative) where only *convergence* is
+        required (no W target). Default -50 V.
+    divergence_penalty : float
+        Penalty added to the cost when the ramp to
+        ``V_target_for_convergence_only`` fails. Default 1e3.
+
+    Returns
+    -------
+    result : dict
+        Keys: ``N_D_junction``, ``N_D_bulk``, ``L_transition`` (optimised
+        floats), ``final_cost`` (float), ``success`` (bool), ``W_simulated``
+        (dict ``{float(V): float(W)}`` for the known-W targets at the optimum),
+        ``V_target_for_convergence_only`` (float, passed through),
+        ``converged_at_convergence_target`` (bool — did the optimum ramp reach
+        the -50 V target), ``nit`` (int, optimiser iteration count).
+    """
+    import uuid
+    import numpy as np
+    import devsim
+    import scipy.optimize
+    from src.charge_collection_2d import create_2d_dd_device
+    from src.poisson import extract_depletion_width_2d_center
+    from src.devsim_reset import reset_devsim_fully
+    import devsim.python_packages.simple_physics as simple_physics
+
+    if target_W_data is None:
+        target_W_data = {0.0: 1.7e-4, -10.0: 9.5e-4, -30.0: 9.73e-4}
+
+    if x0 is None:
+        x0 = [2.9e15, 8.5e13, 1e-4]
+
+    run_id = uuid.uuid4().hex[:8]
+    counter = [0]
+
+    # Descending reverse-bias targets: 0, -10, -30
+    target_voltages = sorted(target_W_data.keys(), reverse=True)
+    W_exp = np.array([target_W_data[v] for v in target_voltages])
+    # Reverse-bias convention: cathode receives -V_reverse (positive)
+    cathode_voltages = [-v for v in target_voltages]
+
+    def _ramp_to(device, bias_name, current_V, V_cathode_target):
+        """Ramp cathode in 0.5 V steps with the cv_sweep fallback pattern.
+
+        Returns True if the target was reached, False on solver failure.
+        """
+        V = current_V
+        while V < V_cathode_target - 1e-10:
+            V = min(V + 0.5, V_cathode_target)
+            V = round(V, 10)
+            devsim.set_parameter(device=device, name=bias_name, value=V)
+            try:
+                devsim.solve(
+                    type="dc",
+                    absolute_error=1e10,
+                    relative_error=1e-10,
+                    maximum_iterations=40,
+                )
+            except devsim.error:
+                try:
+                    devsim.solve(
+                        type="dc",
+                        absolute_error=1e12,
+                        relative_error=1e-8,
+                        maximum_iterations=100,
+                    )
+                except devsim.error:
+                    return False
+        return True
+
+    def objective(params_vec, capture=None):
+        """Compute cost for a trial parameter set; optionally capture details."""
+        N_D_j, N_D_b, L_t = params_vec
+
+        # Bounds penalty (identical bounds to the 1D twin)
+        if (
+            N_D_j < 1e14
+            or N_D_j > 1e16
+            or N_D_b < 1e12
+            or N_D_b > 1e15
+            or L_t < 0.5e-4
+            or L_t > 5e-4
+            or N_D_b >= N_D_j
+        ):
+            return 1e6
+
+        trial_name = f"cal2d_{run_id}_{counter[0]}"
+        counter[0] += 1
+        cost = 0.0
+        W_sim = []
+        converged_to_target = False
+
+        try:
+            device_info = create_2d_dd_device(
+                device_name=trial_name,
+                half_width_um=half_width_um,
+                V_bias=0.0,
+                doping_profile="graded",
+                N_D_junction=N_D_j,
+                N_D_bulk=N_D_b,
+                L_transition=L_t,
+                epi_thickness_cm=epi_thickness_cm,
+                substrate_thickness_cm=substrate_thickness_cm,
+                N_A=N_A,
+                T=T,
+            )
+            device = device_info["device_name"]
+            bias_name = simple_physics.GetContactBiasName("cathode")
+
+            current_V = 0.0
+            for v_rev, v_cath in zip(target_voltages, cathode_voltages):
+                if abs(v_cath) < 1e-12:
+                    W = extract_depletion_width_2d_center(device_info)
+                else:
+                    ok = _ramp_to(device, bias_name, current_V, v_cath)
+                    if not ok:
+                        raise devsim.error(f"ramp to cathode={v_cath:.1f} V failed")
+                    current_V = v_cath
+                    W = extract_depletion_width_2d_center(device_info)
+                W_sim.append(W)
+
+            W_sim_arr = np.array(W_sim)
+            cost = float(np.sum(((W_sim_arr - W_exp) / W_exp) ** 2))
+
+            # Hard convergence requirement at the extended target (no W target).
+            v_conv_cath = -V_target_for_convergence_only
+            converged_to_target = _ramp_to(device, bias_name, current_V, v_conv_cath)
+            if not converged_to_target:
+                cost += divergence_penalty
+
+        except Exception as e:  # noqa: BLE001 - any failure is a max-cost trial
+            logger.warning(f"trial {trial_name} failed: {e}")
+            cost = 1e6
+            W_sim = []
+            converged_to_target = False
+        finally:
+            reset_devsim_fully(preserve_solver=True)
+
+        logger.info(
+            f"trial {counter[0]} N_D_j={N_D_j:.3e} N_D_b={N_D_b:.3e} "
+            f"L_t={L_t:.3e} cost={cost:.6f}"
+        )
+
+        if capture is not None:
+            capture["W_sim"] = list(W_sim)
+            capture["converged_to_target"] = converged_to_target
+
+        return cost
+
+    result = scipy.optimize.minimize(
+        objective,
+        x0,
+        method="Nelder-Mead",
+        options={"maxiter": maxiter, "xatol": 1e-10, "fatol": 1e-6},
+    )
+
+    # Rebuild once at the optimum to capture per-voltage W + convergence flag.
+    capture = {}
+    objective(result.x, capture=capture)
+    captured_W_sim = capture.get("W_sim", [])
+    captured_converged = capture.get("converged_to_target", False)
+
+    W_simulated = {float(v): float(w) for v, w in zip(target_voltages, captured_W_sim)}
+
+    N_D_j_opt, N_D_b_opt, L_t_opt = result.x
+    logger.info(
+        f"calibrate_graded_doping_2d complete: N_D_junction={N_D_j_opt:.3e}, "
+        f"N_D_bulk={N_D_b_opt:.3e}, L_transition={L_t_opt:.3e} cm, "
+        f"cost={result.fun:.6f}, success={result.success}, "
+        f"converged_at_-50V={captured_converged}"
+    )
+
+    return {
+        "N_D_junction": float(N_D_j_opt),
+        "N_D_bulk": float(N_D_b_opt),
+        "L_transition": float(L_t_opt),
+        "final_cost": float(result.fun),
+        "success": bool(result.success),
+        "W_simulated": W_simulated,
+        "V_target_for_convergence_only": float(V_target_for_convergence_only),
+        "converged_at_convergence_target": bool(captured_converged),
+        "nit": int(result.nit),
+    }
