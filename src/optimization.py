@@ -32,6 +32,7 @@ import pandas as pd
 from src.analytical import built_in_potential, full_depletion_voltage_graded
 from src.charge_collection_2d import create_2d_dd_device, cce_lateral_scan
 from src.dark_current import setup_tat_model
+from src.devsim_reset import reset_devsim_fully
 from src.drift_diffusion import extract_contact_current
 from src.microdosimetry import mean_chord_length
 from src.sic_material import SiC4H_Parameters
@@ -109,16 +110,6 @@ def microdosimetric_sweep(
         grid = grid[:max_configs]
         total = len(grid)
 
-    # Save solver settings before sweep — reset_devsim() clears them
-    try:
-        _saved_solver = devsim.get_parameter(name="direct_solver")
-    except Exception:
-        _saved_solver = "custom"
-    try:
-        _saved_callback = devsim.get_parameter(name="solver_callback")
-    except Exception:
-        _saved_callback = None
-
     records = []
     for i, (hw, epi, nd, vb) in enumerate(grid):
         logger.info(f"Sweep {i + 1}/{total}: hw={hw}, epi={epi}, nd={nd:.1e}, vb={vb}")
@@ -195,14 +186,9 @@ def microdosimetric_sweep(
             # Reset devsim global state after failure to prevent
             # contamination of subsequent configurations (a failed
             # ramp_bias can leave solver state that causes all later
-            # equilibrium solves to diverge).
-            try:
-                devsim.reset_devsim()
-                devsim.set_parameter(name="direct_solver", value=_saved_solver)
-                if _saved_callback is not None:
-                    devsim.set_parameter(name="solver_callback", value=_saved_callback)
-            except Exception:
-                pass
+            # equilibrium solves to diverge). reset_devsim_fully also clears
+            # any cylindrical-axis globals (P03/P30) and preserves the solver.
+            reset_devsim_fully(preserve_solver=True)
         finally:
             if device_info is not None:
                 try:
