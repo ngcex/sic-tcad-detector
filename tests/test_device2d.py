@@ -297,12 +297,68 @@ class TestResetStateLeak:
     """
 
     @pytest.mark.slow
-    @pytest.mark.xfail(reason="Plan 02 implements reset_devsim_fully()", strict=True)
     def test_reset_after_alt_structures(self):
-        # Will: (1) build planar 2D, capture I_dark_ref; (2) reset_devsim_fully();
-        # (3) build cylindrical 3D-electrode, run brief solve; (4) reset_devsim_fully();
-        # (5) build planar 2D again, capture I_dark_after; (6) assert |I_dark_after - I_dark_ref|/I_dark_ref < 1e-3
-        raise NotImplementedError("Plan 02 wires the cylindrical-leak canary")
+        from src.devsim_reset import reset_devsim_fully
+        from src.charge_collection_2d import create_2d_dd_device
+
+        try:
+            from src.alternative_structures import create_3d_electrode_device
+        except Exception:
+            pytest.skip("3D electrode constructor not available")
+
+        # Reproducible scalar: total cathode contact current (electrons + holes)
+        # of a fully DD-initialized device. If cylindrical assembly weights leak
+        # into a subsequent planar build, this value shifts measurably.
+        from src.drift_diffusion import extract_contact_current
+
+        def _dark_current_at_cathode(device_info):
+            return extract_contact_current(device_info, contact="cathode")
+
+        # --- Stage 1: fresh-session planar reference ---
+        reset_devsim_fully()
+        try:
+            dev_ref = create_2d_dd_device(
+                device_name=_unique_name(),
+                half_width_um=50.0,
+                V_bias=10.0,
+                doping_profile="graded",
+            )
+            I_ref = _dark_current_at_cathode(dev_ref)
+        finally:
+            reset_devsim_fully()
+
+        # --- Stage 2: contaminate with a cylindrical 3D-electrode device ---
+        # Building it invokes _activate_cylindrical_coords, setting the 7
+        # cylindrical globals. No solve needed — creation sets the globals.
+        try:
+            create_3d_electrode_device(
+                device_name=_unique_name(),
+                outer_radius_um=50.0,
+                column_radius_um=5.0,
+            )
+        finally:
+            reset_devsim_fully()
+
+        # --- Stage 3: verify the leak was cleared, then rebuild planar ---
+        assert (
+            devsim.get_parameter(name="node_volume_model") == "NodeVolume"
+        ), "reset_devsim_fully did not restore the Cartesian node_volume_model"
+        try:
+            dev_after = create_2d_dd_device(
+                device_name=_unique_name(),
+                half_width_um=50.0,
+                V_bias=10.0,
+                doping_profile="graded",
+            )
+            I_after = _dark_current_at_cathode(dev_after)
+        finally:
+            reset_devsim_fully()
+
+        rel = abs(I_after - I_ref) / abs(I_ref)
+        assert rel < 1e-3, (
+            f"cylindrical-leak canary: I_ref={I_ref:.6e}, I_after={I_after:.6e}, "
+            f"rel_diff={rel:.3e} (>= 1e-3 means cylindrical globals leaked)"
+        )
 
 
 class TestExtractDepletionWidth2DCenter:
