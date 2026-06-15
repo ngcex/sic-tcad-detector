@@ -1,6 +1,6 @@
 {
-  "cce_center_100um": 0.9644695230865249,
-  "cce_center_300um": 0.9644695230865253,
+  "cce_center_100um": 0.96085509,
+  "cce_center_300um": 0.96085509,
   "cv_1d": {
     "-10.0": 0.0009592594516739858,
     "-5.0": 0.0005775706380019595,
@@ -16,7 +16,8 @@
       "L_transition": 0.0001,
       "N_D_bulk": 85000000000000.0,
       "N_D_junction": 2900000000000000.0
-    }
+    },
+    "rebaselined_plan_26_04": "cce_center_*um updated from 0.96446952 (v3.0 snapshot) to 0.96085509 (calibrated graded defaults). The 0.37% shift is the intended consequence of the -50V convergence calibration (CONS-01 SC#1); N_D_bulk 8.5e13->8.823e13 dominates. tolerance_rel kept at 0.1% as a forward guard."
   },
   "notebook_list": [
     "01_phase1_validation.ipynb",
