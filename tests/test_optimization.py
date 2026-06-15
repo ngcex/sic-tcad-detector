@@ -9,7 +9,60 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.optimization import estimate_noise_floor, score_structures
+from src.optimization import (
+    estimate_noise_floor,
+    score_structures,
+    _rank_sweep_results,
+)
+
+
+class TestSweepValidityGate:
+    """Mj-3 full-depletion + CCE-floor ranking gate for the sweep results."""
+
+    def test_deceptive_undepleted_ranks_below_valid(self):
+        """A high-ratio but NOT-fully-depleted config must rank BELOW a
+        lower-ratio but valid (fully-depleted, high-CCE) config. This is the
+        exact deceptive-uniformity trap the audit flagged."""
+        df = pd.DataFrame(
+            [
+                # deceptive: both-low CCE, perfect ratio, but undepleted
+                {
+                    "edge_center_ratio": 0.99,
+                    "center_cce": 0.30,
+                    "edge_cce": 0.297,
+                    "is_fully_depleted": False,
+                    "passes_cce_floor": False,
+                    "is_valid": False,
+                },
+                # genuine: fully depleted, high CCE, slightly lower ratio
+                {
+                    "edge_center_ratio": 0.96,
+                    "center_cce": 0.99,
+                    "edge_cce": 0.95,
+                    "is_fully_depleted": True,
+                    "passes_cce_floor": True,
+                    "is_valid": True,
+                },
+            ]
+        )
+        ranked = _rank_sweep_results(df)
+        assert ranked.iloc[0]["is_valid"]
+        assert ranked.iloc[0]["center_cce"] == 0.99
+        assert not ranked.iloc[1]["is_valid"]
+
+    def test_valid_configs_ordered_by_uniformity(self):
+        """Within the valid group, higher edge_center_ratio ranks first."""
+        df = pd.DataFrame(
+            [
+                {"edge_center_ratio": 0.93, "is_valid": True},
+                {"edge_center_ratio": 0.98, "is_valid": True},
+                {"edge_center_ratio": 0.50, "is_valid": False},
+            ]
+        )
+        ranked = _rank_sweep_results(df)
+        assert ranked.iloc[0]["edge_center_ratio"] == 0.98
+        assert ranked.iloc[1]["edge_center_ratio"] == 0.93
+        assert not ranked.iloc[2]["is_valid"]
 
 
 # ---------------------------------------------------------------------------

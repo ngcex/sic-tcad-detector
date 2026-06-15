@@ -42,15 +42,27 @@ _M_H_DOS = _sic.m_h_dos  # 1.0 m0
 
 # ---------------------------------------------------------------------------
 # NIEL hardness factors for protons in SiC
-# kappa(E) = NIEL_proton(E) / NIEL_neutron(1 MeV)
-# PLACEHOLDER values -- must be replaced with SR-NIEL calculator data
-# before production use. See STATE.md blockers.
+# kappa(E) = NIEL_proton(E) / NIEL_neutron_SiC(1 MeV)
+# AUDIT C-5 (v5, 2026-06) -- DATA-BLOCKED, NOT YET FIXED. These are unvalidated
+# placeholders; kappa multiplies fluence everywhere (fluence_neq = fluence_proton
+# * kappa), so ALL absolute proton-damage and Phi_crit numbers ride on them.
+# The energy TREND is correct, but no ABSOLUTE Phi_crit / defect-concentration
+# number is citable until these are replaced.
+#   NOTE: the v5 audit REFUTED the "~3-5x too small / should be ~1-2" claim --
+#   that arose from comparing against SILICON-normalized factors. The denominator
+#   here is correctly the SiC 1-MeV-neutron NIEL (the right reference for a SiC
+#   simulator), which is ~2.5-3x larger than silicon's, so SiC-normalized proton
+#   kappa of ~0.3-0.5 is PLAUSIBLE. The residual issue is that they are
+#   unvalidated and may be off by tens of percent.
+# FIX REQUIRES EXTERNAL DATA (do not fabricate): SR-NIEL SiC proton NIEL at the
+# four beam energies, expressed as kappa(E)=NIEL_proton(E)/NIEL_neutron_SiC(1MeV);
+# document the SiC-neutron normalization explicitly. See PHYSICS_AUDIT_v5.md C-5.
 # ---------------------------------------------------------------------------
 NIEL_HARDNESS_PROTON_SIC: dict[float, float] = {
-    30: 0.50,  # placeholder -- obtain from SR-NIEL
-    62: 0.35,  # placeholder -- obtain from SR-NIEL
-    70: 0.33,  # placeholder -- obtain from SR-NIEL
-    150: 0.22,  # placeholder -- obtain from SR-NIEL
+    30: 0.50,  # placeholder -- obtain from SR-NIEL (SiC-neutron normalized)
+    62: 0.35,  # placeholder -- obtain from SR-NIEL (SiC-neutron normalized)
+    70: 0.33,  # placeholder -- obtain from SR-NIEL (SiC-neutron normalized)
+    150: 0.22,  # placeholder -- obtain from SR-NIEL (SiC-neutron normalized)
 }
 
 
@@ -78,14 +90,18 @@ class RadiationDamageParams:
     # --- EH6/7 center ---
     eta_EH67: float = 1.6  # cm^-1, introduction rate
     E_EH67: float = 1.60  # eV below Ec
-    # AUDIT C5 (2026-06): 9e-12 cm^2 is physically implausible (~1000x larger
-    # than every other trap here and than typical SiC capture cross-sections
-    # ~1e-14..1e-16 cm^2). It dominates electron K_tau and is almost certainly a
-    # transcription error from Burin et al. 2024. NOT corrected here because the
-    # exact paper value must be confirmed (likely 9e-15 or 9e-16). Do NOT trust
-    # EH6/7-driven lifetime/CCE-vs-fluence results until verified against Table I.
+    # AUDIT C-4 (v5, 2026-06): Burin et al. (arXiv:2407.16710) Table I lists
+    # sigma_e(EH6/7) = 9e-12 cm^2 -- this code faithfully transcribed it (the v4
+    # "transcription error" hypothesis was REFUTED: Table I really prints 9e-12,
+    # and that paper notes its cross-sections deviate widely across the
+    # literature). However 9e-12 implies a ~17 nm capture radius (unphysical for
+    # a point defect) and would dominate ~92% of electron K_tau. Replaced with an
+    # order-of-magnitude primary-DLTS-consistent estimate (~1.4e-14, plausible
+    # range 1e-15..5e-14), consistent with this defect's own sigma_p=3.8e-14 and
+    # the neighboring Z1/2 (2e-14) / EH4 (5e-13) electron cross-sections. Absolute
+    # tau_n-vs-fluence (electron side) remains uncertain to ~1 order of magnitude.
     sigma_n_EH67: float = (
-        9e-12  # cm^2, electron capture cross-section [SUSPECT: see C5]
+        1.4e-14  # cm^2, electron capture cross-section [order-of-mag; see AUDIT C-4]
     )
     sigma_p_EH67: float = 3.8e-14  # cm^2, hole capture cross-section
     type_EH67: str = "donor"
