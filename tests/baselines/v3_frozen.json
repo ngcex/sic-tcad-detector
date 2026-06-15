@@ -1,0 +1,43 @@
+{
+  "cce_center_100um": 0.9644695230865249,
+  "cce_center_300um": 0.9644695230865253,
+  "cv_1d": {
+    "-10.0": 0.0009592594516739858,
+    "-5.0": 0.0005775706380019595,
+    "0.0": 0.0001697080262216593
+  },
+  "metadata": {
+    "devsim_version": "2.10.0",
+    "frozen_at_utc": "2026-06-15T12:16:01.802731+00:00",
+    "git_commit_sha": "WORKING_TREE",
+    "purpose": "Phase 26 regression baseline \u2014 Plan 04 asserts that calibrated 2D defaults reproduce these within tolerance_rel at biases <= -10 V",
+    "tolerance_rel": 0.001,
+    "v3_default_doping": {
+      "L_transition": 0.0001,
+      "N_D_bulk": 85000000000000.0,
+      "N_D_junction": 2900000000000000.0
+    }
+  },
+  "notebook_list": [
+    "01_phase1_validation.ipynb",
+    "02_electrical_characterization.ipynb",
+    "03_charge_collection.ipynb",
+    "04_flash_recombination.ipynb",
+    "05_dark_current_vs_fluence.ipynb",
+    "06_temperature_dependence.ipynb",
+    "07_dark_current.ipynb",
+    "08_transient_flash.ipynb",
+    "09_radiation_damage.ipynb",
+    "10_cce_vs_fluence.ipynb",
+    "11_dark_current_cv_evolution.ipynb",
+    "12_multi_defect_comparison.ipynb",
+    "13_parametric_optimization.ipynb",
+    "14_validation.ipynb",
+    "15_2d_electrostatics_cce.ipynb",
+    "16_single_particle_cce.ipynb",
+    "17_mc_coupling.ipynb",
+    "18_microdosimetric_spectra.ipynb",
+    "19_alternative_structures.ipynb",
+    "20_feasibility_report.ipynb"
+  ]
+}
