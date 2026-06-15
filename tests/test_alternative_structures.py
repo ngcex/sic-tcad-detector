@@ -122,6 +122,88 @@ class TestThreeDElectrodeDevice:
 
             restore_cartesian_coords()
 
+    def test_3d_electrode_preserves_graded_epi_doping(self):
+        """AUDIT Mj-1: bulk Donors (outside the n+ column) must reflect the
+        graded epi profile (~N_D_bulk), NOT the old uniform 1.07e15 override."""
+        import numpy as np
+        from src.alternative_structures import (
+            create_3d_electrode_device,
+            restore_cartesian_coords,
+        )
+
+        name = _uid()
+        dev = create_3d_electrode_device(device_name=name, doping_profile="graded")
+        try:
+            x = np.array(
+                devsim.get_node_model_values(device=name, region="sic", name="x")
+            )
+            y = np.array(
+                devsim.get_node_model_values(device=name, region="sic", name="y")
+            )
+            donors = np.array(
+                devsim.get_node_model_values(device=name, region="sic", name="Donors")
+            )
+            donors_epi = np.array(
+                devsim.get_node_model_values(
+                    device=name, region="sic", name="Donors_epi"
+                )
+            )
+            col_r = dev["column_radius_cm"]
+            # Deep-bulk node: outside the column, well past the grading length,
+            # and inside the epi (below the substrate junction).
+            jp = dev.get("junction_pos", 1e-4)
+            deep = (x > 2 * col_r) & (y > jp + 5e-4)
+            assert deep.any(), "no deep-bulk nodes found to sample"
+            bulk_donors = donors[deep]
+            # Must be near N_D_bulk (8.5e13), NOT the old uniform 1.07e15.
+            assert bulk_donors.max() < 5e14, (
+                f"bulk Donors max {bulk_donors.max():.2e} looks like the old "
+                "uniform 1.07e15 override (Mj-1 regression)"
+            )
+            assert len(donors_epi) == len(donors)
+        finally:
+            devsim.delete_device(device=name)
+            restore_cartesian_coords()
+
+    def test_3d_electrode_anode_has_pplus_wall(self):
+        """AUDIT Mj-2: the outer anode wall must be p+ over its FULL depth
+        (NetDoping < 0), not metal-on-n- as before."""
+        import numpy as np
+        from src.alternative_structures import (
+            create_3d_electrode_device,
+            restore_cartesian_coords,
+        )
+
+        name = _uid()
+        dev = create_3d_electrode_device(device_name=name)
+        try:
+            x = np.array(
+                devsim.get_node_model_values(device=name, region="sic", name="x")
+            )
+            y = np.array(
+                devsim.get_node_model_values(device=name, region="sic", name="y")
+            )
+            net = np.array(
+                devsim.get_node_model_values(
+                    device=name, region="sic", name="NetDoping"
+                )
+            )
+            outer_r = dev["outer_radius_cm"]
+            jp = dev.get("junction_pos", 1e-4)
+            # Mid-depth nodes strictly inside the 1 um p+ shell (x >= outer_r -
+            # wall_thickness), well below the old top-only p+. Use >= the wall
+            # inner edge so we don't sample the n- side of the step boundary.
+            wall_thickness_cm = 1e-4
+            wall = (x >= outer_r - wall_thickness_cm) & (y > jp + 3e-4)
+            assert wall.any(), "no outer-wall mid-depth nodes found"
+            assert (net[wall] < 0).all(), (
+                "outer anode wall is not p-type at mid-depth (Mj-2 regression: "
+                "anode still on n-)"
+            )
+        finally:
+            devsim.delete_device(device=name)
+            restore_cartesian_coords()
+
     def test_3d_electrode_poisson_solve(self):
         from src.alternative_structures import create_3d_electrode_device
         from src.poisson import setup_poisson, solve_equilibrium

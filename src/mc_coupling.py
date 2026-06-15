@@ -28,7 +28,13 @@ import logging
 import numpy as np
 import pandas as pd
 
+from src.sic_material import SiC4H_Parameters
+
 logger = logging.getLogger(__name__)
+
+# E-h pair creation energy: single source of truth in SiC4H_Parameters (7.8 eV,
+# measured 4H-SiC W-value). Audit M6: was hardcoded 8.4 eV here, ~7.7% high.
+E_PAIR_SIC_EV = SiC4H_Parameters().E_pair_eV  # eV
 
 # ---------------------------------------------------------------------------
 # Unit conversion
@@ -311,7 +317,7 @@ def events_to_charge_profiles(
     sv_thickness_um=10.0,
     x_ion_cm=0.0,
     track_sigma_cm=1e-4,
-    E_pair_eV=8.4,
+    E_pair_eV=E_PAIR_SIC_EV,
 ):
     """Convert MC events to 2D mesh charge generation profiles.
 

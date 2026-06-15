@@ -16,7 +16,95 @@ from src.analytical import (
     depletion_width,
     electric_field_profile,
     depletion_width_vs_bias,
+    full_depletion_voltage_graded,
 )
+
+
+class TestFullDepletionVoltageGraded:
+    """Full-depletion voltage for the graded epi profile (audit Mj-3 gate)."""
+
+    # Project graded-doping defaults (device2d.py)
+    N_D_JUNCTION = 2.9e15
+    N_D_BULK = 8.5e13
+    L = 1e-4  # cm
+    EPI = 10e-4  # cm
+    V_BI = 2.9
+
+    def test_graded_vfd_standard_config(self):
+        """Standard graded profile (10 um epi, bulk 8.5e13): V_fd ~10 V.
+
+        Numerically verified (scipy.quad of y*N_D(y)) = 10.28 V. The grading
+        length L=1 um means high doping only occupies the first ~1 um, so
+        depletion is governed mostly by the low bulk -> modest V_fd here.
+        (Contrast test_graded_vfd_high_corner: the deep/high-doped corner of
+        the sweep grid is what actually exceeds the swept biases.)
+        """
+        V_fd = full_depletion_voltage_graded(
+            epi_thickness=self.EPI,
+            N_D_bulk=self.N_D_BULK,
+            N_D_junction=self.N_D_JUNCTION,
+            L_transition=self.L,
+            V_bi=self.V_BI,
+        )
+        assert V_fd == pytest.approx(10.3, abs=0.5), f"got {V_fd:.1f}"
+
+    def test_graded_vfd_high_corner(self):
+        """The 20 um / N_D_bulk=5e14 sweep corner needs ~188 V to fully
+        deplete -- far above the swept biases (20/40/60 V). This is the
+        deceptive-uniformity trap the Mj-3 gate must catch."""
+        V_fd = full_depletion_voltage_graded(
+            epi_thickness=20e-4,
+            N_D_bulk=5e14,
+            N_D_junction=self.N_D_JUNCTION,
+            L_transition=self.L,
+            V_bi=self.V_BI,
+        )
+        assert V_fd > 150, f"expected >150 V at deep/high-doped corner, got {V_fd:.1f}"
+
+    def test_graded_vfd_exceeds_uniform_bulk_estimate(self):
+        """The graded V_fd must be LARGER than the (anti-conservative) uniform
+        N_D_bulk estimate -- the whole reason the audit rejected the uniform
+        gate. Using N_D_bulk alone underestimates V_fd (gate fails open)."""
+        eps = 9.7 * 8.854e-14
+        q = 1.602e-19
+        V_fd_uniform_bulk = q * self.N_D_BULK * self.EPI**2 / (2 * eps) - self.V_BI
+        V_fd_graded = full_depletion_voltage_graded(
+            epi_thickness=self.EPI,
+            N_D_bulk=self.N_D_BULK,
+            N_D_junction=self.N_D_JUNCTION,
+            L_transition=self.L,
+            V_bi=self.V_BI,
+        )
+        assert V_fd_graded > V_fd_uniform_bulk
+
+    def test_uniform_fallback_matches_closed_form(self):
+        """With n_d_uniform set, it must collapse to q*N_D*t^2/(2 eps) - V_bi."""
+        eps = 9.7 * 8.854e-14
+        q = 1.602e-19
+        N_D = 1e15
+        expected = q * N_D * self.EPI**2 / (2 * eps) - self.V_BI
+        got = full_depletion_voltage_graded(
+            epi_thickness=self.EPI,
+            N_D_bulk=self.N_D_BULK,
+            N_D_junction=self.N_D_JUNCTION,
+            L_transition=self.L,
+            V_bi=self.V_BI,
+            n_d_uniform=N_D,
+        )
+        assert got == pytest.approx(expected, rel=1e-9)
+
+    def test_thicker_epi_needs_more_voltage(self):
+        """V_fd must increase monotonically with epi thickness."""
+        kw = dict(
+            N_D_bulk=self.N_D_BULK,
+            N_D_junction=self.N_D_JUNCTION,
+            L_transition=self.L,
+            V_bi=self.V_BI,
+        )
+        v5 = full_depletion_voltage_graded(epi_thickness=5e-4, **kw)
+        v10 = full_depletion_voltage_graded(epi_thickness=10e-4, **kw)
+        v20 = full_depletion_voltage_graded(epi_thickness=20e-4, **kw)
+        assert v5 < v10 < v20
 
 
 class TestBuiltInPotential:

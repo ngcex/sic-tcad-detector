@@ -29,16 +29,26 @@ import devsim
 import numpy as np
 import pandas as pd
 
+from src.analytical import built_in_potential, full_depletion_voltage_graded
 from src.charge_collection_2d import create_2d_dd_device, cce_lateral_scan
 from src.dark_current import setup_tat_model
 from src.drift_diffusion import extract_contact_current
 from src.microdosimetry import mean_chord_length
+from src.sic_material import SiC4H_Parameters
+
+# AUDIT Mj-3 (v5): minimum CCE for a config to be a trustworthy microdosimeter.
+# Below this, edge/center uniformity is meaningless (both-low CCE looks uniform).
+CCE_FLOOR = 0.95
 
 logger = logging.getLogger(__name__)
 
 # Physical constants
 Q = 1.602e-19  # C, elementary charge
-E_PAIR_EV = 8.4  # eV, electron-hole pair creation energy in 4H-SiC
+# E-h pair creation energy: single source of truth in SiC4H_Parameters (7.8 eV,
+# measured 4H-SiC W-value). Audit M6: was hardcoded 8.4 eV here, ~7.7% high.
+E_PAIR_EV = (
+    SiC4H_Parameters().E_pair_eV
+)  # eV, electron-hole pair creation energy in 4H-SiC
 
 
 def microdosimetric_sweep(
@@ -75,8 +85,14 @@ def microdosimetric_sweep(
     -------
     pd.DataFrame
         DataFrame with columns: half_width_um, epi_thickness_cm, N_D_bulk,
-        V_bias, center_cce, edge_cce, edge_center_ratio, cce_std.
-        Sorted by edge_center_ratio descending (best uniformity first).
+        V_bias, center_cce, edge_cce, edge_center_ratio, cce_std, plus the
+        Mj-3 validity gate: V_fd (full-depletion voltage from the graded
+        profile), is_fully_depleted (|V_bias| >= V_fd), passes_cce_floor
+        (both center & edge CCE >= CCE_FLOOR=0.95), and is_valid (both).
+        Sorted so all valid configs rank above all invalid ones, then by
+        edge_center_ratio descending within each group. Invalid (partially
+        depleted or low-CCE) configs are RETAINED and flagged, not dropped --
+        do not trust the uniformity ratio of a row with is_valid=False.
     """
     grid = list(
         itertools.product(half_widths_um, epi_thicknesses_cm, N_D_bulks, V_biases)
@@ -116,16 +132,43 @@ def microdosimetric_sweep(
             )
             scan = cce_lateral_scan(device_info, n_points=n_lateral_points)
             cce_vals = np.array(scan["cce_values"])
+
+            # AUDIT Mj-3: full-depletion gate. A partially-depleted device with
+            # both-low CCE shows a deceptively uniform edge/center ratio and
+            # would rank artificially high. Compute V_fd from the device's
+            # actual graded profile (NOT the uniform N_D_bulk estimate, which is
+            # anti-conservative) and require both full depletion AND an absolute
+            # CCE floor before the uniformity ratio is trustworthy.
+            V_bi = built_in_potential(
+                device_info["N_A_ionized"],
+                device_info["N_D_junction"],
+                device_info["n_i"],
+            )
+            V_fd = full_depletion_voltage_graded(
+                epi_thickness=device_info["epi_thickness_cm"],
+                N_D_bulk=device_info["N_D_bulk"],
+                N_D_junction=device_info["N_D_junction"],
+                L_transition=device_info["L_transition"],
+                V_bi=V_bi,
+            )
+            center_cce = float(cce_vals[0])
+            edge_cce = float(cce_vals[-1])
+            is_fully_depleted = abs(vb) >= V_fd
+            passes_cce_floor = center_cce >= CCE_FLOOR and edge_cce >= CCE_FLOOR
             records.append(
                 {
                     "half_width_um": hw,
                     "epi_thickness_cm": epi,
                     "N_D_bulk": nd,
                     "V_bias": vb,
-                    "center_cce": float(cce_vals[0]),
-                    "edge_cce": float(cce_vals[-1]),
+                    "center_cce": center_cce,
+                    "edge_cce": edge_cce,
                     "edge_center_ratio": float(scan["edge_to_center_ratio"]),
                     "cce_std": float(np.std(cce_vals)),
+                    "V_fd": float(V_fd),
+                    "is_fully_depleted": bool(is_fully_depleted),
+                    "passes_cce_floor": bool(passes_cce_floor),
+                    "is_valid": bool(is_fully_depleted and passes_cce_floor),
                 }
             )
         except Exception as e:
@@ -143,6 +186,10 @@ def microdosimetric_sweep(
                     "edge_cce": np.nan,
                     "edge_center_ratio": np.nan,
                     "cce_std": np.nan,
+                    "V_fd": np.nan,
+                    "is_fully_depleted": False,
+                    "passes_cce_floor": False,
+                    "is_valid": False,
                 }
             )
             # Reset devsim global state after failure to prevent
@@ -163,10 +210,24 @@ def microdosimetric_sweep(
                 except Exception:
                     pass
 
-    df = pd.DataFrame(records)
-    df = df.sort_values("edge_center_ratio", ascending=False, na_position="last")
-    df = df.reset_index(drop=True)
-    return df
+    return _rank_sweep_results(pd.DataFrame(records))
+
+
+def _rank_sweep_results(df):
+    """Rank microdosimetric-sweep results with the Mj-3 validity gate.
+
+    Valid configs (fully-depleted AND above the CCE floor) rank above all
+    invalid ones, then by uniformity (edge_center_ratio) within each group.
+    This guarantees a deceptive partially-depleted config can never outrank a
+    genuinely uniform fully-depleted one. Invalid rows are retained (flagged
+    via is_valid=False), not dropped. Pure function for testability.
+    """
+    df = df.sort_values(
+        ["is_valid", "edge_center_ratio"],
+        ascending=[False, False],
+        na_position="last",
+    )
+    return df.reset_index(drop=True)
 
 
 def estimate_noise_floor(

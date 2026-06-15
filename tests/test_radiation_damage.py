@@ -53,7 +53,12 @@ class TestRadiationDamageParams:
         assert p.E_EH67 == 1.60
         assert p.E_EH4 == 1.03
         assert p.sigma_n_Z12 == 2e-14
-        assert p.sigma_n_EH67 == 9e-12
+        # AUDIT C-4: EH6/7 electron cross-section is an order-of-magnitude
+        # estimate, not a measured-to-2-figures constant. Assert a physical
+        # plausibility band (point defect ~1e-15..1e-13 cm^2), not a point lock,
+        # to prevent both a regression to the unphysical 9e-12 and false-precision
+        # lock-in of the replacement value.
+        assert 1e-15 < p.sigma_n_EH67 < 1e-13
         assert p.sigma_n_EH4 == 5e-13
 
     def test_provenance(self):
