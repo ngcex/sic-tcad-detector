@@ -213,64 +213,88 @@ class TestReverseBiasConvergence:
     """
 
     @pytest.mark.slow
-    @pytest.mark.xfail(reason="Plan 03 wires this after calibration", strict=True)
     def test_converges_at_minus_15V_100um(self):
         from src.charge_collection_2d import create_2d_dd_device
+        from src.devsim_reset import reset_devsim_fully
 
-        dev = create_2d_dd_device(
-            device_name=_unique_name(), half_width_um=50, V_bias=15.0
-        )
-        assert dev["dd_initialized"] is True
+        try:
+            dev = create_2d_dd_device(
+                device_name=_unique_name(), half_width_um=50.0, V_bias=15.0
+            )
+            assert dev["dd_initialized"] is True
+            assert dev["dimension"] == 2
+        finally:
+            reset_devsim_fully()
 
     @pytest.mark.slow
-    @pytest.mark.xfail(reason="Plan 03 wires this after calibration", strict=True)
     def test_converges_at_minus_30V_100um(self):
         from src.charge_collection_2d import create_2d_dd_device
+        from src.devsim_reset import reset_devsim_fully
 
-        dev = create_2d_dd_device(
-            device_name=_unique_name(), half_width_um=50, V_bias=30.0
-        )
-        assert dev["dd_initialized"] is True
+        try:
+            dev = create_2d_dd_device(
+                device_name=_unique_name(), half_width_um=50.0, V_bias=30.0
+            )
+            assert dev["dd_initialized"] is True
+            assert dev["dimension"] == 2
+        finally:
+            reset_devsim_fully()
 
     @pytest.mark.slow
-    @pytest.mark.xfail(reason="Plan 03 wires this after calibration", strict=True)
     def test_converges_at_minus_50V_100um(self):
         from src.charge_collection_2d import create_2d_dd_device
+        from src.devsim_reset import reset_devsim_fully
 
-        dev = create_2d_dd_device(
-            device_name=_unique_name(), half_width_um=50, V_bias=50.0
-        )
-        assert dev["dd_initialized"] is True
+        try:
+            dev = create_2d_dd_device(
+                device_name=_unique_name(), half_width_um=50.0, V_bias=50.0
+            )
+            assert dev["dd_initialized"] is True
+            assert dev["dimension"] == 2
+        finally:
+            reset_devsim_fully()
 
     @pytest.mark.slow
-    @pytest.mark.xfail(reason="Plan 03 wires this after calibration", strict=True)
     def test_converges_at_minus_15V_300um(self):
         from src.charge_collection_2d import create_2d_dd_device
+        from src.devsim_reset import reset_devsim_fully
 
-        dev = create_2d_dd_device(
-            device_name=_unique_name(), half_width_um=150, V_bias=15.0
-        )
-        assert dev["dd_initialized"] is True
+        try:
+            dev = create_2d_dd_device(
+                device_name=_unique_name(), half_width_um=150.0, V_bias=15.0
+            )
+            assert dev["dd_initialized"] is True
+            assert dev["dimension"] == 2
+        finally:
+            reset_devsim_fully()
 
     @pytest.mark.slow
-    @pytest.mark.xfail(reason="Plan 03 wires this after calibration", strict=True)
     def test_converges_at_minus_30V_300um(self):
         from src.charge_collection_2d import create_2d_dd_device
+        from src.devsim_reset import reset_devsim_fully
 
-        dev = create_2d_dd_device(
-            device_name=_unique_name(), half_width_um=150, V_bias=30.0
-        )
-        assert dev["dd_initialized"] is True
+        try:
+            dev = create_2d_dd_device(
+                device_name=_unique_name(), half_width_um=150.0, V_bias=30.0
+            )
+            assert dev["dd_initialized"] is True
+            assert dev["dimension"] == 2
+        finally:
+            reset_devsim_fully()
 
     @pytest.mark.slow
-    @pytest.mark.xfail(reason="Plan 03 wires this after calibration", strict=True)
     def test_converges_at_minus_50V_300um(self):
         from src.charge_collection_2d import create_2d_dd_device
+        from src.devsim_reset import reset_devsim_fully
 
-        dev = create_2d_dd_device(
-            device_name=_unique_name(), half_width_um=150, V_bias=50.0
-        )
-        assert dev["dd_initialized"] is True
+        try:
+            dev = create_2d_dd_device(
+                device_name=_unique_name(), half_width_um=150.0, V_bias=50.0
+            )
+            assert dev["dd_initialized"] is True
+            assert dev["dimension"] == 2
+        finally:
+            reset_devsim_fully()
 
 
 class TestCalibrationCV:
@@ -281,13 +305,89 @@ class TestCalibrationCV:
     """
 
     @pytest.mark.slow
-    @pytest.mark.xfail(
-        reason="Plan 02 adds 2D W extractor; Plan 03 wires assertion", strict=True
-    )
     def test_2d_vs_1d_cv_centerline(self):
-        # Will compare cv_sweep on 2D center column vs cv_sweep on 1D twin
-        # at V in [0, -5, -10, -15, -20, -30 V] and assert R^2(W_2d_center, W_1d) >= 0.99
-        raise NotImplementedError("Plan 03 wires the R^2 assertion")
+        import numpy as np
+        from src.charge_collection_2d import create_2d_dd_device
+        from src.drift_diffusion import create_dd_device
+        from src.cv_analysis import cv_sweep
+        from src.poisson import (
+            extract_depletion_width_numerical,  # noqa: F401 - 1D twin via cv_sweep
+            extract_depletion_width_2d_center,
+        )
+        from src.devsim_reset import reset_devsim_fully
+        from src.device2d import (
+            _N_D_JUNCTION_DEFAULT,
+            _N_D_BULK_DEFAULT,
+            _L_TRANSITION_DEFAULT,
+        )
+
+        # Low-bias regime where v3.0 already converged.
+        voltages = [0.0, -2.5, -5.0, -7.5, -10.0]
+
+        # 1D twin
+        reset_devsim_fully()
+        dev_1d = create_dd_device(
+            device_name=_unique_name() + "_1d",
+            doping_profile="graded",
+            N_D_junction=_N_D_JUNCTION_DEFAULT,
+            N_D_bulk=_N_D_BULK_DEFAULT,
+            L_transition=_L_TRANSITION_DEFAULT,
+        )
+        cv_1d = cv_sweep(dev_1d, V_range=voltages)
+        W_1d = np.array(cv_1d["depletion_widths"])
+
+        # 2D center column
+        reset_devsim_fully()
+        dev_2d = create_2d_dd_device(
+            device_name=_unique_name() + "_2d",
+            half_width_um=50.0,
+            V_bias=0.0,
+            doping_profile="graded",
+        )
+        W_2d = []
+        import devsim
+        import devsim.python_packages.simple_physics as simple_physics
+
+        bias_name = simple_physics.GetContactBiasName("cathode")
+        current_V = 0.0
+        for V_rev in voltages:
+            V_cathode_target = -V_rev
+            V = current_V
+            while V < V_cathode_target - 1e-10:
+                V = min(V + 0.5, V_cathode_target)
+                devsim.set_parameter(
+                    device=dev_2d["device_name"], name=bias_name, value=V
+                )
+                try:
+                    devsim.solve(
+                        type="dc",
+                        absolute_error=1e10,
+                        relative_error=1e-10,
+                        maximum_iterations=40,
+                    )
+                except devsim.error:
+                    devsim.solve(
+                        type="dc",
+                        absolute_error=1e12,
+                        relative_error=1e-8,
+                        maximum_iterations=100,
+                    )
+            current_V = V_cathode_target
+            W_2d.append(extract_depletion_width_2d_center(dev_2d))
+        W_2d = np.array(W_2d)
+
+        # R^2 = 1 - SS_res / SS_tot
+        SS_res = np.sum((W_2d - W_1d) ** 2)
+        SS_tot = np.sum((W_1d - np.mean(W_1d)) ** 2)
+        R2 = 1.0 - SS_res / SS_tot if SS_tot > 0 else 0.0
+
+        assert R2 >= 0.99, (
+            "2D-center C-V does not match 1D within R^2 >= 0.99. "
+            f"Got R^2 = {R2:.4f}. W_1d (cm) = {W_1d.tolist()}, "
+            f"W_2d (cm) = {W_2d.tolist()}"
+        )
+
+        reset_devsim_fully()
 
 
 class TestResetStateLeak:
