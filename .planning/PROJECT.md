@@ -21,7 +21,7 @@ A Python-based TCAD simulation toolkit for modeling the electrical, thermal, tra
 
 ## Core Value
 
-Predict how charge collection efficiency (CCE) in the SiC detector degrades under ultra-high dose-rate (FLASH) conditions — a gap no existing paper has filled.
+Explore how charge collection efficiency (CCE) in the SiC detector behaves under ultra-high dose-rate (FLASH) conditions, as an exploratory TCAD sensitivity study. (The genuine high-injection plasma physics is not yet modeled — see the status caveat below; FLASH dose-rate outputs are sensitivity bounds, not a validated mechanistic explanation.)
 
 > **Status caveat (physics audit, 2026-06):** The TCAD "plasma recombination" explanation is **not yet implemented**. The current FLASH module (`flash_recombination.py`) adds only an Auger term, which is quantitatively negligible at 20–230 Gy/s; the genuine high-injection physics (e-h plasma field screening, ambipolar transport, conductivity modulation) and radiative recombination are not in the equations. Until that physics is added and validated, FLASH dose-rate results are exploratory bounds, not a predictive explanation. See `.planning/PHYSICS_AUDIT_v4.md` (C2/C3).
 
@@ -207,24 +207,24 @@ The FLASH paper (Petringa 2025, Physica Medica 138) characterizes the dosimetric
 
 ## Key Decisions
 
-| Decision                           | Rationale                                                                          | Outcome                                                             |
-| ---------------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| Start with FLASH problem           | Highest novelty, no existing TCAD work on SiC under FLASH                          | ✓ Good — produced first SiC-specific FLASH TCAD prediction          |
-| Use devsim for device physics      | Open-source, Python-native, proven for semiconductor simulation                    | ✓ Good — handled all physics including transient high-injection     |
-| devsim-only (no fipy)              | devsim transient solver handled high-injection without needing separate PDE solver | ✓ Good — simplified architecture, one solver for everything         |
-| Python + Jupyter                   | Interactive analysis, publication-quality plots, group accessibility               | ✓ Good — 8 validated notebooks ready for group use                  |
-| Graded epi doping                  | Uniform N_D fails to match C-V under reverse bias; graded profile needed           | ✓ Good — C-V R²=0.998 after calibration                             |
-| Clamped exponential Boltzmann      | SiC n_i~5e-9 causes overflow in standard exponential                               | ✓ Good — stable solver without accuracy loss                        |
-| Flat CCE as null result            | Auger recombination negligible at FLASH dose rates (delta_n << threshold)          | ✓ Good — valid scientific finding                                   |
-| Calibrated n_i(T) anchor           | Physical n_i formula gives 3.93e-9 vs validated 5e-9; use ratio-scaling            | ✓ Good — exact 5e-9 at 300K, correct T-dependence                   |
-| Effective N_t for dark current     | n_i^2 bottleneck prevents pA-level dark current with standard SRH/TAT in 1D        | ✓ Good — calibrated to 18.5 pA, physically motivated                |
-| BDF1 over BDF2 for transient       | Unconditional stability at sharp pulse edges outweighs accuracy                    | ✓ Good — stable across 6 orders of magnitude in dt                  |
-| DC approximation validated         | Transient CCE matches steady-state within 0.1%                                     | ✓ Good — confirms v1.0 approach was correct for SiC                 |
-| Fluence-as-temperature pattern     | Fresh devsim device per fluence point; no in-place parameter mutation              | ✓ Good — clean sweep isolation, no state leakage                    |
-| Additive delta-J dark current      | J_dark(Phi) = J_dark(0) + delta_J(Phi) preserves v1.1 calibrated baseline          | ✓ Good — 18.5 pA preserved exactly at fluence=0                     |
-| Near-zero eta for disabled defects | Single-defect model uses eta=1e-10 instead of 0 (validation requires eta>0)        | ✓ Good — avoids division issues while being physically negligible   |
-| Trend comparison validation        | No digitized tabulated data available from literature                              | ✓ Good — honest about circular validation with Burin 2024 params    |
-| Z1/2 E_a=4.5 eV calibration        | Gives practical stability below 1000°C (f~0.05 at 1000°C/1h)                       | ✓ Good — matches experimental observation of Z1/2 thermal stability |
+| Decision                           | Rationale                                                                          | Outcome                                                                                                                             |
+| ---------------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Start with FLASH problem           | Highest novelty, no existing TCAD work on SiC under FLASH                          | ⚠ Partial — produced an exploratory SiC FLASH TCAD sensitivity study, NOT a validated plasma-recombination prediction (audit C2/C3) |
+| Use devsim for device physics      | Open-source, Python-native, proven for semiconductor simulation                    | ✓ Good — handled all physics including transient high-injection                                                                     |
+| devsim-only (no fipy)              | devsim transient solver handled high-injection without needing separate PDE solver | ✓ Good — simplified architecture, one solver for everything                                                                         |
+| Python + Jupyter                   | Interactive analysis, publication-quality plots, group accessibility               | ✓ Good — 8 validated notebooks ready for group use                                                                                  |
+| Graded epi doping                  | Uniform N_D fails to match C-V under reverse bias; graded profile needed           | ✓ Good — C-V R²=0.998 after calibration                                                                                             |
+| Clamped exponential Boltzmann      | SiC n_i~5e-9 causes overflow in standard exponential                               | ✓ Good — stable solver without accuracy loss                                                                                        |
+| Flat CCE as null result            | Auger recombination negligible at FLASH dose rates (delta_n << threshold)          | ✓ Good — valid scientific finding                                                                                                   |
+| Calibrated n_i(T) anchor           | Physical n_i formula gives 3.93e-9 vs validated 5e-9; use ratio-scaling            | ✓ Good — exact 5e-9 at 300K, correct T-dependence                                                                                   |
+| Effective N_t for dark current     | n_i^2 bottleneck prevents pA-level dark current with standard SRH/TAT in 1D        | ✓ Good — calibrated to 18.5 pA, physically motivated                                                                                |
+| BDF1 over BDF2 for transient       | Unconditional stability at sharp pulse edges outweighs accuracy                    | ✓ Good — stable across 6 orders of magnitude in dt                                                                                  |
+| DC approximation validated         | Transient CCE matches steady-state within 0.1%                                     | ✓ Good — confirms v1.0 approach was correct for SiC                                                                                 |
+| Fluence-as-temperature pattern     | Fresh devsim device per fluence point; no in-place parameter mutation              | ✓ Good — clean sweep isolation, no state leakage                                                                                    |
+| Additive delta-J dark current      | J_dark(Phi) = J_dark(0) + delta_J(Phi) preserves v1.1 calibrated baseline          | ✓ Good — 18.5 pA preserved exactly at fluence=0                                                                                     |
+| Near-zero eta for disabled defects | Single-defect model uses eta=1e-10 instead of 0 (validation requires eta>0)        | ✓ Good — avoids division issues while being physically negligible                                                                   |
+| Trend comparison validation        | No digitized tabulated data available from literature                              | ✓ Good — honest about circular validation with Burin 2024 params                                                                    |
+| Z1/2 E_a=4.5 eV calibration        | Gives practical stability below 1000°C (f~0.05 at 1000°C/1h)                       | ✓ Good — matches experimental observation of Z1/2 thermal stability                                                                 |
 
 ---
 
