@@ -1,0 +1,2 @@
+# PLACEHOLDER — NOT REAL DATA. Replace with NIST PSTAR (si_proton). See README.md. compute_kappa_table(source="bragg") will refuse this file.
+energy_MeV,stopping_power_MeV_cm2_per_g
