@@ -9,7 +9,7 @@ are baked into src/device2d.py. The CCE re-computation recipe mirrors
 scripts/freeze_v3_baselines.py::compute_cce_center exactly (uniform epi
 generation at V_bias=10 V) so the only intended difference between the frozen
 value and the recomputed value is the calibrated _N_D_*_DEFAULT shift in
-src/device2d.py -- which Plan 03 kept within 0.1 % in the low-bias regime.
+src/device2d.py — which Plan 03 kept within 0.1 % in the low-bias regime.
 """
 
 import json
@@ -108,14 +108,14 @@ def test_v3_cce_center_300um_preserved():
 @pytest.mark.slow
 def test_v3_cv_1d_preserved():
     """1D twin must reproduce the frozen v3.0 C-V at the validated [0, -5, -10] V."""
-    from src.drift_diffusion import create_dd_device  # 1D -- frozen per STATE.md
+    from src.drift_diffusion import create_dd_device  # 1D — frozen per STATE.md
     from src.cv_analysis import cv_sweep
     from src.devsim_reset import reset_devsim_fully
 
     baseline = _load_baseline()
     expected_cv = baseline["cv_1d"]
     tol = baseline["metadata"]["tolerance_rel"]
-    # The 1D device is frozen and uses the v3.0 doping values directly -- not the
+    # The 1D device is frozen and uses the v3.0 doping values directly — not the
     # calibrated 2D constants. We assert that nothing has accidentally changed
     # in src/device.py / drift_diffusion (defense in depth alongside git diff).
     v3_doping = baseline["metadata"]["v3_default_doping"]
@@ -149,7 +149,7 @@ def test_v3_cv_1d_preserved():
 
 
 def test_v3_notebook_list_unchanged():
-    """Sanity check -- list of frozen v3.0 notebooks does not silently shrink."""
+    """Sanity check — list of frozen v3.0 notebooks does not silently shrink."""
     baseline = _load_baseline()
     assert len(baseline["notebook_list"]) == 20
     for nb in baseline["notebook_list"]:
