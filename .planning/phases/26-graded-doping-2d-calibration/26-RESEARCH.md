@@ -459,30 +459,38 @@ def test_reset_after_alt_structures():
 | A6  | `cv_sweep` from `cv_analysis.py:121` works on a 2D `device_info` dict unchanged — the function operates on `device_info["device_name"]` and uses contact bias, both dimension-agnostic                                                             | Architecture Patterns   | If `cv_sweep` has 1D assumptions in `extract_depletion_width_numerical`, a thin wrapper is needed. Mitigation: planner verifies by inspection or smoke test in Wave 0                                              |
 | A7  | Calibration result will fit within the existing parameter bounds (`N_D_j ∈ [1e14, 1e16]`, `L_t ∈ [0.5e-4, 5e-4]`)                                                                                                                                  | Code Examples           | If 2D optimum lies outside, bounds need widening — may indicate a non-physical optimum and require revisiting H2/H3                                                                                                |
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+All five open questions below have been resolved during planning. The RESOLVED: line in
+each item gives the answer that downstream plans (Plans 01–04) operate against.
 
 1. **Hypothesis confirmation: H1 (profile) vs H2 (mesh/BC) vs H3 (both).**
    - What we know: 1D `{2.9e15, 8.5e13, 1e-4}` converges to at least −30 V; 2D same profile fails > −15 V. 1D and 2D share identical y-axis mesh spacing at the junction (both use `ps=1e-7` at junction, `ps=1e-6` 5 µm before, `ps=5e-6` in epi mid).
    - What's unclear: which difference (air buffer regions, lateral x-mesh interaction, symmetry BC at `x=0`) causes the divergence.
    - Recommendation: Wave 0 diagnostic — port the failing 2D bias point to 1D with matched parameters; if 1D succeeds, the 2D-specific differential (air buffer, x-mesh) is the culprit. Plan accordingly.
+   - **RESOLVED:** Defer the H1/H2/H3 classification to runtime. Plan 26-01 Task 1 (`scripts/diagnose_1d_2d_parity.py`) empirically classifies the hypothesis by running 1D and 2D devices with the SAME graded profile to −50 V and writing the result to `26-DIAGNOSIS.md`. Plan 26-03 (`scripts/run_calibration_2d.py`) reads the YAML `hypothesis:` key and gates the calibration: H1 or H3 → proceed with Nelder-Mead; H2 → abort with exit code 2 and a message naming the suspect (air buffer, x-mesh, x-symmetry BC) so the user can re-scope before sinking 30–60 min into a doomed fit. The plan does not pre-commit to an answer — the diagnostic IS the answer.
 
 2. **Cost function weighting between low-bias preservation and high-bias convergence.**
    - What we know: Phase success criterion #4 demands ZERO regression on 22 notebooks (low-bias must be preserved); criterion #1 demands −50 V convergence (new).
    - What's unclear: how to weight `W(0V), W(−10V), W(−30V)` residuals vs the new `W(−50V)` requirement.
    - Recommendation: Start with equal weights (1/N) for known-W targets plus a hard convergence penalty (1e3) for `V = −50 V`; tune in `/gsd-discuss-phase` based on initial fit quality.
+   - **RESOLVED:** Adopt the recommended scheme verbatim. The Plan 26-03 `calibrate_graded_doping_2d` cost function uses equal weights `(1/N)` over the three known-W targets `{0 V, −10 V, −30 V}` from the Petringa dataset (cost contribution `sum(((W_sim - W_exp)/W_exp)**2)`) PLUS a hard `divergence_penalty=1e3` added whenever the cathode ramp fails to reach `V_target_for_convergence_only=-50.0 V`. This preserves v3.0 low-bias behavior (PITFALLS P24 protected by the regression sweep in Plan 26-04) while making non-convergence at −50 V dominate the cost surface so Nelder-Mead favors solutions that converge. The two knobs (`V_target_for_convergence_only`, `divergence_penalty`) are exposed as keyword arguments for retuning if Plan 26-03 Task 3's full-range R² test fails on the first calibration pass.
 
 3. **Where does the extended `reset_devsim_fully()` live?**
    - What we know: Currently `reset_devsim` is inline at `optimization.py:153`; Phase 31 will extend it again for tensor-mobility globals.
    - What's unclear: New module (`src/devsim_reset.py`) vs add to `src/device2d.py` vs add to `src/__init__.py`.
    - Recommendation: `src/devsim_reset.py` — single-responsibility, easy to import from any module including alt-structures' own teardown, easy to extend in Phase 31. Defer to planner; this is a `Claude's discretion` style choice.
+   - **RESOLVED:** New module `src/devsim_reset.py`. Plan 26-02 Task 1 creates the file with two exports: the public `reset_devsim_fully(preserve_solver=True)` function and the module-level constant tuple `_CYLINDRICAL_GLOBALS` (7 strings: `raxis_zero`, `raxis_variable`, `node_volume_model`, `edge_couple_model`, `element_edge_couple_model`, `element_node0_volume_model`, `element_node1_volume_model`). The same task refactors `src/optimization.py` to `from src.devsim_reset import reset_devsim_fully` and removes the inline `devsim.reset_devsim()` block at lines 96-158. Single-responsibility module makes the Phase 31 tensor-mobility extension a one-tuple append rather than a code-archaeology exercise.
 
 4. **Notebook scope for the regression: 20 or 22?**
    - What we know: notebooks/ has 22 files. PROJECT.md and prior milestones reference "20 notebooks."
    - Recommendation: Planner counts notebooks numbered 01–20 with scientific content; treats `03_executed.ipynb` as a re-run not a deliverable. Wave 0 produces the explicit list in `tests/baselines/v3_frozen.json`.
+   - **RESOLVED:** 20 notebooks, scientific deliverables only. Plan 26-01 Task 2 hardcodes the canonical 20-notebook list (`01_phase1_validation.ipynb` through `20_feasibility_report.ipynb`) into `scripts/freeze_v3_baselines.py` and writes it as the `notebook_list` field of `tests/baselines/v3_frozen.json`. Duplicates / re-runs (`03_executed.ipynb`, `05_parametric_studies.ipynb`) are explicitly EXCLUDED — these are not deliverables per the v3.0 milestone audit. Plan 26-04 Task 2 reads `notebook_list` and asserts `len == 20`; the regression sweep re-executes exactly those 20 files via nbclient.
 
 5. **Should this phase also re-snap notebook 14 (validation) baselines?**
    - What we know: `notebook 14` (`14_validation.ipynb`) holds v3.0 validation snapshots; PITFALLS P24 says "baseline freeze vs rebaseline" is a milestone-level decision.
    - Recommendation: Freeze for this phase; defer any rebaseline to Phase 34 (milestone audit). Plan accordingly — no edits to notebook 14 in Phase 26.
+   - **RESOLVED:** Freeze, do NOT re-snap. Phase 26 makes no edits to `notebooks/14_validation.ipynb` (or any other notebook in the canonical 20). Plan 26-04 Task 2's `scripts/regression_sweep_v3_notebooks.py` re-EXECUTES each notebook via nbclient but explicitly does NOT call `nbformat.write` — the on-disk notebooks are read-only during the sweep. The acceptance criterion `grep -c "nbformat.write" scripts/regression_sweep_v3_notebooks.py` returns 0 enforces this contract. Any decision to rebaseline notebook 14 is deferred to the Phase 34 milestone audit (per the v4.0 milestone roadmap).
 
 ## Project Constraints (from CLAUDE.md)
 
