@@ -270,11 +270,16 @@ def cce_vs_dose_rate(
     N_D_bulk=8.50e13,
     L_transition=1.0e-4,
 ):
-    """Compute CCE vs dose rate across the FLASH range.
+    """Compute CCE vs dose rate across the FLASH range (exploratory sensitivity bound).
 
-    Sweeps dose rates (typically 20-230 Gy/s) at fixed reference conditions
-    to reveal whether Auger recombination degrades charge collection at
-    FLASH dose rates.
+    Sweeps dose rates (typically 20-230 Gy/s) at fixed reference conditions.
+    NOTE (audit C2/C3): at these dose rates the Auger (n^3) term is ~9-14 orders
+    of magnitude below SRH, so any CCE variation produced here is a numerical
+    sensitivity bound, NOT a physical dose-rate effect. The genuine high-injection
+    plasma physics (field screening, ambipolar transport, conductivity modulation)
+    is not modeled -- see the module-level SCOPE AND HONEST LIMITATIONS block.
+    Do not present these outputs as a validated FLASH plasma-recombination
+    prediction.
 
     Parameters
     ----------

@@ -673,7 +673,13 @@ def create_3d_electrode_device(
     r_mid = (col_r_cm + outer_r_cm) * 0.5
     if r_mid > col_r_cm + 1e-5:
         devsim.add_2d_mesh_line(mesh=mesh_name, dir="x", pos=r_mid, ps=2e-4)
-    devsim.add_2d_mesh_line(mesh=mesh_name, dir="x", pos=outer_r_cm, ps=5e-4)
+    # AUDIT Mj-2 (v5): mesh line at the inner edge of the radial p+ anode wall
+    # so the 1 um shell is actually resolved (otherwise it falls between nodes).
+    wall_thickness_cm = 1e-4  # 1 um radial p+ shell at the outer anode wall
+    devsim.add_2d_mesh_line(
+        mesh=mesh_name, dir="x", pos=outer_r_cm - wall_thickness_cm, ps=1e-5
+    )
+    devsim.add_2d_mesh_line(mesh=mesh_name, dir="x", pos=outer_r_cm, ps=5e-6)
 
     # -- Depth (y) mesh lines --
     _add_depth_mesh_lines(mesh_name, junction_pos, total_depth, air_buffer)
@@ -752,15 +758,34 @@ def create_3d_electrode_device(
     )
 
     # -- Central n+ column: high donor doping at x < column_radius --
-    # Override Donors in the column region with high n+ doping
-    # Use max() to keep the larger of the two values
+    # AUDIT Mj-1 (v5): the previous code redefined Donors as
+    #   max(Donors_column, N_D_used * step(y - junction_pos))
+    # using the SCALAR N_D_used (=DEFAULT_N_D=1.07e15), which DISCARDED the
+    # graded epi field installed by _apply_doping (true bulk ~8.5e13, ~12.6x
+    # lower) -- corrupting depletion width, field shape, and V_fd for this
+    # variant. Fix: rebuild the epi Donors field as Donors_epi from an EXPLICIT
+    # expression (NOT `equation="Donors"`, which devsim evaluates lazily and
+    # would create a Donors->Donors_epi->Donors cycle), then keep
+    # max(column, epi). For uniform doping this reduces to N_D*step(y-junction);
+    # for graded it preserves the real exponential profile.
     n_plus = 1e19
-    existing_donors_expr = devsim.get_node_model_values(
+    _N_D_res, _N_D_j, _N_D_b, _L_t = _resolve_doping_defaults(
+        None, doping_profile, N_D_junction, N_D_bulk, L_transition
+    )
+    if doping_profile == "graded":
+        donors_epi_expr = (
+            f"({_N_D_b} + ({_N_D_j} - {_N_D_b}) * "
+            f"exp(-max(y - {junction_pos}, 0) / {_L_t})) "
+            f"* step(y - {junction_pos})"
+        )
+    else:
+        donors_epi_expr = f"{_N_D_res} * step(y - {junction_pos})"
+    devsim.node_model(
         device=device_name,
         region=region_name,
-        name="Donors",
+        name="Donors_epi",
+        equation=donors_epi_expr,
     )
-    # Re-define Donors to add column n+ contribution
     devsim.node_model(
         device=device_name,
         region=region_name,
@@ -771,7 +796,26 @@ def create_3d_electrode_device(
         device=device_name,
         region=region_name,
         name="Donors",
-        equation=f"max(Donors_column, {N_D_used} * step(y - {junction_pos}))",
+        equation="max(Donors_column, Donors_epi)",
+    )
+    # AUDIT Mj-2 (v5): add a FULL-DEPTH radial p+ shell at the outer anode wall.
+    # Previously acceptors were depth-only (step(junction_pos - y)), so the
+    # "anode" contact at x=outer_r_cm was metal-on-n- over ~91% of its length
+    # and the intended radial p+/n- junction did not exist. The p+ wall over the
+    # full y-range creates the real radial junction the 3D-electrode geometry
+    # needs. Use max() (not +) to avoid a doubled-doping corner where the wall
+    # meets the horizontal p+ substrate. Must precede the NetDoping definition.
+    devsim.node_model(
+        device=device_name,
+        region=region_name,
+        name="Acceptors_wall",
+        equation=f"{N_A_ionized} * step(x - {outer_r_cm - wall_thickness_cm})",
+    )
+    devsim.node_model(
+        device=device_name,
+        region=region_name,
+        name="Acceptors",
+        equation=f"max({N_A_ionized} * step({junction_pos} - y), Acceptors_wall)",
     )
     devsim.node_model(
         device=device_name,

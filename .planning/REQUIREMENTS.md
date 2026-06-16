@@ -9,7 +9,7 @@ Requirements for Scientific Validation & Extended Physics milestone. Phases 26�
 
 ### Consolidamento Scientifico (CONS)
 
-- [ ] **CONS-01**: User can run 2D device simulations at reverse biases beyond −15 V without solver divergence, using a re-calibrated graded epi doping profile in `device2d.py` that matches C-V data across the full bias range
+- [x] **CONS-01**: User can run 2D device simulations at reverse biases beyond −15 V without solver divergence, using a re-calibrated graded epi doping profile in `device2d.py` that matches C-V data across the full bias range
 - [ ] **CONS-02**: User can access tabulated proton stopping powers for SiC and water via a `StoppingPowerTable` class backed by NIST PSTAR (Bragg additivity) and vendored SRIM data, with explicit source-unit conversion and log-log interpolation over ≥50 points/decade
 - [ ] **CONS-03**: User can compute an energy-dependent κ(E) tissue-equivalence curve that varies measurably across the clinical proton energy range (0.1–300 MeV), replacing the flat κ ∈ [0.575, 0.587] artefact from v3.0
 - [ ] **CONS-04**: User can read Geant4 ROOT files using a `RootSchemaMap` for configurable branch-name mapping, validated against a synthetic golden fixture (CSV + ROOT representing the same 1000 events) with KS-test agreement p > 0.01 on the resulting y-spectrum
@@ -136,7 +136,7 @@ Explicitly excluded.
 
 | Requirement | Phase | Status            |
 | ----------- | ----- | ----------------- |
-| CONS-01     | 26    | Pending           |
+| CONS-01     | 26    | Complete           |
 | CONS-02     | 27    | Pending           |
 | CONS-03     | 27    | Pending           |
 | CONS-04     | 28    | Pending           |

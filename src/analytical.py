@@ -20,6 +20,78 @@ Q = 1.602e-19  # C, elementary charge
 K_B = 8.617e-5  # eV/K, Boltzmann constant
 
 
+def full_depletion_voltage_graded(
+    epi_thickness,
+    N_D_bulk,
+    N_D_junction,
+    L_transition,
+    V_bi,
+    eps_r=9.7,
+    n_d_uniform=None,
+):
+    """Reverse bias required to fully deplete a graded-doped epi layer.
+
+    For a one-sided p+/n- junction the potential to deplete from the junction
+    out to depth ``t`` with a depth-dependent donor density N_D(y) is the
+    Poisson double integral:
+
+        V_fd = (q / eps) * integral_0^t [ y * N_D(y) ] dy  -  V_bi
+
+    The project's graded profile (set_graded_doping_2d) is
+
+        N_D(y) = N_D_bulk + (N_D_junction - N_D_bulk) * exp(-y / L)
+
+    for which the moment integral has the closed form
+
+        integral_0^t y*N_D(y) dy =
+            N_D_bulk * t^2 / 2
+          + (N_D_junction - N_D_bulk) * ( L^2 - exp(-t/L) * (L*t + L^2) )
+
+    AUDIT Mj-3 (v5): the uniform-N_D_bulk estimate (q*N_D_bulk*t^2/(2 eps) - V_bi)
+    is NOT a valid gate for the graded sweep -- it is anti-conservative, because
+    the near-junction doping (up to N_D_junction) is much higher than the bulk
+    asymptote, so the real V_fd is LARGER. Using N_D_bulk would mark
+    not-fully-depleted configs as depleted (gate fails open). This function
+    integrates the actual profile.
+
+    Parameters
+    ----------
+    epi_thickness : float
+        Epitaxial layer thickness t (cm).
+    N_D_bulk : float
+        Deep-bulk donor asymptote (cm^-3).
+    N_D_junction : float
+        Near-junction donor concentration (cm^-3).
+    L_transition : float
+        Exponential grading length L (cm).
+    V_bi : float
+        Built-in potential (V).
+    eps_r : float
+        Relative permittivity (9.7 for 4H-SiC).
+    n_d_uniform : float or None
+        If given, ignore the graded profile and use a uniform donor density
+        n_d_uniform, collapsing to V_fd = q*N_D*t^2/(2 eps) - V_bi. Provided
+        as an explicit, documented fallback for uniform-doping devices.
+
+    Returns
+    -------
+    V_fd : float
+        Reverse bias magnitude (V, positive) needed to fully deplete the epi.
+        Compare against the applied reverse-bias magnitude: fully depleted iff
+        |V_bias| >= V_fd.
+    """
+    eps = eps_r * EPS_0  # F/cm
+    t = epi_thickness
+    if n_d_uniform is not None:
+        moment = n_d_uniform * t**2 / 2.0
+    else:
+        L = L_transition
+        moment = N_D_bulk * t**2 / 2.0 + (N_D_junction - N_D_bulk) * (
+            L**2 - np.exp(-t / L) * (L * t + L**2)
+        )
+    return (Q / eps) * moment - V_bi
+
+
 def built_in_potential(N_A_ionized, N_D, n_i, T=300, k_B=K_B):
     """Compute built-in potential for a p-n junction.
 
