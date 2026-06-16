@@ -4,3 +4,6 @@ __pycache__/
 *.pyd
 .pytest_cache/
 .DS_Store
+
+# Claude Code session artifacts (worktrees, workflow scripts)
+.claude/
