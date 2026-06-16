@@ -298,10 +298,12 @@ class TestReverseBiasConvergence:
 
 
 class TestCalibrationCV:
-    """Phase 26 / CONS-01 SC#2: 2D C-V at device center matches 1D C-V with R^2 >= 0.99.
+    """Phase 26 / CONS-01 SC#2: 2D center-column C-V matches the 1D twin with
+    R^2 >= 0.99 over the FULL clinical bias range (0 to -50 V).
 
     Plan 02 introduces the 2D-aware W extractor; Plan 03 wires this with real
-    assertions once the calibrated defaults are in place.
+    assertions once the calibrated defaults are in place. The full-range sweep
+    (not a low-bias subset) is the CONS-01 SC#2 acceptance criterion.
     """
 
     @pytest.mark.slow
@@ -321,8 +323,10 @@ class TestCalibrationCV:
             _L_TRANSITION_DEFAULT,
         )
 
-        # Low-bias regime where v3.0 already converged.
-        voltages = [0.0, -2.5, -5.0, -7.5, -10.0]
+        # CONS-01 SC#2: full clinical reverse-bias range (0 to -50 V), not a
+        # low-bias subset. The calibrated defaults converge to -50 V (SC#1),
+        # so the 2D center-column W must track the 1D twin across the whole range.
+        voltages = [0.0, -5.0, -10.0, -15.0, -20.0, -30.0, -40.0, -50.0]
 
         # 1D twin
         reset_devsim_fully()
