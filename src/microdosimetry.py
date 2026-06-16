@@ -274,6 +274,22 @@ def _load_stopping_powers(filepath):
 def compute_kappa_table(water_csv_path=None, sic_csv_path=None):
     """Compute tissue-equivalence correction factor kappa(E) = S_water / S_SiC.
 
+    .. danger::
+       AUDIT C-1 (v5, 2026-06) -- DATA-BLOCKED, NOT YET FIXED. The default input
+       CSVs (``data/stopping_power_water.csv``, ``data/stopping_power_sic.csv``)
+       are FABRICATED placeholders: they give kappa ~= 0.575-0.587, flat to <1%,
+       with SiC listed *higher* than water. The physics requires kappa > 1
+       (water Z/A=0.555 vs SiC 0.499; water I~78 eV vs SiC I~136 eV) -- real NIST
+       PSTAR gives kappa ~1.24 at 1 MeV decreasing to ~1.13 at 100 MeV, a ~10%
+       monotonic decrease. The current output is sign-INVERTED and ~2x wrong.
+
+       FIX REQUIRES EXTERNAL DATA (do not fabricate): replace both CSVs with real
+       NIST PSTAR liquid-water proton mass stopping powers and SiC (Bragg
+       additivity from PSTAR Si and C with mass fractions Si 0.700 / C 0.300, or
+       ASTAR/SRIM). Then set ``kappa_constant`` default to ~1.2 and update
+       ``test_kappa_range`` bounds to ~1.0-1.4. Must be fixed jointly with C-2
+       (kinetic-energy lookup). See ``.planning/PHYSICS_AUDIT_v5.md``.
+
     Parameters
     ----------
     water_csv_path : str or Path, optional
@@ -330,6 +346,20 @@ def tissue_equivalence_correction(
         Lineal energy values in keV/um (SiC response).
     event_energies_keV : array_like
         Energy per event in keV (used for energy-dependent kappa lookup).
+
+        .. warning::
+           AUDIT C-2 (v5, 2026-06): kappa(E) is physically a function of the
+           particle KINETIC energy, but callers (e.g. ``mc_coupling`` via
+           ``groupby('event_id')['edep_keV'].sum()``) currently pass per-event
+           DEPOSITED energy. For a penetrating particle in a thin SV the deposited
+           energy is ~1e4x below the kinetic energy, so the kappa(E) lookup samples
+           the wrong end of the table. This is presently INERT only because the
+           shipped kappa table is flat/placeholder (AUDIT C-1: fabricated CSVs give
+           a near-constant ~0.58 instead of the physical ~1.13-1.24). DO NOT rely
+           on energy-dependent tissue correction until C-1 (real PSTAR/ASTAR data)
+           AND C-2 (pass primary kinetic energy, or the scalar beam energy for a
+           mono-energetic run) are both fixed -- they are one unit of work. See
+           ``.planning/PHYSICS_AUDIT_v5.md``.
     kappa_table : dict, optional
         Dictionary with energy_MeV and kappa arrays from compute_kappa_table.
         If None, uses constant kappa approximation.

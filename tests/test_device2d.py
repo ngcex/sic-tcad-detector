@@ -190,3 +190,382 @@ class TestMeshStructure:
         assert x.max() <= half_width_cm + 1e-12
         assert y.min() >= -buffer - 1e-12
         assert y.max() <= total_depth + buffer + 1e-12
+
+
+# ---------------------------------------------------------------------------
+# Phase 26 / CONS-01 skeleton test classes.
+#
+# These hold the test surface in place BEFORE implementation. Every body is
+# decorated @pytest.mark.xfail(strict=True) so they collect (proving the surface
+# exists) but cannot produce a false green. Plans 02-04 replace the xfail bodies
+# with real assertions, flipping xfail -> pass:
+#   - Plan 02 adds the 2D-aware W extractor + reset_devsim_fully() + node helpers
+#     -> wires TestCalibrationCV, TestResetStateLeak, TestGradedDopingSmoothness
+#   - Plan 03 calibrates the 2D defaults
+#     -> wires TestReverseBiasConvergence and TestCalibrationCV assertions
+# ---------------------------------------------------------------------------
+
+
+class TestReverseBiasConvergence:
+    """Phase 26 / CONS-01 SC#1: 2D device converges at -15, -30, -50 V on both SV sizes.
+
+    Plan 03 replaces xfail with real assertions after calibration completes.
+    """
+
+    @pytest.mark.slow
+    def test_converges_at_minus_15V_100um(self):
+        from src.charge_collection_2d import create_2d_dd_device
+        from src.devsim_reset import reset_devsim_fully
+
+        try:
+            dev = create_2d_dd_device(
+                device_name=_unique_name(), half_width_um=50.0, V_bias=15.0
+            )
+            assert dev["dd_initialized"] is True
+            assert dev["dimension"] == 2
+        finally:
+            reset_devsim_fully()
+
+    @pytest.mark.slow
+    def test_converges_at_minus_30V_100um(self):
+        from src.charge_collection_2d import create_2d_dd_device
+        from src.devsim_reset import reset_devsim_fully
+
+        try:
+            dev = create_2d_dd_device(
+                device_name=_unique_name(), half_width_um=50.0, V_bias=30.0
+            )
+            assert dev["dd_initialized"] is True
+            assert dev["dimension"] == 2
+        finally:
+            reset_devsim_fully()
+
+    @pytest.mark.slow
+    def test_converges_at_minus_50V_100um(self):
+        from src.charge_collection_2d import create_2d_dd_device
+        from src.devsim_reset import reset_devsim_fully
+
+        try:
+            dev = create_2d_dd_device(
+                device_name=_unique_name(), half_width_um=50.0, V_bias=50.0
+            )
+            assert dev["dd_initialized"] is True
+            assert dev["dimension"] == 2
+        finally:
+            reset_devsim_fully()
+
+    @pytest.mark.slow
+    def test_converges_at_minus_15V_300um(self):
+        from src.charge_collection_2d import create_2d_dd_device
+        from src.devsim_reset import reset_devsim_fully
+
+        try:
+            dev = create_2d_dd_device(
+                device_name=_unique_name(), half_width_um=150.0, V_bias=15.0
+            )
+            assert dev["dd_initialized"] is True
+            assert dev["dimension"] == 2
+        finally:
+            reset_devsim_fully()
+
+    @pytest.mark.slow
+    def test_converges_at_minus_30V_300um(self):
+        from src.charge_collection_2d import create_2d_dd_device
+        from src.devsim_reset import reset_devsim_fully
+
+        try:
+            dev = create_2d_dd_device(
+                device_name=_unique_name(), half_width_um=150.0, V_bias=30.0
+            )
+            assert dev["dd_initialized"] is True
+            assert dev["dimension"] == 2
+        finally:
+            reset_devsim_fully()
+
+    @pytest.mark.slow
+    def test_converges_at_minus_50V_300um(self):
+        from src.charge_collection_2d import create_2d_dd_device
+        from src.devsim_reset import reset_devsim_fully
+
+        try:
+            dev = create_2d_dd_device(
+                device_name=_unique_name(), half_width_um=150.0, V_bias=50.0
+            )
+            assert dev["dd_initialized"] is True
+            assert dev["dimension"] == 2
+        finally:
+            reset_devsim_fully()
+
+
+class TestCalibrationCV:
+    """Phase 26 / CONS-01 SC#2: 2D center-column C-V matches the 1D twin with
+    R^2 >= 0.99 over the FULL clinical bias range (0 to -50 V).
+
+    Plan 02 introduces the 2D-aware W extractor; Plan 03 wires this with real
+    assertions once the calibrated defaults are in place. The full-range sweep
+    (not a low-bias subset) is the CONS-01 SC#2 acceptance criterion.
+    """
+
+    @pytest.mark.slow
+    def test_2d_vs_1d_cv_centerline(self):
+        import numpy as np
+        from src.charge_collection_2d import create_2d_dd_device
+        from src.drift_diffusion import create_dd_device
+        from src.cv_analysis import cv_sweep
+        from src.poisson import (
+            extract_depletion_width_numerical,  # noqa: F401 - 1D twin via cv_sweep
+            extract_depletion_width_2d_center,
+        )
+        from src.devsim_reset import reset_devsim_fully
+        from src.device2d import (
+            _N_D_JUNCTION_DEFAULT,
+            _N_D_BULK_DEFAULT,
+            _L_TRANSITION_DEFAULT,
+        )
+
+        # CONS-01 SC#2: full clinical reverse-bias range (0 to -50 V), not a
+        # low-bias subset. The calibrated defaults converge to -50 V (SC#1),
+        # so the 2D center-column W must track the 1D twin across the whole range.
+        voltages = [0.0, -5.0, -10.0, -15.0, -20.0, -30.0, -40.0, -50.0]
+
+        # 1D twin
+        reset_devsim_fully()
+        dev_1d = create_dd_device(
+            device_name=_unique_name() + "_1d",
+            doping_profile="graded",
+            N_D_junction=_N_D_JUNCTION_DEFAULT,
+            N_D_bulk=_N_D_BULK_DEFAULT,
+            L_transition=_L_TRANSITION_DEFAULT,
+        )
+        cv_1d = cv_sweep(dev_1d, V_range=voltages)
+        W_1d = np.array(cv_1d["depletion_widths"])
+
+        # 2D center column
+        reset_devsim_fully()
+        dev_2d = create_2d_dd_device(
+            device_name=_unique_name() + "_2d",
+            half_width_um=50.0,
+            V_bias=0.0,
+            doping_profile="graded",
+        )
+        W_2d = []
+        import devsim
+        import devsim.python_packages.simple_physics as simple_physics
+
+        bias_name = simple_physics.GetContactBiasName("cathode")
+        current_V = 0.0
+        for V_rev in voltages:
+            V_cathode_target = -V_rev
+            V = current_V
+            while V < V_cathode_target - 1e-10:
+                V = min(V + 0.5, V_cathode_target)
+                devsim.set_parameter(
+                    device=dev_2d["device_name"], name=bias_name, value=V
+                )
+                try:
+                    devsim.solve(
+                        type="dc",
+                        absolute_error=1e10,
+                        relative_error=1e-10,
+                        maximum_iterations=40,
+                    )
+                except devsim.error:
+                    devsim.solve(
+                        type="dc",
+                        absolute_error=1e12,
+                        relative_error=1e-8,
+                        maximum_iterations=100,
+                    )
+            current_V = V_cathode_target
+            W_2d.append(extract_depletion_width_2d_center(dev_2d))
+        W_2d = np.array(W_2d)
+
+        # R^2 = 1 - SS_res / SS_tot
+        SS_res = np.sum((W_2d - W_1d) ** 2)
+        SS_tot = np.sum((W_1d - np.mean(W_1d)) ** 2)
+        R2 = 1.0 - SS_res / SS_tot if SS_tot > 0 else 0.0
+
+        assert R2 >= 0.99, (
+            "2D-center C-V does not match 1D within R^2 >= 0.99. "
+            f"Got R^2 = {R2:.4f}. W_1d (cm) = {W_1d.tolist()}, "
+            f"W_2d (cm) = {W_2d.tolist()}"
+        )
+
+        reset_devsim_fully()
+
+
+class TestResetStateLeak:
+    """Phase 26 / CONS-01 SC#3: reset_devsim_fully() clears alt-structure cylindrical globals.
+
+    Plan 02 implements `src/devsim_reset.py` and wires this test.
+    """
+
+    @pytest.mark.slow
+    def test_reset_after_alt_structures(self):
+        from src.devsim_reset import reset_devsim_fully
+        from src.charge_collection_2d import create_2d_dd_device
+
+        try:
+            from src.alternative_structures import create_3d_electrode_device
+        except Exception:
+            pytest.skip("3D electrode constructor not available")
+
+        # Reproducible scalar: total cathode contact current (electrons + holes)
+        # of a fully DD-initialized device. If cylindrical assembly weights leak
+        # into a subsequent planar build, this value shifts measurably.
+        from src.drift_diffusion import extract_contact_current
+
+        def _dark_current_at_cathode(device_info):
+            return extract_contact_current(device_info, contact="cathode")
+
+        # --- Stage 1: fresh-session planar reference ---
+        reset_devsim_fully()
+        try:
+            dev_ref = create_2d_dd_device(
+                device_name=_unique_name(),
+                half_width_um=50.0,
+                V_bias=10.0,
+                doping_profile="graded",
+            )
+            I_ref = _dark_current_at_cathode(dev_ref)
+        finally:
+            reset_devsim_fully()
+
+        # --- Stage 2: contaminate with a cylindrical 3D-electrode device ---
+        # Building it invokes _activate_cylindrical_coords, setting the 7
+        # cylindrical globals. No solve needed — creation sets the globals.
+        try:
+            create_3d_electrode_device(
+                device_name=_unique_name(),
+                outer_radius_um=50.0,
+                column_radius_um=5.0,
+            )
+        finally:
+            reset_devsim_fully()
+
+        # --- Stage 3: verify the leak was cleared, then rebuild planar ---
+        assert (
+            devsim.get_parameter(name="node_volume_model") == "NodeVolume"
+        ), "reset_devsim_fully did not restore the Cartesian node_volume_model"
+        try:
+            dev_after = create_2d_dd_device(
+                device_name=_unique_name(),
+                half_width_um=50.0,
+                V_bias=10.0,
+                doping_profile="graded",
+            )
+            I_after = _dark_current_at_cathode(dev_after)
+        finally:
+            reset_devsim_fully()
+
+        rel = abs(I_after - I_ref) / abs(I_ref)
+        assert rel < 1e-3, (
+            f"cylindrical-leak canary: I_ref={I_ref:.6e}, I_after={I_after:.6e}, "
+            f"rel_diff={rel:.3e} (>= 1e-3 means cylindrical globals leaked)"
+        )
+
+
+class TestExtractDepletionWidth2DCenter:
+    """Phase 26 / Plan 02: center-column W extractor for 2D devices.
+
+    The 1D extract_depletion_width_numerical reads x as depth; 2D modules use
+    y as depth. These tests lock the new dimension-aware extractor.
+    """
+
+    def test_importable(self):
+        from src.poisson import extract_depletion_width_2d_center  # noqa: F401
+
+    def test_raises_on_1d_device(self):
+        from src.poisson import extract_depletion_width_2d_center
+
+        with pytest.raises(ValueError):
+            extract_depletion_width_2d_center({"dimension": 1})
+
+    @pytest.mark.slow
+    def test_equilibrium_W_within_band_of_1d_twin(self):
+        from src.charge_collection_2d import create_2d_dd_device
+        from src.poisson import extract_depletion_width_2d_center
+
+        dev = create_2d_dd_device(
+            device_name=_unique_name(),
+            half_width_um=50.0,
+            V_bias=0.0,
+            doping_profile="graded",
+        )
+        W0 = extract_depletion_width_2d_center(dev)
+        # 1D-twin equilibrium W ~= 1.7e-4 cm; loose +/-30% band (v3.0 profile
+        # is unrefitted in 2D — Plan 03 tightens it).
+        assert 0.7 * 1.7e-4 <= W0 <= 1.3 * 1.7e-4, f"W0={W0}"
+
+    @pytest.mark.slow
+    def test_W_expands_under_reverse_bias(self):
+        from src.charge_collection_2d import create_2d_dd_device
+        from src.poisson import extract_depletion_width_2d_center
+
+        dev0 = create_2d_dd_device(
+            device_name=_unique_name(),
+            half_width_um=50.0,
+            V_bias=0.0,
+            doping_profile="graded",
+        )
+        W0 = extract_depletion_width_2d_center(dev0)
+        dev5 = create_2d_dd_device(
+            device_name=_unique_name(),
+            half_width_um=50.0,
+            V_bias=5.0,
+            doping_profile="graded",
+        )
+        W5 = extract_depletion_width_2d_center(dev5)
+        assert W5 > W0, f"W5={W5} should exceed W0={W0} under reverse bias"
+
+
+class TestGradedDopingSmoothness:
+    """Phase 26 / PITFALLS P27: graded doping is evaluated at devsim nodes (smooth across mesh).
+
+    Plan 02 wires this test once the 2D-aware extractor is available.
+    """
+
+    def test_graded_doping_smoothness_no_kinks(self):
+        import numpy as np
+        from src.charge_collection_2d import create_2d_dd_device
+        from src.poisson import extract_depletion_width_2d_center
+
+        dev = create_2d_dd_device(
+            device_name=_unique_name(),
+            half_width_um=50.0,
+            V_bias=0.0,
+            doping_profile="graded",
+        )
+
+        # The 2D-aware extractor must return a sane in-range W.
+        W0 = extract_depletion_width_2d_center(dev)
+        assert W0 > 0.0
+        assert W0 < dev["epi_thickness_cm"]
+
+        device = dev["device_name"]
+        region = dev["region_name"]
+        x = np.array(
+            devsim.get_node_model_values(device=device, region=region, name="x")
+        )
+        y = np.array(
+            devsim.get_node_model_values(device=device, region=region, name="y")
+        )
+        donors = np.array(
+            devsim.get_node_model_values(device=device, region=region, name="Donors")
+        )
+
+        # Center column (x ~= 0), sorted by depth, restricted to the n-epi.
+        center = np.abs(x) < 1e-6
+        xc, yc, dc = x[center], y[center], donors[center]
+        order = np.argsort(yc)
+        yc, dc = yc[order], dc[order]
+        in_epi = (yc > dev["junction_pos"]) & (dc > 0)
+        d_in = dc[in_epi]
+
+        assert len(d_in) >= 4, f"expected >=4 center-column epi nodes, got {len(d_in)}"
+
+        # No >50% relative jump between adjacent center-column donor nodes (P27).
+        rel_jumps = np.abs(np.diff(d_in)) / d_in[:-1]
+        assert (
+            np.max(rel_jumps) < 0.5
+        ), f"graded donor profile has a >50% jump: max={np.max(rel_jumps):.3f}"
