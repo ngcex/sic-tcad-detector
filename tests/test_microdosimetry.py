@@ -223,6 +223,37 @@ class TestComputeKappaTable:
 # ---------------------------------------------------------------------------
 
 
+class TestBraggKappaMachinery:
+    """Phase 27 machinery: Bragg-additivity SiC + source switch (data-blocked)."""
+
+    def test_bragg_composer_weights(self):
+        """SiC = 0.7004*Si + 0.2996*C (Bragg additivity), log-log interpolated."""
+        from src.microdosimetry import sic_stopping_power_bragg
+
+        e = np.array([1.0, 10.0, 100.0])
+        s_si = np.array([100.0, 20.0, 4.0])
+        s_c = np.array([130.0, 26.0, 5.2])
+        grid, s_sic = sic_stopping_power_bragg(e, s_si, e, s_c)
+        expected = 0.7004 * s_si + 0.2996 * s_c
+        np.testing.assert_allclose(s_sic, expected, rtol=1e-6)
+
+    def test_bragg_source_refuses_placeholder(self):
+        """compute_kappa_table(source='bragg') must REFUSE placeholder data
+        (no fabrication) until real PSTAR files are dropped in."""
+        from src.microdosimetry import compute_kappa_table
+
+        with pytest.raises(FileNotFoundError, match="PSTAR"):
+            compute_kappa_table(source="bragg")
+
+    def test_legacy_source_back_compat(self):
+        """Legacy source still returns the (placeholder) flat table + source key."""
+        from src.microdosimetry import compute_kappa_table
+
+        res = compute_kappa_table(source="legacy")
+        assert res["source"] == "legacy"
+        assert len(res["kappa"]) == len(res["energy_MeV"])
+
+
 class TestTissueEquivalenceCorrection:
     def test_constant_kappa(self):
         """y_tissue = kappa_constant * y_SiC for constant kappa."""
@@ -233,18 +264,29 @@ class TestTissueEquivalenceCorrection:
         )
         np.testing.assert_allclose(y_tissue, 0.58 * y_sic)
 
-    def test_table_kappa_changes_values(self, kappa_table):
-        """Energy-dependent kappa produces different corrections per event."""
+    def test_table_kappa_uses_kinetic_energy(self, kappa_table):
+        """AUDIT C-2: kappa(E) lookup uses particle KINETIC energy, scalar or
+        per-event, NOT deposited energy."""
         y_sic = np.array([5.0, 5.0, 5.0])
-        # Events at very different energies
-        energies = np.array([1000.0, 10000.0, 100000.0])  # 1, 10, 100 MeV
+        # Per-event KINETIC energies (MeV) -- correct variable
+        Ek = np.array([1.0, 10.0, 100.0])
         y_tissue = tissue_equivalence_correction(
-            y_sic, energies, kappa_table=kappa_table
+            y_sic, kappa_table=kappa_table, particle_energy_MeV=Ek
         )
-        # All y_tissue should be < y_sic (kappa < 1)
-        assert np.all(y_tissue < y_sic)
-        # With different energies, corrections may differ
         assert y_tissue.shape == y_sic.shape
+        # scalar (mono-energetic beam) path also works
+        y_beam = tissue_equivalence_correction(
+            y_sic, kappa_table=kappa_table, particle_energy_MeV=62.0
+        )
+        assert y_beam.shape == y_sic.shape
+
+    def test_no_kinetic_energy_falls_back_to_average(self, kappa_table):
+        """AUDIT C-2: without particle_energy_MeV, fall back to energy-averaged
+        kappa (documented approximation), NOT the deposited-energy lookup."""
+        y_sic = np.array([5.0, 5.0])
+        y_tissue = tissue_equivalence_correction(y_sic, kappa_table=kappa_table)
+        kappa_avg = float(np.mean(kappa_table["kappa"]))
+        np.testing.assert_allclose(y_tissue, kappa_avg * y_sic)
 
 
 # ---------------------------------------------------------------------------

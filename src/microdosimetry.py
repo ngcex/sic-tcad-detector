@@ -271,60 +271,149 @@ def _load_stopping_powers(filepath):
     return df["energy_MeV"].values, df["stopping_power_MeV_cm2_per_g"].values
 
 
-def compute_kappa_table(water_csv_path=None, sic_csv_path=None):
-    """Compute tissue-equivalence correction factor kappa(E) = S_water / S_SiC.
+# 4H-SiC mass fractions (Si 28.0855, C 12.011 g/mol; 1:1 stoichiometry).
+SIC_MASS_FRACTION_SI = 0.7004
+SIC_MASS_FRACTION_C = 0.2996
 
-    .. danger::
-       AUDIT C-1 (v5, 2026-06) -- DATA-BLOCKED, NOT YET FIXED. The default input
-       CSVs (``data/stopping_power_water.csv``, ``data/stopping_power_sic.csv``)
-       are FABRICATED placeholders: they give kappa ~= 0.575-0.587, flat to <1%,
-       with SiC listed *higher* than water. The physics requires kappa > 1
-       (water Z/A=0.555 vs SiC 0.499; water I~78 eV vs SiC I~136 eV) -- real NIST
-       PSTAR gives kappa ~1.24 at 1 MeV decreasing to ~1.13 at 100 MeV, a ~10%
-       monotonic decrease. The current output is sign-INVERTED and ~2x wrong.
 
-       FIX REQUIRES EXTERNAL DATA (do not fabricate): replace both CSVs with real
-       NIST PSTAR liquid-water proton mass stopping powers and SiC (Bragg
-       additivity from PSTAR Si and C with mass fractions Si 0.700 / C 0.300, or
-       ASTAR/SRIM). Then set ``kappa_constant`` default to ~1.2 and update
-       ``test_kappa_range`` bounds to ~1.0-1.4. Must be fixed jointly with C-2
-       (kinetic-energy lookup). See ``.planning/PHYSICS_AUDIT_v5.md``.
+def sic_stopping_power_bragg(
+    e_si,
+    s_si,
+    e_c,
+    s_c,
+    energy_grid=None,
+    w_si=SIC_MASS_FRACTION_SI,
+    w_c=SIC_MASS_FRACTION_C,
+):
+    """Compose the SiC mass stopping power via Bragg additivity.
+
+    Bragg's rule: the mass stopping power of a compound is the mass-fraction-
+    weighted sum of its elemental mass stopping powers,
+
+        (S/rho)_SiC(E) = w_Si * (S/rho)_Si(E) + w_C * (S/rho)_C(E)
+
+    with w_Si = 0.7004, w_C = 0.2996 for 4H-SiC. This lets SiC stopping power be
+    built from NIST PSTAR/ASTAR elemental proton data (Si and C) rather than from
+    a single hand-entered SiC table -- the path the Phase 27 spec calls for.
+
+    Both elemental inputs are interpolated (log-log) onto a common grid.
 
     Parameters
     ----------
-    water_csv_path : str or Path, optional
-        Path to water stopping power CSV. Defaults to data/stopping_power_water.csv.
-    sic_csv_path : str or Path, optional
-        Path to SiC stopping power CSV. Defaults to data/stopping_power_sic.csv.
+    e_si, s_si : array_like
+        Silicon proton energy (MeV) and mass stopping power (MeV cm^2/g).
+    e_c, s_c : array_like
+        Carbon proton energy (MeV) and mass stopping power (MeV cm^2/g).
+    energy_grid : array_like, optional
+        Common output energy grid (MeV). Defaults to the silicon energy grid.
+    w_si, w_c : float
+        SiC mass fractions (default 4H-SiC values).
+
+    Returns
+    -------
+    tuple
+        (energy_MeV, sic_stopping_power MeV cm^2/g) ndarrays.
+    """
+    e_si = np.asarray(e_si, float)
+    e_c = np.asarray(e_c, float)
+    grid = np.asarray(energy_grid, float) if energy_grid is not None else e_si
+
+    def _loglog_interp(x, xp, fp):
+        return np.exp(np.interp(np.log(x), np.log(xp), np.log(fp)))
+
+    s_si_g = _loglog_interp(grid, e_si, np.asarray(s_si, float))
+    s_c_g = _loglog_interp(grid, e_c, np.asarray(s_c, float))
+    return grid, w_si * s_si_g + w_c * s_c_g
+
+
+def compute_kappa_table(water_csv_path=None, sic_csv_path=None, source="legacy"):
+    """Compute tissue-equivalence correction factor kappa(E) = S_water / S_SiC.
+
+    .. danger::
+       AUDIT C-1 (v5) -- the ``source="legacy"`` path reads
+       ``data/stopping_power_{water,sic}.csv`` which are FABRICATED placeholders
+       (kappa ~0.58, flat, sign-inverted). The physics requires kappa > 1 (water
+       Z/A 0.555 vs SiC 0.499; I_water ~78 eV vs I_SiC ~136 eV); real NIST PSTAR
+       gives ~1.24 at 1 MeV decreasing to ~1.13 at 100 MeV.
+
+       Phase 27 machinery (``source="bragg"``) is now wired: it builds SiC by
+       Bragg additivity from elemental Si + C proton stopping powers and divides
+       real water PSTAR by it. **It is still DATA-BLOCKED**: the input files
+       ``data/srim/{water,si,c}_proton.csv`` are placeholders that must be filled
+       with real NIST PSTAR (water, Si, C) tabulated proton mass stopping powers
+       (see ``data/srim/README.md``). Until then ``source="bragg"`` raises a clear
+       error rather than returning a fabricated number. Network fetch is not used
+       (offline/CI environment). See ``.planning/PHYSICS_AUDIT_v5.md`` (C-1/C-2).
+
+    Parameters
+    ----------
+    water_csv_path, sic_csv_path : str or Path, optional
+        Override input paths (legacy source only).
+    source : {"legacy", "bragg"}
+        "legacy" -- divide the (placeholder) water CSV by the SiC CSV (the v3.0
+        flat-kappa artefact; kept for regression continuity).
+        "bragg" -- compute SiC via Bragg additivity from elemental Si + C PSTAR
+        data in ``data/srim/`` and divide real water PSTAR by it (Phase 27).
 
     Returns
     -------
     dict
-        energy_MeV : ndarray -- common energy grid
-        kappa : ndarray -- tissue-equivalence correction factor
+        energy_MeV : ndarray, kappa : ndarray, source : str
     """
     data_dir = Path(__file__).parent.parent / "data"
+
+    if source == "bragg":
+        srim = data_dir / "srim"
+        paths = {
+            "water": srim / "water_proton.csv",
+            "si": srim / "si_proton.csv",
+            "c": srim / "c_proton.csv",
+        }
+        for name, p in paths.items():
+            if not p.exists() or _is_placeholder_stopping_csv(p):
+                raise FileNotFoundError(
+                    f"compute_kappa_table(source='bragg') needs real PSTAR data at "
+                    f"{p} ({name}). It is a placeholder/missing -- DO NOT fabricate. "
+                    f"See data/srim/README.md for the exact NIST PSTAR files to drop in."
+                )
+        e_w, s_w = _load_stopping_powers(paths["water"])
+        e_si, s_si = _load_stopping_powers(paths["si"])
+        e_c, s_c = _load_stopping_powers(paths["c"])
+        grid, s_sic = sic_stopping_power_bragg(e_si, s_si, e_c, s_c, energy_grid=e_w)
+        kappa = s_w / s_sic
+        logger.info(
+            "Kappa(bragg): %d points, range [%.3f, %.3f]",
+            len(kappa),
+            float(np.min(kappa)),
+            float(np.max(kappa)),
+        )
+        return {"energy_MeV": e_w, "kappa": kappa, "source": "bragg"}
+
+    # legacy (v3.0 flat-kappa artefact)
     if water_csv_path is None:
         water_csv_path = data_dir / "stopping_power_water.csv"
     if sic_csv_path is None:
         sic_csv_path = data_dir / "stopping_power_sic.csv"
-
     e_water, s_water = _load_stopping_powers(water_csv_path)
     e_sic, s_sic = _load_stopping_powers(sic_csv_path)
-
-    # Interpolate to common energy grid (use water grid as reference)
     s_sic_interp = np.interp(e_water, e_sic, s_sic)
-
     kappa = s_water / s_sic_interp
-
     logger.info(
-        "Kappa table computed: %d points, range [%.3f, %.3f]",
+        "Kappa(legacy): %d points, range [%.3f, %.3f] (PLACEHOLDER -- see C-1)",
         len(kappa),
-        np.min(kappa),
-        np.max(kappa),
+        float(np.min(kappa)),
+        float(np.max(kappa)),
     )
+    return {"energy_MeV": e_water, "kappa": kappa, "source": "legacy"}
 
-    return {"energy_MeV": e_water, "kappa": kappa}
+
+def _is_placeholder_stopping_csv(path):
+    """True if a stopping-power CSV is the documented placeholder (header marker)."""
+    try:
+        first = Path(path).read_text().splitlines()[0]
+    except (OSError, IndexError):
+        return True
+    return "PLACEHOLDER" in first.upper()
 
 
 # ---------------------------------------------------------------------------
@@ -333,38 +422,45 @@ def compute_kappa_table(water_csv_path=None, sic_csv_path=None):
 
 
 def tissue_equivalence_correction(
-    y_values, event_energies_keV, kappa_table=None, kappa_constant=0.58
+    y_values,
+    event_energies_keV=None,
+    kappa_table=None,
+    kappa_constant=0.58,
+    particle_energy_MeV=None,
 ):
     """Apply tissue-equivalence correction to lineal energy values.
 
     Converts SiC detector lineal energy to tissue-equivalent values using
     kappa = S_tissue / S_SiC.
 
+    AUDIT C-2 (v5): kappa(E) is physically a function of the particle KINETIC
+    energy, NOT the energy deposited in the thin SV (for a penetrating particle
+    the deposited energy is ~1e4x below the kinetic energy). Pass the kinetic
+    energy via ``particle_energy_MeV``:
+
+    - scalar -> mono-energetic beam (e.g. 62.0 for a 62 MeV proton beam): exact,
+      and the recommended path for clinical beams;
+    - array (len == y_values) -> per-event primary kinetic energy from MC truth.
+
+    If ``particle_energy_MeV`` is omitted and a ``kappa_table`` is given, the
+    function falls back to the **energy-averaged** kappa (documented approximation)
+    rather than silently using the wrong (deposited) energy variable.
+
     Parameters
     ----------
     y_values : array_like
         Lineal energy values in keV/um (SiC response).
-    event_energies_keV : array_like
-        Energy per event in keV (used for energy-dependent kappa lookup).
-
-        .. warning::
-           AUDIT C-2 (v5, 2026-06): kappa(E) is physically a function of the
-           particle KINETIC energy, but callers (e.g. ``mc_coupling`` via
-           ``groupby('event_id')['edep_keV'].sum()``) currently pass per-event
-           DEPOSITED energy. For a penetrating particle in a thin SV the deposited
-           energy is ~1e4x below the kinetic energy, so the kappa(E) lookup samples
-           the wrong end of the table. This is presently INERT only because the
-           shipped kappa table is flat/placeholder (AUDIT C-1: fabricated CSVs give
-           a near-constant ~0.58 instead of the physical ~1.13-1.24). DO NOT rely
-           on energy-dependent tissue correction until C-1 (real PSTAR/ASTAR data)
-           AND C-2 (pass primary kinetic energy, or the scalar beam energy for a
-           mono-energetic run) are both fixed -- they are one unit of work. See
-           ``.planning/PHYSICS_AUDIT_v5.md``.
+    event_energies_keV : array_like, optional
+        DEPRECATED for kappa lookup (this is deposited energy, the C-2 bug). Kept
+        only for backward-compatible call signatures; ignored for the lookup.
     kappa_table : dict, optional
-        Dictionary with energy_MeV and kappa arrays from compute_kappa_table.
-        If None, uses constant kappa approximation.
+        From ``compute_kappa_table``. If None, uses ``kappa_constant``.
     kappa_constant : float
-        Constant kappa value used when kappa_table is None. Default 0.58.
+        Constant kappa when no table is given. Default 0.58 (legacy placeholder;
+        set to ~1.2 once real PSTAR data is in place, see C-1).
+    particle_energy_MeV : float or array_like, optional
+        Particle KINETIC energy (MeV) for the kappa(E) lookup -- scalar (beam) or
+        per-event array. Correct variable per C-2.
 
     Returns
     -------
@@ -372,33 +468,42 @@ def tissue_equivalence_correction(
         Tissue-equivalent lineal energy values in keV/um.
     """
     y_values = np.asarray(y_values, dtype=np.float64)
-    event_energies_keV = np.asarray(event_energies_keV, dtype=np.float64)
 
-    if kappa_table is not None:
-        # Energy-dependent kappa: interpolate per event
-        event_energies_MeV = event_energies_keV / 1e3
-        kappa_per_event = np.interp(
-            event_energies_MeV,
-            kappa_table["energy_MeV"],
-            kappa_table["kappa"],
-        )
-        y_tissue = kappa_per_event * y_values
-        logger.info(
-            "Energy-dependent tissue correction: kappa range [%.3f, %.3f]",
-            np.min(kappa_per_event),
-            np.max(kappa_per_event),
-        )
-    else:
+    if kappa_table is None:
         logger.warning(
-            "Using constant kappa = %.3f for tissue-equivalence correction. "
-            "This is an approximation; kappa varies ~20-30%% across the "
-            "energy range. Use compute_kappa_table() for energy-dependent "
-            "correction.",
+            "Constant kappa = %.3f (approximation; real kappa(E) varies ~10-30%%. "
+            "Use compute_kappa_table(source='bragg') once PSTAR data is in place).",
             kappa_constant,
         )
-        y_tissue = kappa_constant * y_values
+        return kappa_constant * y_values
 
-    return y_tissue
+    E_grid = np.asarray(kappa_table["energy_MeV"], float)
+    K_grid = np.asarray(kappa_table["kappa"], float)
+
+    if particle_energy_MeV is not None:
+        # C-2 correct path: lookup by KINETIC energy (scalar beam or per-event).
+        Ek = np.asarray(particle_energy_MeV, dtype=np.float64)
+        kappa = np.interp(Ek, E_grid, K_grid)
+        y_tissue = kappa * y_values
+        kmin, kmax = float(np.min(kappa)), float(np.max(kappa))
+        logger.info(
+            "Energy-dependent tissue correction (kinetic E): kappa [%.3f, %.3f]",
+            kmin,
+            kmax,
+        )
+        return y_tissue
+
+    # No kinetic energy supplied: fall back to ENERGY-AVERAGED kappa, NOT the
+    # deposited-energy lookup (which was the C-2 defect). Documented approximation.
+    kappa_avg = float(np.mean(K_grid))
+    logger.warning(
+        "tissue_equivalence_correction: no particle_energy_MeV given; using "
+        "energy-averaged kappa = %.3f as a documented approximation. Pass the "
+        "particle KINETIC energy (scalar beam or per-event MC truth) for the "
+        "correct energy-dependent correction (AUDIT C-2).",
+        kappa_avg,
+    )
+    return kappa_avg * y_values
 
 
 # ---------------------------------------------------------------------------
