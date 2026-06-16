@@ -2,13 +2,16 @@
 gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Scientific Validation & Extended Physics
-status: planning
-last_updated: "2026-05-17T00:00:00.000Z"
+status: executing
+stopped_at: v4.0 roadmap created (9 phases, 26-34); REQUIREMENTS.md traceability verified
+last_updated: "2026-06-16T10:13:57.574Z"
+last_activity: 2026-06-16
 progress:
-  total_phases: 9
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_phases: 15
+  completed_phases: 8
+  total_plans: 18
+  completed_plans: 18
+  percent: 100
 ---
 
 # Project State
@@ -18,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-17)
 
 **Core value:** TCAD-based feasibility study for a 4H-SiC microdosimeter — first open-source 2D simulation with microdosimetric spectra, parametric optimization, and paper-ready scientific validation
-**Current focus:** v4.0 — Scientific Validation & Extended Physics (Phases 26-34)
+**Current focus:** Phase 26 — graded-doping-2d-calibration
 
 ## Current Position
 
-Phase: Not started (roadmap defined, awaiting Phase 26 planning)
-Plan: —
-Status: Roadmap defined, ready to plan Phase 26
-Last activity: 2026-05-17 — v4.0 roadmap created (9 phases, 26-34)
+Phase: 27
+Plan: Not started
+Status: Executing Phase 26
+Last activity: 2026-06-16
 
 Progress: [░░░░░░░░░░] 0% (0/9 v4.0 phases complete)
 
@@ -56,7 +59,7 @@ Progress: [░░░░░░░░░░] 0% (0/9 v4.0 phases complete)
 
 **Velocity (historical):**
 
-- Total plans completed: 55 (v1.0: 20, v1.1: 7, v2.0: 13, v3.0: 15)
+- Total plans completed: 59 (v1.0: 20, v1.1: 7, v2.0: 13, v3.0: 15)
 - Average duration: ~14 min per plan
 - Total execution time: ~10 hours
 
