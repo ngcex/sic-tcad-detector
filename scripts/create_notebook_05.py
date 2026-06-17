@@ -176,7 +176,7 @@ nb.cells.append(
         "within the explored range.\n"
         "\n"
         "---\n"
-        "*Phase 5 of the Petringa 4H-SiC TCAD simulation project*"
+        "*Phase 5 of the 4H-SiC TCAD simulation project*"
     )
 )
 

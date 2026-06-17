@@ -9,7 +9,7 @@ All units CGS (cm, cm^-3, F/cm, eV, s) per devsim convention.
 References:
     - devsim documentation: https://devsim.net/
     - devsim diode example pattern
-    - Petringa et al. experimental device structure
+    - reference experimental device structure
 """
 
 import logging

@@ -20,7 +20,7 @@ All units CGS (cm, cm^-3, F/cm, eV, s) per devsim convention.
 References:
     - devsim documentation: https://devsim.net/
     - devsim mos_2d_create.py example pattern
-    - Petringa et al. experimental device structure
+    - reference experimental device structure
 """
 
 import logging
@@ -484,7 +484,7 @@ def calibrate_graded_doping_2d(
     This is the 2D analog of ``src/device.py:calibrate_graded_doping``
     (lines 468-637): it fits ``{N_D_junction, N_D_bulk, L_transition}`` with the
     same Nelder-Mead simplex, the same parameter bounds, and the same
-    sum-of-squared-relative-error cost against the validated Petringa 1D-twin
+    sum-of-squared-relative-error cost against the validated 1D-twin
     C-V targets. Two things differ from the 1D version:
 
     1. Trial devices are built with
@@ -494,7 +494,7 @@ def calibrate_graded_doping_2d(
        :func:`src.poisson.extract_depletion_width_2d_center` (NOT the 1D
        depletion-width extractor, which reads ``x`` as depth and would return
        the wrong W for a 2D mesh).
-    2. The cost blends the three Petringa W targets (0, -10, -30 V — equal
+    2. The cost blends the three reference W targets (0, -10, -30 V — equal
        weights, preserving v3.0 behaviour at low bias per PITFALLS P24) with a
        *hard convergence penalty* (``divergence_penalty``, default 1e3) added
        whenever the solver fails to ramp all the way to
@@ -516,7 +516,7 @@ def calibrate_graded_doping_2d(
     target_W_data : dict or None
         Mapping of reverse-bias voltage (V, negative) to target depletion width
         (cm). Default ``{0.0: 1.7e-4, -10.0: 9.5e-4, -30.0: 9.73e-4}`` (the
-        validated Petringa 1D targets).
+        validated 1D targets).
     half_width_um : float
         Half-width of the sensitive volume in micrometers (50 -> 100 um SV).
     epi_thickness_cm, substrate_thickness_cm, N_A, T : float

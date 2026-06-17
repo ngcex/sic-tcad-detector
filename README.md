@@ -2,8 +2,8 @@
 
 A Python TCAD (Technology Computer-Aided Design) toolkit for modelling the
 electrical, transient, and radiation-damage behaviour of **4H-SiC p-n junction
-radiation detectors** — developed for the Petringa group at INFN-LNS (Catania)
-for proton dosimetry and microdosimetry applications.
+radiation detectors**, aimed at proton dosimetry and microdosimetry
+applications.
 
 It is **not** a commercial TCAD package: it is a self-contained simulator (~15k
 lines) built on the open-source [`devsim`](https://devsim.org/) finite-volume
@@ -104,8 +104,11 @@ In the interest of honesty, the current limitations are:
 
 ---
 
+## License
+
+MIT — see [LICENSE](LICENSE).
+
 ## Acknowledgements
 
 Built on [`devsim`](https://devsim.org/) (J. E. Sanchez). Radiation-damage model
-follows Burin et al., arXiv:2407.16710 (2024). Developed for the Petringa group,
-INFN-LNS Catania.
+follows Burin et al., arXiv:2407.16710 (2024).

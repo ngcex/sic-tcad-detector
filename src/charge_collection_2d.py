@@ -20,7 +20,7 @@ Note on symmetry:
 References:
     - Phase 19: 2D mesh & Poisson validation
     - Phase 20 research: 2D drift-diffusion CCE methodology
-    - Petringa et al. experimental microdosimeter geometry
+    - reference experimental microdosimeter geometry
 """
 
 import logging
