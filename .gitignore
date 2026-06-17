@@ -7,3 +7,8 @@ __pycache__/
 
 # Claude Code session artifacts (worktrees, workflow scripts)
 .claude/
+
+# Third-party papers / internal reports (not for public repo)
+papers/
+.DS_Store
+**/.DS_Store
