@@ -10,7 +10,7 @@ concentration and built-in potential from the linear fit slope/intercept.
 All units CGS (cm, F/cm^2, V) per devsim convention unless otherwise noted.
 
 References:
-    - Petringa et al.: C-V measurements at 1 kHz, W(0V)=1.7um, W(-10V)=9.5um
+    - Reference: C-V measurements at 1 kHz, W(0V)=1.7um, W(-10V)=9.5um
     - Sze & Ng, "Physics of Semiconductor Devices", Ch. 2: Junction capacitance
 """
 

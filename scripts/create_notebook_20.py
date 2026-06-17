@@ -50,7 +50,7 @@ This report presents the capstone analysis of the SiC microdosimeter design
 study, integrating results from TCAD drift-diffusion simulations (Phases 19-21),
 Monte Carlo coupling (Phase 22), microdosimetric spectra computation (Phase 23),
 and alternative structure comparison (Phase 24) into actionable fabrication
-guidance for the Petringa group.
+guidance for the this study.
 
 **Key deliverables:**
 1. Parametric optimization heatmaps (SV geometry x bias x doping)
@@ -794,7 +794,7 @@ fabrication complexity:
    capability of mixed-field discrimination.
 
 **Recommendation:** Guard ring is confirmed as the first practical upgrade
-over planar for the Petringa group (consistent with Phase 24 decision).
+over planar for the this study (consistent with Phase 24 decision).
 """
 )
 

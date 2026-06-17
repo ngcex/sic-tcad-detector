@@ -139,7 +139,7 @@ def plot_depletion_width_vs_bias(
         Analytical depletion widths (cm).
     W_experimental : dict or None
         Dict with 'voltages' and 'W' keys (both in V and cm).
-        If None, uses default Petringa experimental data:
+        If None, uses default reference experimental data:
         (0V, 1.7um), (-10V, 9.5um), (-30V, 9.73um).
     ax : matplotlib.axes.Axes or None
         Axes to plot on.
@@ -410,7 +410,7 @@ def plot_cv_comparison(cv_sim, cv_exp=None, ax=None):
         Simulated C-V data with "voltages" and "depletion_widths" keys.
     cv_exp : dict or None
         Experimental C-V data with "voltages" and "depletion_widths_cm" keys.
-        If None, uses default Petringa data: (0V, 1.7um), (-10V, 9.5um), (-30V, 9.73um).
+        If None, uses default reference data: (0V, 1.7um), (-10V, 9.5um), (-30V, 9.73um).
     ax : matplotlib.axes.Axes or None
         Axes to plot on. If None, creates new figure.
 

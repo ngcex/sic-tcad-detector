@@ -162,7 +162,7 @@ def depletion_width(V_bi, V_applied, N_D, eps_r=9.7, epi_thickness=None):
 
     Notes
     -----
-    For the Petringa device:
+    For the reference device:
       - W(0V) ~ 1.7 um = 1.7e-4 cm
       - W(-10V) ~ 9.5 um (approaches punch-through)
       - W(-30V) ~ 9.73 um (essentially fully depleted)

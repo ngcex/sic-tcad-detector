@@ -55,7 +55,7 @@ _V30_N_D_JUNCTION = 2.9e15
 _V30_N_D_BULK = 8.5e13
 _V30_L_TRANSITION = 1.0e-4
 
-# Petringa 1D-twin W targets (cm) — the calibration target at the device center.
+# Reference 1D-twin W targets (cm) — the calibration target at the device center.
 _W_TARGETS = {0.0: 1.7e-4, -10.0: 9.5e-4, -30.0: 9.73e-4}
 
 

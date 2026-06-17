@@ -249,7 +249,7 @@ nb.cells.append(
         "- Bias-dependent CCE under FLASH conditions (combining Phase 3 and 4 results)\n"
         "\n"
         "---\n"
-        "*Phase 4 of the Petringa 4H-SiC TCAD simulation project*"
+        "*Phase 4 of the 4H-SiC TCAD simulation project*"
     )
 )
 

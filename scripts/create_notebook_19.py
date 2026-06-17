@@ -1110,7 +1110,7 @@ md(
 - Suppresses parasitic edge collection, improving spectral purity
 - Two readout channels (main + guard) enable online edge correction
 - Minimal additional fabrication cost over planar
-- Recommended first upgrade for Petringa group
+- Recommended first upgrade for this study
 
 ### Key Trade-offs
 

@@ -1,4 +1,4 @@
-"""Validation framework for comparing simulation against Petringa experimental data.
+"""Validation framework for comparing simulation against reference experimental data.
 
 Provides experimental data targets for I-V and C-V characterization of the
 4H-SiC p+/n- diode, and functions for computing agreement metrics (R-squared,

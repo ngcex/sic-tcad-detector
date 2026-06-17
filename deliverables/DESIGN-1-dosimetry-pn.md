@@ -1,7 +1,7 @@
 # Detector Design Spec 1 — 4H-SiC Dosimetry Diode (p-n, zero-bias capable)
 
 **For:** foundry hand-off (ST / FBK / other)
-**From:** Petringa group, INFN-LNS — 4H-SiC TCAD study
+**From:** 4H-SiC detector TCAD feasibility study
 **Date:** 2026-06-16
 **Status:** process-agnostic physics specification (NOT a mask set)
 
@@ -77,7 +77,7 @@ diffusion, which our model does not quantify at 0 V. So:
   that needs transient DD modeling plus one measured zero-bias anchor.
 
 **Design lever for a genuinely zero-bias dosimeter (recommended separate variant):**
-W(0 V) ∝ √(V_bi·ε / (q·N_D)). To get a _meaningful_ depleted fraction at 0 V,
+W(0 V) ∝ √(V*bi·ε / (q·N_D)). To get a \_meaningful* depleted fraction at 0 V,
 use a **thinner, lower-doped epi**: target **~3–4 µm epi at N_D ≈ 1–3 × 10¹⁴ cm⁻³**,
 which depletes ≳ 80 % of the epi at 0 V (W(0 V) ≈ 3–6 µm). This trades signal
 depth for self-powered operation. The calibrated 2.93 × 10¹⁵ junction profile

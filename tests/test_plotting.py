@@ -106,7 +106,7 @@ class TestPlotDepletionWidthVsBias:
         assert n_lines_with > n_lines_without
 
     def test_default_experimental_data(self):
-        """Without W_experimental, default Petringa data should be plotted."""
+        """Without W_experimental, default reference data should be plotted."""
         V = np.linspace(0, -30, 10)
         W = np.linspace(1.7e-4, 9e-4, 10)
         ax = plot_depletion_width_vs_bias(V, W)

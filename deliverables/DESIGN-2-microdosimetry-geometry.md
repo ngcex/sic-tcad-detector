@@ -1,7 +1,7 @@
 # Detector Design Spec 2 — 4H-SiC Microdosimeter (sensitive-volume geometry)
 
 **For:** foundry hand-off (FBK Schottky / ST JBS / other)
-**From:** Petringa group, INFN-LNS — 4H-SiC TCAD study
+**From:** 4H-SiC detector TCAD feasibility study
 **Date:** 2026-06-16
 **Status:** GEOMETRY-ONLY physics specification (NOT a mask set; junction type NOT modeled)
 
