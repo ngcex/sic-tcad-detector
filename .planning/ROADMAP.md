@@ -377,7 +377,12 @@ Plans:
 2. `python -c "from petringa import DeviceConfig"` executes without error, confirming the public package is importable
 3. `pytest -q` runs all 25 existing test modules and all pass; the `tests/baselines/v3_frozen.json` regression baseline is byte-for-byte unchanged
 4. All runtime dependencies (`devsim`, `numpy`, `scipy`, `matplotlib`, `plotly`, `streamlit`, `pandas`) and optional `[dev]` extras (`pytest`, `jupyter`) are declared in `pyproject.toml`
-   **Plans**: TBD
+   **Plans**: 2 plans
+
+Plans:
+
+- [ ] 35-01-PLAN.md — Package scaffold: pyproject.toml (hatchling), petringa/__init__.py (DeviceConfig stub), editable install
+- [ ] 35-02-PLAN.md — src/ → petringa/core/ rename, import rewrite (326 statements + 6 string-literal fixes + 81 notebook imports), full test gate
 
 ### Phase 36: Core API — DeviceConfig + C-V + Field + Vertical Slice
 
