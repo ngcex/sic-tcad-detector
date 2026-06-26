@@ -187,37 +187,37 @@ Explicitly excluded.
 
 | Requirement | Phase | Status  |
 | ----------- | ----- | ------- |
-| PKG-01      | TBD   | Pending |
-| PKG-02      | TBD   | Pending |
-| PKG-03      | TBD   | Pending |
-| LIB-01      | TBD   | Pending |
-| LIB-02      | TBD   | Pending |
-| LIB-03      | TBD   | Pending |
-| LIB-04      | TBD   | Pending |
-| LIB-05      | TBD   | Pending |
-| LIB-06      | TBD   | Pending |
-| LIB-07      | TBD   | Pending |
-| UI-01       | TBD   | Pending |
-| UI-02       | TBD   | Pending |
-| UI-03       | TBD   | Pending |
-| UI-04       | TBD   | Pending |
-| UI-05       | TBD   | Pending |
-| UI-06       | TBD   | Pending |
-| UI-07       | TBD   | Pending |
-| VIZ-01      | TBD   | Pending |
-| VIZ-02      | TBD   | Pending |
-| VIZ-03      | TBD   | Pending |
-| FEAT-01     | TBD   | Pending |
-| FEAT-02     | TBD   | Pending |
-| FEAT-03     | TBD   | Pending |
-| FEAT-04     | TBD   | Pending |
-| FEAT-05     | TBD   | Pending |
+| PKG-01      | 35    | Pending |
+| PKG-02      | 35    | Pending |
+| PKG-03      | 35    | Pending |
+| LIB-01      | 36    | Pending |
+| LIB-02      | 36    | Pending |
+| LIB-03      | 36    | Pending |
+| LIB-04      | 37    | Pending |
+| LIB-05      | 36    | Pending |
+| LIB-06      | 37    | Pending |
+| LIB-07      | 37    | Pending |
+| UI-01       | 38    | Pending |
+| UI-02       | 38    | Pending |
+| UI-03       | 39    | Pending |
+| UI-04       | 39    | Pending |
+| UI-05       | 39    | Pending |
+| UI-06       | 39    | Pending |
+| UI-07       | 38    | Pending |
+| VIZ-01      | 40    | Pending |
+| VIZ-02      | 40    | Pending |
+| VIZ-03      | 40    | Pending |
+| FEAT-01     | 41    | Pending |
+| FEAT-02     | 41    | Pending |
+| FEAT-03     | 42    | Pending |
+| FEAT-04     | 42    | Pending |
+| FEAT-05     | 43    | Pending |
 
 **v5.0 Coverage:**
 
 - v5.0 requirements: 25 total
-- Mapped to phases: 0 (TBD — roadmapper will assign)
-- Unmapped: 25 ⚠ (expected before roadmap)
+- Mapped to phases: 25 (Phases 35-43)
+- Unmapped: 0 ✓
 
 ### v4.0 and earlier
 

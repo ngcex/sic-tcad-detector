@@ -3,11 +3,11 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Simulator Library & Streamlit UI
 status: planning
-stopped_at: v5.0 milestone started — defining requirements
+stopped_at: v5.0 roadmap created — ready for phase planning
 last_updated: "2026-06-26T00:00:00.000Z"
 last_activity: 2026-06-26
 progress:
-  total_phases: 0
+  total_phases: 9
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -21,20 +21,32 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-26)
 
 **Core value:** Installable Python library + Streamlit UI that makes the SiC TCAD simulator usable by the Petringa group without reading source code
-**Current focus:** Defining requirements for v5.0
+**Current focus:** Phase 35 — Package Setup & Refactor
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 35 (Package Setup & Refactor) — not yet started
 Plan: —
-Status: Defining requirements
-Last activity: 2026-06-26 — Milestone v5.0 started
+Status: Ready for planning
+Last activity: 2026-06-26 — v5.0 roadmap created
 
-Progress: [░░░░░░░░░░] 0% (0/0 v5.0 phases complete)
+Progress: [░░░░░░░░░░] 0% (0/9 v5.0 phases complete)
 
 ## v5.0 Phase Map
 
-To be created by roadmapper after requirements are defined.
+| Phase | Name                                       | Group   | Requirements                   | Depends on |
+| ----- | ------------------------------------------ | ------- | ------------------------------ | ---------- |
+| 35    | Package Setup & Refactor                   | GROUP A | PKG-01, PKG-02, PKG-03         | Phase 25   |
+| 36    | Core API — DeviceConfig + C-V + Field      | GROUP A | LIB-01, LIB-02, LIB-03, LIB-05 | Phase 35   |
+| 37    | Core API — CCE + Facades + ParametricSweep | GROUP A | LIB-04, LIB-06, LIB-07         | Phase 36   |
+| 38    | Streamlit Shell + Device Config Page       | GROUP B | UI-01, UI-02, UI-07            | Phase 37   |
+| 39    | C-V, CCE, Field Map Pages + CSV Download   | GROUP B | UI-03, UI-04, UI-05, UI-06     | Phase 38   |
+| 40    | Geometry Viewer                            | GROUP B | VIZ-01, VIZ-02, VIZ-03         | Phase 39   |
+| 41    | Radiation Damage + Dark Current Pages      | GROUP C | FEAT-01, FEAT-02               | Phase 40   |
+| 42    | Microdosimetry Page + Batch Sweep Page     | GROUP C | FEAT-03, FEAT-04               | Phase 41   |
+| 43    | Integration Audit — All 20 Notebooks       | GROUP C | FEAT-05                        | Phase 42   |
+
+**Key constraint:** Phase 35 is a hard prerequisite for all subsequent phases. No physics changes allowed in any v5.0 phase — refactor only.
 
 ## Performance Metrics
 
@@ -66,10 +78,10 @@ To be created by roadmapper after requirements are defined.
 - Build backend: hatchling via `pyproject.toml` (replaces `requirements.txt`)
 - Public API lives in `petringa/api/`; internal modules in `petringa/core/` are not public contract
 - `MeshData` is populated post-build from devsim node extraction; geometry viewer never calls devsim directly
-- Geometry viewer: 2D Plotly heatmap via `scipy.interpolate.griddata` onto regular grid
+- Geometry viewer: 2D Plotly heatmap via `scipy.interpolate.griddata` onto regular grid; 1D bar for 1D devices
 - kappa data-blocked: UI shows warning banner on radiation damage page; no fabricated values
-- Vertical slice validation: C-V workflow end-to-end before refactoring remaining modules
-- Acceptance gate for refactor: all existing tests + v3_frozen.json baseline pass unchanged
+- Vertical slice validation: `examples/cv_example.py` ships with Phase 36 as end-to-end API proof
+- Acceptance gate for Phase 35: `pytest -q` green + `v3_frozen.json` baseline byte-for-byte unchanged
 - Deployment: local (`streamlit run app/main.py`) and shared lab server (port 8501)
 - Design spec: `docs/superpowers/specs/2026-06-26-simulator-library-ui-design.md`
 
@@ -92,5 +104,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-06-26
-Stopped at: v5.0 milestone started — requirements and roadmap being defined
-Resume file: None — next action is `/gsd:plan-phase [N]` after roadmap is approved
+Stopped at: v5.0 roadmap created — 9 phases (35-43) defined, all 25 requirements mapped
+Resume file: None — next action is `/gsd:plan-phase 35`
