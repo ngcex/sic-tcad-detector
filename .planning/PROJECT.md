@@ -1,19 +1,18 @@
 # SiC TCAD Simulator — Petringa Group
 
-## Current Milestone: v4.0 Scientific Validation & Extended Physics
+## Current Milestone: v5.0 Simulator Library & Streamlit UI
 
-**Goal:** Portare i risultati di v3.0 a livello paper-ready e aggiungere le capacità fisiche mancanti — doping 2D corretto, ROOT/Geant4 integration testata, kappa calibrato, noise analysis, build-up over-response, risposta azimutale, mobilità anisotropa e simulazione 3D — per un toolkit completo usabile dal gruppo INFN-LNS.
+**Goal:** Trasformare il toolkit notebook-based in un package Python installabile (`petringa`) con un'interfaccia Streamlit usabile dal gruppo Petringa senza leggere il codice sorgente, replicando il workflow dei software commerciali (Sentaurus, Silvaco) con configurazione parametrica, visualizzazione geometrica 2D e risultati interattivi.
 
 **Target features:**
 
-- Graded epi doping profile in 2D (fix N_D uniforme che fallisce a reverse bias realistico)
-- ROOT/Geant4 integration reale con file sintetico Geant4-compatibile come test fixture
-- Kappa tissue-equivalence da tabelle PSTAR+SRIM tabulati (non scaling analitico)
-- Noise analysis completa (shot noise + rumore 1/f da trappole + soglia minima energia rilevabile)
-- Build-up over-response 2D (campo elettrico near-surface, zona di non raccolta, correzione)
-- Risposta azimutale (sweep angolare in 2D con approssimazione 3D)
-- Modello mobilità anisotropo (c-axis vs a-axis, tensore 2D in devsim)
-- Simulazione 3D completa per geometrie che richiedono mesh full-3D
+- Package Python installabile `pip install -e .` con `pyproject.toml` (rimpiazza `requirements.txt`)
+- API pubblica stabile: `DeviceConfig`, `SimResult`, `MeshData`, `run_cv()`, `run_cce()`, `run_field()`
+- Refactor `src/` → `petringa/core/` + `petringa/api/` (nessuna modifica alla fisica, tutti i test invariati)
+- Streamlit UI multi-pagina: configurazione device via form, C-V, CCE vs bias, field map
+- Geometry viewer 2D: heatmap Plotly sulla mesh devsim estratta post-build via `MeshData`
+- Feature complete: radiation damage, dark current, microdosimetria, sweep batch parametriche
+- Tutti i 20 workflow dei notebook riproducibili via UI
 
 ## What This Is
 
@@ -80,16 +79,28 @@ Explore how charge collection efficiency (CCE) in the SiC detector behaves under
 - ✓ Publication-quality feasibility report with fabrication recommendations — v3.0
 - ✓ 20 publication-quality Jupyter notebooks — v3.0
 
-### Active
+### Active (v5.0)
 
-- [ ] Graded epi doping profile in 2D (fix N_D uniforme che fallisce a reverse bias realistico)
-- [ ] ROOT/Geant4 integration reale con file sintetico Geant4-compatibile come test fixture
-- [ ] Kappa tissue-equivalence da tabelle PSTAR+SRIM tabulati (non scaling analitico)
-- [ ] Noise analysis completa: shot noise + rumore 1/f da trappole + soglia minima energia rilevabile
-- [ ] Build-up over-response 2D: campo elettrico near-surface, zona non raccolta, correzione
-- [ ] Risposta azimutale: sweep angolare geometrie 2D con estensione a mesh 3D
-- [ ] Modello mobilità anisotropo: c-axis vs a-axis, tensore 2D in devsim
-- [ ] Simulazione 3D completa per geometrie che richiedono mesh full-3D (devsim 3D mesh)
+- [ ] Package Python `petringa` installabile con `pyproject.toml` e hatchling build backend
+- [ ] Refactor `src/` → `petringa/core/` (nessuna modifica alla fisica, tutti i test passano invariati)
+- [ ] API pubblica `petringa/api/`: `DeviceConfig`, `SimResult`, `MeshData` dataclasses
+- [ ] Facade `run_cv()` su `core/cv_analysis.py` + `run_field()` che popola `MeshData`
+- [ ] Vertical slice validation: `examples/cv_example.py` funziona end-to-end
+- [ ] Facade `run_cce()` su `core/charge_collection.py`
+- [ ] App Streamlit multi-pagina: `app/main.py` con layout sidebar + main panel
+- [ ] Pagina device config: form per tutti i campi `DeviceConfig`, store in `st.session_state`
+- [ ] Pagina C-V analysis: chiama `run_cv()`, plot C-V e 1/C² vs V (Plotly)
+- [ ] Pagina CCE: chiama `run_cce()`, plot CCE vs bias
+- [ ] Pagina field map: chiama `run_field()`, plot profilo campo e potenziale in profondità
+- [ ] Geometry viewer 2D: `app/components/geometry_viewer.py` con `MeshData` → Plotly heatmap
+- [ ] Download CSV da ogni pagina risultati
+- [ ] Facade `run_radiation_damage()`, `run_dark_current()`, `run_temperature_sweep()`
+- [ ] Facade `run_flash_recombination()`, `run_transient()`, `run_microdosimetry()`
+- [ ] Classe `ParametricSweep` per sweep batch parametriche
+- [ ] Pagina radiation damage: sweep fluenza, CCE vs fluenza, warning banner kappa data-blocked
+- [ ] Pagina dark current: dark current vs temperatura, contributi da trappole
+- [ ] Pagina microdosimetria: upload MC CSV, spettro y·d(y) vs log(y), y_F/y_D readout
+- [ ] Pagina batch sweep: selezione parametro + range + tipo sim, plot sovrapposti, bulk CSV download
 
 ### Deferred — v3.0 Microdosimeter Design Study
 
@@ -138,8 +149,13 @@ Explore how charge collection efficiency (CCE) in the SiC detector behaves under
 - Full Monte Carlo particle transport (Geant4/FLUKA simulation runs) — handled separately by the group; we import results
 - Commercial TCAD (Silvaco/Synopsys) — this project uses open-source tools only
 - Real-time clinical dosimetry software — this is a research simulation tool
-- GUI application — Jupyter notebooks sufficient for research group
+- ~~GUI application — Jupyter notebooks sufficient for research group~~ (revoked in v5.0: Streamlit UI is now in scope)
 - Full Monte Carlo particle transport runs inside this tool — importiamo risultati da Geant4/FLUKA esterni
+- 3D geometry viewer (devsim devices are 1D/2D; 2D Plotly heatmap is sufficient)
+- Real-time live simulation (devsim runs are seconds to minutes; UI triggers on button click)
+- Web deployment with devsim on Streamlit Community Cloud (devsim is a C extension; needs local/VPS install)
+- Any new physics models in v5.0 (all physics changes are separate future milestones)
+- Mask layout / GDS output (foundry-facing work stays in `deliverables/`)
 
 ## Context
 
@@ -228,4 +244,25 @@ The FLASH paper (Petringa 2025, Physica Medica 138) characterizes the dosimetric
 
 ---
 
-_Last updated: 2026-05-17 after v4.0 milestone start_
+## Evolution
+
+This document evolves at phase transitions and milestone boundaries.
+
+**After each phase transition** (via `/gsd-transition`):
+
+1. Requirements invalidated? → Move to Out of Scope with reason
+2. Requirements validated? → Move to Validated with phase reference
+3. New requirements emerged? → Add to Active
+4. Decisions to log? → Add to Key Decisions
+5. "What This Is" still accurate? → Update if drifted
+
+**After each milestone** (via `/gsd:complete-milestone`):
+
+1. Full review of all sections
+2. Core Value check — still the right priority?
+3. Audit Out of Scope — reasons still valid?
+4. Update Context with current state
+
+---
+
+_Last updated: 2026-06-26 after v5.0 milestone start_
