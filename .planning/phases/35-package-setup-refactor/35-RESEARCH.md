@@ -517,22 +517,13 @@ pytest -q
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **DeviceConfig scope boundary between Phase 35 and Phase 36**
-   - What we know: Success Criterion #2 for Phase 35 is `python -c "from petringa import DeviceConfig"`. REQUIREMENTS.md maps LIB-01 (full `DeviceConfig` dataclass) to Phase 36. The design spec (§4, Phase 1) bundles both the rename and `DeviceConfig` creation together.
-   - What's unclear: Does Phase 35 need only a minimal skeleton dataclass (fields but no validation, no `build_device()`) to satisfy the smoke test, with Phase 36 filling in the full implementation? Or should Phase 35 ship nothing (breaking SC#2) and Phase 36 deliver the full dataclass?
-   - Recommendation: Ship a minimal `DeviceConfig` skeleton in `petringa/__init__.py` during Phase 35 — just the `@dataclass` with the fields from the design spec §3.1 (no physics, no devsim calls). This satisfies the explicit SC#2 smoke test and is < 20 lines. Phase 36 upgrades it with validation, `build_device()`, and the full API. The planner should make this boundary explicit and coordinate with Phase 36.
+1. **DeviceConfig scope boundary between Phase 35 and Phase 36** — RESOLVED: Ship a minimal `@dataclass` skeleton in `petringa/__init__.py` during Phase 35 (fields only, no `__post_init__`, no `build_device()`). This satisfies SC#2 (`from petringa import DeviceConfig`) with < 20 lines. Phase 36 upgrades it with validation and full API (LIB-01). Plan 01 encodes this boundary explicitly.
 
-2. **Notebook import rewrite: in or out of Phase 35 scope?**
-   - What we know: PKG-03 covers test modules only; the 22 notebooks' import correctness is verified in Phase 43. There are 81 `from src.X` imports across 22 notebooks.
-   - What's unclear: Rewriting notebook imports in Phase 35 is cheap (same mechanical pass) but leaves notebooks broken if deferred. If left, Phase 43 must do a notebook import rewrite sweep in addition to execution verification.
-   - Recommendation: Include notebook import rewrite in Phase 35 as a separate task (it's cheap, mechanical, and doesn't gate the acceptance test). Mark notebook execution as Phase 43 scope. This avoids the 22 notebooks being in a broken-import state for the entire v5.0 window (Phases 35-43).
+2. **Notebook import rewrite: in or out of Phase 35 scope?** — RESOLVED: Include notebook import rewrite in Phase 35 (Plan 02 Task 1 Step 4) as a mechanical json-walker pass. Notebook execution validation remains Phase 43 scope. This avoids all 22 notebooks being in broken-import state for the entire v5.0 window.
 
-3. **`devsim` entry in pyproject.toml dependencies — installability on a fresh machine**
-   - What we know: devsim is a C extension (prebuilt wheel for macOS arm64). It installs via `pip install devsim` but it is not a PyPI package in the traditional sense — it may require a custom index or direct URL.
-   - What's unclear: Whether `uv pip install -e .` on a fresh machine with `devsim>=2.10.0` in dependencies will successfully locate and install the devsim wheel, or whether devsim requires manual handling (BLAS/LAPACK prereqs noted in venv output).
-   - Recommendation: The planner should add a note that `devsim` in `dependencies` is a declaration for documentation/tooling purposes, and that `pip install -e .` from a fresh venv may require devsim to be pre-installed separately (devsim install verification is already a project convention). This doesn't affect Phase 35's acceptance test (devsim is already present in the project venv).
+3. **`devsim` entry in pyproject.toml dependencies — installability on a fresh machine** — RESOLVED: Declare `devsim>=2.10.0` in `[project] dependencies` for documentation purposes. Add a comment noting that on a fresh machine devsim may need pre-installation (custom wheel). Phase 35's acceptance test uses the existing project venv where devsim is already present, so this does not block the phase gate. Plan 01 interface block includes this note.
 
 ---
 
@@ -588,7 +579,7 @@ pytest -q
 | SC#2     | `from petringa import DeviceConfig` works       | smoke       | `python -c "from petringa import DeviceConfig; print('OK')"`                            | ❌ Wave 0 — need petringa/**init**.py   |
 | Baseline | v3_frozen.json byte-for-byte unchanged          | regression  | `git diff --exit-code tests/baselines/v3_frozen.json` (VCS check — see note)            | ✅ file in git                          |
 
-**Baseline integrity note:** `test_v3_baseline_regression.py` reads `v3_frozen.json` and asserts that the *current code* reproduces the frozen values within tolerance. It does NOT assert the JSON file itself is unmodified — if `freeze_v3_baselines.py` were re-run (which also gets its imports rewritten in this phase), it would overwrite the baseline and the test would still pass with new numbers. The only correct way to assert byte-for-byte baseline integrity is: `git diff --exit-code tests/baselines/v3_frozen.json`. This must be a distinct phase-gate step, separate from `pytest -q`.
+**Baseline integrity note:** `test_v3_baseline_regression.py` reads `v3_frozen.json` and asserts that the _current code_ reproduces the frozen values within tolerance. It does NOT assert the JSON file itself is unmodified — if `freeze_v3_baselines.py` were re-run (which also gets its imports rewritten in this phase), it would overwrite the baseline and the test would still pass with new numbers. The only correct way to assert byte-for-byte baseline integrity is: `git diff --exit-code tests/baselines/v3_frozen.json`. This must be a distinct phase-gate step, separate from `pytest -q`.
 
 ### Sampling Rate
 
@@ -604,7 +595,7 @@ pytest -q
 - [ ] `pyproject.toml` — replaces requirements.txt; covers PKG-01, PKG-02
 - [ ] `pytest.ini` update — add `testpaths = tests` if needed after rename (currently no testpaths directive; pytest finds tests/ by convention)
 
-_(Existing 25 test\__.py files cover PKG-03 once imports are rewritten — no new test files needed)\*
+\_(Existing 25 test\_\_.py files cover PKG-03 once imports are rewritten — no new test files needed)\*
 
 ---
 
