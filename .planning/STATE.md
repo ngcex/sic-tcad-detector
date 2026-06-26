@@ -1,71 +1,52 @@
 ---
 gsd_state_version: 1.0
-milestone: v4.0
-milestone_name: Scientific Validation & Extended Physics
-status: executing
-stopped_at: v4.0 roadmap created (9 phases, 26-34); REQUIREMENTS.md traceability verified
-last_updated: "2026-06-16T10:13:57.574Z"
-last_activity: 2026-06-16
+milestone: v5.0
+milestone_name: Simulator Library & Streamlit UI
+status: planning
+stopped_at: v5.0 milestone started — defining requirements
+last_updated: "2026-06-26T00:00:00.000Z"
+last_activity: 2026-06-26
 progress:
-  total_phases: 15
-  completed_phases: 8
-  total_plans: 18
-  completed_plans: 18
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-17)
+See: .planning/PROJECT.md (updated 2026-06-26)
 
-**Core value:** TCAD-based feasibility study for a 4H-SiC microdosimeter — first open-source 2D simulation with microdosimetric spectra, parametric optimization, and paper-ready scientific validation
-**Current focus:** Phase 26 — graded-doping-2d-calibration
+**Core value:** Installable Python library + Streamlit UI that makes the SiC TCAD simulator usable by the Petringa group without reading source code
+**Current focus:** Defining requirements for v5.0
 
 ## Current Position
 
-Phase: 27
-Plan: Not started
-Status: Executing Phase 26
-Last activity: 2026-06-16
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-06-26 — Milestone v5.0 started
 
-Progress: [░░░░░░░░░░] 0% (0/9 v4.0 phases complete)
+Progress: [░░░░░░░░░░] 0% (0/0 v5.0 phases complete)
 
-## v4.0 Phase Map (9 phases)
+## v5.0 Phase Map
 
-**TIER 1 — Parallel unblockers** (no inter-dependencies):
-
-- Phase 26: Graded Doping 2D Calibration — CONS-01
-- Phase 27: PSTAR+SRIM Stopping Power & Real κ — CONS-02, CONS-03
-- Phase 28: Geant4 ROOT Integration with Golden Fixture — CONS-04
-
-**TIER 2 — Analysis modules** (depend on Phase 26):
-
-- Phase 29: Complete Noise Analysis — NOIS-01, NOIS-02, NOIS-03
-- Phase 30: Build-up Over-Response 2D — BULD-01, BULD-02
-
-**TIER 3 — New devsim physics** (sequential):
-
-- Phase 31: Anisotropic Mobility Tensor — ANIS-01, ANIS-02 (prerequisite for Phase 33)
-- Phase 32: Angular Response 2D Sweep — ANGL-01, ANGL-02
-
-**TIER 4 — Stretch & synthesis**:
-
-- Phase 33: Full 3D Simulation — 3DIM-01, 3DIM-02 — STRETCH GOAL (may not execute)
-- Phase 34: v4.0 Milestone Audit & Paper Figures — no new REQ-IDs
+To be created by roadmapper after requirements are defined.
 
 ## Performance Metrics
 
 **Velocity (historical):**
 
-- Total plans completed: 59 (v1.0: 20, v1.1: 7, v2.0: 13, v3.0: 15)
+- Total plans completed: 77 (v1.0: 20, v1.1: 7, v2.0: 13, v3.0: 15, v4.0 partial: 22)
 - Average duration: ~14 min per plan
-- Total execution time: ~10 hours
+- Total execution time: ~18 hours
 
 ## Accumulated Context
 
-### Decisions (carried into v4.0)
+### Decisions (carried into v5.0)
 
 - `device2d.py` is the 2D module; `device.py` (1D) is frozen to protect 20 validated notebooks
 - devsim physics modules are dimension-agnostic (poisson, drift-diffusion, transient, CCE)
@@ -74,27 +55,30 @@ Progress: [░░░░░░░░░░] 0% (0/9 v4.0 phases complete)
 - x=lateral, y=depth coordinate convention for all 2D modules
 - `charge_error=1e10` required for all BDF1 transient solves (disables step rejection)
 - uproot imported lazily for backward-compat with CSV-only workflows
-- Guard ring recommended as first practical upgrade for Petringa group
-
-### Decisions (new for v4.0)
-
-- New Python package: `physdata>=0.2.0` for NIST PSTAR access (Phase 27)
-- Vendored data files: `data/srim/sic_proton.txt`, `data/srim/water_proton.txt`, `tests/fixtures/synthetic_geant4.root`
-- `RootSchemaMap` dataclass for configurable Geant4 branch-name mapping (Phase 28)
-- `reset_devsim()` must be extended in Phase 26 (first phase to touch graded doping globals) and again in Phase 31 (tensor mobility globals)
 - `anisotropic=False` is default to preserve every v3.0 notebook within 0.1%
-- Phase 33 (3D) is STRETCH — confirm scope with PI before planning
-- Hooge α: explicit parameter with 3 presets (`sic_best=2e-5`, `typical=1e-4`, `worst=1e-3`); notebook shows sensitivity band
-- SiC stopping power: implement both `pstar_bragg` and `srim` behind `source=` switch; default `pstar_bragg` for CI, SRIM for publication
+- Hooge α: explicit parameter with 3 presets (`sic_best=2e-5`, `typical=1e-4`, `worst=1e-3`)
+- SiC stopping power: `pstar_bragg` default for CI, SRIM for publication
 
-### Tech Debt Resolved by v4.0 Phases
+### Decisions (new for v5.0)
 
-- N_D uniform in 2D fails at reverse bias → **Phase 26** (graded doping 2D calibration)
-- ROOT/uproot integration mock-only → **Phase 28** (synthetic Geant4 fixture + RootSchemaMap)
-- Kappa from analytic Bethe-Bloch scaling → **Phase 27** (PSTAR+SRIM tabulated data)
-- CCE(LET) flat at 1.0 → validation deferred to **Phase 34** audit (currently valid physics, needs human review)
-- t_collection anomalously fast → review in **Phase 34** audit
-- `score_structures` uses hardcoded metrics → integrated with live TCAD output in **Phase 29** (noise) and **Phase 30** (build-up)
+- UI framework: Streamlit (Python-native, no frontend/backend split, direct access to devsim)
+- Package name: `petringa` (installable with `pip install -e .` / `uv pip install -e .`)
+- Build backend: hatchling via `pyproject.toml` (replaces `requirements.txt`)
+- Public API lives in `petringa/api/`; internal modules in `petringa/core/` are not public contract
+- `MeshData` is populated post-build from devsim node extraction; geometry viewer never calls devsim directly
+- Geometry viewer: 2D Plotly heatmap via `scipy.interpolate.griddata` onto regular grid
+- kappa data-blocked: UI shows warning banner on radiation damage page; no fabricated values
+- Vertical slice validation: C-V workflow end-to-end before refactoring remaining modules
+- Acceptance gate for refactor: all existing tests + v3_frozen.json baseline pass unchanged
+- Deployment: local (`streamlit run app/main.py`) and shared lab server (port 8501)
+- Design spec: `docs/superpowers/specs/2026-06-26-simulator-library-ui-design.md`
+
+### Tech Debt Resolved by v5.0 Phases
+
+- `src/` flat layout with no stable public API → `petringa/core/` + `petringa/api/`
+- `requirements.txt` → `pyproject.toml` with proper package metadata
+- Notebooks import internal classes directly → all imports via `petringa.*` public API
+- No UI for non-developers → Streamlit app covers all 20 notebook workflows
 
 ### Pending Todos
 
@@ -102,12 +86,11 @@ None.
 
 ### Blockers / Concerns
 
-- Real Geant4 ROOT file from INFN-LNS not available — Phase 28 uses synthetic fixture as primary deliverable (decision: do not block on external data)
-- devsim 3D mesh API has limited documentation — Phase 33 may require additional research; flagged STRETCH
-- 4H-SiC mobility anisotropy: electrons have μ∥c > μ⊥c (opposite to holes AND opposite to 6H-SiC) — Phase 31 must carefully label `mu_n_c_axis` vs `mu_n_basal_plane` to avoid silently inverting physics
+- kappa(E) NIEL hardness factors still data-blocked (from v4.0 audit C-5) — radiation damage page will show warning banner; absolute Phi_crit numbers remain unvalidated until SRIM data arrives
+- devsim process resource exhaustion under DD-heavy test suites — existing slow test convention (`@pytest.mark.slow`) must be preserved in refactored package
 
 ## Session Continuity
 
-Last session: 2026-05-17
-Stopped at: v4.0 roadmap created (9 phases, 26-34); REQUIREMENTS.md traceability verified
-Resume file: None — next action is `/gsd-plan-phase 26` (or 27 or 28 in parallel)
+Last session: 2026-06-26
+Stopped at: v5.0 milestone started — requirements and roadmap being defined
+Resume file: None — next action is `/gsd:plan-phase [N]` after roadmap is approved
