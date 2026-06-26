@@ -7,6 +7,7 @@
 - ✅ **v2.0 Radiation Damage Modeling** — Phases 13-18 (shipped 2026-03-26)
 - ✅ **v3.0 SiC Microdosimeter Design Study** — Phases 19-25 (shipped 2026-04-01)
 - 📋 **v4.0 Scientific Validation & Extended Physics** — Phases 26-34 (planning)
+- 📋 **v5.0 Simulator Library & Streamlit UI** — Phases 35-43 (planning)
 
 ## Phases
 
@@ -87,6 +88,28 @@ Full details: [milestones/v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md)
 - [ ] **Phase 32: Angular Response 2D Sweep** — Polar-angle θ sweep on 2D mesh for CCE(θ) and y(θ) curves _(TIER 3)_
 - [ ] **Phase 33: Full 3D Simulation** — STRETCH GOAL — full Cartesian 3D devsim with Poisson and CCE on 100×100×10 µm SV _(TIER 4, stretch, depends on Phase 31)_
 - [ ] **Phase 34: v4.0 Milestone Audit & Paper Figures** — Integration regression sweep, paper-quality figures, and milestone synthesis _(TIER 4, audit)_
+
+### v5.0 Simulator Library & Streamlit UI
+
+**Milestone Goal:** Transform the notebook-based toolkit into an installable Python package (`petringa`) with a Streamlit UI usable by the Petringa group without reading source code — replicating the workflow of commercial TCAD tools (Sentaurus, Silvaco) with parametric configuration, 2D geometry visualization, and interactive results.
+
+**Depends on:** v3.0 complete (Phase 25); v4.0 Phase 26 (stable 2D solver)
+
+**Phase organization (3 groups):**
+
+- **GROUP A (Phases 35-37)** — Library foundation; prerequisite for all UI phases. No physics changes.
+- **GROUP B (Phases 38-40)** — Streamlit MVP; depends on Group A complete
+- **GROUP C (Phases 41-43)** — Feature complete; depends on Group B complete
+
+- [ ] **Phase 35: Package Setup & Refactor** — `pyproject.toml`, `src/` → `petringa/core/` rename, all 25 test modules pass unchanged _(GROUP A, prerequisite — no physics changes)_
+- [ ] **Phase 36: Core API — DeviceConfig + C-V + Field + Vertical Slice** — `DeviceConfig`, `SimResult`, `MeshData` dataclasses; `run_cv()`, `run_field()` facades; `examples/cv_example.py` vertical slice _(GROUP A)_
+- [ ] **Phase 37: Core API — CCE + Remaining Facades + ParametricSweep** — `run_cce()`, `run_radiation_damage()`, `run_dark_current()`, `run_temperature_sweep()`, `run_flash_recombination()`, `run_transient()`, `run_microdosimetry()`, `ParametricSweep` _(GROUP A)_
+- [ ] **Phase 38: Streamlit Shell + Device Config Page** — `app/main.py` multi-page shell, device config sidebar form, `st.session_state` persistence, navigation between pages _(GROUP B)_
+- [ ] **Phase 39: C-V, CCE, Field Map Pages + CSV Download** — C-V page with Plotly C-V and 1/C² plots, CCE page, field map page, CSV download from all result pages _(GROUP B)_
+- [ ] **Phase 40: Geometry Viewer** — `app/components/geometry_viewer.py`: `MeshData` → 2D Plotly heatmap for 2D devices, depth-profile bar for 1D devices, quantity selector dropdown _(GROUP B)_
+- [ ] **Phase 41: Radiation Damage + Dark Current Pages** — Radiation damage page with CCE vs fluence and kappa warning banner; dark current page with J component decomposition _(GROUP C)_
+- [ ] **Phase 42: Microdosimetry Page + Batch Sweep Page** — Microdosimetry page with MC CSV upload and y·d(y) spectrum; batch sweep page with parametric run and overlaid results _(GROUP C)_
+- [ ] **Phase 43: Integration Audit — All 20 Notebook Workflows** — Verify all 20 notebook workflows are reproducible via UI; confirm all 25 v5.0 requirements satisfied _(GROUP C, audit — no new code)_
 
 ## Phase Details
 
@@ -343,6 +366,129 @@ Plans:
 4. PROJECT.md "Validated" section is updated with every v4.0 deliverable that shipped, REQUIREMENTS.md traceability marks all CONS/NOIS/BULD/ANIS/ANGL items as Complete, and (if Phase 33 executed) 3DIM items moved from "stretch" to Complete
    **Plans**: TBD
 
+### Phase 35: Package Setup & Refactor
+
+**Goal**: Developers can install the `petringa` package with `pip install -e .`, import `DeviceConfig` from it, and run the full test suite without any regressions — the codebase is refactored but physics is identical
+**Depends on**: v3.0 complete (Phase 25); v4.0 Phase 26 (stable import paths)
+**Requirements**: PKG-01, PKG-02, PKG-03
+**Success Criteria** (what must be TRUE):
+
+1. `pip install -e .` (or `uv pip install -e .`) completes without error from a fresh virtual environment using `pyproject.toml` with hatchling build backend
+2. `python -c "from petringa import DeviceConfig"` executes without error, confirming the public package is importable
+3. `pytest -q` runs all 25 existing test modules and all pass; the `tests/baselines/v3_frozen.json` regression baseline is byte-for-byte unchanged
+4. All runtime dependencies (`devsim`, `numpy`, `scipy`, `matplotlib`, `plotly`, `streamlit`, `pandas`) and optional `[dev]` extras (`pytest`, `jupyter`) are declared in `pyproject.toml`
+   **Plans**: TBD
+
+### Phase 36: Core API — DeviceConfig + C-V + Field + Vertical Slice
+
+**Goal**: Developers can call `run_cv(DeviceConfig())` and `run_field(DeviceConfig(), bias_V=-100)` from a Python script and get physically reasonable results — the public API contract is established and validated end-to-end
+**Depends on**: Phase 35
+**Requirements**: LIB-01, LIB-02, LIB-03, LIB-05
+**Success Criteria** (what must be TRUE):
+
+1. `from petringa import DeviceConfig` and instantiation with named parameters covering geometry, doping profile (uniform or graded), and operating conditions (T, area) works without error
+2. `from petringa import run_cv` and a call returning a `SimResult` with bias array, capacitance array, depletion width, and 1/C² metadata works; capacitance values decrease monotonically with increasing reverse bias
+3. `from petringa import run_field` returns a `SimResult` whose `.mesh` attribute is a populated `MeshData` with node coordinates, electric field, and net doping values extracted from devsim post-build
+4. `python examples/cv_example.py` runs end-to-end without error and prints a capacitance array with physically reasonable values (C decreasing with reverse bias)
+   **Plans**: TBD
+   **UI hint**: yes
+
+### Phase 37: Core API — CCE + Remaining Facades + ParametricSweep
+
+**Goal**: Developers can import all simulation facades and `ParametricSweep` from `petringa` and run them successfully — the complete library API is available before any UI work begins
+**Depends on**: Phase 36
+**Requirements**: LIB-04, LIB-06, LIB-07
+**Success Criteria** (what must be TRUE):
+
+1. `from petringa import run_cce` and a call returning a `SimResult` with bias array and CCE array (values in [0, 1]) works without error
+2. `from petringa import run_radiation_damage, run_dark_current, run_temperature_sweep, run_flash_recombination, run_transient, run_microdosimetry` all import successfully and each function accepts a `DeviceConfig` as first argument
+3. `from petringa import ParametricSweep` works; `.run()` on a sweep over 2+ parameter values returns a `list[SimResult]` of correct length; unit tests for the sweep class pass
+4. All new API unit tests (`tests/test_api_*.py`) pass in `pytest -q`
+   **Plans**: TBD
+
+### Phase 38: Streamlit Shell + Device Config Page
+
+**Goal**: Users can launch the Streamlit app, see all simulation pages in the navigation, and configure a device via the sidebar form with the configuration persisting as they navigate between pages
+**Depends on**: Phase 37
+**Requirements**: UI-01, UI-02, UI-07
+**Success Criteria** (what must be TRUE):
+
+1. `streamlit run app/main.py` opens in the browser without error and displays a multi-page navigation listing all simulation workflow pages
+2. The device config sidebar form exposes all `DeviceConfig` fields (epi/substrate thickness, half-width for 2D, doping profile, N_A, N_D parameters, temperature, area) as interactive form controls
+3. A `DeviceConfig` assembled from the form values is stored in `st.session_state` and remains intact after navigating to a different page and returning
+4. No simulation page crashes on load with an empty `st.session_state` (graceful default or prompt to configure device first)
+   **Plans**: TBD
+   **UI hint**: yes
+
+### Phase 39: C-V, CCE, Field Map Pages + CSV Download
+
+**Goal**: Users can run C-V, CCE, and field map simulations from the UI, see interactive Plotly results, and download the results as CSV files — the three core TCAD workflows are fully functional in the UI
+**Depends on**: Phase 38
+**Requirements**: UI-03, UI-04, UI-05, UI-06
+**Success Criteria** (what must be TRUE):
+
+1. Clicking "Run simulation" on the C-V page calls `run_cv()` with the current `DeviceConfig` and displays an interactive Plotly C-V curve and 1/C² vs V (Mott-Schottky) plot without error
+2. Clicking "Run simulation" on the CCE page calls `run_cce()` and displays an interactive Plotly CCE vs bias plot with CCE values in [0, 1]
+3. Clicking "Run simulation" on the field map page calls `run_field()` and displays interactive Plotly plots of electric field and electrostatic potential vs depth
+4. A "Download CSV" button appears on each result page after simulation completes and downloads a valid CSV file containing the simulation result arrays
+   **Plans**: TBD
+   **UI hint**: yes
+
+### Phase 40: Geometry Viewer
+
+**Goal**: Users can see the electric field (or other quantities) overlaid on a 2D device cross-section after running a field map simulation, with the visualization mode adapting automatically to 1D or 2D device configuration
+**Depends on**: Phase 39
+**Requirements**: VIZ-01, VIZ-02, VIZ-03
+**Success Criteria** (what must be TRUE):
+
+1. After running a field map simulation for a device with `half_width_um` set in `DeviceConfig`, a 2D Plotly heatmap of the electric field appears on the field map page showing the device cross-section with correct axis labels (lateral position vs depth)
+2. For a 1D device (no `half_width_um`), the same page shows a depth-profile bar chart of the selected quantity instead of a 2D heatmap, using the same `MeshData` interface
+3. A quantity selector dropdown lets the user switch between electric field, net doping, and electrostatic potential; the visualization updates to show the selected quantity without re-running the simulation
+4. The geometry viewer reads only from `MeshData` (populated post-build); it never calls devsim directly
+   **Plans**: TBD
+   **UI hint**: yes
+
+### Phase 41: Radiation Damage + Dark Current Pages
+
+**Goal**: Users can simulate radiation-damage-induced CCE degradation and dark current decomposition from the UI, with an explicit warning that kappa values are data-blocked placeholders
+**Depends on**: Phase 40
+**Requirements**: FEAT-01, FEAT-02
+**Success Criteria** (what must be TRUE):
+
+1. On the radiation damage page, user can specify fluence range and proton energy, click Run, and see CCE vs fluence curves plotted for the specified conditions
+2. The radiation damage page displays a persistent warning banner stating that kappa values are data-blocked placeholders (not validated against SRIM/PSTAR data) and that absolute Phi_crit numbers are unvalidated
+3. On the dark current page, user can click Run and see dark current vs temperature with J_SRH, J_TAT, and J_SRV contributions individually decomposed and overlaid in the Plotly plot
+4. Both pages show a CSV download button after simulation completes
+   **Plans**: TBD
+   **UI hint**: yes
+
+### Phase 42: Microdosimetry Page + Batch Sweep Page
+
+**Goal**: Users can upload a Geant4 MC CSV file and see a microdosimetric y·d(y) spectrum, and can launch parametric sweeps over any `DeviceConfig` parameter and compare overlaid results across parameter values
+**Depends on**: Phase 41
+**Requirements**: FEAT-03, FEAT-04
+**Success Criteria** (what must be TRUE):
+
+1. On the microdosimetry page, user can upload a CSV file with MC event data, click Run, and see a y·d(y) vs log(y) lineal energy spectrum plot with y_F and y_D values displayed as numeric readouts
+2. On the batch sweep page, user can select a `DeviceConfig` parameter (e.g., `epi_thickness_um`), define a list of values, choose a simulation type (e.g., CCE), click Run, and see overlaid Plotly curves for each parameter value
+3. The batch sweep page provides a "Download all results as CSV" button that exports all sweep results in a single bulk CSV file
+4. Batch sweep uses `ParametricSweep` under the hood; results for at least 3 parameter values render correctly in the overlaid plot
+   **Plans**: TBD
+   **UI hint**: yes
+
+### Phase 43: Integration Audit — All 20 Notebook Workflows
+
+**Goal**: Every workflow previously covered by the 20 Jupyter notebooks is now accessible and functional via the Streamlit UI, and all 25 v5.0 requirements are verified as satisfied
+**Depends on**: Phase 42
+**Requirements**: FEAT-05
+**Success Criteria** (what must be TRUE):
+
+1. A tester can reproduce the equivalent result of each of the 20 notebooks (01 through 20) using only the Streamlit UI pages, without importing any Python directly
+2. All 25 v5.0 requirements (PKG-01 through FEAT-05) are checked against the running application and documented as satisfied in the phase audit notes
+3. No phase from Phases 35-42 has unresolved issues blocking equivalent notebook coverage (any gaps are logged as v6.0 tech debt, not silent omissions)
+4. A final `pytest -q` run with the installed package passes all tests including all new `tests/test_api_*.py` modules added in Phases 36-37
+   **Plans**: TBD
+
 ## Progress
 
 | Phase                                           | Milestone | Plans Complete | Status      | Completed  |
@@ -372,7 +518,7 @@ Plans:
 | 23. Microdosimetric Spectra                     | v3.0      | 2/2            | Complete    | 2026-04-01 |
 | 24. Alternative Structures                      | v3.0      | 2/2            | Complete    | 2026-04-01 |
 | 25. Optimization & Feasibility Report           | v3.0      | 2/2            | Complete    | 2026-04-01 |
-| 26. Graded Doping 2D Calibration                | v4.0      | 4/4 | Complete    | 2026-06-16 |
+| 26. Graded Doping 2D Calibration                | v4.0      | 4/4            | Complete    | 2026-06-16 |
 | 27. PSTAR+SRIM Stopping Power & Real κ          | v4.0      | 0/0            | Not started | -          |
 | 28. Geant4 ROOT Integration with Golden Fixture | v4.0      | 0/0            | Not started | -          |
 | 29. Complete Noise Analysis                     | v4.0      | 0/0            | Not started | -          |
@@ -381,3 +527,12 @@ Plans:
 | 32. Angular Response 2D Sweep                   | v4.0      | 0/0            | Not started | -          |
 | 33. Full 3D Simulation (STRETCH)                | v4.0      | 0/0            | Not started | -          |
 | 34. v4.0 Milestone Audit & Paper Figures        | v4.0      | 0/0            | Not started | -          |
+| 35. Package Setup & Refactor                    | v5.0      | 0/0            | Not started | -          |
+| 36. Core API — DeviceConfig + C-V + Field       | v5.0      | 0/0            | Not started | -          |
+| 37. Core API — CCE + Facades + ParametricSweep  | v5.0      | 0/0            | Not started | -          |
+| 38. Streamlit Shell + Device Config Page        | v5.0      | 0/0            | Not started | -          |
+| 39. C-V, CCE, Field Map Pages + CSV Download    | v5.0      | 0/0            | Not started | -          |
+| 40. Geometry Viewer                             | v5.0      | 0/0            | Not started | -          |
+| 41. Radiation Damage + Dark Current Pages       | v5.0      | 0/0            | Not started | -          |
+| 42. Microdosimetry Page + Batch Sweep Page      | v5.0      | 0/0            | Not started | -          |
+| 43. Integration Audit — All 20 Notebooks        | v5.0      | 0/0            | Not started | -          |
