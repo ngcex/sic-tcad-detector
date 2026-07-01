@@ -360,7 +360,7 @@ def compute_kappa_table(water_csv_path=None, sic_csv_path=None, source="legacy")
     dict
         energy_MeV : ndarray, kappa : ndarray, source : str
     """
-    data_dir = Path(__file__).parent.parent / "data"
+    data_dir = Path(__file__).parent.parent.parent / "data"
 
     if source == "bragg":
         srim = data_dir / "srim"

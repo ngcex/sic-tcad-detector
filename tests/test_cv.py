@@ -7,7 +7,7 @@ round-trip W -> C -> W conversion, and compute_cv_from_depletion output.
 import numpy as np
 import pytest
 
-from src.cv_analysis import (
+from petringa.core.cv_analysis import (
     EPS_0,
     junction_capacitance,
     depletion_width_from_capacitance,
@@ -101,8 +101,8 @@ class TestCvSweepIntegration:
 
     def test_cv_sweep_depletion_widths(self):
         import devsim
-        from src.cv_analysis import cv_sweep
-        from src.drift_diffusion import create_dd_device
+        from petringa.core.cv_analysis import cv_sweep
+        from petringa.core.drift_diffusion import create_dd_device
 
         device_info = create_dd_device(
             device_name="test_cv_sweep_int",
@@ -134,7 +134,7 @@ class TestCvAtFluence:
 
     def test_pristine_cv_matches_baseline(self):
         """cv_at_fluence(fluence=0) produces valid C-V with monotonic W increase."""
-        from src.cv_analysis import cv_at_fluence
+        from petringa.core.cv_analysis import cv_at_fluence
 
         result = cv_at_fluence(fluence=0.0, V_range=[0, -5, -10, -20, -30])
         assert result is not None
@@ -155,7 +155,7 @@ class TestCvAtFluence:
         At 5e13 protons/cm^2, carrier removal reduces doping variation
         in the epi layer, leading to more uniform depletion and flatter C-V.
         """
-        from src.cv_analysis import cv_at_fluence
+        from petringa.core.cv_analysis import cv_at_fluence
 
         V_pts = [0, -5, -10, -20, -30]
         pristine = cv_at_fluence(fluence=0.0, V_range=V_pts)
@@ -175,7 +175,7 @@ class TestCvAtFluence:
 
     def test_cv_returns_none_above_phi_crit(self):
         """cv_at_fluence returns None when fluence >= Phi_crit."""
-        from src.cv_analysis import cv_at_fluence
+        from petringa.core.cv_analysis import cv_at_fluence
 
         # Phi_crit ~ 4.86e13 for graded profile at 62 MeV
         # 2e14 is well above Phi_crit
@@ -186,7 +186,7 @@ class TestCvAtFluence:
         """No leftover devsim devices after cv_at_fluence call."""
         import devsim
 
-        from src.cv_analysis import cv_at_fluence
+        from petringa.core.cv_analysis import cv_at_fluence
 
         # Record devices before
         devices_before = set(devsim.get_device_list())

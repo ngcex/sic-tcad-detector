@@ -34,13 +34,13 @@ import sys
 
 # Allow `uv run python scripts/run_calibration_2d.py` to find the `src`
 # package: when run as a script, sys.path[0] is the scripts/ dir, not the
-# project root. Prepend the project root so `import src.*` resolves without
+# project root. Prepend the project root so `import petringa.core.*` resolves without
 # requiring PYTHONPATH to be set externally.
 _PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from src.device2d import calibrate_graded_doping_2d  # noqa: E402
+from petringa.core.device2d import calibrate_graded_doping_2d  # noqa: E402
 
 DIAGNOSIS_PATH = pathlib.Path(
     ".planning/phases/26-graded-doping-2d-calibration/26-DIAGNOSIS.md"
@@ -48,7 +48,7 @@ DIAGNOSIS_PATH = pathlib.Path(
 RESULT_PATH = pathlib.Path(
     ".planning/phases/26-graded-doping-2d-calibration/26-CALIBRATION-RESULT.md"
 )
-DEVICE2D_PATH = pathlib.Path("src/device2d.py")
+DEVICE2D_PATH = pathlib.Path("petringa/core/device2d.py")
 
 # v3.0 starting values (for the result-MD comparison columns).
 _V30_N_D_JUNCTION = 2.9e15

@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.single_particle import (
+from petringa.core.single_particle import (
     analyze_current_pulse,
     save_cce_let_table,
     load_cce_let_table,
@@ -206,8 +206,8 @@ class TestIonTrackGeneration:
     def test_generation_integral_matches_expected(self):
         """Generation area integral * q should match expected charge."""
         import devsim
-        from src.charge_collection_2d import create_2d_dd_device
-        from src.single_particle import ion_track_generation_2d
+        from petringa.core.charge_collection_2d import create_2d_dd_device
+        from petringa.core.single_particle import ion_track_generation_2d
 
         device_info = None
         try:
@@ -258,8 +258,8 @@ class TestChargeConservation:
     def test_single_particle_charge_conservation(self):
         """Q_collected / Q_generated should give a CCE between 0.5 and 1.0."""
         import devsim
-        from src.charge_collection_2d import create_2d_dd_device
-        from src.single_particle import (
+        from petringa.core.charge_collection_2d import create_2d_dd_device
+        from petringa.core.single_particle import (
             ion_track_generation_2d,
             simulate_single_particle,
         )
@@ -306,8 +306,8 @@ class TestCCEVsBias:
     def test_cce_increases_with_bias(self):
         """CCE at 50V should be >= CCE at 10V for same LET."""
         import devsim
-        from src.charge_collection_2d import create_2d_dd_device
-        from src.single_particle import (
+        from petringa.core.charge_collection_2d import create_2d_dd_device
+        from petringa.core.single_particle import (
             ion_track_generation_2d,
             simulate_single_particle,
         )

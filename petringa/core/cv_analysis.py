@@ -23,15 +23,15 @@ import numpy as np
 import devsim
 import devsim.python_packages.simple_physics as simple_physics
 
-from src.device import apply_damaged_params, create_sic_device
-from src.drift_diffusion import setup_sic_drift_diffusion
-from src.poisson import (
+from petringa.core.device import apply_damaged_params, create_sic_device
+from petringa.core.drift_diffusion import setup_sic_drift_diffusion
+from petringa.core.poisson import (
     extract_depletion_width_numerical,
     setup_poisson,
     solve_equilibrium,
 )
-from src.radiation_damage import compute_damaged_params, compute_phi_crit
-from src.sic_material import srh_lifetime
+from petringa.core.radiation_damage import compute_damaged_params, compute_phi_crit
+from petringa.core.sic_material import srh_lifetime
 
 logger = logging.getLogger(__name__)
 

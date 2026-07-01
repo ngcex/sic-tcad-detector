@@ -27,13 +27,13 @@ import logging
 
 import devsim
 
-from src.sic_material import (
+from petringa.core.sic_material import (
     SiC4H_Parameters,
     intrinsic_concentration,
     mobility_caughey_thomas_T,
     srh_lifetime,
 )
-from src.incomplete_ionization import ionized_acceptor_concentration
+from petringa.core.incomplete_ionization import ionized_acceptor_concentration
 
 logger = logging.getLogger(__name__)
 
@@ -547,9 +547,9 @@ def calibrate_graded_doping_2d(
     import numpy as np
     import devsim
     import scipy.optimize
-    from src.charge_collection_2d import create_2d_dd_device
-    from src.poisson import extract_depletion_width_2d_center
-    from src.devsim_reset import reset_devsim_fully
+    from petringa.core.charge_collection_2d import create_2d_dd_device
+    from petringa.core.poisson import extract_depletion_width_2d_center
+    from petringa.core.devsim_reset import reset_devsim_fully
     import devsim.python_packages.simple_physics as simple_physics
 
     if target_W_data is None:

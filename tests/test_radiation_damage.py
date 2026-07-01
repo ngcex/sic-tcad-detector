@@ -18,7 +18,7 @@ import sys
 import numpy as np
 import pytest
 
-from src.radiation_damage import (
+from petringa.core.radiation_damage import (
     NIEL_HARDNESS_PROTON_SIC,
     AnnealingParams,
     RadiationDamageParams,
@@ -449,7 +449,7 @@ class TestRegressionSafety:
         references 'devsim'. This is stronger than a runtime check because
         it catches conditional imports inside functions.
         """
-        module_path = "src/radiation_damage.py"
+        module_path = "petringa/core/radiation_damage.py"
         with open(module_path) as f:
             tree = ast.parse(f.read(), filename=module_path)
 

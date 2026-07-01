@@ -10,7 +10,7 @@ Validates:
 import numpy as np
 import pytest
 
-from src.generation_profiles import (
+from petringa.core.generation_profiles import (
     E_PAIR_SIC_EV,
     PROTON_RANGE_WATER_MM,
     RHO_SIC,

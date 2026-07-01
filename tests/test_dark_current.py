@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 import devsim
 
-from src.dark_current import (
+from petringa.core.dark_current import (
     create_dark_current_device,
     dark_current_post_anneal,
     dark_current_vs_fluence,
@@ -20,8 +20,8 @@ from src.dark_current import (
     _compute_node_efield,
     _compute_gamma_factors,
 )
-from src.drift_diffusion import create_dd_device, ramp_bias, extract_contact_current
-from src.sic_material import SiC4H_Parameters, intrinsic_concentration
+from petringa.core.drift_diffusion import create_dd_device, ramp_bias, extract_contact_current
+from petringa.core.sic_material import SiC4H_Parameters, intrinsic_concentration
 
 
 # ---------------------------------------------------------------------------
@@ -115,7 +115,7 @@ class TestGammaEnhancement:
         # Test the Schenk approximation directly
         # For Kt = 1 (very high field): Gamma = sqrt(pi)/(2*1) * exp(1/4) = 1.14
         # For Kt = 0.5: Gamma = sqrt(pi)/(2*0.5) * exp(1) = 4.81
-        from src.dark_current import _compute_gamma_factors
+        from petringa.core.dark_current import _compute_gamma_factors
 
         dev = create_dark_current_device(device_name=_unique_name("gamma_ext"))
         device = dev["device_name"]

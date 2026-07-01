@@ -11,7 +11,7 @@ Validates:
 import numpy as np
 import pytest
 
-from src.charge_collection import (
+from petringa.core.charge_collection import (
     add_generation_to_dd,
     cce_anneal_vs_temperature,
     cce_post_anneal,
@@ -24,7 +24,7 @@ from src.charge_collection import (
     hecht_cce,
     hecht_cce_partial_depletion,
 )
-from src.radiation_damage import (
+from petringa.core.radiation_damage import (
     cce_uncertainty_envelope,
     radiation_hardness_sweep,
 )
@@ -222,7 +222,7 @@ class TestAddGenerationCreatesCarriers:
         electron/hole concentrations increased vs equilibrium."""
         import devsim
 
-        from src.drift_diffusion import create_dd_device
+        from petringa.core.drift_diffusion import create_dd_device
 
         device_info = create_dd_device(
             device_name="test_gen_carriers",
@@ -375,7 +375,7 @@ class TestHechtCCE300KRegression:
     def test_hecht_cce_300k_regression(self):
         """hecht_cce(V=30, d=9.5e-4, T=300) must match the v1.0 result
         computed with explicit 300K default parameter values."""
-        from src.sic_material import SiC4H_Parameters
+        from petringa.core.sic_material import SiC4H_Parameters
 
         params = SiC4H_Parameters()
         # v1.0 call: hecht_cce(30, 9.5e-4) used _params defaults

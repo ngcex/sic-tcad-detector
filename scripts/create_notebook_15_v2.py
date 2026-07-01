@@ -82,15 +82,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 import devsim
 
-from src.device2d import create_sic_2d_device
-from src.device import create_sic_device
-from src.poisson import setup_poisson, solve_equilibrium
-from src.drift_diffusion import setup_sic_drift_diffusion, ramp_bias
-from src.plotting2d import (
+from petringa.core.device2d import create_sic_2d_device
+from petringa.core.device import create_sic_device
+from petringa.core.poisson import setup_poisson, solve_equilibrium
+from petringa.core.drift_diffusion import setup_sic_drift_diffusion, ramp_bias
+from petringa.core.plotting2d import (
     plot_potential_2d, plot_efield_2d, plot_doping_2d, plot_cce_heatmap_2d,
     extract_center_slice,
 )
-from src.charge_collection_2d import (
+from petringa.core.charge_collection_2d import (
     create_2d_dd_device, cce_lateral_scan, cce_heatmap_2d,
     compare_cce_2d_vs_1d, cce_vs_bias_lateral,
 )

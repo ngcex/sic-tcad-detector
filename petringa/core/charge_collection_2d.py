@@ -29,14 +29,14 @@ import uuid
 import devsim
 import numpy as np
 
-from src.device2d import create_sic_2d_device
-from src.poisson import setup_poisson, solve_equilibrium
-from src.drift_diffusion import (
+from petringa.core.device2d import create_sic_2d_device
+from petringa.core.poisson import setup_poisson, solve_equilibrium
+from petringa.core.drift_diffusion import (
     setup_sic_drift_diffusion,
     extract_contact_current,
     ramp_bias,
 )
-from src.charge_collection import add_generation_to_dd
+from petringa.core.charge_collection import add_generation_to_dd
 
 logger = logging.getLogger(__name__)
 
@@ -392,8 +392,8 @@ def compare_cce_2d_vs_1d(half_width_um=50.0, V_bias=50.0, gen_rate=1e18):
         - "half_width_um": half-width used
         - "V_bias": bias voltage used
     """
-    from src.drift_diffusion import create_dd_device
-    from src.charge_collection import compute_cce_from_dd
+    from petringa.core.drift_diffusion import create_dd_device
+    from petringa.core.charge_collection import compute_cce_from_dd
 
     device_info_2d = None
     device_info_1d = None

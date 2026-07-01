@@ -28,7 +28,7 @@ class TestMesaDevice:
     """Test mesa-etched structure mesh builder."""
 
     def test_create_mesa_device(self):
-        from src.alternative_structures import create_mesa_device
+        from petringa.core.alternative_structures import create_mesa_device
 
         name = _uid()
         dev = create_mesa_device(device_name=name)
@@ -46,8 +46,8 @@ class TestMesaDevice:
             devsim.delete_device(device=name)
 
     def test_mesa_poisson_solve(self):
-        from src.alternative_structures import create_mesa_device
-        from src.poisson import setup_poisson, solve_equilibrium
+        from petringa.core.alternative_structures import create_mesa_device
+        from petringa.core.poisson import setup_poisson, solve_equilibrium
 
         name = _uid()
         dev = create_mesa_device(device_name=name)
@@ -65,7 +65,7 @@ class TestMesaDevice:
             devsim.delete_device(device=name)
 
     def test_mesa_trench_zero_doping(self):
-        from src.alternative_structures import create_mesa_device
+        from petringa.core.alternative_structures import create_mesa_device
 
         name = _uid()
         dev = create_mesa_device(device_name=name)
@@ -102,7 +102,7 @@ class TestThreeDElectrodeDevice:
     """Test 3D electrode (axisymmetric) structure mesh builder."""
 
     def test_create_3d_electrode_device(self):
-        from src.alternative_structures import create_3d_electrode_device
+        from petringa.core.alternative_structures import create_3d_electrode_device
 
         name = _uid()
         dev = create_3d_electrode_device(device_name=name)
@@ -118,7 +118,7 @@ class TestThreeDElectrodeDevice:
             assert dev["num_nodes"] > 100
         finally:
             devsim.delete_device(device=name)
-            from src.alternative_structures import restore_cartesian_coords
+            from petringa.core.alternative_structures import restore_cartesian_coords
 
             restore_cartesian_coords()
 
@@ -126,7 +126,7 @@ class TestThreeDElectrodeDevice:
         """AUDIT Mj-1: bulk Donors (outside the n+ column) must reflect the
         graded epi profile (~N_D_bulk), NOT the old uniform 1.07e15 override."""
         import numpy as np
-        from src.alternative_structures import (
+        from petringa.core.alternative_structures import (
             create_3d_electrode_device,
             restore_cartesian_coords,
         )
@@ -169,7 +169,7 @@ class TestThreeDElectrodeDevice:
         """AUDIT Mj-2: the outer anode wall must be p+ over its FULL depth
         (NetDoping < 0), not metal-on-n- as before."""
         import numpy as np
-        from src.alternative_structures import (
+        from petringa.core.alternative_structures import (
             create_3d_electrode_device,
             restore_cartesian_coords,
         )
@@ -205,8 +205,8 @@ class TestThreeDElectrodeDevice:
             restore_cartesian_coords()
 
     def test_3d_electrode_poisson_solve(self):
-        from src.alternative_structures import create_3d_electrode_device
-        from src.poisson import setup_poisson, solve_equilibrium
+        from petringa.core.alternative_structures import create_3d_electrode_device
+        from petringa.core.poisson import setup_poisson, solve_equilibrium
 
         name = _uid()
         dev = create_3d_electrode_device(device_name=name)
@@ -221,17 +221,17 @@ class TestThreeDElectrodeDevice:
             assert len(pot) > 0
         finally:
             devsim.delete_device(device=name)
-            from src.alternative_structures import restore_cartesian_coords
+            from petringa.core.alternative_structures import restore_cartesian_coords
 
             restore_cartesian_coords()
 
     def test_restore_cartesian_coords(self):
         """After cylindrical device, restore Cartesian and create planar device."""
-        from src.alternative_structures import (
+        from petringa.core.alternative_structures import (
             create_3d_electrode_device,
             restore_cartesian_coords,
         )
-        from src.device2d import create_sic_2d_device
+        from petringa.core.device2d import create_sic_2d_device
 
         # Create cylindrical device
         cyl_name = _uid()
@@ -262,7 +262,7 @@ class TestDeltaEEDevice:
     """Test stacked delta-E/E telescope structure mesh builder."""
 
     def test_create_delta_e_e_device(self):
-        from src.alternative_structures import create_delta_e_e_device
+        from petringa.core.alternative_structures import create_delta_e_e_device
 
         name = _uid()
         dev = create_delta_e_e_device(device_name=name)
@@ -281,11 +281,11 @@ class TestDeltaEEDevice:
             devsim.delete_device(device=name)
 
     def test_delta_e_e_poisson_solve(self):
-        from src.alternative_structures import (
+        from petringa.core.alternative_structures import (
             create_delta_e_e_device,
             _setup_poisson_region,
         )
-        from src.poisson import solve_equilibrium
+        from petringa.core.poisson import solve_equilibrium
 
         name = _uid()
         dev = create_delta_e_e_device(device_name=name)
@@ -319,7 +319,7 @@ class TestDeltaEEDevice:
             devsim.delete_device(device=name)
 
     def test_delta_e_e_contact_count(self):
-        from src.alternative_structures import create_delta_e_e_device
+        from petringa.core.alternative_structures import create_delta_e_e_device
 
         name = _uid()
         dev = create_delta_e_e_device(device_name=name)
@@ -343,7 +343,7 @@ class TestGuardRingDevice:
     """Test guard ring structure mesh builder."""
 
     def test_create_guard_ring_device(self):
-        from src.alternative_structures import create_guard_ring_device
+        from petringa.core.alternative_structures import create_guard_ring_device
 
         name = _uid()
         dev = create_guard_ring_device(device_name=name)
@@ -361,8 +361,8 @@ class TestGuardRingDevice:
             devsim.delete_device(device=name)
 
     def test_guard_ring_poisson_solve(self):
-        from src.alternative_structures import create_guard_ring_device
-        from src.poisson import _create_sic_potential_only
+        from petringa.core.alternative_structures import create_guard_ring_device
+        from petringa.core.poisson import _create_sic_potential_only
 
         name = _uid()
         dev = create_guard_ring_device(device_name=name)
@@ -403,7 +403,7 @@ class TestGuardRingDevice:
             devsim.delete_device(device=name)
 
     def test_guard_ring_doping(self):
-        from src.alternative_structures import create_guard_ring_device
+        from petringa.core.alternative_structures import create_guard_ring_device
 
         name = _uid()
         dev = create_guard_ring_device(device_name=name, N_A_guard=5e18)

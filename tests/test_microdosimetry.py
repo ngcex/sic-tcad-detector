@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
-from src.microdosimetry import (
+from petringa.core.microdosimetry import (
     compute_kappa_table,
     compute_microdosimetric_means,
     lineal_energy_spectrum,
@@ -228,7 +228,7 @@ class TestBraggKappaMachinery:
 
     def test_bragg_composer_weights(self):
         """SiC = 0.7004*Si + 0.2996*C (Bragg additivity), log-log interpolated."""
-        from src.microdosimetry import sic_stopping_power_bragg
+        from petringa.core.microdosimetry import sic_stopping_power_bragg
 
         e = np.array([1.0, 10.0, 100.0])
         s_si = np.array([100.0, 20.0, 4.0])
@@ -240,14 +240,14 @@ class TestBraggKappaMachinery:
     def test_bragg_source_refuses_placeholder(self):
         """compute_kappa_table(source='bragg') must REFUSE placeholder data
         (no fabrication) until real PSTAR files are dropped in."""
-        from src.microdosimetry import compute_kappa_table
+        from petringa.core.microdosimetry import compute_kappa_table
 
         with pytest.raises(FileNotFoundError, match="PSTAR"):
             compute_kappa_table(source="bragg")
 
     def test_legacy_source_back_compat(self):
         """Legacy source still returns the (placeholder) flat table + source key."""
-        from src.microdosimetry import compute_kappa_table
+        from petringa.core.microdosimetry import compute_kappa_table
 
         res = compute_kappa_table(source="legacy")
         assert res["source"] == "legacy"

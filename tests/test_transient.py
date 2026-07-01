@@ -13,11 +13,11 @@ import devsim
 import numpy as np
 import pytest
 
-from src.drift_diffusion import create_dd_device, ramp_bias, extract_contact_current
-from src.charge_collection import add_generation_to_dd
-from src.flash_recombination import add_auger_recombination, cce_vs_dose_rate
-from src.generation_profiles import proton_generation_profile
-from src.transient import (
+from petringa.core.drift_diffusion import create_dd_device, ramp_bias, extract_contact_current
+from petringa.core.charge_collection import add_generation_to_dd
+from petringa.core.flash_recombination import add_auger_recombination, cce_vs_dose_rate
+from petringa.core.generation_profiles import proton_generation_profile
+from petringa.core.transient import (
     TransientSolver,
     pulse_envelope,
     adaptive_dt,

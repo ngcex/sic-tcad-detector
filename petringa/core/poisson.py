@@ -35,11 +35,11 @@ from devsim.python_packages.model_create import (
 )
 import numpy as np
 
-from src.analytical import (
+from petringa.core.analytical import (
     built_in_potential,
     depletion_width as analytical_depletion_width,
 )
-from src.sic_material import intrinsic_concentration
+from petringa.core.sic_material import intrinsic_concentration
 
 logger = logging.getLogger(__name__)
 
