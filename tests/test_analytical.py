@@ -6,12 +6,12 @@ against known physical targets for the 4H-SiC p+/n- junction.
 
 import numpy as np
 import pytest
-from src.sic_material import SiC4H_Parameters
-from src.incomplete_ionization import (
+from petringa.core.sic_material import SiC4H_Parameters
+from petringa.core.incomplete_ionization import (
     ionized_acceptor_fraction,
     ionized_acceptor_concentration,
 )
-from src.analytical import (
+from petringa.core.analytical import (
     built_in_potential,
     depletion_width,
     electric_field_profile,

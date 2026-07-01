@@ -38,7 +38,7 @@ import uuid
 
 # Allow `uv run python scripts/diagnose_1d_2d_parity.py` to find the `src`
 # package: when run as a script, sys.path[0] is the scripts/ dir, not the
-# project root. Prepend the project root so `import src.*` resolves without
+# project root. Prepend the project root so `import petringa.core.*` resolves without
 # requiring PYTHONPATH to be set externally.
 _PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
@@ -47,9 +47,9 @@ if str(_PROJECT_ROOT) not in sys.path:
 import devsim
 import numpy as np
 
-from src.drift_diffusion import create_dd_device
-from src.charge_collection_2d import create_2d_dd_device
-from src.poisson import extract_depletion_width_numerical
+from petringa.core.drift_diffusion import create_dd_device
+from petringa.core.charge_collection_2d import create_2d_dd_device
+from petringa.core.poisson import extract_depletion_width_numerical
 
 
 def _reset_devsim_safe():

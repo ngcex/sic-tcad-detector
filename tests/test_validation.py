@@ -7,7 +7,7 @@ experimental data constants contain the expected keys.
 import numpy as np
 import pytest
 
-from src.validation import (
+from petringa.core.validation import (
     compute_agreement_metrics,
     validate_iv,
     validate_cv,

@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.optimization import (
+from petringa.core.optimization import (
     estimate_noise_floor,
     score_structures,
     _rank_sweep_results,

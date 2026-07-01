@@ -24,14 +24,14 @@ class TestDeviceCreation:
     """Test that create_sic_device produces a valid devsim device."""
 
     def test_device_creates_successfully(self):
-        from src.device import create_sic_device
+        from petringa.core.device import create_sic_device
 
         dev = create_sic_device(device_name=_unique_name())
         assert dev["device_name"] is not None
         assert dev["num_nodes"] > 100  # non-trivial mesh
 
     def test_device_has_correct_parameters(self):
-        from src.device import create_sic_device
+        from petringa.core.device import create_sic_device
 
         dev = create_sic_device(device_name=_unique_name())
         assert dev["N_D"] == pytest.approx(1.07e15, rel=0.01)
@@ -40,7 +40,7 @@ class TestDeviceCreation:
         assert dev["junction_pos"] == pytest.approx(1e-4)  # 1 um substrate
 
     def test_device_has_sic_material_params(self):
-        from src.device import create_sic_device
+        from petringa.core.device import create_sic_device
 
         dev = create_sic_device(device_name=_unique_name())
         params = dev["params"]
@@ -54,8 +54,8 @@ class TestPoissonSolver:
 
     def test_equilibrium_converges(self):
         """Poisson solver converges at 0V bias."""
-        from src.device import create_sic_device
-        from src.poisson import setup_poisson, solve_equilibrium
+        from petringa.core.device import create_sic_device
+        from petringa.core.poisson import setup_poisson, solve_equilibrium
 
         dev = create_sic_device(device_name=_unique_name())
         setup_poisson(dev)
@@ -63,8 +63,8 @@ class TestPoissonSolver:
 
     def test_electric_field_reasonable_at_equilibrium(self):
         """E-field at equilibrium is in physically reasonable range."""
-        from src.device import create_sic_device
-        from src.poisson import setup_poisson, solve_equilibrium, extract_electric_field
+        from petringa.core.device import create_sic_device
+        from petringa.core.poisson import setup_poisson, solve_equilibrium, extract_electric_field
 
         dev = create_sic_device(device_name=_unique_name())
         setup_poisson(dev)
@@ -79,8 +79,8 @@ class TestPoissonSolver:
 
     def test_electric_field_correct_shape(self):
         """E-field has correct triangular profile."""
-        from src.device import create_sic_device
-        from src.poisson import setup_poisson, solve_equilibrium, extract_electric_field
+        from petringa.core.device import create_sic_device
+        from petringa.core.poisson import setup_poisson, solve_equilibrium, extract_electric_field
 
         dev = create_sic_device(device_name=_unique_name())
         setup_poisson(dev)
@@ -106,8 +106,8 @@ class TestDepletionWidth:
 
     def test_numerical_W_at_equilibrium(self):
         """Numerical W at 0V approximately matches analytical."""
-        from src.device import create_sic_device
-        from src.poisson import (
+        from petringa.core.device import create_sic_device
+        from petringa.core.poisson import (
             setup_poisson,
             solve_equilibrium,
             extract_depletion_width,
@@ -126,8 +126,8 @@ class TestDepletionWidth:
 
     def test_W_increases_with_reverse_bias(self):
         """Depletion width increases monotonically with reverse bias."""
-        from src.device import create_sic_device
-        from src.poisson import extract_depletion_width
+        from petringa.core.device import create_sic_device
+        from petringa.core.poisson import extract_depletion_width
 
         dev = create_sic_device(device_name=_unique_name())
 
@@ -142,8 +142,8 @@ class TestDepletionWidth:
 
     def test_W_0V_matches_experimental_target(self):
         """W(0V) ~ 1.7 um per experimental C-V data."""
-        from src.device import create_sic_device
-        from src.poisson import extract_depletion_width
+        from petringa.core.device import create_sic_device
+        from petringa.core.poisson import extract_depletion_width
 
         dev = create_sic_device(device_name=_unique_name())
         W = extract_depletion_width(dev, V_applied=0.0)
@@ -154,8 +154,8 @@ class TestDepletionWidth:
 
     def test_punch_through_at_high_bias(self):
         """Depletion width saturates at epi thickness under high reverse bias."""
-        from src.device import create_sic_device
-        from src.poisson import extract_depletion_width
+        from petringa.core.device import create_sic_device
+        from petringa.core.poisson import extract_depletion_width
 
         dev = create_sic_device(device_name=_unique_name())
         epi = dev["epi_thickness_cm"]
@@ -185,8 +185,8 @@ class TestDepletionWidth:
         2. W increases monotonically with reverse bias (correct physics)
         3. The quantitative gap vs experiment is documented honestly
         """
-        from src.device import create_sic_device
-        from src.poisson import extract_depletion_width
+        from petringa.core.device import create_sic_device
+        from petringa.core.poisson import extract_depletion_width
 
         dev = create_sic_device(device_name=_unique_name())
 
@@ -215,8 +215,8 @@ class TestVoltageSweep:
 
     def test_voltage_sweep_short(self):
         """Voltage sweep runs and returns structured results."""
-        from src.device import create_sic_device
-        from src.poisson import voltage_sweep
+        from petringa.core.device import create_sic_device
+        from petringa.core.poisson import voltage_sweep
 
         dev = create_sic_device(device_name=_unique_name())
         voltages = np.array([0, -1, -2, -5, -10])
@@ -247,8 +247,8 @@ class TestVbiRegression:
     def test_vbi_at_300k_regression(self):
         """built_in_potential with n_i from intrinsic_concentration(300) must
         match built_in_potential with params.n_i_300 = 5e-9."""
-        from src.analytical import built_in_potential
-        from src.sic_material import SiC4H_Parameters, intrinsic_concentration
+        from petringa.core.analytical import built_in_potential
+        from petringa.core.sic_material import SiC4H_Parameters, intrinsic_concentration
 
         params = SiC4H_Parameters()
         n_i_T = intrinsic_concentration(300, params)[0]

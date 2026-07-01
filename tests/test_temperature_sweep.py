@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.temperature_sweep import (
+from petringa.core.temperature_sweep import (
     extract_temperature_coefficient,
     sweep_cce_vs_temperature,
     sweep_iv_vs_temperature,

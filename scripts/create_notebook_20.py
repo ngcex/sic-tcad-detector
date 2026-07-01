@@ -73,15 +73,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from src.optimization import (
+from petringa.core.optimization import (
     microdosimetric_sweep,
     estimate_noise_floor,
     score_structures,
     get_dark_current_2d,
 )
-from src.charge_collection_2d import create_2d_dd_device, cce_lateral_scan
-from src.microdosimetry import mean_chord_length, lineal_energy_spectrum
-from src.single_particle import load_cce_let_table
+from petringa.core.charge_collection_2d import create_2d_dd_device, cce_lateral_scan
+from petringa.core.microdosimetry import mean_chord_length, lineal_energy_spectrum
+from petringa.core.single_particle import load_cce_let_table
 
 # Publication-quality plot defaults
 plt.rcParams.update({
@@ -186,7 +186,7 @@ print(f"  Grid: {len(HALF_WIDTHS)} widths x {len(EPI_THICKNESSES)} epi x "
       f"{len(HALF_WIDTHS)*len(EPI_THICKNESSES)*len(N_D_BULKS)*len(V_BIASES)} configs")
 
 import logging
-logging.getLogger('src.optimization').setLevel(logging.WARNING)
+logging.getLogger('petringa.core.optimization').setLevel(logging.WARNING)
 
 sweep_df = microdosimetric_sweep(
     half_widths_um=HALF_WIDTHS,

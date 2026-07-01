@@ -86,13 +86,13 @@ import numpy as np
 import devsim
 import logging
 
-from src.single_particle import (
+from petringa.core.single_particle import (
     ion_track_generation_2d, simulate_single_particle,
     analyze_current_pulse, build_cce_let_table,
     save_cce_let_table, load_cce_let_table,
 )
-from src.charge_collection_2d import create_2d_dd_device, integrate_over_mesh_2d
-from src.plotting2d import get_triangulation
+from petringa.core.charge_collection_2d import create_2d_dd_device, integrate_over_mesh_2d
+from petringa.core.plotting2d import get_triangulation
 
 # Publication-quality plot defaults
 plt.rcParams.update({
@@ -107,7 +107,7 @@ plt.rcParams.update({
 
 # Enable progress logging
 logging.basicConfig(level=logging.INFO, format='%(message)s')
-logger = logging.getLogger('src.single_particle')
+logger = logging.getLogger('petringa.core.single_particle')
 logger.setLevel(logging.INFO)
 
 print("Setup complete.")
@@ -528,7 +528,7 @@ re-running TCAD simulations for each event.
 ### Usage for Monte Carlo Coupling
 
 ```python
-from src.single_particle import load_cce_let_table
+from petringa.core.single_particle import load_cce_let_table
 
 cce_func, metadata = load_cce_let_table('data/cce_let_table_100um.json')
 # For each MC event with a given LET:
