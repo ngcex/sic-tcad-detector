@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Simulator Library & Streamlit UI
 status: executing
-stopped_at: v5.0 roadmap created — 9 phases (35-43) defined, all 25 requirements mapped
-last_updated: "2026-07-01T18:12:08.164Z"
+stopped_at: 35-02 Task 1 complete and committed (`e0988d5`); Task 2 blocked pending user decision on the devsim full-suite crash (see Blockers above)
+last_updated: "2026-07-01T19:36:52.582Z"
 last_activity: 2026-07-01
 progress:
   total_phases: 25
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-06-26)
 
 Phase: 35 (package-setup-refactor) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: BLOCKED — Task 1 complete, Task 2 (full-suite acceptance gate) needs a user decision
 Last activity: 2026-07-01
 
 Progress: [██████████] 95%
@@ -61,6 +61,7 @@ Progress: [██████████] 95%
 | Phase | Plan | Duration | Tasks | Files |
 | ----- | ---- | -------- | ----- | ----- |
 | 35    | 01   | 12min    | 1     | 4     |
+| 35    | 02   | 95min    | 1/2   | 88    |
 
 ## Accumulated Context
 
@@ -92,6 +93,8 @@ Progress: [██████████] 95%
 - Design spec: `docs/superpowers/specs/2026-06-26-simulator-library-ui-design.md`
 - `petringa/core/` deliberately not created in Plan 35-01 — reserved for Plan 35-02's `git mv src petringa/core` to avoid nesting bug
 - `pandas>=2.0` added to pyproject.toml runtime deps — was previously an undeclared dependency used by `tests/test_mc_coupling.py`
+- Plan 35-02 Task 1 complete: `src/` renamed to `petringa/core/`, all 326 imports + 81 notebook imports + 6 string-literal refs rewritten, zero residual `from src.` confirmed — see `35-02-SUMMARY.md`
+- `Path(__file__).parent` chains must be re-verified whenever a module moves to a different directory depth — `microdosimetry.py`'s `data_dir` resolution needed one more `.parent` after the `src/` -> `petringa/core/` rename added a nesting level (fixed in 35-02)
 
 ### Tech Debt Resolved by v5.0 Phases
 
@@ -108,9 +111,10 @@ None.
 
 - kappa(E) NIEL hardness factors still data-blocked (from v4.0 audit C-5) — radiation damage page will show warning banner; absolute Phi_crit numbers remain unvalidated until SRIM data arrives
 - devsim process resource exhaustion under DD-heavy test suites — existing slow test convention (`@pytest.mark.slow`) must be preserved in refactored package
+- **NEW (35-02):** Bare `pytest -q` (single process, full 25-module suite) reproducibly aborts with `Fatal Python error: Aborted` inside devsim's C extension at `test_dd_equilibrium_convergence` (~18% through the run, always the same test/line). Proven pre-existing via disposable worktree at commit `fe3b43c` (pre-refactor) — identical crash reproduces there too, so it is NOT caused by the 35-02 rename. All 25 test files pass individually under per-file `pytest` isolation. This blocks Plan 35-02 Task 2's acceptance gate (bare `pytest -q` exit 0) until the user decides: (a) accept per-file isolation as the real gate, (b) authorize test-isolation infra (conftest + `devsim_reset.reset_devsim_fully()`, or `pytest-forked`), or (c) defer as a known environment limitation. See `.planning/phases/35-package-setup-refactor/35-02-SUMMARY.md` for full analysis.
 
 ## Session Continuity
 
 Last session: 2026-07-01
-Stopped at: Completed 35-01-PLAN.md (petringa package scaffold: pyproject.toml, DeviceConfig stub, editable install verified)
-Resume file: None — next action is executing 35-02-PLAN.md
+Stopped at: 35-02 Task 1 complete and committed (`e0988d5`); Task 2 blocked pending user decision on the devsim full-suite crash (see Blockers above)
+Resume file: `.planning/phases/35-package-setup-refactor/35-02-PLAN.md` — resume at Task 2 once the blocker decision is made
