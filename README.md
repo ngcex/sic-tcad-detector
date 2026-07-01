@@ -41,8 +41,8 @@ Requires Python 3.11+ and the `devsim` solver.
 git clone https://github.com/ngcex/<repo-name>.git
 cd <repo-name>
 
-# install dependencies (devsim, numpy, scipy, matplotlib, pytest)
-pip install -r requirements.txt          # or: uv pip install -r requirements.txt
+# install the package (devsim, numpy, scipy, matplotlib, plotly, streamlit, pandas + dev extras)
+uv pip install -e ".[dev]"
 
 # run the fast tests
 pytest -q                                 # devsim DD tests are slow; see note below
