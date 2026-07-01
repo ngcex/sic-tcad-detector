@@ -381,7 +381,7 @@ Plans:
 
 Plans:
 
-- [ ] 35-01-PLAN.md — Package scaffold: pyproject.toml (hatchling), petringa/__init__.py (DeviceConfig stub), editable install
+- [x] 35-01-PLAN.md — Package scaffold: pyproject.toml (hatchling), petringa/__init__.py (DeviceConfig stub), editable install
 - [ ] 35-02-PLAN.md — src/ → petringa/core/ rename, import rewrite (326 statements + 6 string-literal fixes + 81 notebook imports), full test gate
 
 ### Phase 36: Core API — DeviceConfig + C-V + Field + Vertical Slice
@@ -532,7 +532,7 @@ Plans:
 | 32. Angular Response 2D Sweep                   | v4.0      | 0/0            | Not started | -          |
 | 33. Full 3D Simulation (STRETCH)                | v4.0      | 0/0            | Not started | -          |
 | 34. v4.0 Milestone Audit & Paper Figures        | v4.0      | 0/0            | Not started | -          |
-| 35. Package Setup & Refactor                    | v5.0      | 0/0            | Not started | -          |
+| 35. Package Setup & Refactor                    | v5.0      | 1/2 | In Progress|  |
 | 36. Core API — DeviceConfig + C-V + Field       | v5.0      | 0/0            | Not started | -          |
 | 37. Core API — CCE + Facades + ParametricSweep  | v5.0      | 0/0            | Not started | -          |
 | 38. Streamlit Shell + Device Config Page        | v5.0      | 0/0            | Not started | -          |

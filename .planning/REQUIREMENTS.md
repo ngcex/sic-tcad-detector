@@ -9,8 +9,8 @@ Requirements for Simulator Library & Streamlit UI milestone. Phases 35+.
 
 ### Packaging (PKG)
 
-- [ ] **PKG-01**: Developer can install the simulator with `pip install -e .` (or `uv pip install -e .`) from a `pyproject.toml` with hatchling build backend, replacing `requirements.txt`
-- [ ] **PKG-02**: Package declares all runtime dependencies (`devsim`, `numpy`, `scipy`, `matplotlib`, `plotly`, `streamlit`, `pandas`) and optional `[dev]` extras (`pytest`, `jupyter`)
+- [x] **PKG-01**: Developer can install the simulator with `pip install -e .` (or `uv pip install -e .`) from a `pyproject.toml` with hatchling build backend, replacing `requirements.txt`
+- [x] **PKG-02**: Package declares all runtime dependencies (`devsim`, `numpy`, `scipy`, `matplotlib`, `plotly`, `streamlit`, `pandas`) and optional `[dev]` extras (`pytest`, `jupyter`)
 - [ ] **PKG-03**: All existing 25 pytest modules pass unchanged after the refactor (only import paths updated `src.X` → `petringa.core.X`); `tests/baselines/v3_frozen.json` baseline regression unchanged
 
 ### Library API (LIB)
@@ -187,8 +187,8 @@ Explicitly excluded.
 
 | Requirement | Phase | Status  |
 | ----------- | ----- | ------- |
-| PKG-01      | 35    | Pending |
-| PKG-02      | 35    | Pending |
+| PKG-01      | 35    | Complete |
+| PKG-02      | 35    | Complete |
 | PKG-03      | 35    | Pending |
 | LIB-01      | 36    | Pending |
 | LIB-02      | 36    | Pending |
