@@ -11,7 +11,7 @@ Requirements for Simulator Library & Streamlit UI milestone. Phases 35+.
 
 - [x] **PKG-01**: Developer can install the simulator with `pip install -e .` (or `uv pip install -e .`) from a `pyproject.toml` with hatchling build backend, replacing `requirements.txt`
 - [x] **PKG-02**: Package declares all runtime dependencies (`devsim`, `numpy`, `scipy`, `matplotlib`, `plotly`, `streamlit`, `pandas`) and optional `[dev]` extras (`pytest`, `jupyter`)
-- [ ] **PKG-03**: All existing 25 pytest modules pass unchanged after the refactor (only import paths updated `src.X` → `petringa.core.X`); `tests/baselines/v3_frozen.json` baseline regression unchanged
+- [x] **PKG-03**: All existing 25 pytest modules pass unchanged after the refactor (only import paths updated `src.X` → `petringa.core.X`); `tests/baselines/v3_frozen.json` baseline regression unchanged (verified via per-file/per-class isolation — bare single-process `pytest -q` is unsatisfiable due to pre-existing devsim resource exhaustion, see `35-02-SUMMARY.md`)
 
 ### Library API (LIB)
 
@@ -185,33 +185,33 @@ Explicitly excluded.
 
 ### v5.0 (assigned by roadmapper)
 
-| Requirement | Phase | Status  |
-| ----------- | ----- | ------- |
+| Requirement | Phase | Status   |
+| ----------- | ----- | -------- |
 | PKG-01      | 35    | Complete |
 | PKG-02      | 35    | Complete |
-| PKG-03      | 35    | Pending |
-| LIB-01      | 36    | Pending |
-| LIB-02      | 36    | Pending |
-| LIB-03      | 36    | Pending |
-| LIB-04      | 37    | Pending |
-| LIB-05      | 36    | Pending |
-| LIB-06      | 37    | Pending |
-| LIB-07      | 37    | Pending |
-| UI-01       | 38    | Pending |
-| UI-02       | 38    | Pending |
-| UI-03       | 39    | Pending |
-| UI-04       | 39    | Pending |
-| UI-05       | 39    | Pending |
-| UI-06       | 39    | Pending |
-| UI-07       | 38    | Pending |
-| VIZ-01      | 40    | Pending |
-| VIZ-02      | 40    | Pending |
-| VIZ-03      | 40    | Pending |
-| FEAT-01     | 41    | Pending |
-| FEAT-02     | 41    | Pending |
-| FEAT-03     | 42    | Pending |
-| FEAT-04     | 42    | Pending |
-| FEAT-05     | 43    | Pending |
+| PKG-03      | 35    | Complete |
+| LIB-01      | 36    | Pending  |
+| LIB-02      | 36    | Pending  |
+| LIB-03      | 36    | Pending  |
+| LIB-04      | 37    | Pending  |
+| LIB-05      | 36    | Pending  |
+| LIB-06      | 37    | Pending  |
+| LIB-07      | 37    | Pending  |
+| UI-01       | 38    | Pending  |
+| UI-02       | 38    | Pending  |
+| UI-03       | 39    | Pending  |
+| UI-04       | 39    | Pending  |
+| UI-05       | 39    | Pending  |
+| UI-06       | 39    | Pending  |
+| UI-07       | 38    | Pending  |
+| VIZ-01      | 40    | Pending  |
+| VIZ-02      | 40    | Pending  |
+| VIZ-03      | 40    | Pending  |
+| FEAT-01     | 41    | Pending  |
+| FEAT-02     | 41    | Pending  |
+| FEAT-03     | 42    | Pending  |
+| FEAT-04     | 42    | Pending  |
+| FEAT-05     | 43    | Pending  |
 
 **v5.0 Coverage:**
 
