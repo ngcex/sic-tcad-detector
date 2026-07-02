@@ -102,7 +102,7 @@ Full details: [milestones/v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md)
 - **GROUP C (Phases 41-43)** — Feature complete; depends on Group B complete
 
 - [x] **Phase 35: Package Setup & Refactor** — `pyproject.toml`, `src/` → `petringa/core/` rename, all 25 test modules pass unchanged _(GROUP A, prerequisite — no physics changes)_ (completed 2026-07-01)
-- [ ] **Phase 36: Core API — DeviceConfig + C-V + Field + Vertical Slice** — `DeviceConfig`, `SimResult`, `MeshData` dataclasses; `run_cv()`, `run_field()` facades; `examples/cv_example.py` vertical slice _(GROUP A)_
+- [ ] **Phase 36: Core API — DeviceConfig + C-V + Field + Vertical Slice** — `DeviceConfig`, `SimResult`, `MeshData` dataclasses; `run_cv()`, `run_field()` facades; `examples/cv_example.py` vertical slice _(GROUP A)_ — **3 plans planned**
 - [ ] **Phase 37: Core API — CCE + Remaining Facades + ParametricSweep** — `run_cce()`, `run_radiation_damage()`, `run_dark_current()`, `run_temperature_sweep()`, `run_flash_recombination()`, `run_transient()`, `run_microdosimetry()`, `ParametricSweep` _(GROUP A)_
 - [ ] **Phase 38: Streamlit Shell + Device Config Page** — `app/main.py` multi-page shell, device config sidebar form, `st.session_state` persistence, navigation between pages _(GROUP B)_
 - [ ] **Phase 39: C-V, CCE, Field Map Pages + CSV Download** — C-V page with Plotly C-V and 1/C² plots, CCE page, field map page, CSV download from all result pages _(GROUP B)_
@@ -395,8 +395,14 @@ Plans:
 2. `from petringa import run_cv` and a call returning a `SimResult` with bias array, capacitance array, depletion width, and 1/C² metadata works; capacitance values decrease monotonically with increasing reverse bias
 3. `from petringa import run_field` returns a `SimResult` whose `.mesh` attribute is a populated `MeshData` with node coordinates, electric field, and net doping values extracted from devsim post-build
 4. `python examples/cv_example.py` runs end-to-end without error and prints a capacitance array with physically reasonable values (C decreasing with reverse bias)
-   **Plans**: TBD
+   **Plans**: 3 plans
    **UI hint**: yes
+
+Plans:
+
+- [ ] 36-01-PLAN.md — API contracts: SimResult/MeshData dataclasses, DeviceConfig promoted to api/device.py, build_device() facade, public re-exports (LIB-01)
+- [ ] 36-02-PLAN.md — run_cv() facade + examples/cv_example.py vertical slice + tests/test_api_cv.py (LIB-02, LIB-05)
+- [ ] 36-03-PLAN.md — run_field() with post-build MeshData extraction (1D + 2D) + tests/test_api_field.py (LIB-03)
 
 ### Phase 37: Core API — CCE + Remaining Facades + ParametricSweep
 
@@ -533,7 +539,7 @@ Plans:
 | 33. Full 3D Simulation (STRETCH)                | v4.0      | 0/0            | Not started | -          |
 | 34. v4.0 Milestone Audit & Paper Figures        | v4.0      | 0/0            | Not started | -          |
 | 35. Package Setup & Refactor                    | v5.0      | 2/2 | Complete   | 2026-07-01 |
-| 36. Core API — DeviceConfig + C-V + Field       | v5.0      | 0/0            | Not started | -          |
+| 36. Core API — DeviceConfig + C-V + Field       | v5.0      | 0/3            | Planned     | -          |
 | 37. Core API — CCE + Facades + ParametricSweep  | v5.0      | 0/0            | Not started | -          |
 | 38. Streamlit Shell + Device Config Page        | v5.0      | 0/0            | Not started | -          |
 | 39. C-V, CCE, Field Map Pages + CSV Download    | v5.0      | 0/0            | Not started | -          |
