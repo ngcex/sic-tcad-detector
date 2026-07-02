@@ -84,3 +84,11 @@ class TestRunFieldIntegration2D:
         assert len(E) == len(mesh.x_coords)
         assert np.all(np.isfinite(E))
         assert np.max(np.abs(E)) > 0
+
+        # CR-01 regression guard: for 2D devices, SimResult.x/.y are not a
+        # valid depth profile (the 2D mesh's x is lateral position, not
+        # depth; see petringa.core.device2d.create_sic_2d_device). They
+        # must be empty, not a mislabeled lateral-position array — real
+        # depth-profile data lives in `mesh` instead.
+        assert len(result.x) == 0
+        assert len(result.y) == 0

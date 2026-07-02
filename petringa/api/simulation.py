@@ -130,10 +130,18 @@ def run_field(config: DeviceConfig, bias_V: float = -100.0) -> SimResult:
     Returns
     -------
     SimResult
-        sim_type="field", x=depth (um), y=node ElectricField (V/cm),
-        metadata contains "bias_V", "potential" (V), "net_doping" (cm^-3);
-        mesh is a populated MeshData (x_coords, y_coords, node_values with
-        "NetDoping"/"Potential"/"ElectricField", regions, contacts).
+        For 1D devices: sim_type="field", x=depth (um), y=node
+        ElectricField (V/cm). For 2D devices, `x`/`y` are NOT a valid depth
+        profile — the 2D mesh's `x` is the lateral coordinate, not depth
+        (`petringa.core.device2d.create_sic_2d_device`'s `y` is depth), and
+        a single (x, y) profile isn't well-defined without picking a
+        lateral slice. `SimResult.x`/`.y` are therefore returned as empty
+        arrays for 2D devices; consumers must use the returned `mesh`
+        (`MeshData.x_coords`/`.y_coords`/`.node_values["ElectricField"]`)
+        instead. metadata contains "bias_V", "potential" (V), "net_doping"
+        (cm^-3); mesh is a populated MeshData (x_coords, y_coords,
+        node_values with "NetDoping"/"Potential"/"ElectricField", regions,
+        contacts).
     """
     reset_devsim_fully()
     device_info = build_device(config)
@@ -233,11 +241,26 @@ def run_field(config: DeviceConfig, bias_V: float = -100.0) -> SimResult:
             "net_doping": net_doping,
         }
 
+        if is_2d:
+            # SimResult.x/.y are not a valid depth profile for 2D devices:
+            # the 2D mesh's x is the lateral coordinate (not depth), and
+            # field_nodes has many values per lateral x (one per depth),
+            # so (x, y) is not a function/profile at all. Rather than
+            # silently mislabel lateral position as depth (the CR-01 bug),
+            # return empty arrays and route consumers to `mesh` instead,
+            # mirroring run_cv()'s NotImplementedError pattern for its own
+            # unsupported 2D case.
+            x_out = np.array([])
+            y_out = np.array([])
+        else:
+            x_out = x_coords * 1e4
+            y_out = field_nodes
+
         return SimResult(
             config=config,
             sim_type="field",
-            x=x_coords * 1e4,
-            y=field_nodes,
+            x=x_out,
+            y=y_out,
             metadata=metadata,
             mesh=mesh,
         )
