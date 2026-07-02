@@ -50,3 +50,14 @@ class TestRunCvIntegration:
         # Depletion width at 0V is in a physically sane band
         # (~1-3 um), mirroring tests/test_cv.py::TestCvSweepIntegration.
         assert 1.0e-4 < W[0] < 3.0e-4
+
+
+def test_run_cv_rejects_2d_config():
+    """WR-03 regression guard: run_cv() must reject 2D configs.
+
+    run_cv() raises NotImplementedError before any devsim call (the guard
+    is a plain half_width_um is not None check at the top of the
+    function), so this is a fast test — no devsim device is built.
+    """
+    with pytest.raises(NotImplementedError):
+        run_cv(DeviceConfig(half_width_um=50.0))
