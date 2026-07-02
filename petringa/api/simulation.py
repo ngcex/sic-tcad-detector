@@ -55,6 +55,18 @@ def run_cv(
         sim_type="cv", x=bias voltages (V), y=capacitance (F), metadata
         contains "depletion_widths" (cm), "one_over_C_squared", and
         "area_cm2".
+
+    Warning
+    -------
+    Calling this function deletes all devsim devices currently in the
+    process, not just those created by petringa. `run_cv` calls
+    `reset_devsim_fully()` unconditionally at entry (see
+    `petringa.core.devsim_reset`), which enumerates and deletes every
+    device registered with devsim in the process — devsim state is
+    process-global, not petringa-scoped. If your process holds another
+    live devsim device (e.g. built via `petringa.core.*` directly, or by
+    unrelated code sharing the process) across a `run_cv()` call, that
+    device will be silently deleted.
     """
     if config.half_width_um is not None:
         raise NotImplementedError(
@@ -142,6 +154,18 @@ def run_field(config: DeviceConfig, bias_V: float = -100.0) -> SimResult:
         (cm^-3); mesh is a populated MeshData (x_coords, y_coords,
         node_values with "NetDoping"/"Potential"/"ElectricField", regions,
         contacts).
+
+    Warning
+    -------
+    Calling this function deletes all devsim devices currently in the
+    process, not just those created by petringa. `run_field` calls
+    `reset_devsim_fully()` unconditionally at entry (see
+    `petringa.core.devsim_reset`), which enumerates and deletes every
+    device registered with devsim in the process — devsim state is
+    process-global, not petringa-scoped. If your process holds another
+    live devsim device (e.g. built via `petringa.core.*` directly, or by
+    unrelated code sharing the process) across a `run_field()` call, that
+    device will be silently deleted.
     """
     reset_devsim_fully()
     device_info = build_device(config)
