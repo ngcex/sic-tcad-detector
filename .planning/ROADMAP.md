@@ -539,7 +539,7 @@ Plans:
 | 33. Full 3D Simulation (STRETCH)                | v4.0      | 0/0            | Not started | -          |
 | 34. v4.0 Milestone Audit & Paper Figures        | v4.0      | 0/0            | Not started | -          |
 | 35. Package Setup & Refactor                    | v5.0      | 2/2 | Complete   | 2026-07-01 |
-| 36. Core API — DeviceConfig + C-V + Field       | v5.0      | 3/3 | Complete   | 2026-07-02 |
+| 36. Core API — DeviceConfig + C-V + Field       | v5.0      | 3/3 | Complete    | 2026-07-02 |
 | 37. Core API — CCE + Facades + ParametricSweep  | v5.0      | 0/0            | Not started | -          |
 | 38. Streamlit Shell + Device Config Page        | v5.0      | 0/0            | Not started | -          |
 | 39. C-V, CCE, Field Map Pages + CSV Download    | v5.0      | 0/0            | Not started | -          |
