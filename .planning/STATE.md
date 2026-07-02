@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Simulator Library & Streamlit UI
 status: executing
-stopped_at: Phase 35 complete — petringa package installable, src/ renamed to petringa/core/, all 25 test modules pass per-file (incl. all slow devsim tests), baseline intact
-last_updated: "2026-07-02T00:52:00.000Z"
-last_activity: 2026-07-02
+stopped_at: Phase 35 complete — all requirements (PKG-01, PKG-02, PKG-03) satisfied
+last_updated: "2026-07-02T15:54:03.288Z"
+last_activity: 2026-07-02 -- Phase 36 execution started
 progress:
   total_phases: 25
   completed_phases: 9
-  total_plans: 20
+  total_plans: 23
   completed_plans: 20
-  percent: 33
+  percent: 36
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-26)
 
 **Core value:** Installable Python library + Streamlit UI that makes the SiC TCAD simulator usable by the Petringa group without reading source code
-**Current focus:** Phase 36 — Core API (DeviceConfig + C-V + Field)
+**Current focus:** Phase 36 — core-api-deviceconfig-c-v-field-vertical-slice
 
 ## Current Position
 
-Phase: 35 (package-setup-refactor) — COMPLETE
-Plan: 2 of 2 complete
-Status: PKG-01, PKG-02, PKG-03 all satisfied. Ready for Phase 36.
-Last activity: 2026-07-02
+Phase: 36 (core-api-deviceconfig-c-v-field-vertical-slice) — EXECUTING
+Plan: 1 of 3
+Status: Executing Phase 36
+Last activity: 2026-07-02 -- Phase 36 execution started
 
 Progress: [██████████] 100% (Phase 35)
 
