@@ -8,6 +8,8 @@ performs no physics changes — all physics lives in `petringa.core.*`.
 
 from __future__ import annotations
 
+import logging
+
 import numpy as np
 
 import devsim
@@ -18,6 +20,8 @@ from petringa.core.cv_analysis import cv_sweep
 from petringa.core.devsim_reset import reset_devsim_fully
 from petringa.core.drift_diffusion import ramp_bias
 from petringa.core.poisson import extract_electric_field
+
+logger = logging.getLogger(__name__)
 
 
 def run_cv(
@@ -111,6 +115,11 @@ def run_cv(
         try:
             devsim.delete_device(device=device_info["device_name"])
         except Exception:
+            logger.warning(
+                "run_cv: delete_device(%r) failed, falling back to full reset",
+                device_info["device_name"],
+                exc_info=True,
+            )
             reset_devsim_fully()
 
 
@@ -293,4 +302,9 @@ def run_field(config: DeviceConfig, bias_V: float = -100.0) -> SimResult:
         try:
             devsim.delete_device(device=device_info["device_name"])
         except Exception:
+            logger.warning(
+                "run_field: delete_device(%r) failed, falling back to full reset",
+                device_info["device_name"],
+                exc_info=True,
+            )
             reset_devsim_fully()
