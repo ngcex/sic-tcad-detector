@@ -81,11 +81,11 @@ Explore how charge collection efficiency (CCE) in the SiC detector behaves under
 
 ### Active (v5.0)
 
-- [ ] Package Python `petringa` installabile con `pyproject.toml` e hatchling build backend
-- [ ] Refactor `src/` → `petringa/core/` (nessuna modifica alla fisica, tutti i test passano invariati)
-- [ ] API pubblica `petringa/api/`: `DeviceConfig`, `SimResult`, `MeshData` dataclasses
-- [ ] Facade `run_cv()` su `core/cv_analysis.py` + `run_field()` che popola `MeshData`
-- [ ] Vertical slice validation: `examples/cv_example.py` funziona end-to-end
+- ✓ Package Python `petringa` installabile con `pyproject.toml` e hatchling build backend — v5.0 (Phase 35)
+- ✓ Refactor `src/` → `petringa/core/` (nessuna modifica alla fisica, tutti i test passano invariati) — v5.0 (Phase 35)
+- ✓ API pubblica `petringa/api/`: `DeviceConfig`, `SimResult`, `MeshData` dataclasses — v5.0 (Phase 36)
+- ✓ Facade `run_cv()` su `core/cv_analysis.py` + `run_field()` che popola `MeshData` — v5.0 (Phase 36)
+- ✓ Vertical slice validation: `examples/cv_example.py` funziona end-to-end — v5.0 (Phase 36)
 - [ ] Facade `run_cce()` su `core/charge_collection.py`
 - [ ] App Streamlit multi-pagina: `app/main.py` con layout sidebar + main panel
 - [ ] Pagina device config: form per tutti i campi `DeviceConfig`, store in `st.session_state`
@@ -265,4 +265,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-_Last updated: 2026-06-26 after v5.0 milestone start_
+_Last updated: 2026-07-02 after Phase 36 completion_
