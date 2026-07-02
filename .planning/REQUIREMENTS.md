@@ -17,7 +17,7 @@ Requirements for Simulator Library & Streamlit UI milestone. Phases 35+.
 
 - [ ] **LIB-01**: Developer can import `DeviceConfig` from `petringa` and instantiate it with named parameters covering geometry (epi/substrate thickness, half-width for 2D), doping (uniform or graded profile), and operating conditions (T, area)
 - [x] **LIB-02**: Developer can import `run_cv()` from `petringa` and call it with a `DeviceConfig` to get a `SimResult` containing bias array, capacitance array, and metadata (depletion width, 1/C²)
-- [ ] **LIB-03**: Developer can import `run_field()` from `petringa` and call it with a `DeviceConfig` + bias to get a `SimResult` whose `.mesh` attribute (`MeshData`) contains node coordinates and field/doping values extracted from devsim post-build
+- [x] **LIB-03**: Developer can import `run_field()` from `petringa` and call it with a `DeviceConfig` + bias to get a `SimResult` whose `.mesh` attribute (`MeshData`) contains node coordinates and field/doping values extracted from devsim post-build
 - [ ] **LIB-04**: Developer can import `run_cce()` from `petringa` and call it with a `DeviceConfig` to get a `SimResult` containing bias array and CCE array
 - [x] **LIB-05**: Developer can run `examples/cv_example.py` (vertical slice validation script) without errors; output capacitance values are physically reasonable (C decreasing with reverse bias)
 - [ ] **LIB-06**: Developer can import `run_radiation_damage()`, `run_dark_current()`, `run_temperature_sweep()`, `run_flash_recombination()`, `run_transient()`, `run_microdosimetry()` from `petringa`
@@ -192,7 +192,7 @@ Explicitly excluded.
 | PKG-03      | 35    | Complete |
 | LIB-01      | 36    | Pending  |
 | LIB-02      | 36    | Complete |
-| LIB-03      | 36    | Pending  |
+| LIB-03      | 36    | Complete |
 | LIB-04      | 37    | Pending  |
 | LIB-05      | 36    | Complete |
 | LIB-06      | 37    | Pending  |
