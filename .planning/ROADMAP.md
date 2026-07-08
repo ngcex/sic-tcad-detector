@@ -415,7 +415,13 @@ Plans:
 2. `from petringa import run_radiation_damage, run_dark_current, run_temperature_sweep, run_flash_recombination, run_transient, run_microdosimetry` all import successfully and each function accepts a `DeviceConfig` as first argument
 3. `from petringa import ParametricSweep` works; `.run()` on a sweep over 2+ parameter values returns a `list[SimResult]` of correct length; unit tests for the sweep class pass
 4. All new API unit tests (`tests/test_api_*.py`) pass in `pytest -q`
-   **Plans**: TBD
+   **Plans**: 3 plans
+
+Plans:
+
+- [ ] 37-01-PLAN.md — run_cce() flagship facade (bucket-a config-forwarding adapter, CCE physics gate) + tests/test_api_cce.py (LIB-04)
+- [ ] 37-02-PLAN.md — 6 remaining facades (run_radiation_damage/temperature_sweep/flash_recombination/dark_current/transient/microdosimetry) across 3 buckets + tests/test_api_facades.py + tests/test_api_microdosimetry.py (LIB-06)
+- [ ] 37-03-PLAN.md — ParametricSweep class (dataclasses.replace config cloning) + tests/test_api_sweep.py (LIB-07)
 
 ### Phase 38: Streamlit Shell + Device Config Page
 
