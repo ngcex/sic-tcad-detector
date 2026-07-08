@@ -419,8 +419,16 @@ Plans:
 
 Plans:
 
+**Wave 1**
+
 - [ ] 37-01-PLAN.md — run_cce() flagship facade (bucket-a config-forwarding adapter, CCE physics gate) + tests/test_api_cce.py (LIB-04)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 37-02-PLAN.md — 6 remaining facades (run_radiation_damage/temperature_sweep/flash_recombination/dark_current/transient/microdosimetry) across 3 buckets + tests/test_api_facades.py + tests/test_api_microdosimetry.py (LIB-06)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 37-03-PLAN.md — ParametricSweep class (dataclasses.replace config cloning) + tests/test_api_sweep.py (LIB-07)
 
 ### Phase 38: Streamlit Shell + Device Config Page
