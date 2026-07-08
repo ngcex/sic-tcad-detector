@@ -375,24 +375,24 @@ def test_parametric_sweep_returns_list_of_correct_length():
 | A3  | `transient_cce_vs_dose_rate` (self-building) is an acceptable minimal satisfier for `run_transient` given the criterion-2 weak bar and the spec omitting a `run_transient` signature        | Bucket (b), Open Q #3         | Low — criterion only requires import + `DeviceConfig` first arg; but the "natural" signature is undefined                                                                         |
 | A4  | `data/synthetic_mc_events.csv` is the correct default MC fixture for `run_microdosimetry` tests                                                                                             | Pitfall 5, Environment        | Low — file verified present and already used by existing MC/microdosim tests                                                                                                      |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **CCE doping calibration (HIGH priority — the phase's one real decision).**
+1. **CCE doping calibration (HIGH priority — the phase's one real decision). RESOLVED: forward config values (Option A).**
    - What we know: `cce_vs_bias` hardcodes `N_D_junction=2.90e15, N_D_bulk=8.50e13, L_transition=1.0e-4`; `DeviceConfig` defaults are `2.93e15, 8.82e13, 0.987e-4`.
    - What's unclear: Should `run_cce` forward `config` doping (self-consistent facade, but CCE numbers shift vs notebooks) or ignore it (matches notebooks, but ignores user config)?
-   - Recommendation: Forward config values (A1) and document the difference; but flag for discuss-phase / user confirmation before locking. "No physics changes" is ambiguous here — surface it, don't decide silently.
+   - **RESOLVED (user decision during plan-phase, 2026-07-08):** Forward `config` doping values into `cce_vs_bias`'s `device_kwargs`, making `run_cce(DeviceConfig())` self-consistent with the caller's device configuration. Document in the docstring that CCE output diverges slightly from the original v3.0 CCE notebooks (which used `cce_vs_bias`'s own hardcoded calibration). Applied uniformly across all facades that accept doping fields (see D-01 in plans), with the exception that `run_temperature_sweep` does not forward `config.T` since T is the swept axis.
 
-2. **Facade file layout: single `simulation.py` vs spec's per-domain split (`damage.py`, `microdosimetry.py`).**
+2. **Facade file layout: single `simulation.py` vs spec's per-domain split (`damage.py`, `microdosimetry.py`). RESOLVED: single `simulation.py`.**
    - What we know: Phase 36 put both facades in one `simulation.py`; spec §2 shows a split.
-   - Recommendation: Follow Phase 36 (single file) for consistency unless planner prefers spec; acceptance criteria are location-agnostic.
+   - **RESOLVED (planner decision, low-risk / acceptance-agnostic):** Follow Phase 36's single-file convention (`petringa/api/simulation.py`) for all `run_*` facades, per D-02 in plans.
 
-3. **`run_transient` signature — undefined.**
+3. **`run_transient` signature — undefined. RESOLVED: minimal wrapper over `transient_cce_vs_dose_rate`.**
    - What we know: Design spec §3.4 lists every facade signature EXCEPT `run_transient`. Core offers both `TransientSolver` (device_info + init + pulse) and the self-building `transient_cce_vs_dose_rate`.
-   - Recommendation: Implement the minimal satisfier of criterion 2 (import + `DeviceConfig` first arg). Consider `run_transient(config, dose_rate_Gy_s=..., ...)` wrapping `transient_cce_vs_dose_rate`. Flag as underspecified.
+   - **RESOLVED (planner decision, low-risk):** Implement the minimal satisfier of criterion 2 (import + `DeviceConfig` first arg): `run_transient(config, dose_rate_Gy_s=..., ...)` wrapping `transient_cce_vs_dose_rate`, per D-03 in plans.
 
-4. **`run_temperature_sweep`/`run_flash_recombination`/`run_transient` SimResult axis semantics.**
+4. **`run_temperature_sweep`/`run_flash_recombination`/`run_transient` SimResult axis semantics. RESOLVED: primary swept variable is `x`.**
    - What we know: These return DataFrames or multi-column data (T×V grid for temperature). A single `x`/`y` pair must be chosen.
-   - Recommendation: Pick the primary swept axis as `x` (T for temperature sweep, dose_rate for flash/transient), CCE as `y`, put the rest (fixed V, other columns) in `metadata`. Confirm with planner.
+   - **RESOLVED (planner decision, low-risk):** Primary swept axis is `x` (T for temperature sweep, dose_rate for flash/transient), CCE is `y`, remaining columns (fixed V, other data) go in `metadata`, per D-04 in plans.
 
 ## Environment Availability
 
