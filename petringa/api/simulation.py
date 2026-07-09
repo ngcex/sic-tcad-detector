@@ -627,3 +627,181 @@ def run_flash_recombination(
         },
         mesh=None,
     )
+
+
+def run_dark_current(
+    config: DeviceConfig,
+    v_start: float = 0.0,
+    v_stop: float = -100.0,
+    n_points: int = 20,
+    N_t: "float | None" = None,
+    S_n: "float | None" = None,
+    S_p: "float | None" = None,
+) -> SimResult:
+    """Run a reverse-bias dark-current sweep and return a SimResult.
+
+    Bucket-b: run_dark_current owns the FULL device lifecycle
+    (reset -> build -> try -> finally delete -> fallback reset), mirroring
+    run_cv exactly. The device is built via
+    `petringa.core.dark_current.create_dark_current_device` (create_dd_device
+    + TAT + surface-recombination setup) — the bare device-builder facade
+    would omit the TAT/SRV model setup that dark_current_sweep requires, so it
+    is NOT used here.
+
+    Config-forwarding (D-01): config.T + config.N_D_junction / config.N_D_bulk /
+    config.L_transition + epi thickness are forwarded via **kwargs into
+    create_dd_device; config.area_cm2 is forwarded as the sweep area.
+
+    Parameters
+    ----------
+    config : DeviceConfig
+        Device configuration (geometry, doping, temperature, area).
+    v_start : float
+        Starting bias (V). Default 0.0.
+    v_stop : float
+        Ending bias (V, conventional-negative reverse-bias sign).
+        Default -100.0.
+    n_points : int
+        Number of bias points in the sweep. Default 20.
+    N_t : float or None
+        Effective TAT trap generation rate (cm^-3 s^-1). Default None
+        (core default).
+    S_n, S_p : float or None
+        Electron/hole surface recombination velocities (cm/s). Default None
+        (core defaults).
+
+    Returns
+    -------
+    SimResult
+        sim_type="dark_current", x=bias voltages (V), y=total dark current
+        (A), metadata contains "I_SRH", "I_TAT", "I_SRV", and "area_cm2".
+
+    Warning
+    -------
+    Calling this function deletes all devsim devices currently in the
+    process (see run_cv). `run_dark_current` calls `reset_devsim_fully()`
+    unconditionally at entry — devsim state is process-global, not
+    petringa-scoped.
+    """
+    bias_array = np.linspace(v_start, v_stop, n_points)
+
+    # Bucket-b: full lifecycle owned here (identical to run_cv). Build via
+    # create_dark_current_device so TAT + SRV models are set up (the bare
+    # device-builder facade would omit them). Forward config T +
+    # geometry/doping via **kwargs to create_dd_device (D-01).
+    reset_devsim_fully()
+    device_info = create_dark_current_device(
+        T=config.T,
+        N_t=N_t,
+        S_n=S_n,
+        S_p=S_p,
+        epi_thickness_cm=config.epi_thickness_um * 1e-4,
+        N_D_junction=config.N_D_junction,
+        N_D_bulk=config.N_D_bulk,
+        L_transition=config.L_transition_um * 1e-4,
+    )
+
+    try:
+        result = dark_current_sweep(
+            device_info, V_range=bias_array, area=config.area_cm2
+        )
+
+        return SimResult(
+            config=config,
+            sim_type="dark_current",
+            x=result["voltages"],
+            y=result["I_total"],
+            metadata={
+                "I_SRH": result["I_SRH"],
+                "I_TAT": result["I_TAT"],
+                "I_SRV": result["I_SRV"],
+                "area_cm2": config.area_cm2,
+            },
+            mesh=None,
+        )
+    finally:
+        # Ensure no device leaks after run_dark_current returns, regardless
+        # of outcome (bucket-b finally block copied from run_cv).
+        try:
+            devsim.delete_device(device=device_info["device_name"])
+        except Exception:
+            logger.warning(
+                "run_dark_current: delete_device(%r) failed, falling back to "
+                "full reset",
+                device_info["device_name"],
+                exc_info=True,
+            )
+            reset_devsim_fully()
+
+
+def run_transient(
+    config: DeviceConfig,
+    dose_rates: "np.ndarray | None" = None,
+    V_bias: float = -30.0,
+    epi_thickness_cm: "float | None" = None,
+) -> SimResult:
+    """Run a transient CCE-vs-dose-rate FLASH-pulse sweep and return a SimResult.
+
+    Wraps `petringa.core.transient.transient_cce_vs_dose_rate`, which builds
+    AND deletes its own device for EACH dose rate internally. Despite living
+    in the "bucket-b" task, run_transient is bucket-a-SHAPED: it adds NO
+    build_device / reset_devsim_fully / delete_device — a facade-level cleanup
+    would double-delete the core's per-dose-rate devices.
+
+    Signature note (D-03): run_transient's signature is NOT defined in the
+    design spec. This wraps transient_cce_vs_dose_rate as the MINIMAL
+    satisfier of the LIB-06 criterion (import + DeviceConfig first arg),
+    returning a dose-rate -> transient-CCE curve. Axis (D-04): x=dose_rate,
+    y=CCE (the LIST form `dose_rates=` keeps the axis coherent).
+
+    Config-forwarding (D-01): config epi thickness is forwarded unless the
+    caller overrides it via `epi_thickness_cm`.
+
+    Parameters
+    ----------
+    config : DeviceConfig
+        Device configuration (geometry, doping, area).
+    dose_rates : np.ndarray or None
+        Dose rates (Gy/s) to sweep. Default None ->
+        np.array([20, 50, 100, 150, 200, 230]).
+    V_bias : float
+        Reverse bias (V, conventional-negative sign). Default -30.0.
+    epi_thickness_cm : float or None
+        Epitaxial thickness override (cm). Default None -> derived from
+        config.epi_thickness_um.
+
+    Returns
+    -------
+    SimResult
+        sim_type="transient", x=dose_rates (Gy/s), y=transient CCE values
+        (dimensionless), metadata contains "V_bias".
+    """
+    if dose_rates is None:
+        dose_rates = np.array([20.0, 50.0, 100.0, 150.0, 200.0, 230.0])
+
+    # Forward config epi (D-01) unless the caller overrides.
+    epi_cm = (
+        config.epi_thickness_um * 1e-4 if epi_thickness_cm is None else epi_thickness_cm
+    )
+
+    # transient_cce_vs_dose_rate builds AND deletes its own device per dose
+    # rate, so run_transient adds NO device cleanup (bucket-a-shaped).
+    df = transient_cce_vs_dose_rate(
+        V_bias=V_bias,
+        dose_rates=dose_rates,
+        epi_thickness_cm=epi_cm,
+    )
+
+    # Return is a pd.DataFrame with columns dose_rate_Gy_s, transient_cce
+    # (Pitfall 3).
+    x = df["dose_rate_Gy_s"].to_numpy()
+    y = df["transient_cce"].to_numpy()
+
+    return SimResult(
+        config=config,
+        sim_type="transient",
+        x=x,
+        y=y,
+        metadata={"V_bias": V_bias},
+        mesh=None,
+    )
