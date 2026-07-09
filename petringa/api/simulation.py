@@ -16,6 +16,7 @@ import devsim
 
 from petringa.api.device import DeviceConfig, build_device
 from petringa.api.results import MeshData, SimResult
+from petringa.core.charge_collection import cce_vs_bias
 from petringa.core.cv_analysis import cv_sweep
 from petringa.core.devsim_reset import reset_devsim_fully
 from petringa.core.drift_diffusion import ramp_bias
@@ -308,3 +309,97 @@ def run_field(config: DeviceConfig, bias_V: float = -100.0) -> SimResult:
                 exc_info=True,
             )
             reset_devsim_fully()
+
+
+def run_cce(
+    config: DeviceConfig,
+    v_start: float = -10.0,
+    v_stop: float = -200.0,
+    n_points: int = 30,
+) -> SimResult:
+    """Run a charge-collection-efficiency (CCE) vs bias sweep and return a SimResult.
+
+    Thin bucket-a config->kwargs adapter over
+    `petringa.core.charge_collection.cce_vs_bias`. It maps the DeviceConfig
+    geometry + doping into `cce_vs_bias`'s `device_kwargs`, calls the core
+    function (which builds AND deletes its own devsim device), and repackages
+    the returned dict as `SimResult(sim_type="cce")` with bias voltages on `x`
+    and CCE values in [0, 1] on `y`.
+
+    Only 1D devices (`config.half_width_um is None`) are supported: core
+    `cce_vs_bias` calls `create_dd_device`, a 1D constructor. 2D CCE is out of
+    scope for this facade and raises NotImplementedError before any devsim call.
+
+    Config-forwarding (D-01 locked decision)
+    ----------------------------------------
+    run_cce forwards config.N_D_junction / config.N_D_bulk / config.L_transition
+    into cce_vs_bias's `device_kwargs`, making run_cce(DeviceConfig())
+    self-consistent with the DeviceConfig. This makes CCE output diverge
+    slightly from the original v3.0 CCE notebooks, which used cce_vs_bias's own
+    hardcoded calibration (N_D_junction=2.90e15, N_D_bulk=8.50e13,
+    L_transition=1.0e-4 cm). The DeviceConfig defaults (N_D_junction=2.93e15,
+    N_D_bulk=8.82e13, L_transition_um=0.987) override those hardcoded defaults
+    cleanly via cce_vs_bias's `device_kwargs.update` mechanism.
+
+    Device lifecycle (bucket-a)
+    ---------------------------
+    run_cce does NOT build, reset, or delete any devsim device itself.
+    cce_vs_bias creates its own uniquely-named device and deletes it in a
+    `finally` block, so a facade-level cleanup here would double-delete.
+
+    Parameters
+    ----------
+    config : DeviceConfig
+        Device configuration (geometry, doping, temperature, area).
+    v_start : float
+        Starting bias (V, conventional-negative reverse-bias sign).
+        Default -10.0.
+    v_stop : float
+        Ending bias (V, conventional-negative reverse-bias sign).
+        Default -200.0.
+    n_points : int
+        Number of bias points in the sweep. Default 30.
+
+    Returns
+    -------
+    SimResult
+        sim_type="cce", x=bias voltages (V), y=CCE values (dimensionless,
+        in [0, 1]), metadata contains "I_collected" (collected current per
+        bias point, A/cm^2) and "I_generated" (total generated current,
+        A/cm^2).
+    """
+    if config.half_width_um is not None:
+        raise NotImplementedError(
+            "run_cce: 2D CCE is out of scope for this facade. core "
+            "charge_collection.cce_vs_bias uses create_dd_device (a 1D "
+            "constructor); pass a DeviceConfig with half_width_um=None for "
+            "run_cce()."
+        )
+
+    bias_array = np.linspace(v_start, v_stop, n_points)
+
+    # Bucket-a: cce_vs_bias builds AND deletes its own devsim device. Forward
+    # config doping via device_kwargs (D-01) so run_cce(DeviceConfig()) is
+    # self-consistent with the user's configuration. Do NOT reset/build/delete
+    # any device here — that would double-delete cce_vs_bias's own device.
+    result = cce_vs_bias(
+        V_range=bias_array,
+        epi_thickness_cm=config.epi_thickness_um * 1e-4,
+        device_kwargs={
+            "N_D_junction": config.N_D_junction,
+            "N_D_bulk": config.N_D_bulk,
+            "L_transition": config.L_transition_um * 1e-4,
+        },
+    )
+
+    return SimResult(
+        config=config,
+        sim_type="cce",
+        x=result["voltages"],
+        y=result["cce_values"],
+        metadata={
+            "I_collected": result["I_collected"],
+            "I_generated": result["I_generated"],
+        },
+        mesh=None,
+    )
