@@ -86,7 +86,9 @@ Explore how charge collection efficiency (CCE) in the SiC detector behaves under
 - ✓ API pubblica `petringa/api/`: `DeviceConfig`, `SimResult`, `MeshData` dataclasses — v5.0 (Phase 36)
 - ✓ Facade `run_cv()` su `core/cv_analysis.py` + `run_field()` che popola `MeshData` — v5.0 (Phase 36)
 - ✓ Vertical slice validation: `examples/cv_example.py` funziona end-to-end — v5.0 (Phase 36)
-- [ ] Facade `run_cce()` su `core/charge_collection.py`
+- ✓ Facade `run_cce()` su `core/charge_collection.py` (CCE ∈ [0,1], 2D guard, config-forwarding) — v5.0 (Phase 37)
+- ✓ Facade rimanenti: `run_radiation_damage()`, `run_dark_current()`, `run_temperature_sweep()`, `run_flash_recombination()`, `run_transient()`, `run_microdosimetry()` — v5.0 (Phase 37)
+- ✓ `ParametricSweep` per sweep multi-punto su qualsiasi facade (`dataclasses.replace`, nessun setattr/eval) — v5.0 (Phase 37)
 - [ ] App Streamlit multi-pagina: `app/main.py` con layout sidebar + main panel
 - [ ] Pagina device config: form per tutti i campi `DeviceConfig`, store in `st.session_state`
 - [ ] Pagina C-V analysis: chiama `run_cv()`, plot C-V e 1/C² vs V (Plotly)
@@ -265,4 +267,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-_Last updated: 2026-07-02 after Phase 36 completion_
+_Last updated: 2026-07-09 after Phase 37 completion_
