@@ -805,3 +805,73 @@ def run_transient(
         metadata={"V_bias": V_bias},
         mesh=None,
     )
+
+
+def run_microdosimetry(
+    config: DeviceConfig,
+    mc_csv_path: str,
+    sv_thickness_um: float = 10.0,
+    sv_width_um: float = 150.0,
+) -> SimResult:
+    """Compute an ICRU-36 lineal energy spectrum from MC events (bucket-c).
+
+    Pure data pipeline — touches NO devsim (no reset_devsim_fully, no device
+    build, no delete_device). Loads per-step Monte Carlo energy depositions
+    from `mc_csv_path` via
+    `petringa.core.mc_coupling.load_mc_events_csv`, aggregates them to
+    per-event collected energy, computes the mean chord length for the
+    sensitive-volume geometry, and produces the frequency/dose lineal energy
+    distributions via
+    `petringa.core.microdosimetry.lineal_energy_spectrum`.
+
+    The per-step -> per-event aggregation (sum of edep grouped by event_id)
+    has no existing core analog and is defined explicitly here.
+
+    Security note: `mc_csv_path` is a caller-supplied LOCAL filesystem path
+    parsed by pandas `read_csv` inside load_mc_events_csv — no eval, no
+    pickle, no code execution or binary deserialization (see the phase threat
+    model, T-37-02-V5). It is the only file-input surface in this phase.
+
+    Parameters
+    ----------
+    config : DeviceConfig
+        Device configuration. Carried through on the SimResult for
+        provenance; the microdosimetric spectrum itself depends only on the
+        MC events and the sensitive-volume geometry below.
+    mc_csv_path : str
+        Path to the MC-events CSV (columns event_id, x, y, z, edep; edep in
+        keV, positions in cm — load_mc_events_csv's default column map).
+    sv_thickness_um : float
+        Sensitive-volume thickness (um). Default 10.0.
+    sv_width_um : float
+        Sensitive-volume width (um). Default 150.0.
+
+    Returns
+    -------
+    SimResult
+        sim_type="microdosimetry", x=lineal energy bin centers (keV/um),
+        y=y*d(y) (the dose-weighted representation per design spec 3.4),
+        metadata contains "y_F", "y_D" (frequency-/dose-mean lineal energy),
+        "f_y" (frequency distribution), and "l_bar_um" (mean chord length).
+    """
+    # Bucket-c: no TCAD solve at all. Load per-step events, aggregate to
+    # per-event collected energy (this sum-by-event_id has no core analog).
+    events = load_mc_events_csv(mc_csv_path)
+    collected_energies_keV = events.groupby("event_id")["edep_keV"].sum().to_numpy()
+
+    l_bar = mean_chord_length(sv_thickness_um, sv_width_um=sv_width_um)
+    spec = lineal_energy_spectrum(collected_energies_keV, l_bar)
+
+    return SimResult(
+        config=config,
+        sim_type="microdosimetry",
+        x=spec["bin_centers"],
+        y=spec["d_y"] * spec["bin_centers"],
+        metadata={
+            "y_F": spec["y_F"],
+            "y_D": spec["y_D"],
+            "f_y": spec["f_y"],
+            "l_bar_um": l_bar,
+        },
+        mesh=None,
+    )
