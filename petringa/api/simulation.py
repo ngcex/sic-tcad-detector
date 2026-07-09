@@ -16,11 +16,17 @@ import devsim
 
 from petringa.api.device import DeviceConfig, build_device
 from petringa.api.results import MeshData, SimResult
-from petringa.core.charge_collection import cce_vs_bias
+from petringa.core.charge_collection import cce_vs_bias, cce_vs_fluence
 from petringa.core.cv_analysis import cv_sweep
+from petringa.core.dark_current import create_dark_current_device, dark_current_sweep
 from petringa.core.devsim_reset import reset_devsim_fully
 from petringa.core.drift_diffusion import ramp_bias
+from petringa.core.flash_recombination import cce_vs_dose_rate
+from petringa.core.mc_coupling import load_mc_events_csv
+from petringa.core.microdosimetry import lineal_energy_spectrum, mean_chord_length
 from petringa.core.poisson import extract_electric_field
+from petringa.core.temperature_sweep import sweep_cce_vs_temperature
+from petringa.core.transient import transient_cce_vs_dose_rate
 
 logger = logging.getLogger(__name__)
 
@@ -400,6 +406,224 @@ def run_cce(
         metadata={
             "I_collected": result["I_collected"],
             "I_generated": result["I_generated"],
+        },
+        mesh=None,
+    )
+
+
+def run_radiation_damage(
+    config: DeviceConfig,
+    fluences: "np.ndarray | None" = None,
+    V_bias: float = -40.0,
+    proton_energy_MeV: float = 5.6,
+) -> SimResult:
+    """Run a CCE-vs-proton-fluence damage sweep and return a SimResult.
+
+    Bucket-a config->kwargs adapter over
+    `petringa.core.charge_collection.cce_vs_fluence`, which builds AND deletes
+    a fresh device for each fluence point (self-cleaning). run_radiation_damage
+    therefore does NOT call `build_device`, `reset_devsim_fully`, or
+    `devsim.delete_device` — a facade-level cleanup would double-delete.
+
+    Config-forwarding (D-01 uniform rule): config.N_D_junction /
+    config.N_D_bulk / config.L_transition (and epi thickness) are forwarded
+    into cce_vs_fluence so run_radiation_damage(DeviceConfig()) uses the same
+    doping as run_cce(DeviceConfig()), not cce_vs_fluence's older hardcoded
+    calibration.
+
+    Parameters
+    ----------
+    config : DeviceConfig
+        Device configuration (geometry, doping, temperature, area).
+    fluences : np.ndarray or None
+        Proton fluences (cm^-2) to sweep. Default None -> np.geomspace(1e13,
+        1e16, 6).
+    V_bias : float
+        Reverse bias (V, conventional-negative sign). Default -40.0.
+    proton_energy_MeV : float
+        Incident proton energy (MeV) used for the NIEL damage model.
+        Default 5.6.
+
+    Returns
+    -------
+    SimResult
+        sim_type="damage", x=fluences (cm^-2), y=CCE values (dimensionless),
+        metadata contains "V_bias" and "energy_MeV".
+
+    Warning
+    -------
+    RESEARCH Pitfall 4: the NIEL kappa hardness factors in
+    `petringa.core.radiation_damage` are DATA-BLOCKED placeholders, so the
+    absolute critical-fluence (Phi_crit) numbers produced here are
+    UNVALIDATED. Do NOT present these outputs as validated radiation-hardness
+    predictions — they are a relative sensitivity shape only until real
+    NIEL/damage-coefficient data replaces the placeholders.
+    """
+    if fluences is None:
+        fluences = np.geomspace(1e13, 1e16, 6)
+
+    # Bucket-a: cce_vs_fluence builds AND deletes its own device per fluence.
+    # Forward config doping/geometry (D-01) so this facade is self-consistent
+    # with run_cce. Do NOT reset/build/delete any device here.
+    result = cce_vs_fluence(
+        fluence_range=fluences,
+        V_bias=V_bias,
+        epi_thickness_cm=config.epi_thickness_um * 1e-4,
+        N_D_junction=config.N_D_junction,
+        N_D_bulk=config.N_D_bulk,
+        L_transition=config.L_transition_um * 1e-4,
+        energy_MeV=proton_energy_MeV,
+    )
+
+    return SimResult(
+        config=config,
+        sim_type="damage",
+        x=result["fluences"],
+        y=result["cce_values"],
+        metadata={
+            "V_bias": result["V_bias"],
+            "energy_MeV": result["energy_MeV"],
+        },
+        mesh=None,
+    )
+
+
+def run_temperature_sweep(
+    config: DeviceConfig,
+    temperatures: "np.ndarray | None" = None,
+    voltage: float = -30.0,
+    method: str = "hecht",
+) -> SimResult:
+    """Run a CCE-vs-temperature sweep at a single bias and return a SimResult.
+
+    Bucket-a config->kwargs adapter over
+    `petringa.core.temperature_sweep.sweep_cce_vs_temperature`, which builds
+    AND deletes its own device(s) (self-cleaning). run_temperature_sweep
+    therefore does NOT call `build_device`, `reset_devsim_fully`, or
+    `devsim.delete_device`.
+
+    Axis choice (D-04): a SINGLE bias (`voltages=[voltage]`) is passed so the
+    returned curve is a clean 1D CCE-vs-T profile (x=T). Temperature is the
+    swept axis, so config.T is intentionally NOT forwarded; the epi geometry
+    and doping ARE forwarded (D-01 uniform rule).
+
+    Parameters
+    ----------
+    config : DeviceConfig
+        Device configuration (geometry, doping, area). config.T is ignored
+        here — temperature is the swept axis.
+    temperatures : np.ndarray or None
+        Temperatures (K) to sweep. Default None -> np.linspace(250, 350, 5).
+    voltage : float
+        Single reverse bias (V, conventional-negative sign) at which CCE is
+        evaluated. Default -30.0.
+    method : str
+        "hecht" (analytical) or "dd" (drift-diffusion). Default "hecht".
+
+    Returns
+    -------
+    SimResult
+        sim_type="temperature", x=temperatures (K), y=CCE values
+        (dimensionless), metadata contains "voltage_V" and "method".
+    """
+    if temperatures is None:
+        temperatures = np.linspace(250.0, 350.0, 5)
+
+    # Bucket-a: sweep_cce_vs_temperature self-cleans. Pass voltages=[voltage]
+    # (single element) so x=T is a clean 1D curve. Do NOT forward config.T
+    # (T is the swept axis); DO forward geometry/doping (D-01).
+    df = sweep_cce_vs_temperature(
+        temperatures=temperatures,
+        voltages=[voltage],
+        method=method,
+        epi_thickness_cm=config.epi_thickness_um * 1e-4,
+        N_D_junction=config.N_D_junction,
+        N_D_bulk=config.N_D_bulk,
+        L_transition=config.L_transition_um * 1e-4,
+    )
+
+    # Return is a long-format pd.DataFrame with columns T, V, CCE (Pitfall 3).
+    x = df["T"].to_numpy()
+    y = df["CCE"].to_numpy()
+
+    return SimResult(
+        config=config,
+        sim_type="temperature",
+        x=x,
+        y=y,
+        metadata={"voltage_V": voltage, "method": method},
+        mesh=None,
+    )
+
+
+def run_flash_recombination(
+    config: DeviceConfig,
+    dose_rates_Gy_s: "np.ndarray | None" = None,
+    V_bias: float = -30.0,
+    E_MeV: float = 62,
+) -> SimResult:
+    """Run a steady-state CCE-vs-dose-rate FLASH sweep and return a SimResult.
+
+    Bucket-a config->kwargs adapter over
+    `petringa.core.flash_recombination.cce_vs_dose_rate`, which builds AND
+    deletes its own device(s) (self-cleaning). run_flash_recombination
+    therefore does NOT call `build_device`, `reset_devsim_fully`, or
+    `devsim.delete_device`.
+
+    Config-forwarding (D-01): epi geometry + doping are forwarded so this
+    facade is self-consistent with run_cce. Axis (D-04): x=dose_rate, y=CCE.
+
+    Parameters
+    ----------
+    config : DeviceConfig
+        Device configuration (geometry, doping, area).
+    dose_rates_Gy_s : np.ndarray or None
+        Dose rates (Gy/s) to sweep. Default None ->
+        np.array([20, 50, 100, 150, 200, 230]).
+    V_bias : float
+        Reverse bias (V, conventional-negative sign). Default -30.0.
+    E_MeV : float
+        Incident particle energy (MeV). Default 62.
+
+    Returns
+    -------
+    SimResult
+        sim_type="flash", x=dose_rates (Gy/s), y=CCE values (dimensionless),
+        metadata contains "V_bias" and "E_MeV".
+
+    Warning
+    -------
+    SCOPE / LIMITATIONS (see flash_recombination.py module header): at these
+    dose rates the Auger (n^3) term is orders of magnitude below SRH, so any
+    CCE variation produced here is a NUMERICAL SENSITIVITY BOUND, NOT a
+    validated FLASH plasma-recombination prediction. The genuine
+    high-injection physics (field screening, ambipolar transport,
+    conductivity modulation) is not modeled — do not present these outputs as
+    validated FLASH physics.
+    """
+    if dose_rates_Gy_s is None:
+        dose_rates_Gy_s = np.array([20.0, 50.0, 100.0, 150.0, 200.0, 230.0])
+
+    # Bucket-a: cce_vs_dose_rate self-cleans. Forward config geometry/doping
+    # (D-01). Do NOT reset/build/delete any device here.
+    result = cce_vs_dose_rate(
+        dose_rates_Gy_s=dose_rates_Gy_s,
+        V_bias=V_bias,
+        epi_thickness_cm=config.epi_thickness_um * 1e-4,
+        E_MeV=E_MeV,
+        N_D_junction=config.N_D_junction,
+        N_D_bulk=config.N_D_bulk,
+        L_transition=config.L_transition_um * 1e-4,
+    )
+
+    return SimResult(
+        config=config,
+        sim_type="flash",
+        x=result["dose_rates"],
+        y=result["cce_values"],
+        metadata={
+            "V_bias": result["V_bias"],
+            "E_MeV": result["E_MeV"],
         },
         mesh=None,
     )
