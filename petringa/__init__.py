@@ -16,6 +16,7 @@ from petringa.api.simulation import (
     run_temperature_sweep,
     run_transient,
 )
+from petringa.api.sweep import ParametricSweep
 
 __all__ = [
     "DeviceConfig",
@@ -30,5 +31,6 @@ __all__ = [
     "run_flash_recombination",
     "run_transient",
     "run_microdosimetry",
+    "ParametricSweep",
     "__version__",
 ]
