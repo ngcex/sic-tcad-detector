@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Simulator Library & Streamlit UI
-status: executing
-stopped_at: Phase 35 complete — all requirements (PKG-01, PKG-02, PKG-03) satisfied
-last_updated: "2026-07-08T08:11:48.954Z"
-last_activity: 2026-07-08 -- Phase 37 planning complete
+status: ready_to_plan
+stopped_at: Phase 37 complete (3/3) — ready to discuss Phase 38
+last_updated: 2026-07-09T16:40:22.236Z
+last_activity: 2026-07-09 -- Phase 37 execution started
 progress:
   total_phases: 25
   completed_phases: 10
   total_plans: 26
-  completed_plans: 23
+  completed_plans: 53
   percent: 40
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-26)
 
 **Core value:** Installable Python library + Streamlit UI that makes the SiC TCAD simulator usable by the Petringa group without reading source code
-**Current focus:** Phase 37 — core api — cce + remaining facades + parametricsweep
+**Current focus:** Phase 38 — streamlit shell + device config page
 
 ## Current Position
 
-Phase: 37
+Phase: 38
 Plan: Not started
-Status: Ready to execute
-Last activity: 2026-07-08 -- Phase 37 planning complete
+Status: Ready to plan
+Last activity: 2026-07-09
 
 Progress: [██████████] 100% (Phase 35)
 
@@ -52,7 +52,7 @@ Progress: [██████████] 100% (Phase 35)
 
 **Velocity (historical):**
 
-- Total plans completed: 80 (v1.0: 20, v1.1: 7, v2.0: 13, v3.0: 15, v4.0 partial: 22)
+- Total plans completed: 83 (v1.0: 20, v1.1: 7, v2.0: 13, v3.0: 15, v4.0 partial: 22)
 - Average duration: ~14 min per plan
 - Total execution time: ~18 hours
 
