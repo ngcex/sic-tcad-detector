@@ -97,8 +97,8 @@ _TDD gate compliance: the `test(...)` RED commit (`35815ca`) precedes the `feat(
 **1. [Rule 3 - Blocking] Test/verify invocation adjusted for worktree source resolution**
 
 - **Found during:** Both tasks (verification).
-- **Issue:** This worktree has no `.venv`. The plan's literal verify commands use `.venv/bin/pytest` and bare `python -c`, which would resolve the bare console script against the _main_ checkout's editable `petringa` install — potentially testing the wrong source (the same Rule-3 deviation documented in Waves 1 and 2).
-- **Fix:** Ran everything as `<main>/.venv/bin/python -m pytest ...` / `-m`-style `-c "..."` from the worktree root, then verified `petringa.__file__` resolved to `agent-af67f31954216daa5/petringa/__init__.py` (worktree source, not main). All behavior assertions unchanged; only the harness invocation differs.
+- **Issue:** This worktree has no `.venv`. The plan's literal verify commands use `.venv/bin/pytest` and bare `python -c`; the worktree lacks its own venv, so I invoked the _main_ checkout's interpreter (`/Users/ngcex/projects/physics/petringa/.venv/bin/...`) — which risks resolving `petringa` against main's editable install rather than the worktree source (the same Rule-3 concern documented in Waves 1 and 2).
+- **Fix:** Ran the main checkout's `.venv/bin/pytest` and `.venv/bin/python -c "..."` **from the worktree root** so cwd wins on `sys.path`. Confirmed worktree-source resolution two ways: (1) `python -c "import petringa; print(petringa.__file__)"` resolved to `agent-af67f31954216daa5/petringa/__init__.py` (not main); (2) empirically, the 3 tests import `ParametricSweep`, which exists ONLY in this worktree (main is at f07c7d6 / Wave 2, with no `sweep.py`) — so a green run is positive proof pytest loaded the worktree source. All behavior assertions unchanged; only the harness invocation differs.
 - **Committed in:** N/A (harness-only).
 
 **2. [Rule 3 - Blocking] Reworded one docstring sentence to keep the devsim grep acceptance gate clean**
