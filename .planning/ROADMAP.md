@@ -103,7 +103,7 @@ Full details: [milestones/v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md)
 
 - [x] **Phase 35: Package Setup & Refactor** — `pyproject.toml`, `src/` → `petringa/core/` rename, all 25 test modules pass unchanged _(GROUP A, prerequisite — no physics changes)_ (completed 2026-07-01)
 - [x] **Phase 36: Core API — DeviceConfig + C-V + Field + Vertical Slice** — `DeviceConfig`, `SimResult`, `MeshData` dataclasses; `run_cv()`, `run_field()` facades; `examples/cv_example.py` vertical slice _(GROUP A)_ — **3 plans planned** (completed 2026-07-02)
-- [ ] **Phase 37: Core API — CCE + Remaining Facades + ParametricSweep** — `run_cce()`, `run_radiation_damage()`, `run_dark_current()`, `run_temperature_sweep()`, `run_flash_recombination()`, `run_transient()`, `run_microdosimetry()`, `ParametricSweep` _(GROUP A)_
+- [x] **Phase 37: Core API — CCE + Remaining Facades + ParametricSweep** — `run_cce()`, `run_radiation_damage()`, `run_dark_current()`, `run_temperature_sweep()`, `run_flash_recombination()`, `run_transient()`, `run_microdosimetry()`, `ParametricSweep` _(GROUP A)_ (completed 2026-07-09)
 - [ ] **Phase 38: Streamlit Shell + Device Config Page** — `app/main.py` multi-page shell, device config sidebar form, `st.session_state` persistence, navigation between pages _(GROUP B)_
 - [ ] **Phase 39: C-V, CCE, Field Map Pages + CSV Download** — C-V page with Plotly C-V and 1/C² plots, CCE page, field map page, CSV download from all result pages _(GROUP B)_
 - [ ] **Phase 40: Geometry Viewer** — `app/components/geometry_viewer.py`: `MeshData` → 2D Plotly heatmap for 2D devices, depth-profile bar for 1D devices, quantity selector dropdown _(GROUP B)_
@@ -421,15 +421,15 @@ Plans:
 
 **Wave 1**
 
-- [ ] 37-01-PLAN.md — run_cce() flagship facade (bucket-a config-forwarding adapter, CCE physics gate) + tests/test_api_cce.py (LIB-04)
+- [x] 37-01-PLAN.md — run_cce() flagship facade (bucket-a config-forwarding adapter, CCE physics gate) + tests/test_api_cce.py (LIB-04)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 37-02-PLAN.md — 6 remaining facades (run_radiation_damage/temperature_sweep/flash_recombination/dark_current/transient/microdosimetry) across 3 buckets + tests/test_api_facades.py + tests/test_api_microdosimetry.py (LIB-06)
+- [x] 37-02-PLAN.md — 6 remaining facades (run_radiation_damage/temperature_sweep/flash_recombination/dark_current/transient/microdosimetry) across 3 buckets + tests/test_api_facades.py + tests/test_api_microdosimetry.py (LIB-06)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 37-03-PLAN.md — ParametricSweep class (dataclasses.replace config cloning) + tests/test_api_sweep.py (LIB-07)
+- [x] 37-03-PLAN.md — ParametricSweep class (dataclasses.replace config cloning) + tests/test_api_sweep.py (LIB-07)
 
 ### Phase 38: Streamlit Shell + Device Config Page
 
@@ -554,7 +554,7 @@ Plans:
 | 34. v4.0 Milestone Audit & Paper Figures        | v4.0      | 0/0            | Not started | -          |
 | 35. Package Setup & Refactor                    | v5.0      | 2/2 | Complete   | 2026-07-01 |
 | 36. Core API — DeviceConfig + C-V + Field       | v5.0      | 3/3 | Complete    | 2026-07-02 |
-| 37. Core API — CCE + Facades + ParametricSweep  | v5.0      | 0/0            | Not started | -          |
+| 37. Core API — CCE + Facades + ParametricSweep  | v5.0      | 3/3 | Complete    | 2026-07-09 |
 | 38. Streamlit Shell + Device Config Page        | v5.0      | 0/0            | Not started | -          |
 | 39. C-V, CCE, Field Map Pages + CSV Download    | v5.0      | 0/0            | Not started | -          |
 | 40. Geometry Viewer                             | v5.0      | 0/0            | Not started | -          |
