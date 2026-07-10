@@ -442,8 +442,18 @@ Plans:
 2. The device config sidebar form exposes all `DeviceConfig` fields (epi/substrate thickness, half-width for 2D, doping profile, N_A, N_D parameters, temperature, area) as interactive form controls
 3. A `DeviceConfig` assembled from the form values is stored in `st.session_state` and remains intact after navigating to a different page and returning
 4. No simulation page crashes on load with an empty `st.session_state` (graceful default or prompt to configure device first)
-   **Plans**: TBD
+   **Plans**: 2 plans
    **UI hint**: yes
+
+Plans:
+
+**Wave 1**
+
+- [ ] 38-01-PLAN.md — Config core: pure assemble_config() seam + render_device_sidebar() + pytest pythonpath + UI-02/UI-07 unit tests (UI-02, UI-07)
+
+**Wave 2** *(depends on 38-01)*
+
+- [ ] 38-02-PLAN.md — st.navigation shell (app/main.py) + theme config.toml + Home + 7 placeholder pages with empty-state guard + AppTest smoke (UI-01, UI-07)
 
 ### Phase 39: C-V, CCE, Field Map Pages + CSV Download
 
