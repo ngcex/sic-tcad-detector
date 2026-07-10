@@ -63,22 +63,29 @@ def render_device_sidebar() -> None:
     st.sidebar.header("Device configuration")
 
     # --- Group 1: reactive mode selectors (rendered plainly, no submit gate) ---
-    dim = st.sidebar.radio("Dimensionality", ["1D", "2D"], index=0)
-    profile = st.sidebar.selectbox("Doping profile", ["graded", "uniform"], index=0)
+    dim = st.sidebar.radio(
+        "Dimensionality", ["1D", "2D"], index=0, key="cfg_dimensionality"
+    )
+    profile = st.sidebar.selectbox(
+        "Doping profile", ["graded", "uniform"], index=0, key="cfg_doping_profile"
+    )
 
     st.sidebar.divider()
 
     # --- Group 2: geometry ---
     st.sidebar.header("Geometry")
     epi_thickness_um = st.sidebar.number_input(
-        "Epi thickness (µm)", value=10.0, min_value=0.1
+        "Epi thickness (µm)", value=10.0, min_value=0.1, key="cfg_epi_thickness_um"
     )
     substrate_thickness_um = st.sidebar.number_input(
-        "Substrate thickness (µm)", value=1.0, min_value=0.0
+        "Substrate thickness (µm)",
+        value=1.0,
+        min_value=0.0,
+        key="cfg_substrate_thickness_um",
     )
     if dim == "2D":
         half_width_um = st.sidebar.number_input(
-            "Half-width (µm)", value=50.0, min_value=0.1
+            "Half-width (µm)", value=50.0, min_value=0.1, key="cfg_half_width_um"
         )
     else:
         half_width_um = None
@@ -87,22 +94,29 @@ def render_device_sidebar() -> None:
 
     # --- Group 3: doping ---
     st.sidebar.header("Doping")
-    N_A = st.sidebar.number_input("N_A substrate (cm⁻³)", value=1e19, format="%.3e")
+    N_A = st.sidebar.number_input(
+        "N_A substrate (cm⁻³)", value=1e19, format="%.3e", key="cfg_N_A"
+    )
     if profile == "uniform":
-        N_D = st.sidebar.number_input("N_D uniform (cm⁻³)", value=1e15, format="%.3e")
+        N_D = st.sidebar.number_input(
+            "N_D uniform (cm⁻³)", value=1e15, format="%.3e", key="cfg_N_D"
+        )
         # Graded triplet hidden this mode — fall back to DeviceConfig defaults.
         N_D_junction = DeviceConfig.N_D_junction
         N_D_bulk = DeviceConfig.N_D_bulk
         L_transition_um = DeviceConfig.L_transition_um
     else:  # graded
         N_D_junction = st.sidebar.number_input(
-            "N_D junction (cm⁻³)", value=2.93e15, format="%.3e"
+            "N_D junction (cm⁻³)", value=2.93e15, format="%.3e", key="cfg_N_D_junction"
         )
         N_D_bulk = st.sidebar.number_input(
-            "N_D bulk (cm⁻³)", value=8.82e13, format="%.3e"
+            "N_D bulk (cm⁻³)", value=8.82e13, format="%.3e", key="cfg_N_D_bulk"
         )
         L_transition_um = st.sidebar.number_input(
-            "Transition length (µm)", value=0.987, min_value=0.0
+            "Transition length (µm)",
+            value=0.987,
+            min_value=0.0,
+            key="cfg_L_transition_um",
         )
         # N_D hidden this mode — programmatically set to default; assemble_config
         # also forces N_D=None for "graded", this default is a harmless input.
@@ -112,8 +126,12 @@ def render_device_sidebar() -> None:
 
     # --- Group 4: operating conditions ---
     st.sidebar.header("Operating conditions")
-    T = st.sidebar.number_input("Temperature (K)", value=300.0, min_value=1.0)
-    area_cm2 = st.sidebar.number_input("Area (cm²)", value=1e-4, format="%.3e")
+    T = st.sidebar.number_input(
+        "Temperature (K)", value=300.0, min_value=1.0, key="cfg_T"
+    )
+    area_cm2 = st.sidebar.number_input(
+        "Area (cm²)", value=1e-4, format="%.3e", key="cfg_area_cm2"
+    )
 
     values = {
         "epi_thickness_um": epi_thickness_um,

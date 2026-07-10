@@ -15,14 +15,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import streamlit as st
 
 from app.components.device_sidebar import render_device_sidebar
-from app.pages.home import render as render_home
-from app.pages.cv import render as render_cv
-from app.pages.cce import render as render_cce
-from app.pages.field_map import render as render_field_map
-from app.pages.radiation_damage import render as render_radiation_damage
-from app.pages.dark_current import render as render_dark_current
-from app.pages.microdosimetry import render as render_microdosimetry
-from app.pages.batch_sweep import render as render_batch_sweep
+from app.workflows.home import render as render_home
+from app.workflows.cv import render as render_cv
+from app.workflows.cce import render as render_cce
+from app.workflows.field_map import render as render_field_map
+from app.workflows.radiation_damage import render as render_radiation_damage
+from app.workflows.dark_current import render as render_dark_current
+from app.workflows.microdosimetry import render as render_microdosimetry
+from app.workflows.batch_sweep import render as render_batch_sweep
 
 st.set_page_config(
     page_title="petringa — SiC TCAD Simulator",

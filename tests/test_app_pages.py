@@ -1,11 +1,11 @@
 """UI-01 coverage: empty-state guard unit test + AppTest nav/sidebar smoke.
 
 test_empty_state_guard uses AppTest.from_function on a small wrapper that
-imports and calls app.pages.cv.render() — AppTest.from_function requires the
-supplied callable's body to be self-contained (its own imports), so the
+imports and calls app.workflows.cv.render() — AppTest.from_function requires
+the supplied callable's body to be self-contained (its own imports), so the
 actual page render() is imported *inside* the wrapper body rather than at
 module scope. This still exercises the real guard logic defined in
-app/pages/cv.py, not a copy of it.
+app/workflows/cv.py, not a copy of it.
 
 test_nav_sidebar_smoke boots the full app/main.py entry script headlessly.
 """
@@ -77,7 +77,7 @@ def test_no_magic_pages_directory():
 
 def test_empty_state_guard():
     def _run_cv_page():
-        from app.pages.cv import render
+        from app.workflows.cv import render
 
         render()
 
