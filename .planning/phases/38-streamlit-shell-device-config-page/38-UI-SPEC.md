@@ -51,17 +51,19 @@ Exceptions: none.
 
 ## Typography
 
-Streamlit owns heading sizes and line-heights natively (rendered from `st.title`/`st.header`/`st.subheader`/`st.caption`). Do **not** hand the executor pixel line-heights requiring CSS. This table maps semantic roles to the correct Streamlit primitive.
+Streamlit owns heading sizes and line-heights natively (rendered from `st.title`/`st.header`/`st.subheader`/`st.caption`) on a 16px root. The **Size** column below lists the px values Streamlit's default Source Sans Pro theme **already renders** for each role — these are declared as a contract for the checker, **not** as overrides. Do **not** hand the executor pixel line-heights requiring CSS; do **not** override these sizes.
 
-| Role             | Streamlit primitive                    | Weight                       | Notes                                                           |
-| ---------------- | -------------------------------------- | ---------------------------- | --------------------------------------------------------------- |
-| Page title       | `st.title(...)`                        | semibold (Streamlit default) | One per page; e.g. `st.title("C-V Analysis")`                   |
-| Section heading  | `st.header(...)` / `st.subheader(...)` | semibold                     | Sidebar group labels use `st.sidebar.subheader`                 |
-| Body / label     | widget labels + `st.write`             | regular                      | Every input label carries its unit (see Sidebar Field Contract) |
-| Caption / helper | `st.caption(...)`                      | regular                      | Phase-status notes ("implemented in Phase 39"), units, hints    |
-| Numeric readout  | `st.json` / `st.code` (monospace)      | regular monospace            | Config summary and any scientific-notation value                |
+| Role             | Streamlit primitive                    | Size (Streamlit default, not an override) | Weight            | Line Height   |
+| ---------------- | -------------------------------------- | ----------------------------------------- | ----------------- | ------------- |
+| Page title       | `st.title(...)`                        | 36px (2.25rem)                            | semibold          | ~1.2 (native) |
+| Section heading  | `st.header(...)` / `st.subheader(...)` | 28px (`header`) / 24px (`subheader`)      | semibold          | ~1.2 (native) |
+| Body / label     | widget labels + `st.write`             | 16px (1rem)                               | regular           | ~1.6 (native) |
+| Caption / helper | `st.caption(...)`                      | 14px (0.875rem)                           | regular           | ~1.5 (native) |
+| Numeric readout  | `st.json` / `st.code` (monospace)      | 14px (0.875rem)                           | regular monospace | ~1.5 (native) |
 
-Weights used: exactly 2 — **regular** (body/labels/captions) and **semibold** (titles/headings), both Streamlit defaults. No custom weight overrides.
+Sizes declared: 4 (14, 16, 24/28, 36) — the roles collapse to four effective tiers. All are Streamlit-native defaults; the app applies **no** font-size or line-height overrides.
+
+Weights used: exactly 2 — **regular** (body/labels/captions/readouts) and **semibold** (titles/headings), both Streamlit defaults. No custom weight overrides.
 
 Body line-height: Streamlit default (~1.6, close to the 1.5 recommendation) — accepted as-is, no override.
 Heading line-height: Streamlit default (~1.2) — accepted as-is, no override.
