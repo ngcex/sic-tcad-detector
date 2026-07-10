@@ -33,17 +33,17 @@ created: 2026-07-10
 
 8-point scale is the convention for the layout Streamlit lets the app control (`st.columns` gap arguments, explicit spacers, custom container padding). Streamlit owns default widget-to-widget vertical rhythm — do not fight it with CSS hacks.
 
-| Token | Value | Usage in this phase                                                                                                                                      |
-| ----- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| xs    | 4px   | (reserved) inline icon gaps                                                                                                                              |
-| sm    | 8px   | (reserved) compact grouping inside a widget cluster                                                                                                      |
-| md    | 16px  | Default — matches Streamlit's native widget vertical gap; use `gap="small"`/default on `st.columns`                                                      |
-| lg    | 24px  | Section breaks in the sidebar between field groups (achieved with `st.sidebar.subheader` + a `st.sidebar.divider()`), and `gap="medium"` on `st.columns` |
-| xl    | 32px  | Major main-panel section separation (`gap="large"` on `st.columns`)                                                                                      |
-| 2xl   | 48px  | (reserved) page-level top spacing                                                                                                                        |
-| 3xl   | 64px  | (reserved)                                                                                                                                               |
+| Token | Value | Usage in this phase                                                                                                                                   |
+| ----- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| xs    | 4px   | (reserved) inline icon gaps                                                                                                                           |
+| sm    | 8px   | (reserved) compact grouping inside a widget cluster                                                                                                   |
+| md    | 16px  | Default — matches Streamlit's native widget vertical gap; use `gap="small"`/default on `st.columns`                                                   |
+| lg    | 24px  | Section breaks in the sidebar between field groups (achieved with `st.sidebar.header` + a `st.sidebar.divider()`), and `gap="medium"` on `st.columns` |
+| xl    | 32px  | Major main-panel section separation (`gap="large"` on `st.columns`)                                                                                   |
+| 2xl   | 48px  | (reserved) page-level top spacing                                                                                                                     |
+| 3xl   | 64px  | (reserved)                                                                                                                                            |
 
-**What the app controls this phase:** sidebar field-group separation (dividers/subheaders), and `st.columns` gaps in the main panel config-summary. Everything else is Streamlit-native rhythm.
+**What the app controls this phase:** sidebar field-group separation (dividers/headers), and `st.columns` gaps in the main panel config-summary. Everything else is Streamlit-native rhythm.
 
 Exceptions: none.
 
@@ -51,19 +51,21 @@ Exceptions: none.
 
 ## Typography
 
-Streamlit owns heading sizes and line-heights natively (rendered from `st.title`/`st.header`/`st.subheader`/`st.caption`) on a 16px root. The **Size** column below lists the px values Streamlit's default Source Sans Pro theme **already renders** for each role — these are declared as a contract for the checker, **not** as overrides. Do **not** hand the executor pixel line-heights requiring CSS; do **not** override these sizes.
+Streamlit owns heading sizes and line-heights natively (rendered from `st.title`/`st.header`/`st.caption`) on a 16px root. The **Size** column below lists the px values Streamlit's default Source Sans Pro theme **already renders** for each role — these are declared as a contract for the checker, **not** as overrides. Do **not** hand the executor pixel line-heights requiring CSS; do **not** override these sizes.
 
-| Role             | Streamlit primitive                    | Size (Streamlit default, not an override) | Weight            | Line Height   |
-| ---------------- | -------------------------------------- | ----------------------------------------- | ----------------- | ------------- |
-| Page title       | `st.title(...)`                        | 36px (2.25rem)                            | semibold          | ~1.2 (native) |
-| Section heading  | `st.header(...)` / `st.subheader(...)` | 28px (`header`) / 24px (`subheader`)      | semibold          | ~1.2 (native) |
-| Body / label     | widget labels + `st.write`             | 16px (1rem)                               | regular           | ~1.6 (native) |
-| Caption / helper | `st.caption(...)`                      | 14px (0.875rem)                           | regular           | ~1.5 (native) |
-| Numeric readout  | `st.json` / `st.code` (monospace)      | 14px (0.875rem)                           | regular monospace | ~1.5 (native) |
+**Single section-heading primitive:** `st.header` (28px) is the ONLY primitive used for section-heading roles in this phase — both main-panel sections and sidebar field-group headers (`st.sidebar.header`). `st.subheader` (24px) is **not used** anywhere in Phase 38, so the scale has no dual-size heading row. **Downstream Phases 39–43 must follow this same single primitive** (`st.header` for every section heading) to keep the shared scale at 4 sizes.
 
-Sizes declared: 4 (14, 16, 24/28, 36) — the roles collapse to four effective tiers. All are Streamlit-native defaults; the app applies **no** font-size or line-height overrides.
+| Role             | Streamlit primitive               | Size (Streamlit default, not an override) | Weight            | Line Height   |
+| ---------------- | --------------------------------- | ----------------------------------------- | ----------------- | ------------- |
+| Page title       | `st.title(...)`                   | 36px (2.25rem)                            | semibold          | ~1.2 (native) |
+| Section heading  | `st.header(...)`                  | 28px (1.75rem)                            | semibold          | ~1.2 (native) |
+| Body / label     | widget labels + `st.write`        | 16px (1rem)                               | regular           | ~1.6 (native) |
+| Caption / helper | `st.caption(...)`                 | 14px (0.875rem)                           | regular           | ~1.5 (native) |
+| Numeric readout  | `st.json` / `st.code` (monospace) | 14px (0.875rem)                           | regular monospace | ~1.5 (native) |
 
-Weights used: exactly 2 — **regular** (body/labels/captions/readouts) and **semibold** (titles/headings), both Streamlit defaults. No custom weight overrides.
+Sizes declared: exactly 4 real sizes — **14, 16, 28, 36**. All are Streamlit-native defaults; the app applies **no** font-size or line-height overrides.
+
+Weights used: exactly 2 — **regular** (body/labels/captions/readouts) and **semibold** (title/headings), both Streamlit defaults. No custom weight overrides.
 
 Body line-height: Streamlit default (~1.6, close to the 1.5 recommendation) — accepted as-is, no override.
 Heading line-height: Streamlit default (~1.2) — accepted as-is, no override.
@@ -113,6 +115,8 @@ The real copywriting deliverables for this phase are the **empty-state guard** (
 
 **Nav pattern:** `st.navigation({...}) ` + `st.Page(...)` in the entry script `app/main.py`. The device-config sidebar renderer is called in the entry script **before** `pg.run()`, so it renders on every page automatically (satisfies UI-02 "on any page" and UI-07 "persist across nav"). Do **not** use the legacy `pages/` magic directory (it is ignored once `st.navigation` runs).
 
+**Focal point (primary screen — Home):** the user's eye should land first on the **sidebar device-config form** (expanded by default). This is the app's single required action — no workflow page is usable until a device is configured — so the form is the deliberate visual anchor on Home, with the main panel serving only a brief orientation line plus the config summary readout.
+
 **Page list — register all 7 workflow pages as placeholders now** (UI-01: "all simulation workflow pages listed"). Keep the registration list easy to append to (Phases 39–42 fill in behavior). A landing **Home** page is optional but recommended as the default nav target.
 
 | Nav order | Page title              | Icon (Material shorthand / emoji) | Arrives in phase                                                                                                       |
@@ -152,7 +156,7 @@ Because the entry-script sidebar always writes `device_config` before `pg.run()`
 
 Rendered by a single function (e.g. `render_device_sidebar()`) called in the entry script. **Not** wrapped in `st.form` — the two mode selectors must be reactive so conditional fields appear/disappear immediately. The assembled `DeviceConfig` is stored under the single non-widget key `st.session_state["device_config"]` (the downstream contract for Phases 39–43). Read all 11 fields from `petringa.DeviceConfig` — never redefine them in the app.
 
-**Field grouping** (each group headed by `st.sidebar.subheader`, separated by `st.sidebar.divider()`):
+**Field grouping** (each group headed by `st.sidebar.header` — the single section-heading primitive — separated by `st.sidebar.divider()`):
 
 ### Group 1 — Mode selectors (REACTIVE, render first, outside any form)
 
