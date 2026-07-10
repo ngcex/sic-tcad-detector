@@ -457,7 +457,7 @@ Plans:
 
 **Wave 3 (gap closure)** *(depends on 38-01, 38-02)*
 
-- [ ] 38-03-PLAN.md — Gap closure UI-07: rename app/pages/ -> app/workflows/ (fixes st.navigation magic-dir collision), add explicit key= to all 12 sidebar widgets, AppTest first-rerun persistence regression test + structural guard (UI-02, UI-07)
+- [x] 38-03-PLAN.md — Gap closure UI-07: rename app/pages/ -> app/workflows/ (fixes st.navigation magic-dir collision), add explicit key= to all 12 sidebar widgets, AppTest first-rerun persistence regression test + structural guard (UI-02, UI-07)
 
 ### Phase 39: C-V, CCE, Field Map Pages + CSV Download
 
@@ -569,7 +569,7 @@ Plans:
 | 35. Package Setup & Refactor                    | v5.0      | 2/2 | Complete   | 2026-07-01 |
 | 36. Core API — DeviceConfig + C-V + Field       | v5.0      | 3/3 | Complete    | 2026-07-02 |
 | 37. Core API — CCE + Facades + ParametricSweep  | v5.0      | 3/3 | Complete    | 2026-07-09 |
-| 38. Streamlit Shell + Device Config Page        | v5.0      | 2/2 | Complete   | 2026-07-10 |
+| 38. Streamlit Shell + Device Config Page        | v5.0      | 3/3 | Complete   | 2026-07-10 |
 | 39. C-V, CCE, Field Map Pages + CSV Download    | v5.0      | 0/0            | Not started | -          |
 | 40. Geometry Viewer                             | v5.0      | 0/0            | Not started | -          |
 | 41. Radiation Damage + Dark Current Pages       | v5.0      | 0/0            | Not started | -          |
