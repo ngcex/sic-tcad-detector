@@ -105,7 +105,7 @@ Full details: [milestones/v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md)
 - [x] **Phase 36: Core API — DeviceConfig + C-V + Field + Vertical Slice** — `DeviceConfig`, `SimResult`, `MeshData` dataclasses; `run_cv()`, `run_field()` facades; `examples/cv_example.py` vertical slice _(GROUP A)_ — **3 plans planned** (completed 2026-07-02)
 - [x] **Phase 37: Core API — CCE + Remaining Facades + ParametricSweep** — `run_cce()`, `run_radiation_damage()`, `run_dark_current()`, `run_temperature_sweep()`, `run_flash_recombination()`, `run_transient()`, `run_microdosimetry()`, `ParametricSweep` _(GROUP A)_ (completed 2026-07-09)
 - [x] **Phase 38: Streamlit Shell + Device Config Page** — `app/main.py` multi-page shell, device config sidebar form, `st.session_state` persistence, navigation between pages _(GROUP B)_ (completed 2026-07-10)
-- [ ] **Phase 39: C-V, CCE, Field Map Pages + CSV Download** — C-V page with Plotly C-V and 1/C² plots, CCE page, field map page, CSV download from all result pages _(GROUP B)_
+- [x] **Phase 39: C-V, CCE, Field Map Pages + CSV Download** — C-V page with Plotly C-V and 1/C² plots, CCE page, field map page, CSV download from all result pages _(GROUP B)_ (completed 2026-07-11)
 - [ ] **Phase 40: Geometry Viewer** — `app/components/geometry_viewer.py`: `MeshData` → 2D Plotly heatmap for 2D devices, depth-profile bar for 1D devices, quantity selector dropdown _(GROUP B)_
 - [ ] **Phase 41: Radiation Damage + Dark Current Pages** — Radiation damage page with CCE vs fluence and kappa warning banner; dark current page with J component decomposition _(GROUP C)_
 - [ ] **Phase 42: Microdosimetry Page + Batch Sweep Page** — Microdosimetry page with MC CSV upload and y·d(y) spectrum; batch sweep page with parametric run and overlaid results _(GROUP C)_
@@ -485,7 +485,7 @@ Plans:
 
 **Wave 3** *(depends on 39-01, 39-02; 39-03 and 39-04 run in parallel — no file overlap)*
 
-- [ ] 39-03-PLAN.md — C-V + CCE pages: 1D guard → Run → session_state cache → Plotly charts → CSV download, with mocked-facade AppTests (UI-03, UI-04, UI-06)
+- [x] 39-03-PLAN.md — C-V + CCE pages: 1D guard → Run → session_state cache → Plotly charts → CSV download, with mocked-facade AppTests (UI-03, UI-04, UI-06)
 - [x] 39-04-PLAN.md — Field map page: 1D pre-check → Run → cache → E-field + potential Plotly charts (one call) → CSV download, with mocked-facade AppTest (UI-05, UI-06)
 
 ### Phase 40: Geometry Viewer
@@ -585,7 +585,7 @@ Plans:
 | 36. Core API — DeviceConfig + C-V + Field       | v5.0      | 3/3 | Complete    | 2026-07-02 |
 | 37. Core API — CCE + Facades + ParametricSweep  | v5.0      | 3/3 | Complete    | 2026-07-09 |
 | 38. Streamlit Shell + Device Config Page        | v5.0      | 3/3 | Complete   | 2026-07-10 |
-| 39. C-V, CCE, Field Map Pages + CSV Download    | v5.0      | 3/4 | In Progress|  |
+| 39. C-V, CCE, Field Map Pages + CSV Download    | v5.0      | 4/4 | Complete   | 2026-07-11 |
 | 40. Geometry Viewer                             | v5.0      | 0/0            | Not started | -          |
 | 41. Radiation Damage + Dark Current Pages       | v5.0      | 0/0            | Not started | -          |
 | 42. Microdosimetry Page + Batch Sweep Page      | v5.0      | 0/0            | Not started | -          |

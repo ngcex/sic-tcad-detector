@@ -27,8 +27,8 @@ Requirements for Simulator Library & Streamlit UI milestone. Phases 35+.
 
 - [ ] **UI-01**: User can launch the Streamlit app with `streamlit run app/main.py` and see a multi-page navigation with all simulation workflow pages listed
 - [ ] **UI-02**: User can configure all `DeviceConfig` parameters (geometry, doping profile, temperature, area) via sidebar form controls on any page, with values persisted in `st.session_state`
-- [ ] **UI-03**: User can click "Run simulation" on the C-V page to execute `run_cv()` and see an interactive Plotly C-V curve and 1/C² vs V (Mott-Schottky) plot
-- [ ] **UI-04**: User can click "Run simulation" on the CCE page to execute `run_cce()` and see an interactive Plotly CCE vs bias plot
+- [x] **UI-03**: User can click "Run simulation" on the C-V page to execute `run_cv()` and see an interactive Plotly C-V curve and 1/C² vs V (Mott-Schottky) plot
+- [x] **UI-04**: User can click "Run simulation" on the CCE page to execute `run_cce()` and see an interactive Plotly CCE vs bias plot
 - [x] **UI-05**: User can click "Run simulation" on the field map page to execute `run_field()` and see interactive Plotly plots of electric field and potential vs depth
 - [x] **UI-06**: User can download simulation results as a CSV file from any result page
 - [ ] **UI-07**: User can navigate between all pages without losing the device configuration set in the sidebar
@@ -199,8 +199,8 @@ Explicitly excluded.
 | LIB-07      | 37    | Complete |
 | UI-01       | 38    | Pending  |
 | UI-02       | 38    | Pending  |
-| UI-03       | 39    | Pending  |
-| UI-04       | 39    | Pending  |
+| UI-03       | 39    | Complete |
+| UI-04       | 39    | Complete |
 | UI-05       | 39    | Complete |
 | UI-06       | 39    | Complete |
 | UI-07       | 38    | Pending  |
