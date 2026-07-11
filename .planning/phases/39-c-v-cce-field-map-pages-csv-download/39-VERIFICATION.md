@@ -112,16 +112,17 @@ Both fail in `petringa/core/drift_diffusion.py:ramp_bias`, deep in the DC bias r
 
 This is out of scope for a UI-wiring phase to fix (it requires physics/numerics changes to `ramp_bias`, e.g. adaptive step-halving, damping, or better default bias targets) and has been flagged as a separate follow-up task. The Phase 39 code itself does exactly what it was asked to do — call the facade, cache the result, render, offer download — and does so correctly for every code path AppTest can and cannot observe. The facade it calls into is the part that breaks first for two of the three simulation types at their current defaults.
 
-**Disposition options for this phase** (recommend the user decide):
+**Disposition (decided 2026-07-11, post-advisor consult):**
 
-1. Hold Phase 39 open until the upstream `ramp_bias` convergence fix lands, then re-verify UI-04/UI-05/UI-06(partial).
-2. Accept the phase as wiring-complete (UI-03 done, UI-04/UI-05 correctly wired but functionally blocked upstream) and downgrade/defer UI-04/UI-05 acceptance to a follow-up phase alongside the solver fix.
-3. As a near-term UX improvement (new scope, not covered by the current plan), wrap the three `petringa.run_*` calls in a try/except that shows a friendly `st.error` instead of a raw traceback — does not fix the underlying non-convergence but stops the page from crashing ungracefully.
+1. **Graceful error handling — DONE.** All three pages (`app/workflows/cv.py`, `cce.py`, `field_map.py`) now wrap the `petringa.run_*` call in `try/except RuntimeError`, showing `st.error("Simulation failed to converge: ...")` with guidance instead of a raw traceback. Confirmed in the real browser: triggering the field-map default-config failure now shows the friendly error message and the page remains usable (no crash). Regression-tested with 3 new AppTest cases (one per page, `test_solver_convergence_failure_shows_error_not_crash`), monkeypatching `run_*` to raise the exact observed `RuntimeError` and asserting `at.exception == []` + `len(at.error) >= 1`. This is a different failure mode from the 2D pre-check (a raised exception vs. a config that should never reach the facade at all), so it does not conflict with the "2D guard must be a pre-check, not try/except" rule from the original plan.
+2. **Upstream solver fix — DEFERRED, tracked separately** (not in this phase's scope; requires physics/numerics changes to `petringa/core/drift_diffusion.py:ramp_bias`). Verified this is NOT the same issue Phase 26 already fixed: Phase 26 fixed 2D solver divergence via a graded epi doping profile (`device2d.py`), and the DEFAULT 1D config here already uses `doping_profile="graded"` — the 1D solver's deep-bias convergence failure is a distinct, still-open issue.
+3. **Phase bookkeeping — accepted as wiring-complete, UI-04/UI-05 deferred** (advisor-recommended over holding the phase open, since the wiring is proven correct and complete end-to-end via C-V and AppTest coverage for all three pages — the remaining gap is purely the upstream solver, with no expected further UI work).
 
-REQUIREMENTS.md has been corrected to reflect this: UI-03 Complete, UI-04/UI-05 marked Blocked (upstream solver convergence), UI-06 marked Partial (C-V page only). It previously showed all four as Complete, based on wiring/AppTest evidence alone before the browser click-through — that was inaccurate and has been fixed.
+REQUIREMENTS.md reflects this: UI-03 Complete; UI-04/UI-05 marked `[~]` partial — wiring complete, graceful-error-verified, functionally blocked pending the upstream `ramp_bias` fix; UI-06 marked `[~]` partial (C-V page only). It previously showed all four as fully Complete based on wiring/AppTest evidence alone before the browser click-through — that was inaccurate and has since been corrected twice: once to reflect the crash, and again to reflect the graceful-error fix.
 
 ---
 
 _Verified (code/AppTest): 2026-07-11_
 _Human-verified (browser): 2026-07-11_
+_Graceful-error fix applied + browser-reverified: 2026-07-11_
 _Verifier: Claude (gsd-verifier + manual browser follow-up)_

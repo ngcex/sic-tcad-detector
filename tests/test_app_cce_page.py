@@ -77,3 +77,25 @@ def test_empty_state_guard(monkeypatch):
     assert at.exception == []
     info_texts = [el.value for el in at.info]
     assert "Configure a device in the sidebar to begin." in info_texts
+
+
+def test_solver_convergence_failure_shows_error_not_crash(monkeypatch):
+    def _raise_run_cce(cfg, **kwargs):
+        raise RuntimeError(
+            "ramp_bias: failed to converge at V=60.542V: Convergence failure!"
+        )
+
+    monkeypatch.setattr(petringa, "run_cce", _raise_run_cce)
+
+    at = AppTest.from_function(_run_cce_page)
+    at.session_state["device_config"] = DeviceConfig()
+    at.run()
+
+    at.button[0].click()
+    at.run()
+
+    assert (
+        at.exception == []
+    ), f"page crashed instead of showing st.error: {at.exception}"
+    assert len(at.error) >= 1
+    assert "cce_result" not in at.session_state
