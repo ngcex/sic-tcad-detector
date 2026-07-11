@@ -28,9 +28,9 @@ Requirements for Simulator Library & Streamlit UI milestone. Phases 35+.
 - [ ] **UI-01**: User can launch the Streamlit app with `streamlit run app/main.py` and see a multi-page navigation with all simulation workflow pages listed
 - [ ] **UI-02**: User can configure all `DeviceConfig` parameters (geometry, doping profile, temperature, area) via sidebar form controls on any page, with values persisted in `st.session_state`
 - [x] **UI-03**: User can click "Run simulation" on the C-V page to execute `run_cv()` and see an interactive Plotly C-V curve and 1/C² vs V (Mott-Schottky) plot
-- [x] **UI-04**: User can click "Run simulation" on the CCE page to execute `run_cce()` and see an interactive Plotly CCE vs bias plot
-- [x] **UI-05**: User can click "Run simulation" on the field map page to execute `run_field()` and see interactive Plotly plots of electric field and potential vs depth
-- [x] **UI-06**: User can download simulation results as a CSV file from any result page
+- [~] **UI-04**: User can click "Run simulation" on the CCE page to execute `run_cce()` and see an interactive Plotly CCE vs bias plot — UI wiring complete and AppTest-verified, but blocked in the browser: `run_cce()` raises an uncaught devsim `RuntimeError` ("failed to converge at V≈60.5V") for the default DeviceConfig, so the plot is never reached. Upstream solver bug, not a UI defect — see phase VERIFICATION.md.
+- [~] **UI-05**: User can click "Run simulation" on the field map page to execute `run_field()` and see interactive Plotly plots of electric field and potential vs depth — UI wiring complete and AppTest-verified, but blocked in the browser: `run_field()` raises the same uncaught devsim `RuntimeError` ("failed to converge at V=66.0V") for the default DeviceConfig. Upstream solver bug, not a UI defect — see phase VERIFICATION.md.
+- [~] **UI-06**: User can download simulation results as a CSV file from any result page — CSV download confirmed working end-to-end in the browser on the C-V page only (real file fetched, valid columns/header). CCE and field-map pages never reach the download button on the default config due to UI-04/UI-05's upstream blocker.
 - [ ] **UI-07**: User can navigate between all pages without losing the device configuration set in the sidebar
 
 ### Geometry Viewer (VIZ)
@@ -185,33 +185,33 @@ Explicitly excluded.
 
 ### v5.0 (assigned by roadmapper)
 
-| Requirement | Phase | Status   |
-| ----------- | ----- | -------- |
-| PKG-01      | 35    | Complete |
-| PKG-02      | 35    | Complete |
-| PKG-03      | 35    | Complete |
-| LIB-01      | 36    | Complete |
-| LIB-02      | 36    | Complete |
-| LIB-03      | 36    | Complete |
-| LIB-04      | 37    | Complete |
-| LIB-05      | 36    | Complete |
-| LIB-06      | 37    | Complete |
-| LIB-07      | 37    | Complete |
-| UI-01       | 38    | Pending  |
-| UI-02       | 38    | Pending  |
-| UI-03       | 39    | Complete |
-| UI-04       | 39    | Complete |
-| UI-05       | 39    | Complete |
-| UI-06       | 39    | Complete |
-| UI-07       | 38    | Pending  |
-| VIZ-01      | 40    | Pending  |
-| VIZ-02      | 40    | Pending  |
-| VIZ-03      | 40    | Pending  |
-| FEAT-01     | 41    | Pending  |
-| FEAT-02     | 41    | Pending  |
-| FEAT-03     | 42    | Pending  |
-| FEAT-04     | 42    | Pending  |
-| FEAT-05     | 43    | Pending  |
+| Requirement | Phase | Status                                |
+| ----------- | ----- | ------------------------------------- |
+| PKG-01      | 35    | Complete                              |
+| PKG-02      | 35    | Complete                              |
+| PKG-03      | 35    | Complete                              |
+| LIB-01      | 36    | Complete                              |
+| LIB-02      | 36    | Complete                              |
+| LIB-03      | 36    | Complete                              |
+| LIB-04      | 37    | Complete                              |
+| LIB-05      | 36    | Complete                              |
+| LIB-06      | 37    | Complete                              |
+| LIB-07      | 37    | Complete                              |
+| UI-01       | 38    | Pending                               |
+| UI-02       | 38    | Pending                               |
+| UI-03       | 39    | Complete                              |
+| UI-04       | 39    | Blocked (upstream solver convergence) |
+| UI-05       | 39    | Blocked (upstream solver convergence) |
+| UI-06       | 39    | Partial (C-V page only)               |
+| UI-07       | 38    | Pending                               |
+| VIZ-01      | 40    | Pending                               |
+| VIZ-02      | 40    | Pending                               |
+| VIZ-03      | 40    | Pending                               |
+| FEAT-01     | 41    | Pending                               |
+| FEAT-02     | 41    | Pending                               |
+| FEAT-03     | 42    | Pending                               |
+| FEAT-04     | 42    | Pending                               |
+| FEAT-05     | 43    | Pending                               |
 
 **v5.0 Coverage:**
 
