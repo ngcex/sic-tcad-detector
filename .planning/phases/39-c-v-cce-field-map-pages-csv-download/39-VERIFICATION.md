@@ -1,0 +1,127 @@
+---
+phase: 39-c-v-cce-field-map-pages-csv-download
+verified: 2026-07-11T00:00:00Z
+human_verified: 2026-07-11T00:00:00Z
+status: blocked
+score: 2/4 must-haves confirmed working end-to-end in browser; 2/4 blocked by an upstream solver bug
+overrides_applied: 0
+human_verification:
+  - test: "On the C-V page, configure a 1D device in the sidebar, click 'Run simulation', and visually confirm the C-V curve and Mott-Schottky (1/C² vs V) Plotly charts render and are interactive (zoom/pan/hover)."
+    result: "PASSED. Both charts rendered correctly with proper axis labels and data (real devsim solve, not a mock). Plotly toolbar (zoom/pan/download-PNG/autoscale) present and functional, confirming interactivity."
+  - test: "On the C-V page, after running a simulation, click 'Download CSV' in the browser and open the downloaded file."
+    result: "PASSED. Real browser download triggered (GET .../media/*.csv -> 200 OK); fetched content confirmed valid: commented metadata header (software_version, generated timestamp, full device config) followed by the exact bias_V,capacitance_F,one_over_C2_cm4_per_F2,depletion_width_cm column line and real data rows."
+  - test: "On the CCE page, configure a 1D device, click 'Run simulation', and visually confirm the CCE vs bias Plotly chart renders with values in [0, 1] and a reference line at CCE=1.0, then click 'Download CSV'."
+    result: "FAILED. Clicking 'Run simulation' on a fresh, completely default DeviceConfig raises an uncaught RuntimeError from devsim: 'ramp_bias: failed to converge at V=60.542V: Convergence failure!' (app/workflows/cce.py:37 -> petringa/api/simulation.py:391 -> petringa/core/charge_collection.py:546 -> petringa/core/drift_diffusion.py:310). The page shows a raw Streamlit traceback instead of a chart. No chart, no download button ever appears. Root-caused to the petringa physics/solver layer, not the Phase 39 UI wiring (reproduced identically calling petringa.run_cce via the plain Python API, no Streamlit involved)."
+  - test: "On the Field Map page, configure a 1D device, click 'Run simulation', and visually confirm BOTH the E-field vs depth and potential vs depth Plotly charts render, then click 'Download CSV'."
+    result: "FAILED. Same class of failure as CCE: petringa.run_field(DeviceConfig()) (default bias_V=-100.0) raises 'RuntimeError: ramp_bias: failed to converge at V=66.000V: Convergence failure!' Reproduced directly via the plain petringa API (no Streamlit): `petringa.run_field(DeviceConfig())` fails identically. Probed a shallower bias (bias_V=-20.0) and confirmed it DOES converge (327-point result returned) — the solver fails only when ramping deep enough to approach full depletion for this device geometry, not universally. No chart, no download button ever appears at the default bias."
+  - test: "On each of the three pages, configure a 2D device (set half_width_um) in the sidebar and confirm the page shows a 1D-only warning banner and does NOT attempt to run or crash, especially on the Field Map page where run_field would otherwise silently return empty arrays and plot nothing."
+    result: "PASSED (spot-checked on CCE page). Selecting '2D' immediately shows the warning banner 'These workflows are 1D-only. 2D field visualization arrives in Phase 40 (geometry viewer). Set Dimensionality to 1D in the sidebar.' with no Run button, no chart, no traceback. Pre-check guard confirmed working correctly in the real browser, not just under AppTest mocks."
+---
+
+# Phase 39: C-V, CCE, Field Map Pages + CSV Download Verification Report
+
+**Phase Goal:** Users can run C-V, CCE, and field map simulations from the UI, see interactive Plotly results, and download the results as CSV files — the three core TCAD workflows are fully functional in the UI
+**Verified:** 2026-07-11
+**Status:** human_needed
+**Re-verification:** No — initial verification
+
+## Goal Achievement
+
+### Observable Truths
+
+| #   | Truth                                                                                                                                                                                    | Status                                                             | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Clicking "Run simulation" on the C-V page calls `run_cv()` with the current `DeviceConfig` and displays an interactive Plotly C-V curve and 1/C² vs V (Mott-Schottky) plot without error | ✓ VERIFIED (code path) / ? HUMAN (visual render)                   | `app/workflows/cv.py:40-46` calls `petringa.run_cv(cfg)` (module-attribute style) on button click, caches to `st.session_state["cv_result"]`, renders via `build_cv_figure`/`build_mott_schottky_figure`. `test_run_caches_result` proves the call fires and the render code path does not throw (`at.exception == []`). Real `run_cv` metadata (`petringa/api/simulation.py:106-119`) confirmed to supply `depletion_widths` and `one_over_C_squared` — exact keys `results.py` consumes; no key-mismatch risk. Visual chart rendering itself is outside AppTest's reach (see human_verification). |
+| 2   | Clicking "Run simulation" on the CCE page calls `run_cce()` and displays an interactive Plotly CCE vs bias plot with CCE values in [0, 1]                                                | ✓ VERIFIED (code path) / ? HUMAN (visual render)                   | `app/workflows/cce.py:36-41` calls `petringa.run_cce(cfg)`, caches to `cce_result`, renders via `build_cce_figure` (yaxis_range=[0,1.1], hline at 1.0). Real `run_cce` metadata (`petringa/api/simulation.py:401-409`) confirmed to supply `I_collected`/`I_generated` matching page/results.py usage. `test_run_caches_result` (test_app_cce_page.py) green.                                                                                                                                                                                                                                       |
+| 3   | Clicking "Run simulation" on the field map page calls `run_field()` and displays interactive Plotly plots of electric field and electrostatic potential vs depth                         | ✓ VERIFIED (code path) / ? HUMAN (visual render)                   | `app/workflows/field_map.py:40-47` calls `petringa.run_field(cfg)` once, caches to `field_result`, renders BOTH `efield_fig` and `potential_fig` from `build_field_figures` (a single call produces both, per plan). Real `run_field` metadata (`petringa/api/simulation.py:278-282`) confirmed to supply `potential`/`net_doping`. `test_run_caches_field_result` asserts `len(result.x) == 3` (fake ran) and no exception.                                                                                                                                                                        |
+| 4   | A "Download CSV" button appears on each result page after simulation completes and downloads a valid CSV file containing the simulation result arrays                                    | ✓ VERIFIED (bytes correctness) / ? HUMAN (actual browser download) | All three pages call `st.download_button("Download CSV", data=to_csv_bytes(result), file_name="{sim}_result.csv", mime="text/csv")` unconditionally alongside the charts. `to_csv_bytes` unit-tested for all three sim_types + ValueError path in `tests/test_app_csv_export.py` (4/4 passing) — verifies exact column headers, data values, and metadata header (software_version, device config, generated timestamp) round-trip via `pandas.read_csv(comment='#')`. AppTest cannot exercise an actual browser file download.                                                                     |
+
+**Score:** 4/4 truths' code paths verified; visual render + actual file download deferred to human verification (AppTest 1.55 has no `plotly_chart`/`download_button` accessor — this is a tooling limitation, not a code gap).
+
+### Required Artifacts
+
+| Artifact                            | Expected                                                                 | Status     | Details                                                                                                                                                                                                                                                      |
+| ----------------------------------- | ------------------------------------------------------------------------ | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `app/workflows/cv.py`               | 1D guard, Run→cache→render→download, `petringa.run_cv`                   | ✓ VERIFIED | Module-attribute call at line 41; pre-check guard at lines 32-38 (not try/except); download_button at 47-52; placeholder caption removed (grep 0 hits)                                                                                                       |
+| `app/workflows/cce.py`              | 1D guard, Run→cache→render→download, `petringa.run_cce`                  | ✓ VERIFIED | Module-attribute call at line 37; identical pre-check pattern; download_button at 42-47; caption removed                                                                                                                                                     |
+| `app/workflows/field_map.py`        | 1D pre-check, Run→cache→render (2 charts)→download, `petringa.run_field` | ✓ VERIFIED | Module-attribute call at line 41; pre-check at lines 32-38 BEFORE `run_field` (critical — see Key Link Verification); renders both efield_fig and potential_fig; download_button at 49-54; caption removed                                                   |
+| `app/components/results.py`         | Pure Plotly builders + `to_csv_bytes`, no `st.*`                         | ✓ VERIFIED | Exports `build_cv_figure`, `build_mott_schottky_figure`, `build_cce_figure`, `build_field_figures`, `to_csv_bytes` (146 lines). `grep -c "import streamlit"` returns 0. E-field builder does not re-multiply `result.x` by 1e4 (confirmed no `1e4` in file). |
+| `tests/test_app_cv_page.py`         | AppTest w/ mocked `run_cv`: no-crash, cache, 2D guard                    | ✓ VERIFIED | 3 tests, all passing; `monkeypatch.setattr` before `at.run()`                                                                                                                                                                                                |
+| `tests/test_app_cce_page.py`        | AppTest w/ mocked `run_cce`: no-crash, cache, 2D guard                   | ✓ VERIFIED | 3 tests, all passing                                                                                                                                                                                                                                         |
+| `tests/test_app_field_page.py`      | AppTest w/ mocked `run_field`: no-crash, cache, 2D guard                 | ✓ VERIFIED | 3 tests, all passing; explicitly guards against the "silent empty array" trap                                                                                                                                                                                |
+| `tests/test_app_csv_export.py`      | Pure serializer tests, all 3 sim_types + ValueError                      | ✓ VERIFIED | 4 tests, all passing; column headers match exactly; metadata header content confirmed                                                                                                                                                                        |
+| `tests/test_app_run_mockability.py` | Wave-0 spike proving `petringa.run_cv` mockable via module attribute     | ✓ VERIFIED | 1 test passing; establishes the seam used by all downstream page tests                                                                                                                                                                                       |
+
+### Key Link Verification
+
+| From                         | To                       | Via                                                                  | Status  | Details                                                                                                                                                                   |
+| ---------------------------- | ------------------------ | -------------------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app/workflows/cv.py`        | `petringa.run_cv`        | `petringa.run_cv(cfg)` in Run handler                                | ✓ WIRED | Literal module-attribute call confirmed; real `run_cv` metadata keys (`depletion_widths`, `one_over_C_squared`) match `results.py` consumption exactly                    |
+| `app/workflows/cv.py`        | `app.components.results` | `build_cv_figure`/`build_mott_schottky_figure`/`to_csv_bytes` import | ✓ WIRED | Import present; functions called on cached result                                                                                                                         |
+| `app/workflows/cce.py`       | `petringa.run_cce`       | `petringa.run_cce(cfg)` in Run handler                               | ✓ WIRED | Real `run_cce` metadata keys (`I_collected`, `I_generated`) match consumption                                                                                             |
+| `app/workflows/field_map.py` | `petringa.run_field`     | `petringa.run_field(cfg)` in Run handler                             | ✓ WIRED | Real `run_field` metadata keys (`potential`, `net_doping`) match consumption                                                                                              |
+| `app/workflows/field_map.py` | `app.components.results` | `build_field_figures`/`to_csv_bytes` import                          | ✓ WIRED | Import present; both figures rendered from one call                                                                                                                       |
+| `app/main.py`                | all 3 pages              | `st.Page(render_cv/...)` registration                                | ✓ WIRED | All three pages registered in `st.navigation()` with explicit `url_path` (cv, cce, field-map); device sidebar renders before `pg.run()` for cross-page config persistence |
+
+**1D-only guard pattern (critical check):** All three pages implement the guard identically as a PRE-CHECK (`if cfg.half_width_um is not None: st.warning(...); st.stop()`) placed BEFORE the `petringa.run_*` call — never a try/except. This is verified as load-bearing specifically for `field_map.py`: confirmed by reading `petringa/api/simulation.py:133-306` that `run_field` does NOT raise for a 2D config — it runs a full devsim solve and returns `x_out=np.array([])`, `y_out=np.array([])` at lines 293-294. A try/except would not only fail to catch anything, it would also waste a full expensive solve while silently plotting nothing. The pre-check avoids calling `run_field` at all for 2D configs. `run_cv`/`run_cce` do raise `NotImplementedError` for 2D (confirmed at lines 82-88, 377-383), but the pages correctly use the same pre-check pattern uniformly rather than relying on exception handling for two of the three and needing something different for the third.
+
+### Requirements Coverage
+
+| Requirement | Source Plan         | Description                                            | Status                                                | Evidence                                                             |
+| ----------- | ------------------- | ------------------------------------------------------ | ----------------------------------------------------- | -------------------------------------------------------------------- |
+| UI-03       | 39-01, 39-02, 39-03 | Run C-V, see Plotly C-V + Mott-Schottky                | ✓ SATISFIED (code) / ? NEEDS HUMAN (visual)           | cv.py wired; chart render unverifiable headlessly                    |
+| UI-04       | 39-01, 39-02, 39-03 | Run CCE, see Plotly CCE vs bias                        | ✓ SATISFIED (code) / ? NEEDS HUMAN (visual)           | cce.py wired                                                         |
+| UI-05       | 39-01, 39-02, 39-04 | Run field map, see Plotly E-field + potential vs depth | ✓ SATISFIED (code) / ? NEEDS HUMAN (visual)           | field_map.py wired; both charts from one call                        |
+| UI-06       | 39-02, 39-03, 39-04 | CSV download on every result page                      | ✓ SATISFIED (bytes) / ? NEEDS HUMAN (actual download) | to_csv_bytes fully unit-tested; download_button wired on all 3 pages |
+
+No orphaned requirements — ROADMAP.md requirements table shows UI-03/04/05/06 all mapped to Phase 39 with no additional unclaimed IDs.
+
+### Anti-Patterns Found
+
+| File | Line | Pattern    | Severity | Impact                                                                                                                                                                                                                                                                                                  |
+| ---- | ---- | ---------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| —    | —    | None found | —        | `grep` for TBD/FIXME/XXX/TODO/HACK/placeholder/"coming soon"/"not yet implemented" across cv.py, cce.py, field_map.py, results.py returns zero hits. Placeholder caption "Running this simulation is implemented in Phase 39." fully removed from all three pages (grep across app/ returns zero hits). |
+
+### Behavioral Spot-Checks / Test Suite Execution
+
+| Behavior                                                          | Command                                                                                                                                                             | Result                                                                                     | Status |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | ------ |
+| Full phase-relevant test suite                                    | `uv run pytest tests/test_app_cv_page.py tests/test_app_cce_page.py tests/test_app_field_page.py tests/test_app_csv_export.py tests/test_app_run_mockability.py -v` | 14 passed in 1.75s                                                                         | ✓ PASS |
+| Broader app regression suite                                      | `uv run pytest tests/ -k app -v`                                                                                                                                    | 32 passed, 0 failed                                                                        | ✓ PASS |
+| No test asserts on non-existent AppTest 1.55 accessors            | `grep -n "plotly_chart\|download_button" tests/test_app_{cv,cce,field}_page.py`                                                                                     | Only present in docstring comments explaining the limitation, never as an assertion target | ✓ PASS |
+| Real facade metadata contract matches page/results.py consumption | Manual read of `petringa/api/simulation.py` return blocks for run_cv (106-119), run_cce (401-409), run_field (278-306)                                              | All three confirmed to supply exactly the metadata keys consumed downstream                | ✓ PASS |
+
+### Human Verification Required
+
+Browser click-through completed 2026-07-11 (post-initial-verification). See YAML frontmatter `human_verification` section (5 items, now with `result` recorded) for full detail. Summary: C-V page (UI-03, UI-06) and the 2D pre-check guard (all pages) PASSED in the real browser. CCE (UI-04) and Field Map (UI-05) FAILED — not from UI code defects, but because `petringa.run_cce()` and `petringa.run_field()` raise an uncaught `RuntimeError` from devsim ("ramp_bias: failed to converge") for the plain default `DeviceConfig()`, before any chart or download button is ever reached.
+
+### Gaps Summary — UPDATED after browser verification
+
+**Code/wiring: no gaps.** All plan must-haves are implemented, wired, and covered by passing automated tests. The 1D-only guard is correctly a pre-check on all three pages, confirmed working in the real browser (not just AppTest mocks). No placeholder captions or debt markers remain.
+
+**Functional: 2 of 4 requirements blocked by an upstream physics/solver bug, not by this phase's code.** Independently reproduced with the plain `petringa` API (no Streamlit involved):
+
+```python
+import petringa
+from petringa import DeviceConfig
+petringa.run_field(DeviceConfig())   # RuntimeError: ramp_bias: failed to converge at V=66.000V
+petringa.run_cce(DeviceConfig())     # RuntimeError: ramp_bias: failed to converge at V=60.542V (via cce_vs_bias)
+```
+
+Both fail in `petringa/core/drift_diffusion.py:ramp_bias`, deep in the DC bias ramp toward the default target (`run_field` defaults to `bias_V=-100.0`), for the exact same default device geometry that `run_cv` handles without issue. A probe at a shallower bias (`run_field(DeviceConfig(), bias_V=-20.0)`) converged cleanly (327-point result) — the solver only fails when the ramp approaches deep depletion for this device, so this is a solver-robustness/continuation-strategy issue, not a universal break.
+
+This is out of scope for a UI-wiring phase to fix (it requires physics/numerics changes to `ramp_bias`, e.g. adaptive step-halving, damping, or better default bias targets) and has been flagged as a separate follow-up task. The Phase 39 code itself does exactly what it was asked to do — call the facade, cache the result, render, offer download — and does so correctly for every code path AppTest can and cannot observe. The facade it calls into is the part that breaks first for two of the three simulation types at their current defaults.
+
+**Disposition options for this phase** (recommend the user decide):
+
+1. Hold Phase 39 open until the upstream `ramp_bias` convergence fix lands, then re-verify UI-04/UI-05/UI-06(partial).
+2. Accept the phase as wiring-complete (UI-03 done, UI-04/UI-05 correctly wired but functionally blocked upstream) and downgrade/defer UI-04/UI-05 acceptance to a follow-up phase alongside the solver fix.
+3. As a near-term UX improvement (new scope, not covered by the current plan), wrap the three `petringa.run_*` calls in a try/except that shows a friendly `st.error` instead of a raw traceback — does not fix the underlying non-convergence but stops the page from crashing ungracefully.
+
+REQUIREMENTS.md has been corrected to reflect this: UI-03 Complete, UI-04/UI-05 marked Blocked (upstream solver convergence), UI-06 marked Partial (C-V page only). It previously showed all four as Complete, based on wiring/AppTest evidence alone before the browser click-through — that was inaccurate and has been fixed.
+
+---
+
+_Verified (code/AppTest): 2026-07-11_
+_Human-verified (browser): 2026-07-11_
+_Verifier: Claude (gsd-verifier + manual browser follow-up)_
