@@ -4,14 +4,14 @@ milestone: v5.0
 milestone_name: Simulator Library & Streamlit UI
 status: verifying
 stopped_at: Completed 39-04-PLAN.md
-last_updated: "2026-07-11T12:21:37.443Z"
+last_updated: "2026-07-11T12:25:07.434Z"
 last_activity: 2026-07-11
 progress:
   total_phases: 25
-  completed_phases: 12
+  completed_phases: 13
   total_plans: 33
-  completed_plans: 32
-  percent: 48
+  completed_plans: 33
+  percent: 52
 ---
 
 # Project State
@@ -30,7 +30,7 @@ Plan: 3 of 3
 Status: Phase complete — ready for verification
 Last activity: 2026-07-11
 
-Progress: [██████████] 97%
+Progress: [██████████] 100%
 
 ## v5.0 Phase Map
 
@@ -65,6 +65,7 @@ Progress: [██████████] 97%
 | 39           | 01     | 12min    | 2       | 1     |
 | Phase 39 P02 | 25 min | 2 tasks  | 2 files |
 | Phase 39 P04 | 15min  | 1 tasks  | 2 files |
+| Phase 39 P03 | 20min  | 2 tasks  | 4 files |
 
 ## Accumulated Context
 
@@ -104,6 +105,7 @@ Progress: [██████████] 97%
 - `app/components/results.py` (39-02) is the single shared module for all Phase 39 result pages — five pure Plotly `go.Figure` builders (`build_cv_figure`, `build_mott_schottky_figure`, `build_cce_figure`, `build_field_figures`) plus `to_csv_bytes(result)`, no `st.*` calls, consumed verbatim by 39-03/39-04.
 - `uv sync` alone only materializes `pyproject.toml`'s base `[project.dependencies]`; `pytest` lives in `[project.optional-dependencies].dev` and must be synced via `uv sync --extra dev` or `uv run pytest` silently falls back to a non-project `pytest` on `PATH` that cannot see the venv's installed packages (observed as a spurious `ModuleNotFoundError: plotly` during 39-02 test collection).
 - Plan 39-04 complete: field map page mirrors the sibling 39-03 page/test structure (`petringa.run_field` referenced as a module attribute for monkeypatch mockability); 1D-only pre-check placed BEFORE `run_field` since it silently returns empty x/y arrays for 2D configs instead of raising — see `39-04-SUMMARY.md`.
+- Plan 39-03 complete: C-V and CCE pages mirror the 39-04 field_map page/test structure exactly (`petringa.run_cv` / `petringa.run_cce` referenced as module attributes for monkeypatch mockability); both use a 1D-only pre-check before the facade call since `run_cv`/`run_cce` raise `NotImplementedError` for 2D configs (unlike `run_field`, which silently returns empty arrays) — see `39-03-SUMMARY.md`.
 
 ### Tech Debt Resolved by v5.0 Phases
 
@@ -123,6 +125,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-11T12:21:37.424Z
+Last session: 2026-07-11T12:24:13.417Z
 Stopped at: Completed 39-04-PLAN.md
 Resume file: None
