@@ -38,7 +38,14 @@ def render() -> None:
         st.stop()
 
     if st.button("Run simulation"):
-        st.session_state["field_result"] = petringa.run_field(cfg)
+        try:
+            st.session_state["field_result"] = petringa.run_field(cfg)
+        except RuntimeError as e:
+            st.error(
+                f"Simulation failed to converge: {e}\n\n"
+                "Try adjusting device parameters (e.g. epi thickness, doping) "
+                "in the sidebar and running again."
+            )
 
     result = st.session_state.get("field_result")
     if result is not None:
