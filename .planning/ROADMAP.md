@@ -470,8 +470,23 @@ Plans:
 2. Clicking "Run simulation" on the CCE page calls `run_cce()` and displays an interactive Plotly CCE vs bias plot with CCE values in [0, 1]
 3. Clicking "Run simulation" on the field map page calls `run_field()` and displays interactive Plotly plots of electric field and electrostatic potential vs depth
 4. A "Download CSV" button appears on each result page after simulation completes and downloads a valid CSV file containing the simulation result arrays
-   **Plans**: TBD
+   **Plans**: 4 plans
    **UI hint**: yes
+
+Plans:
+
+**Wave 1**
+
+- [ ] 39-01-PLAN.md — Wave 0 prerequisites: materialize plotly via `uv sync` + AppTest/monkeypatch mockability spike proving `petringa.run_*` is interceptable (UI-03, UI-04, UI-05)
+
+**Wave 2** *(depends on 39-01)*
+
+- [ ] 39-02-PLAN.md — Shared `app/components/results.py`: pure Plotly figure builders + `to_csv_bytes` serializer (per-sim_type columns + commented traceability header) + pure serializer unit test (UI-03, UI-04, UI-05, UI-06)
+
+**Wave 3** *(depends on 39-01, 39-02; 39-03 and 39-04 run in parallel — no file overlap)*
+
+- [ ] 39-03-PLAN.md — C-V + CCE pages: 1D guard → Run → session_state cache → Plotly charts → CSV download, with mocked-facade AppTests (UI-03, UI-04, UI-06)
+- [ ] 39-04-PLAN.md — Field map page: 1D pre-check → Run → cache → E-field + potential Plotly charts (one call) → CSV download, with mocked-facade AppTest (UI-05, UI-06)
 
 ### Phase 40: Geometry Viewer
 
