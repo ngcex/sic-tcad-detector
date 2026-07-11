@@ -477,7 +477,7 @@ Plans:
 
 **Wave 1**
 
-- [ ] 39-01-PLAN.md — Wave 0 prerequisites: materialize plotly via `uv sync` + AppTest/monkeypatch mockability spike proving `petringa.run_*` is interceptable (UI-03, UI-04, UI-05)
+- [x] 39-01-PLAN.md — Wave 0 prerequisites: materialize plotly via `uv sync` + AppTest/monkeypatch mockability spike proving `petringa.run_*` is interceptable (UI-03, UI-04, UI-05)
 
 **Wave 2** *(depends on 39-01)*
 
@@ -585,7 +585,7 @@ Plans:
 | 36. Core API — DeviceConfig + C-V + Field       | v5.0      | 3/3 | Complete    | 2026-07-02 |
 | 37. Core API — CCE + Facades + ParametricSweep  | v5.0      | 3/3 | Complete    | 2026-07-09 |
 | 38. Streamlit Shell + Device Config Page        | v5.0      | 3/3 | Complete   | 2026-07-10 |
-| 39. C-V, CCE, Field Map Pages + CSV Download    | v5.0      | 0/0            | Not started | -          |
+| 39. C-V, CCE, Field Map Pages + CSV Download    | v5.0      | 1/4 | In Progress|  |
 | 40. Geometry Viewer                             | v5.0      | 0/0            | Not started | -          |
 | 41. Radiation Damage + Dark Current Pages       | v5.0      | 0/0            | Not started | -          |
 | 42. Microdosimetry Page + Batch Sweep Page      | v5.0      | 0/0            | Not started | -          |
