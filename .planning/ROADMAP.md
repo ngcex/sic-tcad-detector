@@ -486,7 +486,7 @@ Plans:
 **Wave 3** *(depends on 39-01, 39-02; 39-03 and 39-04 run in parallel — no file overlap)*
 
 - [ ] 39-03-PLAN.md — C-V + CCE pages: 1D guard → Run → session_state cache → Plotly charts → CSV download, with mocked-facade AppTests (UI-03, UI-04, UI-06)
-- [ ] 39-04-PLAN.md — Field map page: 1D pre-check → Run → cache → E-field + potential Plotly charts (one call) → CSV download, with mocked-facade AppTest (UI-05, UI-06)
+- [x] 39-04-PLAN.md — Field map page: 1D pre-check → Run → cache → E-field + potential Plotly charts (one call) → CSV download, with mocked-facade AppTest (UI-05, UI-06)
 
 ### Phase 40: Geometry Viewer
 
@@ -585,7 +585,7 @@ Plans:
 | 36. Core API — DeviceConfig + C-V + Field       | v5.0      | 3/3 | Complete    | 2026-07-02 |
 | 37. Core API — CCE + Facades + ParametricSweep  | v5.0      | 3/3 | Complete    | 2026-07-09 |
 | 38. Streamlit Shell + Device Config Page        | v5.0      | 3/3 | Complete   | 2026-07-10 |
-| 39. C-V, CCE, Field Map Pages + CSV Download    | v5.0      | 2/4 | In Progress|  |
+| 39. C-V, CCE, Field Map Pages + CSV Download    | v5.0      | 3/4 | In Progress|  |
 | 40. Geometry Viewer                             | v5.0      | 0/0            | Not started | -          |
 | 41. Radiation Damage + Dark Current Pages       | v5.0      | 0/0            | Not started | -          |
 | 42. Microdosimetry Page + Batch Sweep Page      | v5.0      | 0/0            | Not started | -          |

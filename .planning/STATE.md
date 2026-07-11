@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Simulator Library & Streamlit UI
-status: executing
-stopped_at: Completed 39-02-PLAN.md
-last_updated: "2026-07-11T12:07:35.947Z"
+status: verifying
+stopped_at: Completed 39-04-PLAN.md
+last_updated: "2026-07-11T12:21:37.443Z"
 last_activity: 2026-07-11
 progress:
   total_phases: 25
   completed_phases: 12
   total_plans: 33
-  completed_plans: 31
+  completed_plans: 32
   percent: 48
 ---
 
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-06-26)
 
 Phase: 39 — c-v-cce-field-map-pages-csv-download
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-11
 
-Progress: [█████████░] 94%
+Progress: [██████████] 97%
 
 ## v5.0 Phase Map
 
@@ -64,6 +64,7 @@ Progress: [█████████░] 94%
 | 35           | 02     | 95min    | 2/2     | 88    |
 | 39           | 01     | 12min    | 2       | 1     |
 | Phase 39 P02 | 25 min | 2 tasks  | 2 files |
+| Phase 39 P04 | 15min  | 1 tasks  | 2 files |
 
 ## Accumulated Context
 
@@ -102,6 +103,7 @@ Progress: [█████████░] 94%
 - **Phase 39-02 CCE CSV schema (confirmed by source read, not devsim run):** `cce_vs_bias`'s `I_collected` is a bias-aligned numpy array (`I_sorted`) -> CSV column `I_collected_A_per_cm2`; `I_generated` is a scalar total generated current (`Q*np.trapezoid(...)`) -> `# I_generated_A_per_cm2:` metadata header line, never a broadcast column. Ground truth for all future CCE CSV/export work — see `petringa/core/charge_collection.py` `cce_vs_bias` return block and `39-02-SUMMARY.md`.
 - `app/components/results.py` (39-02) is the single shared module for all Phase 39 result pages — five pure Plotly `go.Figure` builders (`build_cv_figure`, `build_mott_schottky_figure`, `build_cce_figure`, `build_field_figures`) plus `to_csv_bytes(result)`, no `st.*` calls, consumed verbatim by 39-03/39-04.
 - `uv sync` alone only materializes `pyproject.toml`'s base `[project.dependencies]`; `pytest` lives in `[project.optional-dependencies].dev` and must be synced via `uv sync --extra dev` or `uv run pytest` silently falls back to a non-project `pytest` on `PATH` that cannot see the venv's installed packages (observed as a spurious `ModuleNotFoundError: plotly` during 39-02 test collection).
+- Plan 39-04 complete: field map page mirrors the sibling 39-03 page/test structure (`petringa.run_field` referenced as a module attribute for monkeypatch mockability); 1D-only pre-check placed BEFORE `run_field` since it silently returns empty x/y arrays for 2D configs instead of raising — see `39-04-SUMMARY.md`.
 
 ### Tech Debt Resolved by v5.0 Phases
 
@@ -121,6 +123,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-11T12:07:35.941Z
-Stopped at: Completed 39-02-PLAN.md
+Last session: 2026-07-11T12:21:37.424Z
+Stopped at: Completed 39-04-PLAN.md
 Resume file: None
