@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Simulator Library & Streamlit UI
-status: completed
-stopped_at: Phase 38 UI-SPEC approved
-last_updated: "2026-07-10T14:28:13.272Z"
-last_activity: 2026-07-10 -- Phase 38 marked complete
+status: executing
+stopped_at: Completed 39-01-PLAN.md
+last_updated: "2026-07-11T11:56:36.756Z"
+last_activity: 2026-07-11
 progress:
   total_phases: 25
   completed_phases: 12
-  total_plans: 29
-  completed_plans: 29
+  total_plans: 33
+  completed_plans: 30
   percent: 48
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-26)
 
 **Core value:** Installable Python library + Streamlit UI that makes the SiC TCAD simulator usable by the Petringa group without reading source code
-**Current focus:** Phase 38 — streamlit-shell-device-config-page
+**Current focus:** Phase 39 — c-v-cce-field-map-pages-csv-download
 
 ## Current Position
 
-Phase: 38 — COMPLETE
-Plan: 1 of 3
-Status: Phase 38 complete
-Last activity: 2026-07-10 -- Phase 38 marked complete
+Phase: 39 — c-v-cce-field-map-pages-csv-download
+Plan: 2 of 3
+Status: Ready to execute
+Last activity: 2026-07-11
 
-Progress: [██████████] 100% (Phase 35)
+Progress: [█████████░] 91%
 
 ## v5.0 Phase Map
 
@@ -62,6 +62,7 @@ Progress: [██████████] 100% (Phase 35)
 | ----- | ---- | -------- | ----- | ----- |
 | 35    | 01   | 12min    | 1     | 4     |
 | 35    | 02   | 95min    | 2/2   | 88    |
+| 39    | 01   | 12min    | 2     | 1     |
 
 ## Accumulated Context
 
@@ -96,6 +97,7 @@ Progress: [██████████] 100% (Phase 35)
 - Plan 35-02 complete: `src/` renamed to `petringa/core/`, all 326 imports + 81 notebook imports + 6 string-literal refs rewritten, zero residual `from src.` confirmed — see `35-02-SUMMARY.md`
 - `Path(__file__).parent` chains must be re-verified whenever a module moves to a different directory depth — `microdosimetry.py`'s `data_dir` resolution needed one more `.parent` after the `src/` -> `petringa/core/` rename added a nesting level (fixed in 35-02)
 - **PKG-03 acceptance gate redefined:** bare single-process `pytest -q` is unsatisfiable due to devsim resource exhaustion (proven to also crash on the pre-refactor commit `fe3b43c`) — per-file/per-class test isolation is the durable convention for all future phases' verification steps involving DD-heavy devsim tests. All 25 test modules, including every `@pytest.mark.slow` file, pass individually.
+- **Phase 39 page import structure (RESEARCH A6, confirmed by 39-01 spike):** `petringa.run_*` facades must be referenced as module attributes (`import petringa; petringa.run_cv(cfg)`) in page code, never `from petringa import run_cv` — empirically proven mockable via `monkeypatch.setattr(petringa, "run_cv", fake)` under `AppTest.from_function` in `tests/test_app_run_mockability.py`. Mandatory for 39-03/39-04 page implementations.
 
 ### Tech Debt Resolved by v5.0 Phases
 
@@ -115,6 +117,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-10T09:02:23.875Z
-Stopped at: Phase 38 UI-SPEC approved
-Resume file: .planning/phases/38-streamlit-shell-device-config-page/38-UI-SPEC.md
+Last session: 2026-07-11T11:56:36.749Z
+Stopped at: Completed 39-01-PLAN.md
+Resume file: None
