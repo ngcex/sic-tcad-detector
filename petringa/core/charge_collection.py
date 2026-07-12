@@ -460,10 +460,20 @@ def cce_vs_bias(
     -------
     result : dict
         Dictionary with:
-        - "voltages": numpy array of applied voltages (V)
-        - "cce_values": numpy array of CCE values
-        - "I_collected": numpy array of collected currents (A/cm^2)
+        - "voltages": numpy array of applied voltages actually reached (V) —
+          shorter than the requested V_range if the DD solver hit a
+          convergence wall (typically full depletion / punch-through) partway
+          through the sweep; see "truncated".
+        - "cce_values": numpy array of CCE values, same length as "voltages"
+        - "I_collected": numpy array of collected currents (A/cm^2), same
+          length as "voltages"
         - "I_generated": total generated current (A/cm^2)
+        - "truncated": True if the solver failed to converge before reaching
+          the end of V_range (a partial result is returned instead of
+          raising); False if the full requested sweep converged
+        - "requested_v_stop": the most extreme (deepest reverse bias) voltage
+          in V_range, for comparison against the last entry of "voltages"
+          when "truncated" is True
     """
     from petringa.core.drift_diffusion import create_dd_device, ramp_bias
 
@@ -520,9 +530,6 @@ def cce_vs_bias(
     Q = 1.602e-19
     I_generated = Q * np.trapezoid(gen_values, x_nodes)
 
-    cce_values = []
-    I_collected_list = []
-
     # Sort voltages for stable ramping (0V first, then increasingly negative)
     # We need to track the ramp order
     sorted_indices = np.argsort(-V_range)  # descending: 0, -10, -20, ...
@@ -530,6 +537,8 @@ def cce_vs_bias(
 
     cce_sorted = np.zeros(len(V_range))
     I_sorted = np.zeros(len(V_range))
+    reached_mask = np.zeros(len(V_range), dtype=bool)
+    truncated = False
 
     try:
         for idx, V_target in zip(sorted_indices, sorted_V):
@@ -543,7 +552,20 @@ def cce_vs_bias(
             # So reverse bias -40V on diode = cathode at +40V
             cathode_V = -V_target  # e.g., V_target=-40 -> cathode_V=+40
 
-            ramp_bias(device_info, cathode_V, contact="cathode", V_step=0.5)
+            try:
+                ramp_bias(device_info, cathode_V, contact="cathode", V_step=0.5)
+            except RuntimeError as e:
+                # Typically full depletion / punch-through: the DD solver's
+                # Newton iteration stops converging once the depletion edge
+                # reaches the back contact. This is a physical sweep
+                # endpoint, not a bug — stop here and return the converged
+                # portion rather than raising (mirrors cv_sweep's behavior).
+                logger.warning(
+                    f"cce_vs_bias: stopped sweep at V={V_target:.1f}V "
+                    f"(requested down to {V_range.min():.1f}V): {e}"
+                )
+                truncated = True
+                break
 
             # Add generation and re-solve
             add_generation_to_dd(device_info, gen_values)
@@ -563,6 +585,7 @@ def cce_vs_bias(
 
             cce_sorted[idx] = cce
             I_sorted[idx] = I_coll
+            reached_mask[idx] = True
 
             logger.info(
                 f"cce_vs_bias: V={V_target:.1f}V, CCE={cce:.4f}, "
@@ -586,11 +609,17 @@ def cce_vs_bias(
         except Exception:
             pass
 
+    # Keep only the bias points that actually converged, in their original
+    # V_range order — drops the zero-filled placeholders for points past a
+    # mid-sweep convergence failure (an unreached point defaulting to
+    # cce_values=0 would be indistinguishable from a genuine CCE=0).
     return {
-        "voltages": V_range,
-        "cce_values": cce_sorted,
-        "I_collected": I_sorted,
+        "voltages": V_range[reached_mask],
+        "cce_values": cce_sorted[reached_mask],
+        "I_collected": I_sorted[reached_mask],
         "I_generated": I_generated,
+        "truncated": truncated,
+        "requested_v_stop": float(V_range.min()),
     }
 
 

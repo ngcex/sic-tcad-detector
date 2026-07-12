@@ -45,6 +45,14 @@ def render() -> None:
 
     result = st.session_state.get("cce_result")
     if result is not None:
+        if result.metadata.get("truncated"):
+            st.warning(
+                f"Sweep stopped at {result.x.min():.1f} V (requested down to "
+                f"{result.metadata['requested_v_stop']:.1f} V) — the solver "
+                "reached full depletion / punch-through of the epi layer, "
+                "which is a physical sweep endpoint, not an error. Results "
+                "below reflect only the converged portion."
+            )
         st.plotly_chart(build_cce_figure(result))
         st.download_button(
             "Download CSV",
