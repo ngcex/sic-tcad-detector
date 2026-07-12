@@ -73,25 +73,109 @@ def dose_rate_to_generation(dose_rate_Gy_s, rho_g_cm3=RHO_SIC, E_pair_eV=E_PAIR_
 # ---------------------------------------------------------------------------
 
 
-def alpha_generation_profile(
-    x_cm, alpha_range_cm=15e-4, total_energy_eV=5.486e6, E_pair_eV=E_PAIR_SIC_EV
-):
-    """Spatial e-h pair generation profile for Am-241 alpha particles in SiC.
+def alpha_depth_shape(x_cm, alpha_range_cm=15e-4, bragg_peak_ratio=None):
+    """Unnormalized spatial shape of the alpha e-h pair generation profile.
 
-    Uses a smooth profile: approximately uniform from 0 to ~0.8*range,
-    then smooth erfc roll-off (width ~0.1*range) to avoid numerical ringing
-    in the DD solver.
+    Approximately uniform (or, if `bragg_peak_ratio` is set, linearly
+    rising) from 0 to ~0.8*range, then smooth erfc roll-off (width
+    ~0.1*range) to avoid numerical ringing in the DD solver. Pure
+    function of `x_cm` — no normalization, no assumption that `x_cm` is
+    sorted or evenly spaced, safe to evaluate on unordered mesh node
+    arrays (e.g. a 2D device's node coordinates).
 
     Parameters
     ----------
     x_cm : array_like
         Depth positions in SiC (cm), measured from detector entrance.
+        Values are NOT required to be sorted.
+    alpha_range_cm : float
+        Alpha particle range in SiC (cm). Default: 15e-4 (15 um).
+    bragg_peak_ratio : float or None
+        If given, linearly ramps the flat region from 1.0 (entrance) to
+        this ratio (just before the erfc roll-off), approximating the
+        real Bragg-curve rise in stopping power near end-of-range instead
+        of a flat box. Default None (flat box, original behavior).
+
+        QUALITATIVE shape correction, not a calibrated physical value: a
+        real peak/entrance stopping-power ratio for a 5.486 MeV alpha in
+        4H-SiC requires ASTAR/SRIM data this project does not have
+        offline access to (same constraint as the kappa(E) NIST PSTAR
+        data gap — see `data/srim/README.md`). Order-of-magnitude
+        literature reasoning (Bethe-Bloch shape) suggests ~2.5-3x, well
+        below a therapeutic proton's Bragg ratio (~30-50x, per Bortfeld
+        1997) since an Am-241 alpha starts already well up its own
+        stopping-power curve. Do NOT treat any specific value as
+        validated — if precision matters, source a real ASTAR-Si or
+        SRIM-4H-SiC stopping power table first (audit finding Mj-5,
+        PHYSICS_AUDIT_v5.md).
+
+    Returns
+    -------
+    shape : ndarray
+        Unnormalized profile shape, same length as x_cm. Peaks at 1.0
+        (bragg_peak_ratio=None) or bragg_peak_ratio (otherwise); callers
+        normalize as needed (to total deposited energy, to a peak
+        generation rate, etc.).
+    """
+    x = np.asarray(x_cm, dtype=float)
+    R = alpha_range_cm
+
+    # Transition region parameters
+    x_flat = 0.8 * R  # flat/rising region ends at 80% of range
+    sigma = 0.1 * R  # roll-off width (10% of range)
+
+    if bragg_peak_ratio is None:
+        # Flat-box shape (default: see docstring on why a calibrated peak
+        # shape isn't available offline).
+        shape_factor = np.ones_like(x)
+    else:
+        # Linear ramp from 1.0 (entrance) to bragg_peak_ratio (end of the
+        # flat/rising region, just before the erfc roll-off) — a
+        # QUALITATIVE stand-in for the real (nonlinear) Bragg-Kleeman rise
+        # in stopping power near end-of-range. See docstring: not calibrated.
+        shape_factor = 1.0 + (bragg_peak_ratio - 1.0) * np.clip(x / x_flat, 0.0, 1.0)
+
+    # Smooth roll-off to zero beyond the flat/rising region.
+    # erfc((x - x_flat) / (sqrt(2) * sigma)) transitions from 2 to 0.
+    # Divide by 2 to get transition from 1 to 0.
+    rolloff = 0.5 * erfc((x - x_flat) / (np.sqrt(2) * sigma))
+    return shape_factor * rolloff
+
+
+def alpha_generation_profile(
+    x_cm,
+    alpha_range_cm=15e-4,
+    total_energy_eV=5.486e6,
+    E_pair_eV=E_PAIR_SIC_EV,
+    bragg_peak_ratio=None,
+):
+    """Spatial e-h pair generation profile for Am-241 alpha particles in SiC.
+
+    Evaluates `alpha_depth_shape` and normalizes it so the total number
+    of generated e-h pairs matches the alpha's deposited energy. Requires
+    `x_cm` to be SORTED and evenly-representative of the integration
+    domain (uses `np.diff`/trapezoidal integration) — for an unordered
+    array (e.g. raw mesh node coordinates), use `alpha_depth_shape`
+    directly and normalize separately (see `charge_collection_2d.py`'s
+    `cce_lateral_scan` for an example: peak-normalized, not
+    energy-normalized).
+
+    Parameters
+    ----------
+    x_cm : array_like
+        Depth positions in SiC (cm), measured from detector entrance.
+        Must be sorted (ascending or descending) for the trapezoidal
+        normalization integral to be meaningful.
     alpha_range_cm : float
         Alpha particle range in SiC (cm). Default: 15e-4 (15 um).
     total_energy_eV : float
         Total kinetic energy of alpha particle (eV). Default: 5.486e6 (Am-241).
     E_pair_eV : float
         Electron-hole pair creation energy (eV). Default: 7.8 (4H-SiC).
+    bragg_peak_ratio : float or None
+        See `alpha_depth_shape`. Default None (flat box, original
+        behavior — kept as default; see that function's docstring for
+        why a calibrated peak shape isn't available offline).
 
     Returns
     -------
@@ -102,21 +186,17 @@ def alpha_generation_profile(
     Notes
     -----
     The profile is normalized so that integral(G(x) dx) = total_energy_eV / E_pair_eV,
-    giving the total number of e-h pairs generated per alpha particle.
+    giving the total number of e-h pairs generated per alpha particle,
+    REGARDLESS of `bragg_peak_ratio` — a local peak/entrance ratio changes
+    the SHAPE, not the total charge. This matters for depth-dependent
+    quantities (track containment near end-of-range, depth-resolved
+    collection efficiency) but is a second-order correction for
+    integrated CCE in a fully-depleted, uniform-collection detector.
     """
     x = np.asarray(x_cm, dtype=float)
-    R = alpha_range_cm
+    profile = alpha_depth_shape(x, alpha_range_cm, bragg_peak_ratio)
 
-    # Transition region parameters
-    x_flat = 0.8 * R  # flat region ends at 80% of range
-    sigma = 0.1 * R  # roll-off width (10% of range)
-
-    # Smooth profile: erfc roll-off from flat region
-    # erfc((x - x_flat) / (sqrt(2) * sigma)) transitions from 2 to 0
-    # Divide by 2 to get transition from 1 to 0
-    profile = 0.5 * erfc((x - x_flat) / (np.sqrt(2) * sigma))
-
-    # Normalize so integral = total pairs per alpha
+    # Normalize so integral = total pairs per alpha (independent of shape)
     total_pairs = total_energy_eV / E_pair_eV
     dx = np.diff(x)
     # Trapezoidal integration for normalization
