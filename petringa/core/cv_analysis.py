@@ -144,9 +144,20 @@ def cv_sweep(device_info, V_range, eps_r=9.7, area=1.0):
     -------
     result : dict
         Dictionary with:
-        - "voltages": numpy array of voltages (V), in conventional form
-        - "depletion_widths": numpy array of W values (cm)
-        - "capacitance": numpy array of C values (F or F/cm^2)
+        - "voltages": numpy array of voltages actually reached (V), in
+          conventional form — shorter than the requested V_range if the DD
+          solver hit a convergence wall (typically full depletion /
+          punch-through) partway through the sweep; see "truncated".
+        - "depletion_widths": numpy array of W values (cm), same length as
+          "voltages"
+        - "capacitance": numpy array of C values (F or F/cm^2), same length
+          as "voltages"
+        - "truncated": True if the solver failed to converge before reaching
+          the end of V_range (a partial result is returned instead of
+          raising); False if the full requested sweep converged
+        - "requested_v_stop": the most extreme (deepest reverse bias) voltage
+          in V_range, for comparison against voltages.min() when "truncated"
+          is True
     """
     V_range = np.asarray(V_range, dtype=float)
     device = device_info["device_name"]
@@ -154,6 +165,7 @@ def cv_sweep(device_info, V_range, eps_r=9.7, area=1.0):
 
     depletion_widths = []
     solved_voltages = []
+    truncated = False
 
     # Extract W at 0V first (current equilibrium state)
     W0 = extract_depletion_width_numerical(device_info)
@@ -213,7 +225,16 @@ def cv_sweep(device_info, V_range, eps_r=9.7, area=1.0):
             solved_voltages.append(V_target)
             current_V_cathode = V_cathode_target
         else:
-            logger.warning(f"cv_sweep: no results at V={V_target:.2f}V")
+            # Typically full depletion / punch-through: the depletion edge
+            # reaches the back contact and the DD solver's Newton iteration
+            # stops converging. This is a physical sweep endpoint, not a
+            # bug — stop here and return the converged portion.
+            logger.warning(
+                f"cv_sweep: stopped sweep at V={V_target:.2f}V "
+                f"(requested down to {V_range.min():.2f}V)"
+            )
+            truncated = True
+            break
 
     voltages = np.array(solved_voltages)
     W_arr = np.array(depletion_widths)
@@ -223,6 +244,8 @@ def cv_sweep(device_info, V_range, eps_r=9.7, area=1.0):
         "voltages": voltages,
         "depletion_widths": W_arr,
         "capacitance": C_arr,
+        "truncated": truncated,
+        "requested_v_stop": float(V_range.min()) if len(V_range) else 0.0,
     }
 
 

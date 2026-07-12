@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 def run_cv(
     config: DeviceConfig,
     v_start: float = 0.0,
-    v_stop: float = -200.0,
+    v_stop: float = -50.0,
     n_points: int = 40,
 ) -> SimResult:
     """Run a C-V sweep over a DeviceConfig and return a SimResult.
@@ -56,16 +56,25 @@ def run_cv(
         Starting bias (V). Default 0.0.
     v_stop : float
         Ending bias (V, conventional reverse-bias sign i.e. negative).
-        Default -200.0.
+        Default -50.0 — chosen to stay within the DD solver's validated
+        convergence envelope for the default DeviceConfig (full depletion /
+        punch-through of the default 10um epi occurs around -60 to -66V;
+        see metadata["truncated"] and the "requested_v_stop" note above for
+        what happens if a caller requests a deeper v_stop than converges).
     n_points : int
         Number of bias points in the sweep. Default 40.
 
     Returns
     -------
     SimResult
-        sim_type="cv", x=bias voltages (V), y=capacitance (F), metadata
-        contains "depletion_widths" (cm), "one_over_C_squared", and
-        "area_cm2".
+        sim_type="cv", x=bias voltages actually reached (V) — shorter than
+        the requested [v_start, v_stop] sweep if the DD solver hit a
+        convergence wall (typically full depletion / punch-through) partway
+        through, y=capacitance (F) for the same points, metadata contains
+        "depletion_widths" (cm), "one_over_C_squared", "area_cm2",
+        "truncated" (True if the sweep stopped before v_stop), and
+        "requested_v_stop" (the originally requested v_stop, for comparison
+        against x.min() when truncated).
 
     Warning
     -------
@@ -107,6 +116,8 @@ def run_cv(
             "depletion_widths": cv_result["depletion_widths"],
             "one_over_C_squared": 1.0 / cv_result["capacitance"] ** 2,
             "area_cm2": area,
+            "truncated": cv_result["truncated"],
+            "requested_v_stop": cv_result["requested_v_stop"],
         }
 
         return SimResult(
@@ -130,7 +141,7 @@ def run_cv(
             reset_devsim_fully()
 
 
-def run_field(config: DeviceConfig, bias_V: float = -100.0) -> SimResult:
+def run_field(config: DeviceConfig, bias_V: float = -50.0) -> SimResult:
     """Ramp a device to a fixed reverse bias and return a field/potential SimResult.
 
     Builds a DD-initialized devsim device from `config` (1D or 2D, dispatched
@@ -153,7 +164,13 @@ def run_field(config: DeviceConfig, bias_V: float = -100.0) -> SimResult:
         None); a float builds a 2D device (mesh.y_coords is populated).
     bias_V : float
         Reverse bias (V, conventional-negative sign, e.g. -50 means 50 V
-        reverse bias). Default -100.0.
+        reverse bias). Default -50.0 — chosen to stay within the DD solver's
+        validated convergence envelope for the default DeviceConfig (full
+        depletion / punch-through of the default 10um epi occurs around -60
+        to -66V). A `bias_V` beyond that envelope raises RuntimeError from
+        the underlying `ramp_bias` call (single-target ramp — unlike
+        run_cv/run_cce's sweeps, there is no partial-result fallback here
+        since a single target has nothing to degrade to).
 
     Returns
     -------
@@ -320,7 +337,7 @@ def run_field(config: DeviceConfig, bias_V: float = -100.0) -> SimResult:
 def run_cce(
     config: DeviceConfig,
     v_start: float = -10.0,
-    v_stop: float = -200.0,
+    v_stop: float = -40.0,
     n_points: int = 30,
 ) -> SimResult:
     """Run a charge-collection-efficiency (CCE) vs bias sweep and return a SimResult.
@@ -362,17 +379,31 @@ def run_cce(
         Default -10.0.
     v_stop : float
         Ending bias (V, conventional-negative reverse-bias sign).
-        Default -200.0.
+        Default -40.0 — chosen to stay within the DD solver's validated
+        convergence envelope for the default DeviceConfig. Full depletion /
+        punch-through of the default 10um epi occurs around -60 to -66V for
+        a plain DD solve (run_cv/run_field), but cce_vs_bias additionally
+        applies a generation profile at each bias point (alpha-particle
+        irradiation), which is a stiffer solve that empirically stops
+        converging around -50 to -60V — hence the extra margin vs run_cv/
+        run_field's -50.0 default. See the "truncated" / "requested_v_stop"
+        metadata note above for what happens if a caller requests a deeper
+        v_stop than converges.
     n_points : int
         Number of bias points in the sweep. Default 30.
 
     Returns
     -------
     SimResult
-        sim_type="cce", x=bias voltages (V), y=CCE values (dimensionless,
-        in [0, 1]), metadata contains "I_collected" (collected current per
-        bias point, A/cm^2) and "I_generated" (total generated current,
-        A/cm^2).
+        sim_type="cce", x=bias voltages actually reached (V) — shorter than
+        the requested [v_start, v_stop] sweep if the DD solver hit a
+        convergence wall (typically full depletion / punch-through) partway
+        through, y=CCE values (dimensionless, in [0, 1]) for the same points,
+        metadata contains "I_collected" (collected current per reached bias
+        point, A/cm^2), "I_generated" (total generated current, A/cm^2),
+        "truncated" (True if the sweep stopped before v_stop), and
+        "requested_v_stop" (the originally requested v_stop, for comparison
+        against x.min() when truncated).
     """
     if config.half_width_um is not None:
         raise NotImplementedError(
@@ -406,6 +437,8 @@ def run_cce(
         metadata={
             "I_collected": result["I_collected"],
             "I_generated": result["I_generated"],
+            "truncated": result["truncated"],
+            "requested_v_stop": result["requested_v_stop"],
         },
         mesh=None,
     )

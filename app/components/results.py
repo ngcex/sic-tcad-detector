@@ -104,6 +104,12 @@ def to_csv_bytes(result: SimResult) -> bytes:
             }
         )
         extra_header_lines: list[str] = []
+        if result.metadata.get("truncated"):
+            extra_header_lines.append(
+                f"# truncated: sweep stopped at {result.x.min():.2f} V "
+                f"(requested down to {result.metadata['requested_v_stop']:.2f} V) "
+                "— solver reached full depletion / punch-through"
+            )
     elif result.sim_type == "cce":
         df = pd.DataFrame(
             {
@@ -115,6 +121,12 @@ def to_csv_bytes(result: SimResult) -> bytes:
         extra_header_lines = [
             f"# I_generated_A_per_cm2: {result.metadata['I_generated']}"
         ]
+        if result.metadata.get("truncated"):
+            extra_header_lines.append(
+                f"# truncated: sweep stopped at {result.x.min():.2f} V "
+                f"(requested down to {result.metadata['requested_v_stop']:.2f} V) "
+                "— solver reached full depletion / punch-through"
+            )
     elif result.sim_type == "field":
         df = pd.DataFrame(
             {
