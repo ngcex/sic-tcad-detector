@@ -37,6 +37,7 @@ from petringa.core.drift_diffusion import (
     ramp_bias,
 )
 from petringa.core.charge_collection import add_generation_to_dd
+from petringa.core.generation_profiles import alpha_depth_shape
 
 logger = logging.getLogger(__name__)
 
@@ -209,9 +210,21 @@ def cce_lateral_scan(
     """Compute CCE at multiple lateral positions from center to edge.
 
     At each lateral position x_pos, creates a Gaussian-stripe generation
-    profile G(x,y) = gen_rate * exp(-y/alpha) * exp(-0.5*((x-x_pos)/sigma)^2)
-    where y is measured from the junction (epi entrance).  Generation is
-    zero in the substrate (y < junction_pos).
+    profile G(x,y) = depth_shape(y) * gen_rate * exp(-0.5*((x-x_pos)/sigma)^2)
+    where y is measured from the junction (epi entrance), and depth_shape
+    is the same smooth flat-box + erfc roll-off alpha depth profile used
+    by the 1D path (`petringa.core.generation_profiles.alpha_generation_profile`,
+    shape-only, renormalized to peak at gen_rate here rather than to total
+    deposited energy). Generation is zero in the substrate (y < junction_pos).
+
+    AUDIT Mj-5 (v5): this previously used a monotonically DECAYING
+    exponential exp(-y/alpha) — generation highest at the entrance and
+    falling with depth, which is backwards for an alpha particle (energy
+    loss per unit path RISES toward end-of-range, the Bragg-curve shape)
+    and was inconsistent with the flat-box shape already used by the 1D
+    alpha profile in generation_profiles.py. Fixed to reuse that same
+    (qualitative, non-Bragg-peaked-by-default) shape so both alpha
+    generation profiles in this codebase agree.
 
     Parameters
     ----------
@@ -220,7 +233,8 @@ def cce_lateral_scan(
     n_points : int
         Number of lateral positions to scan.
     gen_rate : float
-        Peak generation rate (cm^-3 s^-1).
+        Peak generation rate (cm^-3 s^-1) — the depth profile's plateau
+        value, not a total dose; see Notes.
     stripe_sigma_cm : float
         Gaussian width of the lateral generation stripe (cm).
     contact : str
@@ -239,7 +253,7 @@ def cce_lateral_scan(
     region = device_info["region_name"]
     half_width_cm = device_info["half_width_cm"]
     substrate_thickness_cm = device_info["substrate_thickness_cm"]
-    alpha = _ALPHA_RANGE_CM
+    alpha_range_cm = _ALPHA_RANGE_CM
 
     # Get mesh node coordinates
     x_nodes = np.array(
@@ -253,13 +267,30 @@ def cce_lateral_scan(
     junction_pos = substrate_thickness_cm
     y_from_junction = y_nodes - junction_pos
 
+    # Depth shape: same flat-box + erfc roll-off used by the 1D alpha
+    # profile (generation_profiles.alpha_depth_shape), reused here so both
+    # alpha profiles in the codebase agree on where generation is largest.
+    # alpha_depth_shape is a pure function of x (no sorting requirement),
+    # safe to evaluate directly on unordered 2D mesh node coordinates —
+    # unlike alpha_generation_profile, which additionally normalizes to
+    # total deposited energy via a trapezoidal integral that assumes
+    # sorted x. Clip negative depths (substrate side) to 0 first so the
+    # erfc roll-off math only ever sees non-negative depth, then
+    # renormalize to a peak of 1.0 since this function's contract is a
+    # peak rate (gen_rate), not a total per-alpha dose.
+    depth_shape_raw = alpha_depth_shape(
+        np.clip(y_from_junction, 0.0, None), alpha_range_cm=alpha_range_cm
+    )
+    max_shape = np.max(depth_shape_raw)
+    depth_shape = depth_shape_raw / max_shape if max_shape > 0 else depth_shape_raw
+
     # Lateral positions: center (x=0) to edge (x=half_width)
     x_positions = np.linspace(0, half_width_cm, n_points)
     cce_values = []
 
     for i, x_pos in enumerate(x_positions):
-        # Build generation profile: exponential depth * Gaussian lateral stripe
-        depth_profile = gen_rate * np.exp(-y_from_junction / alpha)
+        # Build generation profile: depth shape * Gaussian lateral stripe
+        depth_profile = gen_rate * depth_shape
         lateral_profile = np.exp(-0.5 * ((x_nodes - x_pos) / stripe_sigma_cm) ** 2)
         generation = depth_profile * lateral_profile
 
