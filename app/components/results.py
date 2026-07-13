@@ -60,6 +60,78 @@ def build_cce_figure(result: SimResult) -> go.Figure:
     return fig
 
 
+def build_damage_figure(result: SimResult) -> go.Figure:
+    """CCE vs proton fluence (log-x), NaN-tolerant.
+
+    Does not call `.dropna()` or otherwise filter NaN — Plotly renders a NaN
+    y-value as a native line gap, so a partial-convergence result (see
+    RESEARCH.md Pitfall 2) still displays the remaining points cleanly.
+    """
+    fig = go.Figure(
+        data=go.Scatter(
+            x=result.x,
+            y=result.y,
+            mode="lines+markers",
+            line=dict(color="#1F6FEB"),
+        )
+    )
+    fig.add_hline(y=1.0, line_dash="dash", line_color="#9AA0A6", opacity=0.5)
+    fig.update_layout(
+        title="CCE vs Proton Fluence",
+        xaxis_title="Proton Fluence (p/cm²)",
+        xaxis_type="log",
+        yaxis_title="Charge Collection Efficiency",
+        yaxis_range=[0, 1.1],
+    )
+    return fig
+
+
+def build_dark_current_figure(result: SimResult) -> go.Figure:
+    """Dark current decomposition vs temperature, log-y, zero/negative-guarded.
+
+    Input is a single AGGREGATED SimResult with sim_type="dark_current",
+    x=temperature array (K), y=I_total array (A), and
+    metadata={"I_SRH": array, "I_TAT": array, "I_SRV": array} — one value
+    per temperature. The aggregation from the list[SimResult] returned by
+    ParametricSweep into this single-SimResult shape happens in the Wave 2
+    dark current PAGE code, not here — this builder stays a pure
+    single-SimResult-in / go.Figure-out function, consistent with every
+    other builder in this module.
+
+    I_TAT can be negative (net generation, not recombination sign) and
+    I_SRV can be exactly 0.0 at default S_n/S_p — each trace is abs()'d and
+    only added if it has any positive value, mirroring
+    petringa.core.dark_current.plot_dark_current_decomposition's existing
+    abs() + zero-guard pattern.
+    """
+    fig = go.Figure()
+    components = [
+        ("Total", result.y, "#1A1A1A"),
+        ("SRH (bulk)", result.metadata["I_SRH"], "#1F6FEB"),
+        ("TAT (effective)", result.metadata["I_TAT"], "#D32F2F"),
+        ("SRV (surface)", result.metadata["I_SRV"], "#2E7D32"),
+    ]
+    for label, values, color in components:
+        I = np.abs(np.asarray(values))
+        if np.any(I > 0):
+            fig.add_trace(
+                go.Scatter(
+                    x=result.x,
+                    y=I,
+                    mode="lines+markers",
+                    name=label,
+                    line=dict(color=color),
+                )
+            )
+    fig.update_layout(
+        title="Dark Current Decomposition vs Temperature",
+        xaxis_title="Temperature (K)",
+        yaxis_title="Absolute Dark Current (A)",
+        yaxis_type="log",
+    )
+    return fig
+
+
 def build_field_figures(result: SimResult) -> tuple[go.Figure, go.Figure]:
     """Return (efield_fig, potential_fig) vs depth (result.x, already um).
 
@@ -134,6 +206,25 @@ def to_csv_bytes(result: SimResult) -> bytes:
                 "ElectricField_V_per_cm": result.y,
                 "Potential_V": result.metadata["potential"],
                 "NetDoping_cm-3": result.metadata["net_doping"],
+            }
+        )
+        extra_header_lines = []
+    elif result.sim_type == "damage":
+        df = pd.DataFrame({"fluence_p_per_cm2": result.x, "CCE": result.y})
+        extra_header_lines = [
+            f"# V_bias: {result.metadata['V_bias']}",
+            f"# energy_MeV: {result.metadata['energy_MeV']}",
+            "# WARNING: kappa (NIEL hardness factor) is a data-blocked placeholder; "
+            "absolute Phi_crit numbers are unvalidated.",
+        ]
+    elif result.sim_type == "dark_current":
+        df = pd.DataFrame(
+            {
+                "T_K": result.x,
+                "I_total_A": result.y,
+                "I_SRH_A": result.metadata["I_SRH"],
+                "I_TAT_A": result.metadata["I_TAT"],
+                "I_SRV_A": result.metadata["I_SRV"],
             }
         )
         extra_header_lines = []
