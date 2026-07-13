@@ -660,12 +660,16 @@ or similar single-point-per-T kwargs).run()` — each per-temperature `run_dark_
   request a minimal bias sweep (e.g. `n_points=1` or `2`, `v_start=v_stop=V_bias`) since only the
   fixed-bias operating point is needed per temperature; verify `run_dark_current` tolerates
   `v_start == v_stop` / `n_points=1` without raising — flag this as a Wave 0 spike check if unverified.
-- Result shape: a **list of `SimResult`** (one per temperature), not a single `SimResult` — this
-  changes the page's caching (`session_state["dark_current_result"] = list[SimResult]`), the new
-  `build_dark_current_figure` builder (must extract one point — `result.y[0]` or an aggregate — per
-  temperature from each per-T `SimResult`, building x=temperatures, y=I_total/I_SRH/I_TAT/I_SRV
-  arrays of length `n_temperatures`), and the CSV export (columns: `T_K`, `I_total_A`, `I_SRH_A`,
-  `I_TAT_A`, `I_SRV_A`, one row per temperature — NOT one row per bias point).
+- Result shape: `ParametricSweep.run()` returns a **list of `SimResult`** (one per temperature),
+  not a single `SimResult`. The dark current **page** (not the builder) aggregates this list into
+  a single `SimResult` — extracting one point (`result.y[0]` or an aggregate) per temperature from
+  each per-T `SimResult` to build `x=temperatures`, `y`/`metadata["I_SRH"/"I_TAT"/"I_SRV"]` arrays
+  of length `n_temperatures` — BEFORE calling `build_dark_current_figure`. This keeps
+  `build_dark_current_figure` a pure single-`SimResult`-in function, consistent with every other
+  builder in `results.py`, and matches how `to_csv_bytes` is called elsewhere (one `SimResult` in,
+  one CSV out; columns: `T_K`, `I_total_A`, `I_SRH_A`, `I_TAT_A`, `I_SRV_A`, one row per
+  temperature — NOT one row per bias point). Page-level caching stores the aggregated
+  `SimResult` (`session_state["dark_current_result"]`), not the raw `list[SimResult]`.
 - Pitfalls 2 (silent truncation/NaN) and 3 (log-scale abs+zero-guard) still apply per-temperature
   per-call — each per-T `run_dark_current` call can independently truncate or NaN; the page/builder
   must tolerate a per-temperature result being partial or missing a component.
@@ -681,7 +685,13 @@ list-of-SimResult-aware builder), and Open Question #1/Assumption A1 (RESOLVED, 
 The radiation damage page (FEAT-01) is UNAFFECTED by this addendum — it remains a single
 `run_radiation_damage` call as originally researched.
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+All three questions below are resolved: Q1 by the Decision Addendum (temperature x-axis via
+`ParametricSweep`, confirmed with the advisor), Q2 by 41-01-PLAN.md's Task 1 live-devsim spike
+(confirms convergent widget defaults before Wave 2 builds around them), and Q3 by 41-UI-SPEC.md's
+Discretion Resolved section (`proton_energy_MeV` as a `st.selectbox` restricted to the 4 real NIEL
+table keys). Retained below for provenance/history only — no further action needed.
 
 1. **Does "dark current vs temperature" (FEAT-02, Success Criterion #3) mean a literal
    temperature x-axis, or is it loose phrasing for "the existing bias-sweep facade, whose
