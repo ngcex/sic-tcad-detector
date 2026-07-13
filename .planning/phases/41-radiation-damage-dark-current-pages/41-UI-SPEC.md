@@ -1,10 +1,11 @@
 ---
 phase: 41
 slug: radiation-damage-dark-current-pages
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: 2026-07-13
+reviewed_at: 2026-07-13
 ---
 
 # Phase 41 — UI Design Contract
@@ -158,7 +159,7 @@ Dark Current page (temperature sweep, per the Decision Addendum):
 | Traces                    | 4 overlaid `go.Scatter`, `mode="lines+markers"`, per the data-viz palette table above, in fixed order: I_total, I_SRH, I_TAT, I_SRV                                                                                                                                                                                                                       |
 | Zero/negative-guard       | `I = np.abs(np.asarray(values))`; only add a trace if `np.any(I > 0)` — mirrors `petringa.core.dark_current.plot_dark_current_decomposition`'s existing `abs()` + zero-guard pattern (see RESEARCH.md Pitfall 3). A guarded-out trace (e.g. all-zero I_SRV at default `S_n`/`S_p`) is simply omitted from the legend, not shown as an empty/broken trace. |
 | X-axis                    | linear (NOT log — temperature range is narrow, e.g. 250-400K, no benefit to log scale), title `"Temperature (K)"`                                                                                                                                                                                                                                         |
-| Y-axis                    | `yaxis_type="log"`, title `"Absolute Dark Current (A)"` (avoid magnitude-bar notation in the axis title string entirely — it introduces literal pipe characters that break Markdown table parsing in this spec and are unnecessary since the axis is already log-scaled)                                                                                    |
+| Y-axis                    | `yaxis_type="log"`, title `"Absolute Dark Current (A)"` (avoid magnitude-bar notation in the axis title string entirely — it introduces literal pipe characters that break Markdown table parsing in this spec and are unnecessary since the axis is already log-scaled)                                                                                  |
 | Title                     | `"Dark Current Decomposition vs Temperature"`                                                                                                                                                                                                                                                                                                             |
 | Data shape note           | input is a `list[SimResult]` (one per temperature, from `ParametricSweep`), not a single `SimResult` — the builder must extract one operating-point value per temperature from each per-T result (e.g. `result.y[0]` at the fixed bias) to build the `x=temperatures`, `y=I_total/I_SRH/I_TAT/I_SRV` arrays of length `n_temperatures`                    |
 | Partial-failure tolerance | a per-temperature entry that failed/returned no data is simply omitted from all 4 arrays at that index (see Copywriting Contract's per-temperature truncation banner) — do not attempt to interpolate or fabricate a missing point                                                                                                                        |
@@ -177,11 +178,11 @@ No third-party registries or blocks are declared. Registry vetting gate not requ
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS
-- [ ] Dimension 4 Typography: PASS
-- [ ] Dimension 5 Spacing: PASS
-- [ ] Dimension 6 Registry Safety: PASS
+- [x] Dimension 1 Copywriting: PASS
+- [x] Dimension 2 Visuals: FLAG — no explicit focal-point statement (non-blocking; result chart implied as anchor via typography/spacing)
+- [x] Dimension 3 Color: PASS
+- [x] Dimension 4 Typography: PASS
+- [x] Dimension 5 Spacing: PASS
+- [x] Dimension 6 Registry Safety: PASS
 
-**Approval:** pending
+**Approval:** approved (with 1 non-blocking recommendation — Dimension 2)
