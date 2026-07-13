@@ -516,8 +516,19 @@ Plans:
 2. The radiation damage page displays a persistent warning banner stating that kappa values are data-blocked placeholders (not validated against SRIM/PSTAR data) and that absolute Phi_crit numbers are unvalidated
 3. On the dark current page, user can click Run and see dark current vs temperature with J_SRH, J_TAT, and J_SRV contributions individually decomposed and overlaid in the Plotly plot
 4. Both pages show a CSV download button after simulation completes
-   **Plans**: TBD
+   **Plans**: 3 plans
    **UI hint**: yes
+
+Plans:
+
+**Wave 1**
+
+- [ ] 41-01-PLAN.md — Foundation: live-devsim ParametricSweep(param="T") spike + results.py figure builders/CSV branches + Pitfall-4 test fix (FEAT-01, FEAT-02)
+
+**Wave 2** *(depends on 41-01; 41-02 and 41-03 run in parallel — no file overlap)*
+
+- [ ] 41-02-PLAN.md — Radiation damage page: fluence/energy widgets, persistent kappa banner, NaN-tolerant CCE-vs-fluence render, CSV download (FEAT-01)
+- [ ] 41-03-PLAN.md — Dark current page: temperature sweep via ParametricSweep(param="T"), J_SRH/J_TAT/J_SRV decomposition, CSV download (FEAT-02)
 
 ### Phase 42: Microdosimetry Page + Batch Sweep Page
 
