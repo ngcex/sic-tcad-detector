@@ -14,7 +14,7 @@ import pandas as pd
 import pytest
 
 from petringa import DeviceConfig, SimResult
-from app.components.results import to_csv_bytes
+from app.components.results import build_dark_current_figure, to_csv_bytes
 
 
 def _decode(result: SimResult) -> str:
@@ -142,11 +142,67 @@ def test_field_csv_columns_and_header():
     assert len(df) == 3
 
 
+def test_damage_csv_columns_and_header():
+    cfg = DeviceConfig()
+    x = np.array([1e13, 1e14, 1e15])
+    y = np.array([0.99, 0.95, 0.80])
+    result = SimResult(
+        config=cfg,
+        sim_type="damage",
+        x=x,
+        y=y,
+        metadata={"V_bias": -20.0, "energy_MeV": 5.6},
+    )
+
+    text = _decode(result)
+
+    non_comment_lines = [ln for ln in text.splitlines() if not ln.startswith("#")]
+    assert non_comment_lines[0] == "fluence_p_per_cm2,CCE"
+
+    v_bias_lines = [ln for ln in text.splitlines() if ln.startswith("# V_bias:")]
+    assert v_bias_lines, "missing '# V_bias:' header line"
+    assert "-20.0" in v_bias_lines[0]
+
+    warning_lines = [ln for ln in text.splitlines() if ln.startswith("# WARNING:")]
+    assert warning_lines, "missing '# WARNING:' header line"
+    assert "data-blocked" in warning_lines[0]
+
+    df = pd.read_csv(StringIO(text), comment="#")
+    assert list(df.columns) == ["fluence_p_per_cm2", "CCE"]
+    assert len(df) == 3
+
+
+def test_dark_current_csv_columns_and_header():
+    cfg = DeviceConfig()
+    x = np.array([250.0, 325.0, 400.0])
+    y = np.array([1e-13, 5e-12, 2e-10])
+    result = SimResult(
+        config=cfg,
+        sim_type="dark_current",
+        x=x,
+        y=y,
+        metadata={
+            "I_SRH": np.array([1e-13, 5e-12, 2e-10]),
+            "I_TAT": np.array([-1e-14, -3e-13, -5e-12]),
+            "I_SRV": np.array([0.0, 0.0, 0.0]),
+        },
+    )
+
+    text = _decode(result)
+
+    non_comment_lines = [ln for ln in text.splitlines() if not ln.startswith("#")]
+    assert non_comment_lines[0] == "T_K,I_total_A,I_SRH_A,I_TAT_A,I_SRV_A"
+
+    df = pd.read_csv(StringIO(text), comment="#")
+    assert list(df.columns) == ["T_K", "I_total_A", "I_SRH_A", "I_TAT_A", "I_SRV_A"]
+    assert len(df) == 3
+
+
 def test_unknown_sim_type_raises_value_error():
     cfg = DeviceConfig()
     result = SimResult(
         config=cfg,
-        sim_type="damage",
+        sim_type="not_a_real_sim_type",
         x=np.array([1.0]),
         y=np.array([0.5]),
         metadata={},
@@ -154,3 +210,26 @@ def test_unknown_sim_type_raises_value_error():
 
     with pytest.raises(ValueError):
         to_csv_bytes(result)
+
+
+def test_build_dark_current_figure_guards_zero_and_negative():
+    cfg = DeviceConfig()
+    result = SimResult(
+        config=cfg,
+        sim_type="dark_current",
+        x=np.array([250.0, 325.0, 400.0]),
+        y=np.array([1e-13, 5e-12, 2e-10]),
+        metadata={
+            "I_SRH": np.array([1e-13, 5e-12, 2e-10]),
+            "I_TAT": np.array([-1e-14, -3e-13, -5e-12]),
+            "I_SRV": np.array([0.0, 0.0, 0.0]),
+        },
+    )
+
+    fig = build_dark_current_figure(result)
+
+    assert len(fig.data) == 3
+    assert not any(t.name == "SRV (surface)" for t in fig.data)
+
+    tat_trace = next(t for t in fig.data if t.name == "TAT (effective)")
+    assert all(v >= 0 for v in tat_trace.y)
