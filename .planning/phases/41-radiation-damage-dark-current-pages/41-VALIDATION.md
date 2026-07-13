@@ -1,7 +1,7 @@
 ---
 phase: 41
 slug: radiation-damage-dark-current-pages
-status: draft
+status: approved
 nyquist_compliant: true
 wave_0_complete: false
 created: 2026-07-13
@@ -83,4 +83,4 @@ _(No framework install needed — pytest + AppTest already present per Phase 38-
 - [x] Feedback latency < 30s
 - [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved — plan-checker verification passed (re-check after fixes, 2026-07-13)
