@@ -107,7 +107,7 @@ Full details: [milestones/v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md)
 - [x] **Phase 38: Streamlit Shell + Device Config Page** — `app/main.py` multi-page shell, device config sidebar form, `st.session_state` persistence, navigation between pages _(GROUP B)_ (completed 2026-07-10)
 - [x] **Phase 39: C-V, CCE, Field Map Pages + CSV Download** — C-V page with Plotly C-V and 1/C² plots, CCE page, field map page, CSV download from all result pages _(GROUP B)_ (completed 2026-07-11)
 - [x] **Phase 40: Geometry Viewer** — `app/components/geometry_viewer.py`: `MeshData` → 2D Plotly heatmap for 2D devices, depth-profile bar for 1D devices, quantity selector dropdown _(GROUP B)_ (completed 2026-07-13)
-- [ ] **Phase 41: Radiation Damage + Dark Current Pages** — Radiation damage page with CCE vs fluence and kappa warning banner; dark current page with J component decomposition _(GROUP C)_
+- [x] **Phase 41: Radiation Damage + Dark Current Pages** — Radiation damage page with CCE vs fluence and kappa warning banner; dark current page with J component decomposition _(GROUP C)_ (completed 2026-07-13)
 - [ ] **Phase 42: Microdosimetry Page + Batch Sweep Page** — Microdosimetry page with MC CSV upload and y·d(y) spectrum; batch sweep page with parametric run and overlaid results _(GROUP C)_
 - [ ] **Phase 43: Integration Audit — All 20 Notebook Workflows** — Verify all 20 notebook workflows are reproducible via UI; confirm all 25 v5.0 requirements satisfied _(GROUP C, audit — no new code)_
 
@@ -523,12 +523,12 @@ Plans:
 
 **Wave 1**
 
-- [ ] 41-01-PLAN.md — Foundation: live-devsim ParametricSweep(param="T") spike + results.py figure builders/CSV branches + Pitfall-4 test fix (FEAT-01, FEAT-02)
+- [x] 41-01-PLAN.md — Foundation: live-devsim ParametricSweep(param="T") spike + results.py figure builders/CSV branches + Pitfall-4 test fix (FEAT-01, FEAT-02)
 
 **Wave 2** *(depends on 41-01; 41-02 and 41-03 run in parallel — no file overlap)*
 
-- [ ] 41-02-PLAN.md — Radiation damage page: fluence/energy widgets, persistent kappa banner, NaN-tolerant CCE-vs-fluence render, CSV download (FEAT-01)
-- [ ] 41-03-PLAN.md — Dark current page: temperature sweep via ParametricSweep(param="T"), J_SRH/J_TAT/J_SRV decomposition, CSV download (FEAT-02)
+- [x] 41-02-PLAN.md — Radiation damage page: fluence/energy widgets, persistent kappa banner, NaN-tolerant CCE-vs-fluence render, CSV download (FEAT-01)
+- [x] 41-03-PLAN.md — Dark current page: temperature sweep via ParametricSweep(param="T"), J_SRH/J_TAT/J_SRV decomposition, CSV download (FEAT-02)
 
 ### Phase 42: Microdosimetry Page + Batch Sweep Page
 
@@ -601,6 +601,6 @@ Plans:
 | 38. Streamlit Shell + Device Config Page        | v5.0      | 3/3 | Complete   | 2026-07-10 |
 | 39. C-V, CCE, Field Map Pages + CSV Download    | v5.0      | 4/4 | Complete   | 2026-07-11 |
 | 40. Geometry Viewer                             | v5.0      | 2/2 | Complete   | 2026-07-13 |
-| 41. Radiation Damage + Dark Current Pages       | v5.0      | 0/0            | Not started | -          |
+| 41. Radiation Damage + Dark Current Pages       | v5.0      | 3/3 | Complete   | 2026-07-13 |
 | 42. Microdosimetry Page + Batch Sweep Page      | v5.0      | 0/0            | Not started | -          |
 | 43. Integration Audit — All 20 Notebooks        | v5.0      | 0/0            | Not started | -          |
