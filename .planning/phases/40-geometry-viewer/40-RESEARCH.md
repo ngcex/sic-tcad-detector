@@ -412,7 +412,7 @@ _(No framework install needed — pytest + AppTest already present.)_
 | A6  | Dropdown default = "Electric field" (first option)                                                | §5      | Low — cosmetic default                                                          |
 | A7  | Coordinate mapping: 2D mesh x=lateral, y=depth (per STATE.md:79); heatmap x=lateral               | §6      | Low — locked convention; verify once in browser if 2D solve converges           |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Does 2D `run_field` converge for a realistic 2D `DeviceConfig`?**
    - What we know: 1D `ramp_bias` fails at deep bias (STATE.md); 2D path is untested this session; devsim CI resource-exhaustion blocks a quick check here.
