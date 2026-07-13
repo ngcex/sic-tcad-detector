@@ -501,7 +501,7 @@ Plans:
 4. The geometry viewer reads only from `MeshData` (populated post-build); it never calls devsim directly
    **Plans**: 2 plans
 
-- [ ] 40-01-PLAN.md — Pure geometry_viewer builder (MeshData -> go.Heatmap 2D / go.Bar 1D) + QUANTITIES + pure unit tests (VIZ-01, VIZ-02, VIZ-03)
+- [x] 40-01-PLAN.md — Pure geometry_viewer builder (MeshData -> go.Heatmap 2D / go.Bar 1D) + QUANTITIES + pure unit tests (VIZ-01, VIZ-02, VIZ-03)
 - [ ] 40-02-PLAN.md — Wire viewer into field_map page: remove 2D st.stop guard, branch 1D/2D render, quantity selectbox (no re-solve) + AppTests (VIZ-01, VIZ-02, VIZ-03)
    **UI hint**: yes
 
@@ -589,7 +589,7 @@ Plans:
 | 37. Core API — CCE + Facades + ParametricSweep  | v5.0      | 3/3 | Complete    | 2026-07-09 |
 | 38. Streamlit Shell + Device Config Page        | v5.0      | 3/3 | Complete   | 2026-07-10 |
 | 39. C-V, CCE, Field Map Pages + CSV Download    | v5.0      | 4/4 | Complete   | 2026-07-11 |
-| 40. Geometry Viewer                             | v5.0      | 0/0            | Not started | -          |
+| 40. Geometry Viewer                             | v5.0      | 1/2 | In Progress|  |
 | 41. Radiation Damage + Dark Current Pages       | v5.0      | 0/0            | Not started | -          |
 | 42. Microdosimetry Page + Batch Sweep Page      | v5.0      | 0/0            | Not started | -          |
 | 43. Integration Audit — All 20 Notebooks        | v5.0      | 0/0            | Not started | -          |
