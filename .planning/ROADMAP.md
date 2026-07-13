@@ -106,7 +106,7 @@ Full details: [milestones/v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md)
 - [x] **Phase 37: Core API — CCE + Remaining Facades + ParametricSweep** — `run_cce()`, `run_radiation_damage()`, `run_dark_current()`, `run_temperature_sweep()`, `run_flash_recombination()`, `run_transient()`, `run_microdosimetry()`, `ParametricSweep` _(GROUP A)_ (completed 2026-07-09)
 - [x] **Phase 38: Streamlit Shell + Device Config Page** — `app/main.py` multi-page shell, device config sidebar form, `st.session_state` persistence, navigation between pages _(GROUP B)_ (completed 2026-07-10)
 - [x] **Phase 39: C-V, CCE, Field Map Pages + CSV Download** — C-V page with Plotly C-V and 1/C² plots, CCE page, field map page, CSV download from all result pages _(GROUP B)_ (completed 2026-07-11)
-- [ ] **Phase 40: Geometry Viewer** — `app/components/geometry_viewer.py`: `MeshData` → 2D Plotly heatmap for 2D devices, depth-profile bar for 1D devices, quantity selector dropdown _(GROUP B)_
+- [x] **Phase 40: Geometry Viewer** — `app/components/geometry_viewer.py`: `MeshData` → 2D Plotly heatmap for 2D devices, depth-profile bar for 1D devices, quantity selector dropdown _(GROUP B)_ (completed 2026-07-13)
 - [ ] **Phase 41: Radiation Damage + Dark Current Pages** — Radiation damage page with CCE vs fluence and kappa warning banner; dark current page with J component decomposition _(GROUP C)_
 - [ ] **Phase 42: Microdosimetry Page + Batch Sweep Page** — Microdosimetry page with MC CSV upload and y·d(y) spectrum; batch sweep page with parametric run and overlaid results _(GROUP C)_
 - [ ] **Phase 43: Integration Audit — All 20 Notebook Workflows** — Verify all 20 notebook workflows are reproducible via UI; confirm all 25 v5.0 requirements satisfied _(GROUP C, audit — no new code)_
@@ -502,7 +502,7 @@ Plans:
    **Plans**: 2 plans
 
 - [x] 40-01-PLAN.md — Pure geometry_viewer builder (MeshData -> go.Heatmap 2D / go.Bar 1D) + QUANTITIES + pure unit tests (VIZ-01, VIZ-02, VIZ-03)
-- [ ] 40-02-PLAN.md — Wire viewer into field_map page: remove 2D st.stop guard, branch 1D/2D render, quantity selectbox (no re-solve) + AppTests (VIZ-01, VIZ-02, VIZ-03)
+- [x] 40-02-PLAN.md — Wire viewer into field_map page: remove 2D st.stop guard, branch 1D/2D render, quantity selectbox (no re-solve) + AppTests (VIZ-01, VIZ-02, VIZ-03)
    **UI hint**: yes
 
 ### Phase 41: Radiation Damage + Dark Current Pages
@@ -589,7 +589,7 @@ Plans:
 | 37. Core API — CCE + Facades + ParametricSweep  | v5.0      | 3/3 | Complete    | 2026-07-09 |
 | 38. Streamlit Shell + Device Config Page        | v5.0      | 3/3 | Complete   | 2026-07-10 |
 | 39. C-V, CCE, Field Map Pages + CSV Download    | v5.0      | 4/4 | Complete   | 2026-07-11 |
-| 40. Geometry Viewer                             | v5.0      | 1/2 | In Progress|  |
+| 40. Geometry Viewer                             | v5.0      | 2/2 | Complete   | 2026-07-13 |
 | 41. Radiation Damage + Dark Current Pages       | v5.0      | 0/0            | Not started | -          |
 | 42. Microdosimetry Page + Batch Sweep Page      | v5.0      | 0/0            | Not started | -          |
 | 43. Integration Audit — All 20 Notebooks        | v5.0      | 0/0            | Not started | -          |
