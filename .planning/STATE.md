@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Simulator Library & Streamlit UI
-status: verifying
+status: executing
 stopped_at: Completed 39-04-PLAN.md
-last_updated: "2026-07-11T12:25:07.434Z"
-last_activity: 2026-07-11
+last_updated: "2026-07-13T10:41:37.028Z"
+last_activity: 2026-07-13 -- Phase 40 execution started
 progress:
   total_phases: 25
   completed_phases: 13
-  total_plans: 33
+  total_plans: 35
   completed_plans: 33
   percent: 52
 ---
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-26)
 
 **Core value:** Installable Python library + Streamlit UI that makes the SiC TCAD simulator usable by the Petringa group without reading source code
-**Current focus:** Phase 39 — c-v-cce-field-map-pages-csv-download
+**Current focus:** Phase 40 — geometry-viewer
 
 ## Current Position
 
-Phase: 39 — c-v-cce-field-map-pages-csv-download
-Plan: 3 of 3
-Status: Phase complete — ready for verification
-Last activity: 2026-07-11
+Phase: 40 (geometry-viewer) — EXECUTING
+Plan: 1 of 2
+Status: Executing Phase 40
+Last activity: 2026-07-13 -- Phase 40 execution started
 
 Progress: [██████████] 100%
 
