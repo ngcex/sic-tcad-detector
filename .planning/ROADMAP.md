@@ -499,7 +499,10 @@ Plans:
 2. For a 1D device (no `half_width_um`), the same page shows a depth-profile bar chart of the selected quantity instead of a 2D heatmap, using the same `MeshData` interface
 3. A quantity selector dropdown lets the user switch between electric field, net doping, and electrostatic potential; the visualization updates to show the selected quantity without re-running the simulation
 4. The geometry viewer reads only from `MeshData` (populated post-build); it never calls devsim directly
-   **Plans**: TBD
+   **Plans**: 2 plans
+
+- [ ] 40-01-PLAN.md — Pure geometry_viewer builder (MeshData -> go.Heatmap 2D / go.Bar 1D) + QUANTITIES + pure unit tests (VIZ-01, VIZ-02, VIZ-03)
+- [ ] 40-02-PLAN.md — Wire viewer into field_map page: remove 2D st.stop guard, branch 1D/2D render, quantity selectbox (no re-solve) + AppTests (VIZ-01, VIZ-02, VIZ-03)
    **UI hint**: yes
 
 ### Phase 41: Radiation Damage + Dark Current Pages
