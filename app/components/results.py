@@ -132,6 +132,72 @@ def build_dark_current_figure(result: SimResult) -> go.Figure:
     return fig
 
 
+def build_microdosimetry_figure(result: SimResult) -> go.Figure:
+    """y·d(y) vs lineal energy y (LOG x-axis per ICRU-36; x spans 0.01–9772 keV/µm).
+
+    Single-trace log-x builder, mirroring build_damage_figure's shape. The
+    log x-axis is MANDATORY (UI-SPEC Plot Contract): the fixture x-range spans
+    0.01–9772 keV/µm, so a linear x-axis is a defect. No NaN-gap handling —
+    run_microdosimetry is a deterministic pipeline with no partial-convergence
+    failure mode.
+    """
+    fig = go.Figure(
+        data=go.Scatter(
+            x=result.x, y=result.y, mode="lines", line=dict(color="#1F6FEB")
+        )
+    )
+    fig.update_layout(
+        title="Microdosimetric Spectrum",
+        xaxis_title="Lineal energy y (keV/µm)",
+        xaxis_type="log",
+        yaxis_title="y · d(y)",
+    )
+    return fig
+
+
+# Value-keyed qualitative palette: cycled by TRACE ORDER (i % len), NOT a
+# fixed-quantity mapping — one color per swept value.
+_SWEEP_PALETTE = ["#1F6FEB", "#D32F2F", "#2E7D32", "#1A1A1A", "#9AA0A6"]
+
+# Per-facade axis titles keyed by the SIM_FACADES selectbox LABEL.
+_SWEEP_AXIS_TITLES = {
+    "CCE vs bias (run_cce)": ("Bias V (V)", "Charge Collection Efficiency"),
+    "C-V (run_cv)": ("Bias V (V)", "Capacitance (F)"),
+    "CCE vs temperature (run_temperature_sweep)": ("Temperature (K)", "Value"),
+}
+
+
+def build_sweep_overlay_figure(results, param, values, sim_label) -> go.Figure:
+    """Overlay one trace per swept value; legend f"{param}={val}"; per-facade axes.
+
+    FOUR arguments — the 4th `sim_label` selects axis titles from
+    _SWEEP_AXIS_TITLES (the 3-arg RESEARCH.md sketch is superseded by UI-SPEC).
+    Palette is cycled by trace order (value-keyed qualitative). Note that
+    `param` names the legend/run-identifier while `sim_label` names the axes:
+    e.g. sweeping epi_thickness_um with sim_label="CCE vs bias (run_cce)"
+    overlays N CCE-vs-bias curves, one per epi thickness — the x-axis is
+    "Bias V (V)" by design, not a mismatch.
+    """
+    fig = go.Figure()
+    for i, (val, res) in enumerate(zip(values, results)):
+        fig.add_trace(
+            go.Scatter(
+                x=res.x,
+                y=res.y,
+                mode="lines+markers",
+                name=f"{param}={val}",
+                line=dict(color=_SWEEP_PALETTE[i % len(_SWEEP_PALETTE)]),
+            )
+        )
+    x_title, y_title = _SWEEP_AXIS_TITLES.get(sim_label, ("(facade x-axis)", "Value"))
+    fig.update_layout(
+        title=f"Parametric Sweep: {param}",
+        xaxis_title=x_title,
+        yaxis_title=y_title,
+    )
+    return fig
+
+
 def build_field_figures(result: SimResult) -> tuple[go.Figure, go.Figure]:
     """Return (efield_fig, potential_fig) vs depth (result.x, already um).
 
