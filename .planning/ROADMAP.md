@@ -541,8 +541,19 @@ Plans:
 2. On the batch sweep page, user can select a `DeviceConfig` parameter (e.g., `epi_thickness_um`), define a list of values, choose a simulation type (e.g., CCE), click Run, and see overlaid Plotly curves for each parameter value
 3. The batch sweep page provides a "Download all results as CSV" button that exports all sweep results in a single bulk CSV file
 4. Batch sweep uses `ParametricSweep` under the hood; results for at least 3 parameter values render correctly in the overlaid plot
-   **Plans**: TBD
+   **Plans**: 3 plans
    **UI hint**: yes
+
+Plans:
+
+**Wave 1**
+
+- [ ] 42-01-PLAN.md — Shared foundation: pure results.py builders (microdosimetry spectrum + 4-arg sweep overlay), sweep bulk-CSV + microdosimetry to_csv_bytes branch, CSV-export tests, batch-sweep-default live spike (FEAT-03, FEAT-04)
+
+**Wave 2** *(depends on 42-01; 42-02 and 42-03 run in parallel — no file overlap)*
+
+- [ ] 42-02-PLAN.md — Microdosimetry page: CSV upload + tempfile bridge to run_microdosimetry, y·d(y) log-x spectrum, y_F/y_D caption, single-result CSV download (FEAT-03)
+- [ ] 42-03-PLAN.md — Batch sweep page: curated param/sim-type selectboxes, real ParametricSweep.run(), partial-tolerant overlay, bulk CSV download (FEAT-04)
 
 ### Phase 43: Integration Audit — All 20 Notebook Workflows
 
