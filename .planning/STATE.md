@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Simulator Library & Streamlit UI
 status: executing
-stopped_at: Phase 42 planned (3 plans, 2 waves, plan-checker verified)
-last_updated: "2026-07-14T15:20:34.336Z"
+stopped_at: Phase 42 executed (3/3 plans complete, 2 waves)
+last_updated: "2026-07-14T16:00:00.000Z"
 last_activity: 2026-07-14
 progress:
   total_phases: 25
-  completed_phases: 15
+  completed_phases: 16
   total_plans: 41
-  completed_plans: 39
-  percent: 60
+  completed_plans: 41
+  percent: 64
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-26)
 
 **Core value:** Installable Python library + Streamlit UI that makes the SiC TCAD simulator usable by the Petringa group without reading source code
-**Current focus:** Phase 42 — microdosimetry-page-batch-sweep-page (planned, 3 plans across 2 waves — ready to execute)
+**Current focus:** Phase 42 complete — next up: Phase 43 (Integration Audit — All 20 Notebooks)
 
 ## Current Position
 
-Phase: 42 (microdosimetry-page-batch-sweep-page) — PLANNED (0/3 plans executed)
-Plan: 1 of 3
-Status: Ready to execute
+Phase: 42 (microdosimetry-page-batch-sweep-page) — COMPLETE (3/3 plans executed)
+Plan: 3 of 3
+Status: Phase complete. Next: /gsd:execute-phase 43 (or plan-phase 43 if not yet planned).
 Last activity: 2026-07-14
 
-Progress: [██████████] 95%
+Progress: [██████████] 100%
 
 ## v5.0 Phase Map
 
@@ -67,7 +67,9 @@ Progress: [██████████] 95%
 | Phase 39 P04 | 15min  | 1 tasks  | 2 files |
 | Phase 39 P03 | 20min  | 2 tasks  | 4 files |
 | Phase 41 P02 | 25min  | 2 tasks  | 2 files |
-| Phase 42 P01 | 8 min | 3 tasks | 3 files |
+| Phase 42 P01 | 8 min  | 3 tasks  | 3 files |
+| Phase 42 P02 | 15 min | 2 tasks  | 2 files |
+| Phase 42 P03 | 13 min | 2 tasks  | 2 files |
 
 ## Accumulated Context
 
@@ -108,6 +110,7 @@ Progress: [██████████] 95%
 - `uv sync` alone only materializes `pyproject.toml`'s base `[project.dependencies]`; `pytest` lives in `[project.optional-dependencies].dev` and must be synced via `uv sync --extra dev` or `uv run pytest` silently falls back to a non-project `pytest` on `PATH` that cannot see the venv's installed packages (observed as a spurious `ModuleNotFoundError: plotly` during 39-02 test collection).
 - Plan 39-04 complete: field map page mirrors the sibling 39-03 page/test structure (`petringa.run_field` referenced as a module attribute for monkeypatch mockability); 1D-only pre-check placed BEFORE `run_field` since it silently returns empty x/y arrays for 2D configs instead of raising — see `39-04-SUMMARY.md`.
 - Plan 39-03 complete: C-V and CCE pages mirror the 39-04 field_map page/test structure exactly (`petringa.run_cv` / `petringa.run_cce` referenced as module attributes for monkeypatch mockability); both use a 1D-only pre-check before the facade call since `run_cv`/`run_cce` raise `NotImplementedError` for 2D configs (unlike `run_field`, which silently returns empty arrays) — see `39-03-SUMMARY.md`.
+- Phase 42 complete (2026-07-14): `app/components/results.py` extended with `build_microdosimetry_figure`, `build_sweep_overlay_figure` (4-arg, per-facade axis titles), `sweep_results_to_csv_bytes` (bulk N-result CSV), and a `microdosimetry` branch in `to_csv_bytes` (42-01). The live-devsim spike confirmed the batch-sweep default (`run_cce` + `epi_thickness_um=[10,15,20]`) renders 3 full, non-truncated curves — see `42-01-SPIKE-NOTES.md`. `app/workflows/microdosimetry.py` (42-02) is the app's first file-upload page: `st.file_uploader` → server-side tempfile bridge → `run_microdosimetry` → cached spectrum + y_F/y_D readout + CSV download. `app/workflows/batch_sweep.py` (42-03) is the general-case parametric-sweep page: curated `SWEEPABLE_FIELDS`/`SIM_FACADES` selectboxes, real `ParametricSweep(...).run()` via `getattr` facade seam, overlay chart, bulk CSV download. Both Wave 2 pages built in parallel worktrees against the shared 42-01 foundation with zero file conflicts; merged clean, 19/19 combined tests pass.
 
 ### Tech Debt Resolved by v5.0 Phases
 
@@ -128,6 +131,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-14T15:20:06.994Z
-Stopped at: Phase 42 planned (3 plans, 2 waves, plan-checker verified)
+Last session: 2026-07-14T16:00:00.000Z
+Stopped at: Phase 42 executed (3/3 plans complete, 2 waves) — ready for /gsd:execute-phase 43
 Resume file: None

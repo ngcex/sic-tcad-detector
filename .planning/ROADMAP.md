@@ -381,7 +381,7 @@ Plans:
 
 Plans:
 
-- [x] 35-01-PLAN.md — Package scaffold: pyproject.toml (hatchling), petringa/__init__.py (DeviceConfig stub), editable install
+- [x] 35-01-PLAN.md — Package scaffold: pyproject.toml (hatchling), petringa/**init**.py (DeviceConfig stub), editable install
 - [x] 35-02-PLAN.md — src/ → petringa/core/ rename, import rewrite (326 statements + 6 string-literal fixes + 81 notebook imports), full test gate
 
 ### Phase 36: Core API — DeviceConfig + C-V + Field + Vertical Slice
@@ -423,11 +423,11 @@ Plans:
 
 - [x] 37-01-PLAN.md — run_cce() flagship facade (bucket-a config-forwarding adapter, CCE physics gate) + tests/test_api_cce.py (LIB-04)
 
-**Wave 2** *(blocked on Wave 1 completion)*
+**Wave 2** _(blocked on Wave 1 completion)_
 
 - [x] 37-02-PLAN.md — 6 remaining facades (run_radiation_damage/temperature_sweep/flash_recombination/dark_current/transient/microdosimetry) across 3 buckets + tests/test_api_facades.py + tests/test_api_microdosimetry.py (LIB-06)
 
-**Wave 3** *(blocked on Wave 2 completion)*
+**Wave 3** _(blocked on Wave 2 completion)_
 
 - [x] 37-03-PLAN.md — ParametricSweep class (dataclasses.replace config cloning) + tests/test_api_sweep.py (LIB-07)
 
@@ -451,11 +451,11 @@ Plans:
 
 - [x] 38-01-PLAN.md — Config core: pure assemble_config() seam + render_device_sidebar() + pytest pythonpath + UI-02/UI-07 unit tests (UI-02, UI-07)
 
-**Wave 2** *(depends on 38-01)*
+**Wave 2** _(depends on 38-01)_
 
 - [x] 38-02-PLAN.md — st.navigation shell (app/main.py) + theme config.toml + Home + 7 placeholder pages with empty-state guard + AppTest smoke (UI-01, UI-07)
 
-**Wave 3 (gap closure)** *(depends on 38-01, 38-02)*
+**Wave 3 (gap closure)** _(depends on 38-01, 38-02)_
 
 - [x] 38-03-PLAN.md — Gap closure UI-07: rename app/pages/ -> app/workflows/ (fixes st.navigation magic-dir collision), add explicit key= to all 12 sidebar widgets, AppTest first-rerun persistence regression test + structural guard (UI-02, UI-07)
 
@@ -479,11 +479,11 @@ Plans:
 
 - [x] 39-01-PLAN.md — Wave 0 prerequisites: materialize plotly via `uv sync` + AppTest/monkeypatch mockability spike proving `petringa.run_*` is interceptable (UI-03, UI-04, UI-05)
 
-**Wave 2** *(depends on 39-01)*
+**Wave 2** _(depends on 39-01)_
 
 - [x] 39-02-PLAN.md — Shared `app/components/results.py`: pure Plotly figure builders + `to_csv_bytes` serializer (per-sim_type columns + commented traceability header) + pure serializer unit test (UI-03, UI-04, UI-05, UI-06)
 
-**Wave 3** *(depends on 39-01, 39-02; 39-03 and 39-04 run in parallel — no file overlap)*
+**Wave 3** _(depends on 39-01, 39-02; 39-03 and 39-04 run in parallel — no file overlap)_
 
 - [x] 39-03-PLAN.md — C-V + CCE pages: 1D guard → Run → session_state cache → Plotly charts → CSV download, with mocked-facade AppTests (UI-03, UI-04, UI-06)
 - [x] 39-04-PLAN.md — Field map page: 1D pre-check → Run → cache → E-field + potential Plotly charts (one call) → CSV download, with mocked-facade AppTest (UI-05, UI-06)
@@ -503,7 +503,7 @@ Plans:
 
 - [x] 40-01-PLAN.md — Pure geometry_viewer builder (MeshData -> go.Heatmap 2D / go.Bar 1D) + QUANTITIES + pure unit tests (VIZ-01, VIZ-02, VIZ-03)
 - [x] 40-02-PLAN.md — Wire viewer into field_map page: remove 2D st.stop guard, branch 1D/2D render, quantity selectbox (no re-solve) + AppTests (VIZ-01, VIZ-02, VIZ-03)
-   **UI hint**: yes
+      **UI hint**: yes
 
 ### Phase 41: Radiation Damage + Dark Current Pages
 
@@ -525,7 +525,7 @@ Plans:
 
 - [x] 41-01-PLAN.md — Foundation: live-devsim ParametricSweep(param="T") spike + results.py figure builders/CSV branches + Pitfall-4 test fix (FEAT-01, FEAT-02)
 
-**Wave 2** *(depends on 41-01; 41-02 and 41-03 run in parallel — no file overlap)*
+**Wave 2** _(depends on 41-01; 41-02 and 41-03 run in parallel — no file overlap)_
 
 - [x] 41-02-PLAN.md — Radiation damage page: fluence/energy widgets, persistent kappa banner, NaN-tolerant CCE-vs-fluence render, CSV download (FEAT-01)
 - [x] 41-03-PLAN.md — Dark current page: temperature sweep via ParametricSweep(param="T"), J_SRH/J_TAT/J_SRV decomposition, CSV download (FEAT-02)
@@ -550,10 +550,10 @@ Plans:
 
 - [x] 42-01-PLAN.md — Shared foundation: pure results.py builders (microdosimetry spectrum + 4-arg sweep overlay), sweep bulk-CSV + microdosimetry to_csv_bytes branch, CSV-export tests, batch-sweep-default live spike (FEAT-03, FEAT-04)
 
-**Wave 2** *(depends on 42-01; 42-02 and 42-03 run in parallel — no file overlap)*
+**Wave 2** _(depends on 42-01; 42-02 and 42-03 run in parallel — no file overlap)_
 
-- [ ] 42-02-PLAN.md — Microdosimetry page: CSV upload + tempfile bridge to run_microdosimetry, y·d(y) log-x spectrum, y_F/y_D caption, single-result CSV download (FEAT-03)
-- [ ] 42-03-PLAN.md — Batch sweep page: curated param/sim-type selectboxes, real ParametricSweep.run(), partial-tolerant overlay, bulk CSV download (FEAT-04)
+- [x] 42-02-PLAN.md — Microdosimetry page: CSV upload + tempfile bridge to run_microdosimetry, y·d(y) log-x spectrum, y_F/y_D caption, single-result CSV download (FEAT-03)
+- [x] 42-03-PLAN.md — Batch sweep page: curated param/sim-type selectboxes, real ParametricSweep.run(), partial-tolerant overlay, bulk CSV download (FEAT-04)
 
 ### Phase 43: Integration Audit — All 20 Notebook Workflows
 
@@ -606,12 +606,12 @@ Plans:
 | 32. Angular Response 2D Sweep                   | v4.0      | 0/0            | Not started | -          |
 | 33. Full 3D Simulation (STRETCH)                | v4.0      | 0/0            | Not started | -          |
 | 34. v4.0 Milestone Audit & Paper Figures        | v4.0      | 0/0            | Not started | -          |
-| 35. Package Setup & Refactor                    | v5.0      | 2/2 | Complete   | 2026-07-01 |
-| 36. Core API — DeviceConfig + C-V + Field       | v5.0      | 3/3 | Complete    | 2026-07-02 |
-| 37. Core API — CCE + Facades + ParametricSweep  | v5.0      | 3/3 | Complete    | 2026-07-09 |
-| 38. Streamlit Shell + Device Config Page        | v5.0      | 3/3 | Complete   | 2026-07-10 |
-| 39. C-V, CCE, Field Map Pages + CSV Download    | v5.0      | 4/4 | Complete   | 2026-07-11 |
-| 40. Geometry Viewer                             | v5.0      | 2/2 | Complete   | 2026-07-13 |
-| 41. Radiation Damage + Dark Current Pages       | v5.0      | 3/3 | Complete   | 2026-07-13 |
-| 42. Microdosimetry Page + Batch Sweep Page      | v5.0      | 1/3 | In Progress|  |
+| 35. Package Setup & Refactor                    | v5.0      | 2/2            | Complete    | 2026-07-01 |
+| 36. Core API — DeviceConfig + C-V + Field       | v5.0      | 3/3            | Complete    | 2026-07-02 |
+| 37. Core API — CCE + Facades + ParametricSweep  | v5.0      | 3/3            | Complete    | 2026-07-09 |
+| 38. Streamlit Shell + Device Config Page        | v5.0      | 3/3            | Complete    | 2026-07-10 |
+| 39. C-V, CCE, Field Map Pages + CSV Download    | v5.0      | 4/4            | Complete    | 2026-07-11 |
+| 40. Geometry Viewer                             | v5.0      | 2/2            | Complete    | 2026-07-13 |
+| 41. Radiation Damage + Dark Current Pages       | v5.0      | 3/3            | Complete    | 2026-07-13 |
+| 42. Microdosimetry Page + Batch Sweep Page      | v5.0      | 3/3            | Complete    | 2026-07-14 |
 | 43. Integration Audit — All 20 Notebooks        | v5.0      | 0/0            | Not started | -          |
