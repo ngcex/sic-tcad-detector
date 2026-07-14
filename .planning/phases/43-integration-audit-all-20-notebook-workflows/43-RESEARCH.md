@@ -9,8 +9,9 @@
 Phase 43 is a **documentation + verification audit**, not a build phase. ROADMAP explicitly
 tags it "audit — no new code," and Success Criterion 3 states that any gaps are _logged as v6.0
 tech debt, not silently omitted (nor fixed here)_. The single phase requirement is **FEAT-05**
-("all 20 notebook workflows have an equivalent UI workflow"). This research catalogs the 20
-notebooks, the 8 Streamlit workflow pages, produces a notebook→page coverage matrix, audits the
+("all 20 notebook workflows have an equivalent UI workflow"). This research catalogs the 21
+workflow notebooks (see count reconciliation below — FEAT-05 says "20" but there are 21 files, prefix
+`05` doubled), the 8 Streamlit workflow pages, produces a notebook→page coverage matrix, audits the
 25 v5.0 requirements against actual source, and identifies the concrete gaps.
 
 **Key tension (surface to planner):** FEAT-05 as written requires _all 20_ notebooks to have UI
@@ -93,13 +94,16 @@ registry verification before adoption.)
 
 ## The 20 Notebooks (Catalog)
 
-**Notebook count reconciliation [VERIFIED: `ls notebooks/`]:** There are 21 `.ipynb` files. One is
-a duplicate execution artifact (`03_executed.ipynb`) — not a distinct workflow. There are **two
-`05_` files** (`05_dark_current_vs_fluence.ipynb` and `05_parametric_studies.ipynb`). Excluding the
-`03_executed` duplicate leaves exactly **20 canonical workflow notebooks** matching the `01–20`
-prefix range. Filenames do **not** align 1:1 with phase numbers (e.g. `06` = "Phase 10", `15`+ =
-v3.0 phases 19–25). `[ASSUMED]` that FEAT-05's "20 notebooks" = these 20 (the two `05_` files both
-count; `03_executed` does not) — planner should confirm this framing.
+**Notebook count reconciliation [VERIFIED: `ls notebooks/` → 22 `.ipynb` files]:** Of the 22
+files, one is a duplicate execution artifact (`03_executed.ipynb`) — not a distinct workflow.
+Removing it leaves **21 workflow notebooks, not 20**, because prefix `05` is used **twice**
+(`05_dark_current_vs_fluence.ipynb` and `05_parametric_studies.ipynb`). The files span the `01–20`
+prefix range (20 distinct prefixes), so FEAT-05's phrase "20 notebooks (`01_*` through `20_*`)"
+appears to **count prefixes and undercounts the actual workflow files by one**. Filenames do **not**
+align 1:1 with phase numbers (e.g. `06` = "Phase 10", `15`+ = v3.0 phases 19–25). `[ASSUMED]` that
+FEAT-05's intent is "every workflow across all 21 files" (both `05_*` count as distinct; `03_executed`
+does not) — planner should confirm this framing, since the matrix below has **21 rows** (05a + 05b),
+one more than the literal "20."
 
 | #   | Notebook                         | Workflow                                                       | Key `petringa.core` imports                                                 | Nearest UI facade                                             |
 | --- | -------------------------------- | -------------------------------------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------- |
@@ -181,10 +185,11 @@ notebooks 04 (FLASH), 05b (FLASH parametric), and 08 (transient).
 | 19  | alternative_structures      | NONE     | —                               | No page for mesa / 3D-electrode / delta-E/E structure comparison                                                                                              |
 | 20  | feasibility_report          | NONE     | —                               | No page for parametric optimization + noise + fab recommendations                                                                                             |
 
-**Coverage tally (MEDIUM confidence, executor to confirm):** FULL ≈ 4 (02, 07, 10, 18);
-PARTIAL ≈ 9; NONE ≈ 7 (04, 08, 12, 14, 16, 19, 20). This is the concrete evidence that FEAT-05
-is **partially satisfied** — the audit's job is to record each PARTIAL/NONE cell as a v6.0
-tech-debt item, not to close it.
+**Coverage tally (21 rows; MEDIUM confidence, executor to confirm):** FULL = 4 (02, 07, 10, 18);
+PARTIAL = 10 (01, 05a, 05b, 06, 09, 11, 13, 15, 17, plus 03 which is FULL-when-run-at-shallow-bias
+but PARTIAL at default); NONE = 7 (04, 08, 12, 14, 16, 19, 20). 4 + 10 + 7 = 21. This is the concrete
+evidence that FEAT-05 is **partially satisfied** — the audit's job is to record each PARTIAL/NONE
+cell as a v6.0 tech-debt item, not to close it.
 
 ## 25 v5.0 Requirements — Source-Verified Status
 
@@ -294,28 +299,30 @@ resource exhaustion — but this is a _known machine limitation_, not a regressi
 | ------------------ | ---------------------------------------------------------------------------- |
 | Framework          | pytest (declared in `[dev]` extras; run via `uv run pytest`)                 |
 | Config file        | none dedicated; `pyproject.toml` + `uv sync --extra dev` (STATE.md line 110) |
-| Quick run command  | `uv run pytest tests/test_api_*.py -q` (fast API unit tests, no heavy DD)    |
+| Quick run command  | `uv run pytest tests/test_api_*.py -q` — 24 pass in ~28s [VERIFIED 2026-07-14]; default `-q` deselects `@pytest.mark.slow` live-devsim classes |
 | Full suite command | **per-file/per-class isolation** (NOT bare `pytest -q`) — see Q1             |
 
 ### Phase Requirements → Test Map
 
 | Req       | Behavior                         | Test type              | Automated command                                                                                                                                                                                 | Exists?                          |
 | --------- | -------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
-| FEAT-05   | 20 notebooks reproducible via UI | manual (click-through) | human browser verification per workflow                                                                                                                                                           | ❌ manual-only by nature         |
-| SC4       | all `tests/test_api_*.py` pass   | unit                   | `uv run pytest tests/test_api_cv.py tests/test_api_cce.py tests/test_api_device.py tests/test_api_facades.py tests/test_api_field.py tests/test_api_microdosimetry.py tests/test_api_sweep.py -q` | ✅ all 7 exist                   |
+| FEAT-05   | 21 notebook workflows reproducible via UI | manual (click-through) | human browser verification per workflow                                                                                                                                                           | ❌ manual-only by nature         |
+| SC4       | all `tests/test_api_*.py` pass   | unit                   | `uv run pytest tests/test_api_cv.py tests/test_api_cce.py tests/test_api_device.py tests/test_api_facades.py tests/test_api_field.py tests/test_api_microdosimetry.py tests/test_api_sweep.py -q` | ✅ all 7 exist; **24 tests pass in one command in ~28s [VERIFIED]** — but this deselects `@pytest.mark.slow` live-devsim integration classes (e.g. `test_api_cce`'s `run_cce(v_start=-10,v_stop=-40)`). Running `-m slow` triggers real DD solves and falls under the per-file isolation rule |
 | App pages | pages render / mockable          | AppTest                | `uv run pytest tests/test_app_*.py -q`                                                                                                                                                            | ✅ 13 `test_app_*` modules exist |
 
 ### Sampling Rate
 
-- **Per task:** `uv run pytest tests/test_api_*.py -q` (fast, no devsim DD).
+- **Per task:** `uv run pytest tests/test_api_*.py -q` — fast (~28s, 24 tests) because default `-q` deselects the `@pytest.mark.slow` live-devsim classes; the slow classes need per-file isolation.
 - **Phase gate:** per-file/per-class isolation across all test modules (the DD-heavy `test_cv`,
   `test_charge_collection*`, `test_device2d`, `test_single_particle`, `test_transient`, etc. must be
   run in isolation, not in one process). Plus AppTest suite for the app pages.
 
 ### Wave 0 Gaps
 
-- None — all 7 `tests/test_api_*.py` and 13 `tests/test_app_*.py` modules already exist. This phase
-  adds **no new tests**; it runs the existing suite as an acceptance gate.
+- None — all 7 `tests/test_api_*.py` and 13 `tests/test_app_*.py` modules already exist, and the
+  fast `test_api_*` set was confirmed green (24 pass in ~28s, `test_api_cce.py` alone 2 pass in 2.8s)
+  [VERIFIED 2026-07-14]. This phase adds **no new tests**; it runs the existing suite as an
+  acceptance gate. The `@pytest.mark.slow` live-devsim classes still require per-file isolation.
 
 ## Security Domain
 
@@ -336,7 +343,7 @@ line 110).
 
 | #   | Claim                                                                                        | Section                | Risk if Wrong                                                                                                 |
 | --- | -------------------------------------------------------------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------- |
-| A1  | FEAT-05's "20 notebooks" = the 20 canonical files (both `05_*`; excluding `03_executed`)     | Notebook Catalog       | If the intended set differs, the matrix rows shift; low risk (any reasonable reading gives ~20)               |
+| A1  | FEAT-05's "20 notebooks" = the **21** workflow files (both `05_*`; excluding `03_executed`); the literal "20" counts prefixes     | Notebook Catalog       | If the intended set differs, the matrix rows shift; low risk (any reasonable reading gives ~20)               |
 | A2  | FULL/PARTIAL classifications (non-NONE rows) hold when click-tested in the browser           | Coverage Matrix        | MEDIUM — executor must confirm each observable renders; NONE rows are grep-hard, FULL/PARTIAL are inference   |
 | A3  | The de-facto meaning of SC4's `pytest -q` is per-file/per-class isolation (PKG-03 precedent) | Open Questions Q1      | If the user insists on a literal single `pytest -q`, it is unsatisfiable without `pytest-forked` (unverified) |
 | A4  | v6.0 gaps should be logged in a milestone-audit doc (v3.0 template), no TECH-DEBT.md exists  | v6.0 Tech-Debt Logging | Low — planner may choose a different doc; the _content_ is what SC3 requires                                  |
