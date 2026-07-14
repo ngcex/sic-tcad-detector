@@ -239,8 +239,14 @@ if st.button("Run simulation"):
             base_config=cfg, param=param, values=values, sim_fn=sim_fn,
         ).run()
         st.session_state["sweep_results"] = results
-        st.session_state["sweep_param"] = param
-        st.session_state["sweep_values"] = values
+        st.session_state["sweep_param"] = param      # SUPERSEDED — see 42-PATTERNS.md
+        st.session_state["sweep_values"] = values     # widget-key/snapshot-key namespace discipline:
+                                                        # these collide with key="sweep_param"/"sweep_values"
+                                                        # on the selectbox/text_input and raise
+                                                        # StreamlitAPIException in streamlit 1.58. The
+                                                        # actual plan (42-03-PLAN.md) snapshots to the
+                                                        # renamed keys sweep_run_param/sweep_run_values
+                                                        # instead — follow that, not this sketch.
     except RuntimeError as e:
         st.error(f"Simulation failed to converge: {e}\n\nTry a shallower value range.")
 ```
