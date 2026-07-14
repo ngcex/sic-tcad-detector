@@ -404,18 +404,23 @@ def sweep_results_to_csv_bytes(results: list[SimResult], param: str, values: lis
 
 **If this table were empty:** it is not — A1 and A3 in particular should be confirmed (A1 via a live spike, A3 via the UI-SPEC) before locking the plan.
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+> All three questions below were substantively resolved in `42-UI-SPEC.md` ("Open questions resolved this session" preamble); all three plans (42-01/02/03) already implement those resolutions. Inline `RESOLVED:` markers below record each disposition for traceability.
 
 1. **Should the microdosimetry page keep the `device_config` empty-state guard even though the spectrum is config-independent?**
+   - **RESOLVED (42-UI-SPEC.md):** KEEP the empty-state guard for cross-page consistency (config recorded as provenance in the CSV header). Implemented in 42-02.
    - What we know: config is provenance-only on the `SimResult`; the spectrum depends only on MC events + SV geometry.
    - What's unclear: whether forcing device config adds unwanted friction vs. cross-page consistency.
    - Recommendation: surface both in the UI-SPEC; default to keeping the guard for consistency unless the UI-SPEC decides otherwise. (A3)
 
 2. **Single-result CSV download on the microdosimetry page — include it or not?**
+   - **RESOLVED (42-UI-SPEC.md):** INCLUDE the single-result Download CSV; add a `microdosimetry` branch to `to_csv_bytes`. Implemented in 42-01/42-02.
    - What we know: not a stated success criterion; `to_csv_bytes` currently lacks a `microdosimetry` branch.
    - Recommendation: discretion — if included, add a `microdosimetry` branch to `to_csv_bytes` (columns: `y_keV_per_um`, `y_times_d_y`, plus `y_F`/`y_D`/`l_bar_um` in the `#` header); else omit. Flag for UI-SPEC.
 
 3. **Which sim facades to expose in the batch-sweep sim-type selectbox beyond `run_cce`?**
+   - **RESOLVED (42-UI-SPEC.md):** Expose exactly `run_cce` (default), `run_cv`, `run_temperature_sweep`; EXCLUDE `run_field` and `run_microdosimetry`. Implemented in 42-03 `SIM_FACADES`.
    - What we know: `run_cce`, `run_cv`, `run_temperature_sweep`, `run_radiation_damage`, `run_flash_recombination`, `run_transient` all return an overlayable x/y curve. `run_field` returns a single-bias depth profile with no partial-failure fallback (exclude). `run_microdosimetry` needs an mc_csv_path (doesn't fit the config-sweep model — exclude).
    - Recommendation: start with `run_cce` (default), `run_cv`, `run_temperature_sweep`; keep the list curated and explicitly EXCLUDE `run_field` and `run_microdosimetry`. Confirm in UI-SPEC.
 
