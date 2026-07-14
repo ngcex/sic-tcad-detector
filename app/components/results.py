@@ -294,6 +294,13 @@ def to_csv_bytes(result: SimResult) -> bytes:
             }
         )
         extra_header_lines = []
+    elif result.sim_type == "microdosimetry":
+        df = pd.DataFrame({"y_keV_per_um": result.x, "y_times_d_y": result.y})
+        extra_header_lines = [
+            f"# y_F_keV_per_um: {result.metadata['y_F']}",
+            f"# y_D_keV_per_um: {result.metadata['y_D']}",
+            f"# l_bar_um: {result.metadata['l_bar_um']}",
+        ]
     else:
         raise ValueError(f"to_csv_bytes: unknown sim_type {result.sim_type!r}")
 
@@ -312,3 +319,30 @@ def to_csv_bytes(result: SimResult) -> bytes:
 
     csv_text = "\n".join(header_lines) + "\n" + df.to_csv(index=False)
     return csv_text.encode("utf-8")
+
+
+def sweep_results_to_csv_bytes(results, param, values) -> bytes:
+    """Serialize ALL sweep runs into ONE CSV; leading `<param>` column per run.
+
+    A SEPARATE bulk serializer — NOT a `to_csv_bytes` branch (which is
+    single-result and dispatches on sim_type; see RESEARCH Pitfall 2). One
+    DataFrame per (val, res) is concatenated so every swept curve lives in a
+    single file, with a leading run-identifier column named literally after
+    the swept `param`. The `#`-comment header mirrors the `to_csv_bytes`
+    convention but omits `# device:` (this is a multi-run export) and adds
+    `# swept_values:` instead. Pure — no `st.*`, no temp files.
+    """
+    frames = [
+        pd.DataFrame({param: val, "x": res.x, "y": res.y})
+        for val, res in zip(values, results)
+    ]
+    combined = pd.concat(frames, ignore_index=True)
+    header_lines = [
+        f"# petringa SiC TCAD Simulator — parametric sweep ({param})",
+        f"# software_version: {petringa.__version__}",
+        f"# generated: {datetime.now(timezone.utc).isoformat()}",
+        f"# swept_values: {list(values)}",
+    ]
+    return ("\n".join(header_lines) + "\n" + combined.to_csv(index=False)).encode(
+        "utf-8"
+    )
