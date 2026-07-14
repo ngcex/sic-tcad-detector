@@ -1,10 +1,11 @@
 ---
 phase: 42
 slug: microdosimetry-page-batch-sweep-page
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: 2026-07-14
+reviewed_at: 2026-07-14
 ---
 
 # Phase 42 — UI Design Contract
