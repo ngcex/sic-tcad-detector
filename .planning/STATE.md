@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Simulator Library & Streamlit UI
 status: executing
-stopped_at: Completed 41-02-PLAN.md
+stopped_at: Completed Phase 41 (41-01, 41-02, 41-03)
 last_updated: "2026-07-13T23:26:05.092Z"
 last_activity: 2026-07-13
 progress:
   total_phases: 25
-  completed_phases: 15
+  completed_phases: 16
   total_plans: 38
   completed_plans: 38
   percent: 60
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-26)
 
 **Core value:** Installable Python library + Streamlit UI that makes the SiC TCAD simulator usable by the Petringa group without reading source code
-**Current focus:** Phase 40 — geometry-viewer
+**Current focus:** Phase 42 — microdosimetry-page-batch-sweep-page (not yet planned)
 
 ## Current Position
 
-Phase: 40 (geometry-viewer) — EXECUTING
-Plan: 2 of 2
-Status: Ready to execute
+Phase: 41 (radiation-damage-dark-current-pages) — COMPLETE (3/3 plans)
+Plan: 3 of 3
+Status: Phase complete. Next: plan Phase 42.
 Last activity: 2026-07-13
 
 Progress: [██████████] 100%
@@ -66,7 +66,7 @@ Progress: [██████████] 100%
 | Phase 39 P02 | 25 min | 2 tasks  | 2 files |
 | Phase 39 P04 | 15min  | 1 tasks  | 2 files |
 | Phase 39 P03 | 20min  | 2 tasks  | 4 files |
-| Phase 41 P02 | 25min | 2 tasks | 2 files |
+| Phase 41 P02 | 25min  | 2 tasks  | 2 files |
 
 ## Accumulated Context
 

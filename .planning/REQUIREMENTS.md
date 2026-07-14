@@ -42,7 +42,7 @@ Requirements for Simulator Library & Streamlit UI milestone. Phases 35+.
 ### Feature Complete (FEAT)
 
 - [x] **FEAT-01**: User can run a radiation damage sweep on the radiation damage page, specifying fluence range and proton energy, and see CCE vs fluence curves; page shows a warning banner noting kappa values are data-blocked placeholders
-- [ ] **FEAT-02**: User can run a dark current simulation and see dark current vs temperature with individual trap contributions (J_SRH, J_TAT, J_SRV) decomposed in the plot
+- [x] **FEAT-02**: User can run a dark current simulation and see dark current vs temperature with individual trap contributions (J_SRH, J_TAT, J_SRV) decomposed in the plot
 - [ ] **FEAT-03**: User can upload a Geant4 MC CSV file on the microdosimetry page and see a y·d(y) vs log(y) lineal energy spectrum with y_F and y_D values displayed
 - [ ] **FEAT-04**: User can configure and run a parametric sweep on the batch sweep page (select parameter, define range, choose simulation type), view overlaid results for all parameter values, and download all results as a bulk CSV
 - [ ] **FEAT-05**: All 20 notebook workflows (from `notebooks/01_*` through `notebooks/20_*`) have an equivalent UI workflow accessible via the Streamlit pages
@@ -207,8 +207,8 @@ Explicitly excluded.
 | VIZ-01      | 40    | Pending                               |
 | VIZ-02      | 40    | Pending                               |
 | VIZ-03      | 40    | Pending                               |
-| FEAT-01     | 41    | Complete |
-| FEAT-02     | 41    | Pending                               |
+| FEAT-01     | 41    | Complete                              |
+| FEAT-02     | 41    | Complete                              |
 | FEAT-03     | 42    | Pending                               |
 | FEAT-04     | 42    | Pending                               |
 | FEAT-05     | 43    | Pending                               |
