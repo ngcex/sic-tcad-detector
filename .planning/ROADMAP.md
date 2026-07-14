@@ -548,7 +548,7 @@ Plans:
 
 **Wave 1**
 
-- [ ] 42-01-PLAN.md — Shared foundation: pure results.py builders (microdosimetry spectrum + 4-arg sweep overlay), sweep bulk-CSV + microdosimetry to_csv_bytes branch, CSV-export tests, batch-sweep-default live spike (FEAT-03, FEAT-04)
+- [x] 42-01-PLAN.md — Shared foundation: pure results.py builders (microdosimetry spectrum + 4-arg sweep overlay), sweep bulk-CSV + microdosimetry to_csv_bytes branch, CSV-export tests, batch-sweep-default live spike (FEAT-03, FEAT-04)
 
 **Wave 2** *(depends on 42-01; 42-02 and 42-03 run in parallel — no file overlap)*
 
@@ -613,5 +613,5 @@ Plans:
 | 39. C-V, CCE, Field Map Pages + CSV Download    | v5.0      | 4/4 | Complete   | 2026-07-11 |
 | 40. Geometry Viewer                             | v5.0      | 2/2 | Complete   | 2026-07-13 |
 | 41. Radiation Damage + Dark Current Pages       | v5.0      | 3/3 | Complete   | 2026-07-13 |
-| 42. Microdosimetry Page + Batch Sweep Page      | v5.0      | 0/0            | Not started | -          |
+| 42. Microdosimetry Page + Batch Sweep Page      | v5.0      | 1/3 | In Progress|  |
 | 43. Integration Audit — All 20 Notebooks        | v5.0      | 0/0            | Not started | -          |
