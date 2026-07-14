@@ -39,6 +39,8 @@ from app.components.results import build_sweep_overlay_figure, sweep_results_to_
 
 `petringa.ParametricSweep` and the facades MUST be referenced as **module attributes** (`petringa.run_cce`, `getattr(petringa, ...)`), never `from petringa import ...`, so tests can `monkeypatch.setattr(petringa, "run_cce", fake)` while real `ParametricSweep.run()` executes — the seam proven in `tests/test_app_run_mockability.py` (39-01).
 
+> **State-key namespace discipline (mirror dark_current.py):** dark_current.py keeps its WIDGET keys (`dc_t_min`, `dc_v_bias`, …) and its result-SNAPSHOT keys (`dark_current_result`, `dark_current_n_ok`, …) in **disjoint namespaces** — a widget's `key=` is NEVER re-written via `st.session_state[...] = ` later in the same `render()`. streamlit 1.58 enforces this: writing `st.session_state["sweep_param"] = param` **after** a `st.selectbox(..., key="sweep_param")` was instantiated raises `StreamlitAPIException: st.session_state.sweep_param cannot be modified after the widget with key sweep_param is instantiated`. On this page the WIDGET keys are `sweep_param` / `sweep_values` (on the selectbox / text_input); the run-snapshot the render/download block depends on MUST therefore use the **renamed** keys `sweep_run_param` / `sweep_run_values` (plus the already-disjoint `sweep_results`, `sweep_sim_label`, `sweep_n_ok`, `sweep_n_requested`).
+
 **Empty-state + 1D guard pattern** (`dark_current.py:48-60`) — keep BOTH on this page (UI-SPEC line 121 puts the 1D guard on batch sweep):
 
 ```python
@@ -79,7 +81,7 @@ values_raw = st.text_input("Values (comma-separated)", value="10, 15, 20", key="
 sim_label = st.selectbox("Simulation type", list(SIM_FACADES), key="sweep_sim")  # default "CCE vs bias (run_cce)"
 ```
 
-**Value-list parse + Run + partial-failure aggregation** — mirror `dark_current.py:97-149`'s `try/except RuntimeError` + `T_ok`/`I_total` skip-empty loop, adapted per-swept-value (UI-SPEC Interaction Contract line 160-168):
+**Value-list parse + Run + partial-failure aggregation** — mirror `dark_current.py:97-149`'s `try/except RuntimeError` + `T_ok`/`I_total` skip-empty loop, adapted per-swept-value (UI-SPEC Interaction Contract line 160-168). **NOTE the renamed snapshot keys** `sweep_run_param` / `sweep_run_values` (they must NOT reuse the `sweep_param` / `sweep_values` widget keys — streamlit 1.58 forbids re-writing a widget key):
 
 ```python
 if st.button("Run simulation"):
@@ -103,8 +105,8 @@ if st.button("Run simulation"):
                 continue
             ok_values.append(val); ok_results.append(res)
         st.session_state["sweep_results"] = ok_results
-        st.session_state["sweep_param"] = param
-        st.session_state["sweep_values"] = ok_values
+        st.session_state["sweep_run_param"] = param       # RENAMED — NOT "sweep_param" (that is the widget key)
+        st.session_state["sweep_run_values"] = ok_values  # RENAMED — NOT "sweep_values" (that is the widget key)
         st.session_state["sweep_sim_label"] = sim_label   # needed for per-facade axis titles at render
         st.session_state["sweep_n_ok"] = len(ok_results)
         st.session_state["sweep_n_requested"] = len(values)
@@ -112,7 +114,7 @@ if st.button("Run simulation"):
         st.error(f"Simulation failed to converge: {e}\n\nTry a shallower value range.")
 ```
 
-**Partial-failure banner + render + bulk download** — mirror `dark_current.py:151-167` (`n_ok < n_requested` warning above chart), extended with the `n_ok == 0` → `st.error` case (UI-SPEC line 167) and the bulk-CSV button label (UI-SPEC line 123, must read exactly `"Download all results as CSV"`):
+**Partial-failure banner + render + bulk download** — mirror `dark_current.py:151-167` (`n_ok < n_requested` warning above chart), extended with the `n_ok == 0` → `st.error` case (UI-SPEC line 167) and the bulk-CSV button label (UI-SPEC line 123, must read exactly `"Download all results as CSV"`). Read the run snapshot from the **renamed** keys, NOT the live widget values:
 
 ```python
 results = st.session_state.get("sweep_results")
@@ -127,8 +129,8 @@ if results is not None:
                 f"{n_ok} of {n_requested} values completed successfully; the rest "
                 "failed to converge or returned no data and are omitted from the plot below."
             )
-        param = st.session_state["sweep_param"]
-        values = st.session_state["sweep_values"]
+        param = st.session_state["sweep_run_param"]     # RENAMED snapshot key (not the live widget)
+        values = st.session_state["sweep_run_values"]   # RENAMED snapshot key (not the live widget)
         sim_label = st.session_state["sweep_sim_label"]
         st.plotly_chart(build_sweep_overlay_figure(results, param, values, sim_label))
         st.download_button(
@@ -322,7 +324,7 @@ from petringa import DeviceConfig, SimResult
 - `_run_batch_sweep_page()` importing `app.workflows.batch_sweep.render` (`test_app_dark_current_page.py:46-49`)
 - empty-state guard (`test_app_dark_current_page.py:52-61`)
 - 2D-config 1D-only warning (`test_app_dark_current_page.py:64-72`)
-- Run uses real `ParametricSweep` + caches `list[SimResult]`, ≥3 values → ≥3 results (`test_app_dark_current_page.py:75-99`) — assert `len(at.session_state["sweep_results"]) >= 3`
+- Run uses real `ParametricSweep` + caches `list[SimResult]`, ≥3 values → ≥3 results (`test_app_dark_current_page.py:75-99`) — assert `len(at.session_state["sweep_results"]) >= 3`; the run-snapshot assertion (if any) reads the RENAMED key `at.session_state["sweep_run_param"]`, NOT `sweep_param` (which is the live widget value the render/download block does not depend on)
 - partial-value-failure warning, not crash (`test_app_dark_current_page.py:102-140`) — one fake returns empty `x` → `n_ok < n_requested` banner
 - bad value-list → `st.error`, no crash (NEW vs dark_current — set `sweep_values` to non-numeric via `at.text_input`, assert `at.error`)
 - facade `RuntimeError` → `st.error`, no cache (`test_app_dark_current_page.py:142-159`)
@@ -361,6 +363,11 @@ Mirror `test_app_radiation_damage_page.py`:
 **Source:** `app/workflows/dark_current.py:32-36` + `tests/test_app_run_mockability.py` (39-01)
 **Apply to:** both new pages + both new page tests
 `import petringa; petringa.run_X(...)` (never `from petringa import run_X`) so tests `monkeypatch.setattr(petringa, "run_X", fake)`. For batch sweep, monkeypatch the **facade** (`run_cce`), never `ParametricSweep` — the real `.run()` must execute.
+
+### Widget-key vs snapshot-key namespace discipline
+
+**Source:** `app/workflows/dark_current.py` (widget keys `dc_*` vs snapshot keys `dark_current_*`, disjoint) + streamlit 1.58 `StreamlitAPIException`
+**Apply to:** batch sweep page — a WIDGET `key=` (`sweep_param`, `sweep_values`) must NEVER be re-written via `st.session_state[...] = ` after the widget is instantiated. The run snapshot uses RENAMED keys `sweep_run_param` / `sweep_run_values`; the render/download block reads those, not the live widget values.
 
 ### Run → cache → render → download shape
 
