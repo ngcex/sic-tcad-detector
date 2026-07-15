@@ -16,7 +16,7 @@ provides:
   - "Corrected REQUIREMENTS.md: six stale checkboxes reconciled to source-verified reality"
   - "v5.0 milestone audit document (.planning/milestones/v5.0-MILESTONE-AUDIT.md)"
   - "21-row notebook-to-page coverage matrix with FULL/PARTIAL/NONE tally"
-  - "16-item v6.0 tech-debt backlog (15 new + 1 carried-forward from v4.0)"
+  - "17-item v6.0 tech-debt backlog (16 new + 1 carried-forward from v4.0)"
   - "Documented SC4 reinterpretation (per-file/per-class pytest isolation)"
 affects: [v6.0-planning, 43-02-plan-notebook-click-through-checkpoint]
 
@@ -44,7 +44,7 @@ completed: 2026-07-15
 
 # Phase 43 Plan 01: v5.0 Milestone Audit + Requirements Correction Summary
 
-**Reconciled six stale REQUIREMENTS.md checkboxes to source-verified reality and produced the v5.0 milestone audit documenting a 21-row notebook coverage matrix (FULL=4/PARTIAL=10/NONE=7) with a 16-item v6.0 tech-debt backlog — no source, physics, or UI code touched.**
+**Reconciled six stale REQUIREMENTS.md checkboxes to source-verified reality and produced the v5.0 milestone audit documenting a 21-row notebook coverage matrix (FULL=4/PARTIAL=10/NONE=7) with a 17-item v6.0 tech-debt backlog — no source, physics, or UI code touched.**
 
 ## Performance
 
@@ -72,7 +72,7 @@ _Note: Task 1 intentionally has no commit — it only runs the existing suite, p
 
 ## Files Created/Modified
 
-- `.planning/milestones/v5.0-MILESTONE-AUDIT.md` — new v5.0 milestone audit: requirements cross-reference, 21-row notebook coverage matrix, SC4 reinterpretation, 16-item v6.0 tech-debt backlog
+- `.planning/milestones/v5.0-MILESTONE-AUDIT.md` — new v5.0 milestone audit: requirements cross-reference, 21-row notebook coverage matrix, SC4 reinterpretation, 17-item v6.0 tech-debt backlog
 - `.planning/REQUIREMENTS.md` — six stale checkboxes + traceability rows corrected (UI-01/02/07, VIZ-01/02/03); FEAT-05 marked partial
 
 ## Decisions Made
