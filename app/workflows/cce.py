@@ -33,9 +33,25 @@ def render() -> None:
         )
         st.stop()
 
+    col1, col2 = st.columns(2)
+    with col1:
+        v_start = st.number_input(
+            "Min bias V_start (V)",
+            value=-10.0,
+            key="cce_v_start",
+        )
+    with col2:
+        v_stop = st.number_input(
+            "Max bias V_stop (V)",
+            value=-40.0,
+            key="cce_v_stop",
+        )
+
     if st.button("Run simulation"):
         try:
-            st.session_state["cce_result"] = petringa.run_cce(cfg)
+            st.session_state["cce_result"] = petringa.run_cce(
+                cfg, v_start=v_start, v_stop=v_stop
+            )
         except RuntimeError as e:
             st.error(
                 f"Simulation failed to converge: {e}\n\n"

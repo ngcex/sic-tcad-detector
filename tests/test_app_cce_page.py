@@ -55,6 +55,52 @@ def test_run_caches_result(monkeypatch):
     assert len(result.x) == 2  # proves the fake ran, not a real devsim solve
 
 
+def test_configurable_bias_range_passed_to_facade(monkeypatch):
+    captured_kwargs = {}
+
+    def _capturing_run_cce(cfg, **kwargs):
+        captured_kwargs.update(kwargs)
+        return _fake_run_cce(cfg, **kwargs)
+
+    monkeypatch.setattr(petringa, "run_cce", _capturing_run_cce)
+
+    at = AppTest.from_function(_run_cce_page)
+    at.session_state["device_config"] = DeviceConfig()
+    at.run()
+
+    at.number_input(key="cce_v_start").set_value(-1.0)
+    at.number_input(key="cce_v_stop").set_value(-20.0)
+    at.run()
+
+    at.button[0].click()
+    at.run()
+
+    assert at.exception == [], f"page crashed on Run click: {at.exception}"
+    assert captured_kwargs["v_start"] == -1.0
+    assert captured_kwargs["v_stop"] == -20.0
+
+
+def test_bias_inputs_default_to_facade_defaults(monkeypatch):
+    captured_kwargs = {}
+
+    def _capturing_run_cce(cfg, **kwargs):
+        captured_kwargs.update(kwargs)
+        return _fake_run_cce(cfg, **kwargs)
+
+    monkeypatch.setattr(petringa, "run_cce", _capturing_run_cce)
+
+    at = AppTest.from_function(_run_cce_page)
+    at.session_state["device_config"] = DeviceConfig()
+    at.run()
+
+    at.button[0].click()
+    at.run()
+
+    assert at.exception == []
+    assert captured_kwargs["v_start"] == -10.0
+    assert captured_kwargs["v_stop"] == -40.0
+
+
 def test_2d_config_warns_and_skips(monkeypatch):
     monkeypatch.setattr(petringa, "run_cce", _fake_run_cce)
 
