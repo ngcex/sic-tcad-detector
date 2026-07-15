@@ -566,7 +566,17 @@ Plans:
 2. All 25 v5.0 requirements (PKG-01 through FEAT-05) are checked against the running application and documented as satisfied in the phase audit notes
 3. No phase from Phases 35-42 has unresolved issues blocking equivalent notebook coverage (any gaps are logged as v6.0 tech debt, not silent omissions)
 4. A final `pytest -q` run with the installed package passes all tests including all new `tests/test_api_*.py` modules added in Phases 36-37
-   **Plans**: TBD
+   **Plans**: 2 plans
+
+Plans:
+
+**Wave 1**
+
+- [ ] 43-01-PLAN.md — Audit deliverable: pytest per-file isolation gate, correct 6 stale REQUIREMENTS.md checkboxes, write v5.0-MILESTONE-AUDIT.md (coverage matrix + FEAT-05 partial disposition + v6.0 tech-debt backlog)
+
+**Wave 2** _(depends on 43-01)_
+
+- [ ] 43-02-PLAN.md — Human-verify checkpoint: click-test all 21 notebook workflows against the running UI (CCE/field at bias_V=-20.0), confirm the documented coverage matrix
 
 ## Progress
 
