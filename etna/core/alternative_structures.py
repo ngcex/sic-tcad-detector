@@ -20,14 +20,14 @@ import logging
 import devsim
 import devsim.python_packages.simple_physics as simple_physics
 
-from petringa.core.sic_material import (
+from etna.core.sic_material import (
     SiC4H_Parameters,
     intrinsic_concentration,
     mobility_caughey_thomas_T,
     srh_lifetime,
 )
-from petringa.core.incomplete_ionization import ionized_acceptor_concentration
-from petringa.core.device2d import (
+from etna.core.incomplete_ionization import ionized_acceptor_concentration
+from etna.core.device2d import (
     set_doping_profile_2d,
     set_graded_doping_2d,
     EPS_0,
@@ -867,7 +867,7 @@ def _setup_poisson_region(device_name, region_name, contacts):
     This is a minimal helper that replicates poisson.setup_poisson logic
     for arbitrary contact names, without modifying the poisson module.
     """
-    from petringa.core.poisson import _create_sic_potential_only
+    from etna.core.poisson import _create_sic_potential_only
 
     _create_sic_potential_only(device_name, region_name)
     for contact in contacts:

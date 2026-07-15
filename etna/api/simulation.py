@@ -1,9 +1,9 @@
-"""Simulation facades for the petringa public API.
+"""Simulation facades for the etna public API.
 
-`run_cv()` is a thin wrapper over `petringa.core.cv_analysis.cv_sweep`: it
+`run_cv()` is a thin wrapper over `etna.core.cv_analysis.cv_sweep`: it
 builds a DD-initialized 1D device via `build_device()`, sweeps the requested
 bias range through `cv_sweep`, and packages the result as a `SimResult`. It
-performs no physics changes — all physics lives in `petringa.core.*`.
+performs no physics changes — all physics lives in `etna.core.*`.
 """
 
 from __future__ import annotations
@@ -14,19 +14,19 @@ import numpy as np
 
 import devsim
 
-from petringa.api.device import DeviceConfig, build_device
-from petringa.api.results import MeshData, SimResult
-from petringa.core.charge_collection import cce_vs_bias, cce_vs_fluence
-from petringa.core.cv_analysis import cv_sweep
-from petringa.core.dark_current import create_dark_current_device, dark_current_sweep
-from petringa.core.devsim_reset import reset_devsim_fully
-from petringa.core.drift_diffusion import ramp_bias
-from petringa.core.flash_recombination import cce_vs_dose_rate
-from petringa.core.mc_coupling import load_mc_events_csv
-from petringa.core.microdosimetry import lineal_energy_spectrum, mean_chord_length
-from petringa.core.poisson import extract_electric_field
-from petringa.core.temperature_sweep import sweep_cce_vs_temperature
-from petringa.core.transient import transient_cce_vs_dose_rate
+from etna.api.device import DeviceConfig, build_device
+from etna.api.results import MeshData, SimResult
+from etna.core.charge_collection import cce_vs_bias, cce_vs_fluence
+from etna.core.cv_analysis import cv_sweep
+from etna.core.dark_current import create_dark_current_device, dark_current_sweep
+from etna.core.devsim_reset import reset_devsim_fully
+from etna.core.drift_diffusion import ramp_bias
+from etna.core.flash_recombination import cce_vs_dose_rate
+from etna.core.mc_coupling import load_mc_events_csv
+from etna.core.microdosimetry import lineal_energy_spectrum, mean_chord_length
+from etna.core.poisson import extract_electric_field
+from etna.core.temperature_sweep import sweep_cce_vs_temperature
+from etna.core.transient import transient_cce_vs_dose_rate
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ def run_cv(
     """Run a C-V sweep over a DeviceConfig and return a SimResult.
 
     Builds a DD-initialized 1D devsim device from `config`, sweeps the bias
-    range [v_start, v_stop] via `petringa.core.cv_analysis.cv_sweep`, and
+    range [v_start, v_stop] via `etna.core.cv_analysis.cv_sweep`, and
     wraps the result as `SimResult(sim_type="cv")` with bias on `x`,
     capacitance on `y`, and depletion widths + 1/C^2 in `metadata`.
 
@@ -79,12 +79,12 @@ def run_cv(
     Warning
     -------
     Calling this function deletes all devsim devices currently in the
-    process, not just those created by petringa. `run_cv` calls
+    process, not just those created by etna. `run_cv` calls
     `reset_devsim_fully()` unconditionally at entry (see
-    `petringa.core.devsim_reset`), which enumerates and deletes every
+    `etna.core.devsim_reset`), which enumerates and deletes every
     device registered with devsim in the process — devsim state is
-    process-global, not petringa-scoped. If your process holds another
-    live devsim device (e.g. built via `petringa.core.*` directly, or by
+    process-global, not etna-scoped. If your process holds another
+    live devsim device (e.g. built via `etna.core.*` directly, or by
     unrelated code sharing the process) across a `run_cv()` call, that
     device will be silently deleted.
     """
@@ -178,7 +178,7 @@ def run_field(config: DeviceConfig, bias_V: float = -50.0) -> SimResult:
         For 1D devices: sim_type="field", x=depth (um), y=node
         ElectricField (V/cm). For 2D devices, `x`/`y` are NOT a valid depth
         profile — the 2D mesh's `x` is the lateral coordinate, not depth
-        (`petringa.core.device2d.create_sic_2d_device`'s `y` is depth), and
+        (`etna.core.device2d.create_sic_2d_device`'s `y` is depth), and
         a single (x, y) profile isn't well-defined without picking a
         lateral slice. `SimResult.x`/`.y` are therefore returned as empty
         arrays for 2D devices; consumers must use the returned `mesh`
@@ -191,12 +191,12 @@ def run_field(config: DeviceConfig, bias_V: float = -50.0) -> SimResult:
     Warning
     -------
     Calling this function deletes all devsim devices currently in the
-    process, not just those created by petringa. `run_field` calls
+    process, not just those created by etna. `run_field` calls
     `reset_devsim_fully()` unconditionally at entry (see
-    `petringa.core.devsim_reset`), which enumerates and deletes every
+    `etna.core.devsim_reset`), which enumerates and deletes every
     device registered with devsim in the process — devsim state is
-    process-global, not petringa-scoped. If your process holds another
-    live devsim device (e.g. built via `petringa.core.*` directly, or by
+    process-global, not etna-scoped. If your process holds another
+    live devsim device (e.g. built via `etna.core.*` directly, or by
     unrelated code sharing the process) across a `run_field()` call, that
     device will be silently deleted.
     """
@@ -343,7 +343,7 @@ def run_cce(
     """Run a charge-collection-efficiency (CCE) vs bias sweep and return a SimResult.
 
     Thin bucket-a config->kwargs adapter over
-    `petringa.core.charge_collection.cce_vs_bias`. It maps the DeviceConfig
+    `etna.core.charge_collection.cce_vs_bias`. It maps the DeviceConfig
     geometry + doping into `cce_vs_bias`'s `device_kwargs`, calls the core
     function (which builds AND deletes its own devsim device), and repackages
     the returned dict as `SimResult(sim_type="cce")` with bias voltages on `x`
@@ -453,7 +453,7 @@ def run_radiation_damage(
     """Run a CCE-vs-proton-fluence damage sweep and return a SimResult.
 
     Bucket-a config->kwargs adapter over
-    `petringa.core.charge_collection.cce_vs_fluence`, which builds AND deletes
+    `etna.core.charge_collection.cce_vs_fluence`, which builds AND deletes
     a fresh device for each fluence point (self-cleaning). run_radiation_damage
     therefore does NOT call `build_device`, `reset_devsim_fully`, or
     `devsim.delete_device` — a facade-level cleanup would double-delete.
@@ -486,7 +486,7 @@ def run_radiation_damage(
     Warning
     -------
     RESEARCH Pitfall 4: the NIEL kappa hardness factors in
-    `petringa.core.radiation_damage` are DATA-BLOCKED placeholders, so the
+    `etna.core.radiation_damage` are DATA-BLOCKED placeholders, so the
     absolute critical-fluence (Phi_crit) numbers produced here are
     UNVALIDATED. Do NOT present these outputs as validated radiation-hardness
     predictions — they are a relative sensitivity shape only until real
@@ -530,7 +530,7 @@ def run_temperature_sweep(
     """Run a CCE-vs-temperature sweep at a single bias and return a SimResult.
 
     Bucket-a config->kwargs adapter over
-    `petringa.core.temperature_sweep.sweep_cce_vs_temperature`, which builds
+    `etna.core.temperature_sweep.sweep_cce_vs_temperature`, which builds
     AND deletes its own device(s) (self-cleaning). run_temperature_sweep
     therefore does NOT call `build_device`, `reset_devsim_fully`, or
     `devsim.delete_device`.
@@ -598,7 +598,7 @@ def run_flash_recombination(
     """Run a steady-state CCE-vs-dose-rate FLASH sweep and return a SimResult.
 
     Bucket-a config->kwargs adapter over
-    `petringa.core.flash_recombination.cce_vs_dose_rate`, which builds AND
+    `etna.core.flash_recombination.cce_vs_dose_rate`, which builds AND
     deletes its own device(s) (self-cleaning). run_flash_recombination
     therefore does NOT call `build_device`, `reset_devsim_fully`, or
     `devsim.delete_device`.
@@ -676,7 +676,7 @@ def run_dark_current(
     Bucket-b: run_dark_current owns the FULL device lifecycle
     (reset -> build -> try -> finally delete -> fallback reset), mirroring
     run_cv exactly. The device is built via
-    `petringa.core.dark_current.create_dark_current_device` (create_dd_device
+    `etna.core.dark_current.create_dark_current_device` (create_dd_device
     + TAT + surface-recombination setup) — the bare device-builder facade
     would omit the TAT/SRV model setup that dark_current_sweep requires, so it
     is NOT used here.
@@ -714,7 +714,7 @@ def run_dark_current(
     Calling this function deletes all devsim devices currently in the
     process (see run_cv). `run_dark_current` calls `reset_devsim_fully()`
     unconditionally at entry — devsim state is process-global, not
-    petringa-scoped.
+    etna-scoped.
     """
     bias_array = np.linspace(v_start, v_stop, n_points)
 
@@ -775,7 +775,7 @@ def run_transient(
 ) -> SimResult:
     """Run a transient CCE-vs-dose-rate FLASH-pulse sweep and return a SimResult.
 
-    Wraps `petringa.core.transient.transient_cce_vs_dose_rate`, which builds
+    Wraps `etna.core.transient.transient_cce_vs_dose_rate`, which builds
     AND deletes its own device for EACH dose rate internally. Despite living
     in the "bucket-b" task, run_transient is bucket-a-SHAPED: it adds NO
     build_device / reset_devsim_fully / delete_device — a facade-level cleanup
@@ -851,11 +851,11 @@ def run_microdosimetry(
     Pure data pipeline — touches NO devsim (no reset_devsim_fully, no device
     build, no delete_device). Loads per-step Monte Carlo energy depositions
     from `mc_csv_path` via
-    `petringa.core.mc_coupling.load_mc_events_csv`, aggregates them to
+    `etna.core.mc_coupling.load_mc_events_csv`, aggregates them to
     per-event collected energy, computes the mean chord length for the
     sensitive-volume geometry, and produces the frequency/dose lineal energy
     distributions via
-    `petringa.core.microdosimetry.lineal_energy_spectrum`.
+    `etna.core.microdosimetry.lineal_energy_spectrum`.
 
     The per-step -> per-event aggregation (sum of edep grouped by event_id)
     has no existing core analog and is defined explicitly here.

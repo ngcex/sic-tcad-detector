@@ -52,8 +52,8 @@ from devsim.python_packages.model_create import (
 )
 import numpy as np
 
-from petringa.core.charge_collection import add_generation_to_dd, compute_cce_from_dd
-from petringa.core.generation_profiles import proton_generation_profile
+from etna.core.charge_collection import add_generation_to_dd, compute_cce_from_dd
+from etna.core.generation_profiles import proton_generation_profile
 
 logger = logging.getLogger(__name__)
 
@@ -314,7 +314,7 @@ def cce_vs_dose_rate(
         - "N_D_bulk": bulk doping used
         - "L_transition": transition length used
     """
-    from petringa.core.drift_diffusion import create_dd_device, ramp_bias
+    from etna.core.drift_diffusion import create_dd_device, ramp_bias
 
     dose_rates = np.asarray(dose_rates_Gy_s, dtype=float)
     sorted_idx = np.argsort(dose_rates)

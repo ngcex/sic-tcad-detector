@@ -29,15 +29,15 @@ import uuid
 import devsim
 import numpy as np
 
-from petringa.core.device2d import create_sic_2d_device
-from petringa.core.poisson import setup_poisson, solve_equilibrium
-from petringa.core.drift_diffusion import (
+from etna.core.device2d import create_sic_2d_device
+from etna.core.poisson import setup_poisson, solve_equilibrium
+from etna.core.drift_diffusion import (
     setup_sic_drift_diffusion,
     extract_contact_current,
     ramp_bias,
 )
-from petringa.core.charge_collection import add_generation_to_dd
-from petringa.core.generation_profiles import alpha_depth_shape
+from etna.core.charge_collection import add_generation_to_dd
+from etna.core.generation_profiles import alpha_depth_shape
 
 logger = logging.getLogger(__name__)
 
@@ -213,7 +213,7 @@ def cce_lateral_scan(
     profile G(x,y) = depth_shape(y) * gen_rate * exp(-0.5*((x-x_pos)/sigma)^2)
     where y is measured from the junction (epi entrance), and depth_shape
     is the same smooth flat-box + erfc roll-off alpha depth profile used
-    by the 1D path (`petringa.core.generation_profiles.alpha_generation_profile`,
+    by the 1D path (`etna.core.generation_profiles.alpha_generation_profile`,
     shape-only, renormalized to peak at gen_rate here rather than to total
     deposited energy). Generation is zero in the substrate (y < junction_pos).
 
@@ -423,8 +423,8 @@ def compare_cce_2d_vs_1d(half_width_um=50.0, V_bias=50.0, gen_rate=1e18):
         - "half_width_um": half-width used
         - "V_bias": bias voltage used
     """
-    from petringa.core.drift_diffusion import create_dd_device
-    from petringa.core.charge_collection import compute_cce_from_dd
+    from etna.core.drift_diffusion import create_dd_device
+    from etna.core.charge_collection import compute_cce_from_dd
 
     device_info_2d = None
     device_info_1d = None

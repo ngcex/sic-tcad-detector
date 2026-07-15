@@ -25,8 +25,8 @@ from devsim.python_packages.model_create import (
 )
 import numpy as np
 
-from petringa.core.generation_profiles import alpha_generation_profile
-from petringa.core.sic_material import (
+from etna.core.generation_profiles import alpha_generation_profile
+from etna.core.sic_material import (
     SiC4H_Parameters,
     mobility_caughey_thomas_T,
     srh_lifetime,
@@ -403,7 +403,7 @@ def compute_cce_from_dd(device_info, generation_values, contact="cathode"):
     cce : float
         Charge collection efficiency, clipped to [0, 1].
     """
-    from petringa.core.drift_diffusion import extract_contact_current
+    from etna.core.drift_diffusion import extract_contact_current
 
     Q = 1.602e-19  # C
 
@@ -475,7 +475,7 @@ def cce_vs_bias(
           in V_range, for comparison against the last entry of "voltages"
           when "truncated" is True
     """
-    from petringa.core.drift_diffusion import create_dd_device, ramp_bias
+    from etna.core.drift_diffusion import create_dd_device, ramp_bias
 
     V_range = np.asarray(V_range, dtype=float)
 
@@ -579,7 +579,7 @@ def cce_vs_bias(
 
             # Extract CCE
             cce = compute_cce_from_dd(device_info, gen_values, contact="cathode")
-            from petringa.core.drift_diffusion import extract_contact_current
+            from etna.core.drift_diffusion import extract_contact_current
 
             I_coll = abs(extract_contact_current(device_info, "cathode"))
 
@@ -682,10 +682,10 @@ def cce_vs_fluence(
         - "energy_MeV": float
         - "lifetime_model": str
     """
-    from petringa.core.device import apply_damaged_params, create_sic_device
-    from petringa.core.drift_diffusion import ramp_bias, setup_sic_drift_diffusion
-    from petringa.core.poisson import setup_poisson, solve_equilibrium
-    from petringa.core.radiation_damage import compute_damaged_params
+    from etna.core.device import apply_damaged_params, create_sic_device
+    from etna.core.drift_diffusion import ramp_bias, setup_sic_drift_diffusion
+    from etna.core.poisson import setup_poisson, solve_equilibrium
+    from etna.core.radiation_damage import compute_damaged_params
 
     fluence_range = np.asarray(fluence_range, dtype=float)
 
@@ -870,10 +870,10 @@ def cce_vs_bias_at_fluence(
         - "energy_MeV": float
         - "lifetime_model": str
     """
-    from petringa.core.device import apply_damaged_params, create_sic_device
-    from petringa.core.drift_diffusion import ramp_bias, setup_sic_drift_diffusion
-    from petringa.core.poisson import setup_poisson, solve_equilibrium
-    from petringa.core.radiation_damage import compute_damaged_params
+    from etna.core.device import apply_damaged_params, create_sic_device
+    from etna.core.drift_diffusion import ramp_bias, setup_sic_drift_diffusion
+    from etna.core.poisson import setup_poisson, solve_equilibrium
+    from etna.core.radiation_damage import compute_damaged_params
 
     V_range = np.asarray(V_range, dtype=float)
 
@@ -1069,10 +1069,10 @@ def cce_post_anneal(
         Dictionary with: cce, fluence, T_anneal, t_anneal, V_bias,
         energy_MeV, f_Z12, f_EH67, f_EH4, tau_n, tau_p.
     """
-    from petringa.core.device import apply_damaged_params, create_sic_device
-    from petringa.core.drift_diffusion import ramp_bias, setup_sic_drift_diffusion
-    from petringa.core.poisson import setup_poisson, solve_equilibrium
-    from petringa.core.radiation_damage import compute_annealed_params
+    from etna.core.device import apply_damaged_params, create_sic_device
+    from etna.core.drift_diffusion import ramp_bias, setup_sic_drift_diffusion
+    from etna.core.poisson import setup_poisson, solve_equilibrium
+    from etna.core.radiation_damage import compute_annealed_params
 
     fluence = float(fluence)
 
@@ -1347,7 +1347,7 @@ def cce_vs_epi_thickness(
     diffusion only. At high bias (>30V for this doping) all thicknesses
     are fully depleted and CCE ~ 1.0.
     """
-    from petringa.core.drift_diffusion import (
+    from etna.core.drift_diffusion import (
         create_dd_device,
         ramp_bias,
         extract_contact_current,
@@ -1499,7 +1499,7 @@ def compare_cce_hecht_vs_dd(V_range, epi_thickness_cm=10e-4, **kwargs):
     max_dev = float(np.max(np.abs(cce_dd - np.asarray(cce_hecht, dtype=float))))
 
     # Compute agreement metrics (R-squared, RMSE, relative errors)
-    from petringa.core.validation import compute_agreement_metrics
+    from etna.core.validation import compute_agreement_metrics
 
     metrics_vs_hecht = compute_agreement_metrics(cce_dd, cce_hecht)
     metrics_vs_partial = compute_agreement_metrics(cce_dd, cce_hecht_partial)

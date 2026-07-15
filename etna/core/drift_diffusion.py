@@ -37,8 +37,8 @@ from devsim.python_packages.simple_dd import (
 import devsim.python_packages.simple_physics as simple_physics
 import numpy as np
 
-from petringa.core.device import create_sic_device
-from petringa.core.poisson import setup_poisson, solve_equilibrium
+from etna.core.device import create_sic_device
+from etna.core.poisson import setup_poisson, solve_equilibrium
 
 logger = logging.getLogger(__name__)
 

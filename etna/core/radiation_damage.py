@@ -25,7 +25,7 @@ import logging
 
 import numpy as np
 
-from petringa.core.sic_material import SiC4H_Parameters
+from etna.core.sic_material import SiC4H_Parameters
 
 logger = logging.getLogger(__name__)
 
@@ -966,7 +966,7 @@ def cce_uncertainty_envelope(
     """
     import itertools
 
-    from petringa.core.charge_collection import cce_vs_fluence
+    from etna.core.charge_collection import cce_vs_fluence
 
     if damage_params is None:
         damage_params = RadiationDamageParams()
@@ -1062,7 +1062,7 @@ def radiation_hardness_sweep(
 
     import pandas as pd
 
-    from petringa.core.charge_collection import cce_vs_fluence
+    from etna.core.charge_collection import cce_vs_fluence
 
     records = []
     for epi, nd, vb in itertools.product(epi_thicknesses, N_D_bulks, V_biases):

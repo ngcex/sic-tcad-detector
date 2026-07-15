@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "petringa"
+name = "etna"
 version = "5.0.0"
-description = "SiC TCAD Simulator Library for the Petringa group"
+description = "ETNA: Epitaxial Tcad Numerical Analysis — SiC TCAD simulator library for 4H-SiC detectors (INFN-LNS Petringa group)"
 requires-python = ">=3.13"
 dependencies = [
     "devsim>=2.10.0",
@@ -24,7 +24,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["petringa"]
+packages = ["etna"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

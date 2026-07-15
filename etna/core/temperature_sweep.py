@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import linregress
 
-from petringa.core.sic_material import (
+from etna.core.sic_material import (
     SiC4H_Parameters,
     bandgap,
     intrinsic_concentration,
@@ -64,8 +64,8 @@ def sweep_iv_vs_temperature(
     """
     import devsim
 
-    from petringa.core.drift_diffusion import create_dd_device, extract_contact_current, ramp_bias
-    from petringa.core.dark_current import create_dark_current_device
+    from etna.core.drift_diffusion import create_dd_device, extract_contact_current, ramp_bias
+    from etna.core.dark_current import create_dark_current_device
 
     temperatures = np.asarray(temperatures, dtype=float)
     params = SiC4H_Parameters()
@@ -159,8 +159,8 @@ def sweep_cv_vs_temperature(
     """
     import devsim
 
-    from petringa.core.cv_analysis import cv_sweep as _cv_sweep
-    from petringa.core.drift_diffusion import create_dd_device
+    from etna.core.cv_analysis import cv_sweep as _cv_sweep
+    from etna.core.drift_diffusion import create_dd_device
 
     temperatures = np.asarray(temperatures, dtype=float)
     if voltages is None:
@@ -239,9 +239,9 @@ def sweep_cce_vs_temperature(
     """
     import devsim
 
-    from petringa.core.charge_collection import hecht_cce
-    from petringa.core.cv_analysis import cv_sweep as _cv_sweep
-    from petringa.core.drift_diffusion import create_dd_device
+    from etna.core.charge_collection import hecht_cce
+    from etna.core.cv_analysis import cv_sweep as _cv_sweep
+    from etna.core.drift_diffusion import create_dd_device
 
     temperatures = np.asarray(temperatures, dtype=float)
     if voltages is None:
@@ -288,7 +288,7 @@ def sweep_cce_vs_temperature(
 
     elif method == "dd":
         # Use full DD CCE computation from charge_collection module
-        from petringa.core.charge_collection import cce_vs_bias
+        from etna.core.charge_collection import cce_vs_bias
 
         for T in temperatures:
             try:

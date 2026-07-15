@@ -439,6 +439,40 @@ wheels = [
 ]
 
 [[package]]
+name = "etna"
+version = "5.0.0"
+source = { editable = "." }
+dependencies = [
+    { name = "devsim" },
+    { name = "matplotlib" },
+    { name = "numpy" },
+    { name = "pandas" },
+    { name = "plotly" },
+    { name = "scipy" },
+    { name = "streamlit" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "jupyter" },
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "devsim", specifier = ">=2.10.0" },
+    { name = "jupyter", marker = "extra == 'dev'", specifier = ">=1.0" },
+    { name = "matplotlib", specifier = ">=3.7" },
+    { name = "numpy", specifier = ">=1.24" },
+    { name = "pandas", specifier = ">=2.0" },
+    { name = "plotly", specifier = ">=5.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
+    { name = "scipy", specifier = ">=1.11" },
+    { name = "streamlit", specifier = ">=1.30" },
+]
+provides-extras = ["dev"]
+
+[[package]]
 name = "executing"
 version = "2.2.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1403,40 +1437,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/30/4b/90c937815137d43ce
 wheels = [
     { url = "https://files.pythonhosted.org/packages/99/5d/8268b644392ee874ee82a635cd0df1773de230bde356c38de28e298392cc/parso-0.8.7-py2.py3-none-any.whl", hash = "sha256:a8926eb2a1b915486941fdbd31e86a4baf88fe8c210f25f2f35ecec5b574ca1c", size = 107025, upload-time = "2026-05-01T23:12:58.867Z" },
 ]
-
-[[package]]
-name = "petringa"
-version = "5.0.0"
-source = { editable = "." }
-dependencies = [
-    { name = "devsim" },
-    { name = "matplotlib" },
-    { name = "numpy" },
-    { name = "pandas" },
-    { name = "plotly" },
-    { name = "scipy" },
-    { name = "streamlit" },
-]
-
-[package.optional-dependencies]
-dev = [
-    { name = "jupyter" },
-    { name = "pytest" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "devsim", specifier = ">=2.10.0" },
-    { name = "jupyter", marker = "extra == 'dev'", specifier = ">=1.0" },
-    { name = "matplotlib", specifier = ">=3.7" },
-    { name = "numpy", specifier = ">=1.24" },
-    { name = "pandas", specifier = ">=2.0" },
-    { name = "plotly", specifier = ">=5.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
-    { name = "scipy", specifier = ">=1.11" },
-    { name = "streamlit", specifier = ">=1.30" },
-]
-provides-extras = ["dev"]
 
 [[package]]
 name = "pexpect"
