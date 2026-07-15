@@ -3,10 +3,10 @@
 All Streamlit calls live inside render() -- no module-level side effects --
 so this module can be imported for st.Page registration (app/main.py) and
 exercised headlessly via AppTest.from_function(render) in tests
-(tests/test_app_microdosimetry_page.py). petringa.run_microdosimetry is
-referenced as a MODULE ATTRIBUTE (not `from petringa import
+(tests/test_app_microdosimetry_page.py). etna.run_microdosimetry is
+referenced as a MODULE ATTRIBUTE (not `from etna import
 run_microdosimetry`) so tests can intercept it via
-monkeypatch.setattr(petringa, "run_microdosimetry", fake) -- the seam
+monkeypatch.setattr(etna, "run_microdosimetry", fake) -- the seam
 proven in tests/test_app_run_mockability.py (39-01).
 
 This is the app's first (and only) file-upload surface. run_microdosimetry
@@ -34,7 +34,7 @@ import tempfile
 
 import streamlit as st
 
-import petringa
+import etna
 from app.components.results import build_microdosimetry_figure, to_csv_bytes
 
 
@@ -68,7 +68,7 @@ def render() -> None:
                 # UploadedFile bytes; server-generated path (no traversal).
                 tmp.write(uploaded.getvalue())
                 tmp_path = tmp.name
-            st.session_state["microdosimetry_result"] = petringa.run_microdosimetry(
+            st.session_state["microdosimetry_result"] = etna.run_microdosimetry(
                 cfg,
                 mc_csv_path=tmp_path,
                 sv_thickness_um=sv_thickness,

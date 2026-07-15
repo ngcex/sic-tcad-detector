@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from petringa import DeviceConfig, SimResult
+from etna import DeviceConfig, SimResult
 from app.components.results import (
     build_dark_current_figure,
     sweep_results_to_csv_bytes,

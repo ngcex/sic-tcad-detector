@@ -1,10 +1,10 @@
-"""Wave 0 spike (Phase 39): prove petringa.run_cv is mockable via monkeypatch
+"""Wave 0 spike (Phase 39): prove etna.run_cv is mockable via monkeypatch
 under AppTest.from_function.
 
 This is the empirical confirmation of RESEARCH A6: pages must reference
-facades as a module attribute (`import petringa; petringa.run_cv(cfg)`)
-rather than `from petringa import run_cv`, so that `monkeypatch.setattr`
-on the `petringa` module is visible to the page code under test. Page
+facades as a module attribute (`import etna; etna.run_cv(cfg)`)
+rather than `from etna import run_cv`, so that `monkeypatch.setattr`
+on the `etna` module is visible to the page code under test. Page
 plans 39-03/39-04 depend on this seam to avoid real, expensive devsim
 solves in their AppTest suites.
 """
@@ -14,16 +14,16 @@ from __future__ import annotations
 import numpy as np
 from streamlit.testing.v1 import AppTest
 
-import petringa
-from petringa import DeviceConfig
+import etna
+from etna import DeviceConfig
 
 
 def test_run_cv_mockable_via_module_attribute(monkeypatch):
-    """petringa.run_cv, referenced as a module attribute, is interceptable
+    """etna.run_cv, referenced as a module attribute, is interceptable
     by monkeypatch under AppTest.from_function."""
 
     def fake_run_cv(cfg, **kwargs):
-        return petringa.SimResult(
+        return etna.SimResult(
             config=cfg,
             sim_type="cv",
             x=np.array([0.0, -10.0]),
@@ -36,15 +36,15 @@ def test_run_cv_mockable_via_module_attribute(monkeypatch):
             mesh=None,
         )
 
-    monkeypatch.setattr(petringa, "run_cv", fake_run_cv)
+    monkeypatch.setattr(etna, "run_cv", fake_run_cv)
 
     def _run_cv_wrapper():
         import streamlit as st
 
-        import petringa
-        from petringa import DeviceConfig
+        import etna
+        from etna import DeviceConfig
 
-        result = petringa.run_cv(DeviceConfig())
+        result = etna.run_cv(DeviceConfig())
         st.session_state["cv_result"] = result
 
     at = AppTest.from_function(_run_cv_wrapper)

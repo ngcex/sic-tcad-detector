@@ -24,21 +24,21 @@ class TestDevice2DCreation:
     """Test that create_sic_2d_device produces valid 2D devsim devices."""
 
     def test_creates_100um_sv(self):
-        from petringa.core.device2d import create_sic_2d_device
+        from etna.core.device2d import create_sic_2d_device
 
         dev = create_sic_2d_device(device_name=_unique_name(), half_width_um=50)
         assert dev["num_nodes"] > 500
         assert dev["dimension"] == 2
 
     def test_creates_300um_sv(self):
-        from petringa.core.device2d import create_sic_2d_device
+        from etna.core.device2d import create_sic_2d_device
 
         dev = create_sic_2d_device(device_name=_unique_name(), half_width_um=150)
         assert dev["num_nodes"] > 500
         assert dev["dimension"] == 2
 
     def test_has_correct_parameters(self):
-        from petringa.core.device2d import create_sic_2d_device
+        from etna.core.device2d import create_sic_2d_device
 
         dev = create_sic_2d_device(device_name=_unique_name(), half_width_um=50)
         assert dev["junction_pos"] == pytest.approx(1e-4)  # 1 um substrate
@@ -47,7 +47,7 @@ class TestDevice2DCreation:
         assert dev["half_width_cm"] == pytest.approx(50.0 * 1e-4)
 
     def test_has_sic_material_params(self):
-        from petringa.core.device2d import create_sic_2d_device
+        from etna.core.device2d import create_sic_2d_device
 
         dev = create_sic_2d_device(device_name=_unique_name())
         params = dev["params"]
@@ -61,7 +61,7 @@ class TestDoping2D:
 
     def test_graded_doping_applied(self):
         """Graded doping should vary with y (depth), not be constant."""
-        from petringa.core.device2d import create_sic_2d_device
+        from etna.core.device2d import create_sic_2d_device
 
         dev = create_sic_2d_device(device_name=_unique_name(), doping_profile="graded")
         donors = np.array(
@@ -80,7 +80,7 @@ class TestDoping2D:
 
     def test_doping_laterally_uniform(self):
         """Donors at same depth but different x should be identical."""
-        from petringa.core.device2d import create_sic_2d_device
+        from etna.core.device2d import create_sic_2d_device
 
         dev = create_sic_2d_device(
             device_name=_unique_name(), half_width_um=50, doping_profile="graded"
@@ -117,7 +117,7 @@ class TestDoping2D:
 
     def test_net_doping_junction_position(self):
         """NetDoping should change sign near junction_pos."""
-        from petringa.core.device2d import create_sic_2d_device
+        from etna.core.device2d import create_sic_2d_device
 
         dev = create_sic_2d_device(device_name=_unique_name(), doping_profile="graded")
         device = dev["device_name"]
@@ -158,7 +158,7 @@ class TestMeshStructure:
 
     def test_contacts_have_nodes(self):
         """Contacts should have nodes (air buffer regions working)."""
-        from petringa.core.device2d import create_sic_2d_device
+        from etna.core.device2d import create_sic_2d_device
 
         dev = create_sic_2d_device(device_name=_unique_name())
         contacts = devsim.get_contact_list(device=dev["device_name"])
@@ -167,7 +167,7 @@ class TestMeshStructure:
 
     def test_mesh_coordinates_in_range(self):
         """Node coordinates should be within expected bounds."""
-        from petringa.core.device2d import create_sic_2d_device
+        from etna.core.device2d import create_sic_2d_device
 
         half_width_um = 50.0
         dev = create_sic_2d_device(
@@ -214,8 +214,8 @@ class TestReverseBiasConvergence:
 
     @pytest.mark.slow
     def test_converges_at_minus_15V_100um(self):
-        from petringa.core.charge_collection_2d import create_2d_dd_device
-        from petringa.core.devsim_reset import reset_devsim_fully
+        from etna.core.charge_collection_2d import create_2d_dd_device
+        from etna.core.devsim_reset import reset_devsim_fully
 
         try:
             dev = create_2d_dd_device(
@@ -228,8 +228,8 @@ class TestReverseBiasConvergence:
 
     @pytest.mark.slow
     def test_converges_at_minus_30V_100um(self):
-        from petringa.core.charge_collection_2d import create_2d_dd_device
-        from petringa.core.devsim_reset import reset_devsim_fully
+        from etna.core.charge_collection_2d import create_2d_dd_device
+        from etna.core.devsim_reset import reset_devsim_fully
 
         try:
             dev = create_2d_dd_device(
@@ -242,8 +242,8 @@ class TestReverseBiasConvergence:
 
     @pytest.mark.slow
     def test_converges_at_minus_50V_100um(self):
-        from petringa.core.charge_collection_2d import create_2d_dd_device
-        from petringa.core.devsim_reset import reset_devsim_fully
+        from etna.core.charge_collection_2d import create_2d_dd_device
+        from etna.core.devsim_reset import reset_devsim_fully
 
         try:
             dev = create_2d_dd_device(
@@ -256,8 +256,8 @@ class TestReverseBiasConvergence:
 
     @pytest.mark.slow
     def test_converges_at_minus_15V_300um(self):
-        from petringa.core.charge_collection_2d import create_2d_dd_device
-        from petringa.core.devsim_reset import reset_devsim_fully
+        from etna.core.charge_collection_2d import create_2d_dd_device
+        from etna.core.devsim_reset import reset_devsim_fully
 
         try:
             dev = create_2d_dd_device(
@@ -270,8 +270,8 @@ class TestReverseBiasConvergence:
 
     @pytest.mark.slow
     def test_converges_at_minus_30V_300um(self):
-        from petringa.core.charge_collection_2d import create_2d_dd_device
-        from petringa.core.devsim_reset import reset_devsim_fully
+        from etna.core.charge_collection_2d import create_2d_dd_device
+        from etna.core.devsim_reset import reset_devsim_fully
 
         try:
             dev = create_2d_dd_device(
@@ -284,8 +284,8 @@ class TestReverseBiasConvergence:
 
     @pytest.mark.slow
     def test_converges_at_minus_50V_300um(self):
-        from petringa.core.charge_collection_2d import create_2d_dd_device
-        from petringa.core.devsim_reset import reset_devsim_fully
+        from etna.core.charge_collection_2d import create_2d_dd_device
+        from etna.core.devsim_reset import reset_devsim_fully
 
         try:
             dev = create_2d_dd_device(
@@ -309,15 +309,15 @@ class TestCalibrationCV:
     @pytest.mark.slow
     def test_2d_vs_1d_cv_centerline(self):
         import numpy as np
-        from petringa.core.charge_collection_2d import create_2d_dd_device
-        from petringa.core.drift_diffusion import create_dd_device
-        from petringa.core.cv_analysis import cv_sweep
-        from petringa.core.poisson import (
+        from etna.core.charge_collection_2d import create_2d_dd_device
+        from etna.core.drift_diffusion import create_dd_device
+        from etna.core.cv_analysis import cv_sweep
+        from etna.core.poisson import (
             extract_depletion_width_numerical,  # noqa: F401 - 1D twin via cv_sweep
             extract_depletion_width_2d_center,
         )
-        from petringa.core.devsim_reset import reset_devsim_fully
-        from petringa.core.device2d import (
+        from etna.core.devsim_reset import reset_devsim_fully
+        from etna.core.device2d import (
             _N_D_JUNCTION_DEFAULT,
             _N_D_BULK_DEFAULT,
             _L_TRANSITION_DEFAULT,
@@ -402,18 +402,18 @@ class TestResetStateLeak:
 
     @pytest.mark.slow
     def test_reset_after_alt_structures(self):
-        from petringa.core.devsim_reset import reset_devsim_fully
-        from petringa.core.charge_collection_2d import create_2d_dd_device
+        from etna.core.devsim_reset import reset_devsim_fully
+        from etna.core.charge_collection_2d import create_2d_dd_device
 
         try:
-            from petringa.core.alternative_structures import create_3d_electrode_device
+            from etna.core.alternative_structures import create_3d_electrode_device
         except Exception:
             pytest.skip("3D electrode constructor not available")
 
         # Reproducible scalar: total cathode contact current (electrons + holes)
         # of a fully DD-initialized device. If cylindrical assembly weights leak
         # into a subsequent planar build, this value shifts measurably.
-        from petringa.core.drift_diffusion import extract_contact_current
+        from etna.core.drift_diffusion import extract_contact_current
 
         def _dark_current_at_cathode(device_info):
             return extract_contact_current(device_info, contact="cathode")
@@ -473,18 +473,18 @@ class TestExtractDepletionWidth2DCenter:
     """
 
     def test_importable(self):
-        from petringa.core.poisson import extract_depletion_width_2d_center  # noqa: F401
+        from etna.core.poisson import extract_depletion_width_2d_center  # noqa: F401
 
     def test_raises_on_1d_device(self):
-        from petringa.core.poisson import extract_depletion_width_2d_center
+        from etna.core.poisson import extract_depletion_width_2d_center
 
         with pytest.raises(ValueError):
             extract_depletion_width_2d_center({"dimension": 1})
 
     @pytest.mark.slow
     def test_equilibrium_W_within_band_of_1d_twin(self):
-        from petringa.core.charge_collection_2d import create_2d_dd_device
-        from petringa.core.poisson import extract_depletion_width_2d_center
+        from etna.core.charge_collection_2d import create_2d_dd_device
+        from etna.core.poisson import extract_depletion_width_2d_center
 
         dev = create_2d_dd_device(
             device_name=_unique_name(),
@@ -499,8 +499,8 @@ class TestExtractDepletionWidth2DCenter:
 
     @pytest.mark.slow
     def test_W_expands_under_reverse_bias(self):
-        from petringa.core.charge_collection_2d import create_2d_dd_device
-        from petringa.core.poisson import extract_depletion_width_2d_center
+        from etna.core.charge_collection_2d import create_2d_dd_device
+        from etna.core.poisson import extract_depletion_width_2d_center
 
         dev0 = create_2d_dd_device(
             device_name=_unique_name(),
@@ -527,8 +527,8 @@ class TestGradedDopingSmoothness:
 
     def test_graded_doping_smoothness_no_kinks(self):
         import numpy as np
-        from petringa.core.charge_collection_2d import create_2d_dd_device
-        from petringa.core.poisson import extract_depletion_width_2d_center
+        from etna.core.charge_collection_2d import create_2d_dd_device
+        from etna.core.poisson import extract_depletion_width_2d_center
 
         dev = create_2d_dd_device(
             device_name=_unique_name(),

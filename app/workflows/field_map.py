@@ -4,7 +4,7 @@ All Streamlit calls live inside render() — no module-level side effects —
 so this module can be imported for st.Page registration (app/main.py) and
 exercised headlessly via AppTest.from_function(render) in tests.
 
-This page routes BOTH 1D and 2D configs THROUGH `petringa.run_field` (there is
+This page routes BOTH 1D and 2D configs THROUGH `etna.run_field` (there is
 no 2D pre-check that short-circuits before the solve). The render then branches
 on `result.mesh.y_coords is None`:
 
@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-import petringa
+import etna
 from app.components.geometry_viewer import build_geometry_figure, QUANTITIES
 from app.components.results import build_field_figures, to_csv_bytes
 
@@ -43,7 +43,7 @@ def render() -> None:
 
     if st.button("Run simulation"):
         try:
-            st.session_state["field_result"] = petringa.run_field(cfg)
+            st.session_state["field_result"] = etna.run_field(cfg)
         except RuntimeError as e:
             st.error(
                 f"Simulation failed to converge: {e}\n\n"

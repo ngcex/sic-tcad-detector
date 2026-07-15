@@ -2,7 +2,7 @@
 
 Mirrors tests/test_api_cv.py's structure: a slow @pytest.mark.slow class
 that exercises the full DeviceConfig -> cce_vs_bias -> SimResult contract
-through the public `petringa.run_cce()` facade (LIB-04), plus a fast
+through the public `etna.run_cce()` facade (LIB-04), plus a fast
 module-level guard that run_cce() rejects 2D configs before any devsim call.
 
 The LIB-04 physics gate is CCE in [0, 1]: run_cce() must return CCE values
@@ -12,8 +12,8 @@ on the y axis bounded to [0, 1] and bias voltages on the x axis.
 import numpy as np
 import pytest
 
-from petringa import DeviceConfig, run_cce
-from petringa.api.results import SimResult
+from etna import DeviceConfig, run_cce
+from etna.api.results import SimResult
 
 
 @pytest.mark.slow

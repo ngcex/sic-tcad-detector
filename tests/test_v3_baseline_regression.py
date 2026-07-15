@@ -40,12 +40,12 @@ def _compute_cce_center(half_width_um):
     to the module-level _N_D_*_DEFAULT constants patched by Plan 03.
     """
     import numpy as np
-    from petringa.core.charge_collection_2d import (
+    from etna.core.charge_collection_2d import (
         create_2d_dd_device,
         compute_cce_2d,
         _robust_dc_solve,
     )
-    from petringa.core.charge_collection import add_generation_to_dd
+    from etna.core.charge_collection import add_generation_to_dd
 
     dev = create_2d_dd_device(
         half_width_um=half_width_um,
@@ -68,7 +68,7 @@ def _compute_cce_center(half_width_um):
 @pytest.mark.slow
 def test_v3_cce_center_100um_preserved():
     """Calibrated 2D defaults must reproduce v3.0 CCE at the 100 um SV center."""
-    from petringa.core.devsim_reset import reset_devsim_fully
+    from etna.core.devsim_reset import reset_devsim_fully
 
     baseline = _load_baseline()
     expected = baseline["cce_center_100um"]
@@ -88,7 +88,7 @@ def test_v3_cce_center_100um_preserved():
 @pytest.mark.slow
 def test_v3_cce_center_300um_preserved():
     """Calibrated 2D defaults must reproduce v3.0 CCE at the 300 um SV center."""
-    from petringa.core.devsim_reset import reset_devsim_fully
+    from etna.core.devsim_reset import reset_devsim_fully
 
     baseline = _load_baseline()
     expected = baseline["cce_center_300um"]
@@ -108,9 +108,9 @@ def test_v3_cce_center_300um_preserved():
 @pytest.mark.slow
 def test_v3_cv_1d_preserved():
     """1D twin must reproduce the frozen v3.0 C-V at the validated [0, -5, -10] V."""
-    from petringa.core.drift_diffusion import create_dd_device  # 1D — frozen per STATE.md
-    from petringa.core.cv_analysis import cv_sweep
-    from petringa.core.devsim_reset import reset_devsim_fully
+    from etna.core.drift_diffusion import create_dd_device  # 1D — frozen per STATE.md
+    from etna.core.cv_analysis import cv_sweep
+    from etna.core.devsim_reset import reset_devsim_fully
 
     baseline = _load_baseline()
     expected_cv = baseline["cv_1d"]

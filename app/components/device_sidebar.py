@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from petringa import DeviceConfig
+from etna import DeviceConfig
 
 
 def assemble_config(values: dict) -> DeviceConfig:

@@ -24,7 +24,7 @@ if H1/H3 hold; if H2 dominates, the fix is mesh/BC, not the profile.
 DIAGNOSTIC ONLY — this script does NOT modify any file under ``src/``.
 
 Run:
-    cd /Users/ngcex/projects/physics/petringa && uv run python scripts/diagnose_1d_2d_parity.py
+    cd /Users/ngcex/projects/physics/etna && uv run python scripts/diagnose_1d_2d_parity.py
 
 NOTE on imports: ``create_dd_device`` is exported from ``src.drift_diffusion``
 (NOT ``src.device`` — the plan's import path was corrected here; ``src.device``
@@ -38,7 +38,7 @@ import uuid
 
 # Allow `uv run python scripts/diagnose_1d_2d_parity.py` to find the `src`
 # package: when run as a script, sys.path[0] is the scripts/ dir, not the
-# project root. Prepend the project root so `import petringa.core.*` resolves without
+# project root. Prepend the project root so `import etna.core.*` resolves without
 # requiring PYTHONPATH to be set externally.
 _PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
@@ -47,9 +47,9 @@ if str(_PROJECT_ROOT) not in sys.path:
 import devsim
 import numpy as np
 
-from petringa.core.drift_diffusion import create_dd_device
-from petringa.core.charge_collection_2d import create_2d_dd_device
-from petringa.core.poisson import extract_depletion_width_numerical
+from etna.core.drift_diffusion import create_dd_device
+from etna.core.charge_collection_2d import create_2d_dd_device
+from etna.core.poisson import extract_depletion_width_numerical
 
 
 def _reset_devsim_safe():

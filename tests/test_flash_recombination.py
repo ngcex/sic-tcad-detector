@@ -14,9 +14,9 @@ import devsim
 import numpy as np
 import pytest
 
-from petringa.core.drift_diffusion import create_dd_device, ramp_bias
-from petringa.core.charge_collection import add_generation_to_dd, compute_cce_from_dd
-from petringa.core.flash_recombination import (
+from etna.core.drift_diffusion import create_dd_device, ramp_bias
+from etna.core.charge_collection import add_generation_to_dd, compute_cce_from_dd
+from etna.core.flash_recombination import (
     add_auger_recombination,
     cce_vs_dose_rate,
     load_parametric_results,
@@ -24,8 +24,8 @@ from petringa.core.flash_recombination import (
     save_parametric_results,
     solve_with_continuation,
 )
-from petringa.core.generation_profiles import dose_rate_to_generation, proton_generation_profile
-from petringa.core.sic_material import SiC4H_Parameters
+from etna.core.generation_profiles import dose_rate_to_generation, proton_generation_profile
+from etna.core.sic_material import SiC4H_Parameters
 
 
 def _make_dd_device(name_prefix="test_auger"):

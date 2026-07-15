@@ -1,6 +1,6 @@
 """C-V page AppTest coverage: 1D guard, Run->cache->render->download.
 
-Each test monkeypatches petringa.run_cv as a MODULE ATTRIBUTE (the seam
+Each test monkeypatches etna.run_cv as a MODULE ATTRIBUTE (the seam
 proven in tests/test_app_run_mockability.py / 39-01) BEFORE calling at.run(),
 so the real (expensive) devsim solve never executes. AppTest 1.55 has no
 plotly_chart / download_button accessor (39-RESEARCH.md Validation), so
@@ -13,8 +13,8 @@ from __future__ import annotations
 import numpy as np
 from streamlit.testing.v1 import AppTest
 
-import petringa
-from petringa import DeviceConfig, SimResult
+import etna
+from etna import DeviceConfig, SimResult
 
 
 def _fake_run_cv(cfg, **kwargs):
@@ -39,7 +39,7 @@ def _run_cv_page():
 
 
 def test_run_caches_result(monkeypatch):
-    monkeypatch.setattr(petringa, "run_cv", _fake_run_cv)
+    monkeypatch.setattr(etna, "run_cv", _fake_run_cv)
 
     at = AppTest.from_function(_run_cv_page)
     at.session_state["device_config"] = DeviceConfig()
@@ -57,7 +57,7 @@ def test_run_caches_result(monkeypatch):
 
 
 def test_2d_config_warns_and_skips(monkeypatch):
-    monkeypatch.setattr(petringa, "run_cv", _fake_run_cv)
+    monkeypatch.setattr(etna, "run_cv", _fake_run_cv)
 
     at = AppTest.from_function(_run_cv_page)
     at.session_state["device_config"] = DeviceConfig(half_width_um=50.0)
@@ -69,7 +69,7 @@ def test_2d_config_warns_and_skips(monkeypatch):
 
 
 def test_empty_state_guard(monkeypatch):
-    monkeypatch.setattr(petringa, "run_cv", _fake_run_cv)
+    monkeypatch.setattr(etna, "run_cv", _fake_run_cv)
 
     at = AppTest.from_function(_run_cv_page)
     # session_state is empty by default (do not pre-seed device_config).
@@ -86,7 +86,7 @@ def test_solver_convergence_failure_shows_error_not_crash(monkeypatch):
             "ramp_bias: failed to converge at V=60.000V: Convergence failure!"
         )
 
-    monkeypatch.setattr(petringa, "run_cv", _raise_run_cv)
+    monkeypatch.setattr(etna, "run_cv", _raise_run_cv)
 
     at = AppTest.from_function(_run_cv_page)
     at.session_state["device_config"] = DeviceConfig()

@@ -3,10 +3,10 @@
 All Streamlit calls live inside render() -- no module-level side effects --
 so this module can be imported for st.Page registration (app/main.py) and
 exercised headlessly via AppTest.from_function(render) in tests
-(tests/test_app_radiation_damage_page.py). petringa.run_radiation_damage is
-referenced as a MODULE ATTRIBUTE (not `from petringa import
+(tests/test_app_radiation_damage_page.py). etna.run_radiation_damage is
+referenced as a MODULE ATTRIBUTE (not `from etna import
 run_radiation_damage`) so tests can intercept it via
-monkeypatch.setattr(petringa, "run_radiation_damage", fake) -- the seam
+monkeypatch.setattr(etna, "run_radiation_damage", fake) -- the seam
 proven in tests/test_app_run_mockability.py (39-01).
 
 The kappa (NIEL hardness factor) data-blocked warning banner is rendered
@@ -29,7 +29,7 @@ from __future__ import annotations
 import numpy as np
 import streamlit as st
 
-import petringa
+import etna
 from app.components.results import build_damage_figure, to_csv_bytes
 
 
@@ -96,7 +96,7 @@ def render() -> None:
     if st.button("Run simulation"):
         try:
             fluences = np.geomspace(fluence_min, fluence_max, int(n_points))
-            st.session_state["damage_result"] = petringa.run_radiation_damage(
+            st.session_state["damage_result"] = etna.run_radiation_damage(
                 cfg,
                 fluences=fluences,
                 V_bias=V_bias,

@@ -18,7 +18,7 @@ import sys
 import numpy as np
 import pytest
 
-from petringa.core.radiation_damage import (
+from etna.core.radiation_damage import (
     NIEL_HARDNESS_PROTON_SIC,
     AnnealingParams,
     RadiationDamageParams,
@@ -433,7 +433,7 @@ class TestRegressionSafety:
             ],
             capture_output=True,
             text=True,
-            cwd="/Users/ngcex/projects/physics/petringa",
+            cwd="/Users/ngcex/projects/physics/etna",
             timeout=120,
         )
         assert result.returncode == 0, (
@@ -449,7 +449,7 @@ class TestRegressionSafety:
         references 'devsim'. This is stronger than a runtime check because
         it catches conditional imports inside functions.
         """
-        module_path = "petringa/core/radiation_damage.py"
+        module_path = "etna/core/radiation_damage.py"
         with open(module_path) as f:
             tree = ast.parse(f.read(), filename=module_path)
 

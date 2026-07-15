@@ -1,7 +1,7 @@
 """Batch sweep page AppTest coverage: a general-case parametric sweep via the
-real ``petringa.ParametricSweep(...).run()`` orchestration.
+real ``etna.ParametricSweep(...).run()`` orchestration.
 
-Each test monkeypatches the FACADE (``petringa.run_cce``) as a MODULE ATTRIBUTE
+Each test monkeypatches the FACADE (``etna.run_cce``) as a MODULE ATTRIBUTE
 (the seam proven in ``tests/test_app_run_mockability.py`` / 39-01) BEFORE calling
 ``at.run()``, so the expensive real devsim solve never executes -- but
 ``ParametricSweep`` itself is NEVER monkeypatched: its real ``.run()`` logic runs
@@ -18,8 +18,8 @@ from __future__ import annotations
 import numpy as np
 from streamlit.testing.v1 import AppTest
 
-import petringa
-from petringa import DeviceConfig, SimResult
+import etna
+from etna import DeviceConfig, SimResult
 
 
 def _fake_run_cce(cfg, **kwargs):
@@ -40,7 +40,7 @@ def _run_batch_sweep_page():
 
 
 def test_empty_state_guard(monkeypatch):
-    monkeypatch.setattr(petringa, "run_cce", _fake_run_cce)
+    monkeypatch.setattr(etna, "run_cce", _fake_run_cce)
 
     at = AppTest.from_function(_run_batch_sweep_page)
     # session_state is empty by default (do not pre-seed device_config).
@@ -52,7 +52,7 @@ def test_empty_state_guard(monkeypatch):
 
 
 def test_2d_config_shows_1d_only_warning(monkeypatch):
-    monkeypatch.setattr(petringa, "run_cce", _fake_run_cce)
+    monkeypatch.setattr(etna, "run_cce", _fake_run_cce)
 
     at = AppTest.from_function(_run_batch_sweep_page)
     at.session_state["device_config"] = DeviceConfig(half_width_um=50.0)
@@ -64,7 +64,7 @@ def test_2d_config_shows_1d_only_warning(monkeypatch):
 
 def test_run_uses_parametric_sweep_and_caches_results(monkeypatch):
     # Monkeypatch the FACADE only; the real ParametricSweep.run() must execute.
-    monkeypatch.setattr(petringa, "run_cce", _fake_run_cce)
+    monkeypatch.setattr(etna, "run_cce", _fake_run_cce)
 
     at = AppTest.from_function(_run_batch_sweep_page)
     at.session_state["device_config"] = DeviceConfig()
@@ -84,7 +84,7 @@ def test_run_uses_parametric_sweep_and_caches_results(monkeypatch):
 
 
 def test_bad_value_list_shows_error(monkeypatch):
-    monkeypatch.setattr(petringa, "run_cce", _fake_run_cce)
+    monkeypatch.setattr(etna, "run_cce", _fake_run_cce)
 
     at = AppTest.from_function(_run_batch_sweep_page)
     at.session_state["device_config"] = DeviceConfig()
@@ -115,7 +115,7 @@ def test_partial_value_failure_shows_warning_not_crash(monkeypatch):
             )
         return _fake_run_cce(cfg, **kwargs)
 
-    monkeypatch.setattr(petringa, "run_cce", _fake_with_one_failure)
+    monkeypatch.setattr(etna, "run_cce", _fake_with_one_failure)
 
     at = AppTest.from_function(_run_batch_sweep_page)
     at.session_state["device_config"] = DeviceConfig()
@@ -140,7 +140,7 @@ def test_facade_runtime_error_shows_error_not_crash(monkeypatch):
     def _raise_run_cce(cfg, **kwargs):
         raise RuntimeError("failed to converge")
 
-    monkeypatch.setattr(petringa, "run_cce", _raise_run_cce)
+    monkeypatch.setattr(etna, "run_cce", _raise_run_cce)
 
     at = AppTest.from_function(_run_batch_sweep_page)
     at.session_state["device_config"] = DeviceConfig()

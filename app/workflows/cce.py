@@ -3,9 +3,9 @@
 All Streamlit calls live inside render() -- no module-level side effects --
 so this module can be imported for st.Page registration (app/main.py) and
 exercised headlessly via AppTest.from_function(render) in tests
-(tests/test_app_cce_page.py). petringa.run_cce is referenced as a MODULE
-ATTRIBUTE (not `from petringa import run_cce`) so tests can intercept it via
-monkeypatch.setattr(petringa, "run_cce", fake) -- the seam proven in
+(tests/test_app_cce_page.py). etna.run_cce is referenced as a MODULE
+ATTRIBUTE (not `from etna import run_cce`) so tests can intercept it via
+monkeypatch.setattr(etna, "run_cce", fake) -- the seam proven in
 tests/test_app_run_mockability.py (39-01).
 """
 
@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-import petringa
+import etna
 from app.components.results import build_cce_figure, to_csv_bytes
 
 
@@ -49,7 +49,7 @@ def render() -> None:
 
     if st.button("Run simulation"):
         try:
-            st.session_state["cce_result"] = petringa.run_cce(
+            st.session_state["cce_result"] = etna.run_cce(
                 cfg, v_start=v_start, v_stop=v_stop
             )
         except RuntimeError as e:

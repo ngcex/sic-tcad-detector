@@ -81,7 +81,7 @@ os.chdir('..')
 import matplotlib.pyplot as plt
 import numpy as np
 
-from petringa.core.microdosimetry import (
+from etna.core.microdosimetry import (
     mean_chord_length,
     lineal_energy_spectrum,
     compute_kappa_table,
@@ -89,8 +89,8 @@ from petringa.core.microdosimetry import (
     plot_yd_spectrum,
     plot_yf_spectrum,
 )
-from petringa.core.mc_coupling import load_mc_events_csv, process_mc_ensemble
-from petringa.core.single_particle import load_cce_let_table
+from etna.core.mc_coupling import load_mc_events_csv, process_mc_ensemble
+from etna.core.single_particle import load_cce_let_table
 
 # Publication-quality plot defaults
 plt.rcParams.update({

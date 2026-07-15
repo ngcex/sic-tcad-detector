@@ -20,7 +20,7 @@ values by > 0.1 % fails CI.
 DOES NOT modify src/. DOES NOT re-run any notebook.
 
 Run:
-    cd /Users/ngcex/projects/physics/petringa && uv run python scripts/freeze_v3_baselines.py
+    cd /Users/ngcex/projects/physics/etna && uv run python scripts/freeze_v3_baselines.py
 
 NOTE on devsim global state: ``devsim.reset_devsim()`` clears the direct-solver
 parameter AND the UMFPACK solver callback; this script saves and restores both
@@ -35,7 +35,7 @@ import subprocess
 import sys
 import uuid
 
-# Make `import petringa.core.*` resolve when run as `uv run python scripts/...`.
+# Make `import etna.core.*` resolve when run as `uv run python scripts/...`.
 _PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
@@ -43,14 +43,14 @@ if str(_PROJECT_ROOT) not in sys.path:
 import devsim
 import numpy as np
 
-from petringa.core.charge_collection_2d import (
+from etna.core.charge_collection_2d import (
     create_2d_dd_device,
     compute_cce_2d,
     _robust_dc_solve,
 )
-from petringa.core.charge_collection import add_generation_to_dd
-from petringa.core.drift_diffusion import create_dd_device
-from petringa.core.cv_analysis import cv_sweep
+from etna.core.charge_collection import add_generation_to_dd
+from etna.core.drift_diffusion import create_dd_device
+from etna.core.cv_analysis import cv_sweep
 
 # v3.0 default graded doping (src/device2d.py:41-43)
 N_D_JUNCTION = 2.9e15

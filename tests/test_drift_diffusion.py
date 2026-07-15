@@ -12,8 +12,8 @@ import pytest
 
 import devsim
 
-from petringa.core.device import create_sic_device, set_graded_doping_profile
-from petringa.core.drift_diffusion import (
+from etna.core.device import create_sic_device, set_graded_doping_profile
+from etna.core.drift_diffusion import (
     setup_sic_drift_diffusion,
     extract_contact_current,
     create_dd_device,

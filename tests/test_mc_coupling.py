@@ -18,7 +18,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from petringa.core.mc_coupling import (
+from etna.core.mc_coupling import (
     convert_units,
     events_to_charge_profiles,
     list_root_trees,
@@ -298,7 +298,7 @@ class TestEventsToChargeProfiles:
         )
         mock_device = {"device": "test", "region": "test"}
 
-        with patch("petringa.core.single_particle.ion_track_generation_2d") as mock_itg:
+        with patch("etna.core.single_particle.ion_track_generation_2d") as mock_itg:
             mock_itg.return_value = (np.zeros(100), 1e-15)
             profiles = events_to_charge_profiles(df, mock_device, sv_thickness_um=10.0)
 
@@ -327,7 +327,7 @@ class TestEventsToChargeProfiles:
         sv_um = 10.0
         expected_let = 80.0 / sv_um  # 8.0 keV/um
 
-        with patch("petringa.core.single_particle.ion_track_generation_2d") as mock_itg:
+        with patch("etna.core.single_particle.ion_track_generation_2d") as mock_itg:
             mock_itg.return_value = (np.zeros(100), 1e-15)
             events_to_charge_profiles(df, mock_device, sv_thickness_um=sv_um)
 
@@ -427,7 +427,7 @@ class TestFullPipeline:
         if not cce_path.exists():
             pytest.skip("CCE table not found at data/cce_let_table_100um.json")
 
-        from petringa.core.single_particle import load_cce_let_table
+        from etna.core.single_particle import load_cce_let_table
 
         cce_interp, metadata = load_cce_let_table(cce_path)
 

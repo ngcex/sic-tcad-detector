@@ -1,6 +1,6 @@
 """Field map page AppTest coverage: Run->cache->branched-render + selectbox.
 
-Each test monkeypatches petringa.run_field as a MODULE ATTRIBUTE (the seam
+Each test monkeypatches etna.run_field as a MODULE ATTRIBUTE (the seam
 proven in tests/test_app_run_mockability.py / 39-01) BEFORE calling at.run(),
 so the real (expensive) devsim solve never executes. AppTest 1.55 has no
 plotly_chart / download_button accessor (39/40-RESEARCH), so assertions are
@@ -20,8 +20,8 @@ from __future__ import annotations
 import numpy as np
 from streamlit.testing.v1 import AppTest
 
-import petringa
-from petringa import DeviceConfig, MeshData, SimResult
+import etna
+from etna import DeviceConfig, MeshData, SimResult
 
 
 def _fake_run_field(cfg, **kwargs):
@@ -83,7 +83,7 @@ def _run_field_page():
 
 
 def test_run_caches_field_result(monkeypatch):
-    monkeypatch.setattr(petringa, "run_field", _fake_run_field)
+    monkeypatch.setattr(etna, "run_field", _fake_run_field)
 
     at = AppTest.from_function(_run_field_page)
     at.session_state["device_config"] = DeviceConfig()
@@ -101,7 +101,7 @@ def test_run_caches_field_result(monkeypatch):
 
 
 def test_2d_config_routes_through_and_caches(monkeypatch):
-    monkeypatch.setattr(petringa, "run_field", _fake_run_field_2d)
+    monkeypatch.setattr(etna, "run_field", _fake_run_field_2d)
 
     at = AppTest.from_function(_run_field_page)
     at.session_state["device_config"] = DeviceConfig(half_width_um=50.0)
@@ -120,7 +120,7 @@ def test_2d_config_routes_through_and_caches(monkeypatch):
 
 
 def test_quantity_selectbox_present(monkeypatch):
-    monkeypatch.setattr(petringa, "run_field", _fake_run_field)
+    monkeypatch.setattr(etna, "run_field", _fake_run_field)
 
     at = AppTest.from_function(_run_field_page)
     at.session_state["device_config"] = DeviceConfig()
@@ -151,7 +151,7 @@ def test_selectbox_change_does_not_resolve(monkeypatch):
         calls["n"] += 1
         return _fake_run_field(cfg, **kwargs)
 
-    monkeypatch.setattr(petringa, "run_field", _counting_fake)
+    monkeypatch.setattr(etna, "run_field", _counting_fake)
 
     at = AppTest.from_function(_run_field_page)
     at.session_state["device_config"] = DeviceConfig()
@@ -174,7 +174,7 @@ def test_selectbox_change_does_not_resolve(monkeypatch):
 
 
 def test_empty_state_guard(monkeypatch):
-    monkeypatch.setattr(petringa, "run_field", _fake_run_field)
+    monkeypatch.setattr(etna, "run_field", _fake_run_field)
 
     at = AppTest.from_function(_run_field_page)
     # session_state is empty by default (do not pre-seed device_config).
@@ -191,7 +191,7 @@ def test_solver_convergence_failure_shows_error_not_crash(monkeypatch):
             "ramp_bias: failed to converge at V=66.000V: Convergence failure!"
         )
 
-    monkeypatch.setattr(petringa, "run_field", _raise_run_field)
+    monkeypatch.setattr(etna, "run_field", _raise_run_field)
 
     at = AppTest.from_function(_run_field_page)
     at.session_state["device_config"] = DeviceConfig()

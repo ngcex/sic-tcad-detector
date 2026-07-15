@@ -1,6 +1,6 @@
 """Geometry viewer: pure MeshData to Plotly figure builder.
 
-PURE module — no Streamlit calls anywhere. Turns a petringa MeshData
+PURE module — no Streamlit calls anywhere. Turns a etna MeshData
 (irregular node coords in cm + node_values) into a go.Figure: a 2D
 scipy-griddata heatmap when y_coords is present, or a 1D depth-profile bar
 chart when y_coords is None. Unit-testable without Streamlit and without any
@@ -16,7 +16,7 @@ import numpy as np
 import plotly.graph_objects as go
 from scipy.interpolate import griddata
 
-from petringa import MeshData
+from etna import MeshData
 
 # Friendly dropdown label -> node_values key. "Electric field" MUST stay first
 # (it is the dropdown default).
@@ -30,7 +30,7 @@ QUANTITIES = {
 def _scale_quantity(key: str, z: np.ndarray) -> tuple[np.ndarray, str, str, str]:
     """Return (z_scaled, colorbar_label, colorscale, title) for a node key.
 
-    Mirrors petringa/core/plotting2d.py's per-quantity treatment:
+    Mirrors etna/core/plotting2d.py's per-quantity treatment:
     E-field linear/Viridis, potential linear/RdBu_r, doping log10(|.|)/Plasma.
     """
     if key == "ElectricField":

@@ -59,14 +59,14 @@ cells.append(
         "import numpy as np\n"
         "import devsim\n"
         "\n"
-        "from petringa.core.device2d import create_sic_2d_device\n"
-        "from petringa.core.poisson import setup_poisson, solve_equilibrium\n"
-        "from petringa.core.drift_diffusion import setup_sic_drift_diffusion, ramp_bias\n"
-        "from petringa.core.plotting2d import (\n"
+        "from etna.core.device2d import create_sic_2d_device\n"
+        "from etna.core.poisson import setup_poisson, solve_equilibrium\n"
+        "from etna.core.drift_diffusion import setup_sic_drift_diffusion, ramp_bias\n"
+        "from etna.core.plotting2d import (\n"
         "    plot_potential_2d, plot_efield_2d, plot_doping_2d, plot_cce_heatmap_2d,\n"
         "    validate_2d_vs_1d, extract_center_slice,\n"
         ")\n"
-        "from petringa.core.charge_collection_2d import (\n"
+        "from etna.core.charge_collection_2d import (\n"
         "    create_2d_dd_device, cce_lateral_scan, cce_heatmap_2d, compare_cce_2d_vs_1d,\n"
         ")\n"
         "\n"
@@ -151,7 +151,7 @@ cells.append(
 
 cells.append(
     new_code_cell(
-        "from petringa.core.device import create_sic_device\n"
+        "from etna.core.device import create_sic_device\n"
         "\n"
         "# Create equivalent 1D device\n"
         "device_info_1d = create_sic_device(device_name='ref1d', doping_profile='graded')\n"
@@ -476,6 +476,6 @@ nb.cells = cells
 
 nbformat.write(
     nb,
-    "/Users/ngcex/projects/physics/petringa/notebooks/15_2d_electrostatics_cce.ipynb",
+    "/Users/ngcex/projects/physics/etna/notebooks/15_2d_electrostatics_cce.ipynb",
 )
 print(f"Notebook created with {len(cells)} cells")

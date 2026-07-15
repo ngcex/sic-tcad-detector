@@ -1,7 +1,7 @@
 """CCE page AppTest coverage: 1D guard, Run->cache->render->download.
 
 Mirrors tests/test_app_cv_page.py, substituting cce for cv. Each test
-monkeypatches petringa.run_cce as a MODULE ATTRIBUTE BEFORE calling
+monkeypatches etna.run_cce as a MODULE ATTRIBUTE BEFORE calling
 at.run() (the seam proven in tests/test_app_run_mockability.py / 39-01),
 so the real devsim solve never executes. AppTest 1.55 has no plotly_chart
 / download_button accessor, so assertions are limited to at.exception,
@@ -13,8 +13,8 @@ from __future__ import annotations
 import numpy as np
 from streamlit.testing.v1 import AppTest
 
-import petringa
-from petringa import DeviceConfig, SimResult
+import etna
+from etna import DeviceConfig, SimResult
 
 
 def _fake_run_cce(cfg, **kwargs):
@@ -38,7 +38,7 @@ def _run_cce_page():
 
 
 def test_run_caches_result(monkeypatch):
-    monkeypatch.setattr(petringa, "run_cce", _fake_run_cce)
+    monkeypatch.setattr(etna, "run_cce", _fake_run_cce)
 
     at = AppTest.from_function(_run_cce_page)
     at.session_state["device_config"] = DeviceConfig()
@@ -62,7 +62,7 @@ def test_configurable_bias_range_passed_to_facade(monkeypatch):
         captured_kwargs.update(kwargs)
         return _fake_run_cce(cfg, **kwargs)
 
-    monkeypatch.setattr(petringa, "run_cce", _capturing_run_cce)
+    monkeypatch.setattr(etna, "run_cce", _capturing_run_cce)
 
     at = AppTest.from_function(_run_cce_page)
     at.session_state["device_config"] = DeviceConfig()
@@ -87,7 +87,7 @@ def test_bias_inputs_default_to_facade_defaults(monkeypatch):
         captured_kwargs.update(kwargs)
         return _fake_run_cce(cfg, **kwargs)
 
-    monkeypatch.setattr(petringa, "run_cce", _capturing_run_cce)
+    monkeypatch.setattr(etna, "run_cce", _capturing_run_cce)
 
     at = AppTest.from_function(_run_cce_page)
     at.session_state["device_config"] = DeviceConfig()
@@ -102,7 +102,7 @@ def test_bias_inputs_default_to_facade_defaults(monkeypatch):
 
 
 def test_2d_config_warns_and_skips(monkeypatch):
-    monkeypatch.setattr(petringa, "run_cce", _fake_run_cce)
+    monkeypatch.setattr(etna, "run_cce", _fake_run_cce)
 
     at = AppTest.from_function(_run_cce_page)
     at.session_state["device_config"] = DeviceConfig(half_width_um=50.0)
@@ -114,7 +114,7 @@ def test_2d_config_warns_and_skips(monkeypatch):
 
 
 def test_empty_state_guard(monkeypatch):
-    monkeypatch.setattr(petringa, "run_cce", _fake_run_cce)
+    monkeypatch.setattr(etna, "run_cce", _fake_run_cce)
 
     at = AppTest.from_function(_run_cce_page)
     # session_state is empty by default (do not pre-seed device_config).
@@ -131,7 +131,7 @@ def test_solver_convergence_failure_shows_error_not_crash(monkeypatch):
             "ramp_bias: failed to converge at V=60.542V: Convergence failure!"
         )
 
-    monkeypatch.setattr(petringa, "run_cce", _raise_run_cce)
+    monkeypatch.setattr(etna, "run_cce", _raise_run_cce)
 
     at = AppTest.from_function(_run_cce_page)
     at.session_state["device_config"] = DeviceConfig()

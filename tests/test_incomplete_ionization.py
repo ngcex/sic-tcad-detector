@@ -5,7 +5,7 @@ reasonable ionization fractions for Al acceptors in 4H-SiC.
 """
 
 import pytest
-from petringa.core.incomplete_ionization import (
+from etna.core.incomplete_ionization import (
     ionized_acceptor_fraction,
     ionized_acceptor_concentration,
 )

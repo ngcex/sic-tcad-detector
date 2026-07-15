@@ -1,5 +1,5 @@
 """Batch Sweep page: a general-case parametric sweep over a curated device
-field, driven by the real ``petringa.ParametricSweep(...).run()`` (the Dark
+field, driven by the real ``etna.ParametricSweep(...).run()`` (the Dark
 Current page is its hard-coded ``param="T"`` special case).
 
 The user picks a swept parameter from a CURATED selectbox, enters a
@@ -18,8 +18,8 @@ Two security constraints are load-bearing and must NOT be weakened:
 - The value list is parsed with ``float()`` per token inside a
   ``try/except ValueError``; user input is NEVER passed to a code evaluator.
 
-``petringa.ParametricSweep`` and the facades are referenced as MODULE
-ATTRIBUTES (``getattr(petringa, ...)``) so tests can monkeypatch the FACADE
+``etna.ParametricSweep`` and the facades are referenced as MODULE
+ATTRIBUTES (``getattr(etna, ...)``) so tests can monkeypatch the FACADE
 (e.g. ``run_cce``) while the real ``ParametricSweep.run()`` orchestration still
 executes -- the seam proven in ``tests/test_app_run_mockability.py`` (39-01).
 
@@ -36,7 +36,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-import petringa
+import etna
 from app.components.results import (
     build_sweep_overlay_figure,
     sweep_results_to_csv_bytes,
@@ -99,9 +99,9 @@ def render() -> None:
             st.warning("Enter at least one value.")
             st.stop()
 
-        sim_fn = getattr(petringa, SIM_FACADES[sim_label])
+        sim_fn = getattr(etna, SIM_FACADES[sim_label])
         try:
-            results = petringa.ParametricSweep(
+            results = etna.ParametricSweep(
                 base_config=cfg,
                 param=param,
                 values=values,

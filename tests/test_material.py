@@ -6,7 +6,7 @@ reasonable results.
 """
 
 import pytest
-from petringa.core.sic_material import (
+from etna.core.sic_material import (
     SiC4H_Parameters,
     compute_ni,
     mobility_caughey_thomas,
@@ -290,14 +290,14 @@ class TestRegressionT300K:
 
     def test_device_ni_at_300k(self):
         """create_sic_device(T=300) must produce n_i == 5e-9 (v1.0 value)."""
-        from petringa.core.device import create_sic_device
+        from etna.core.device import create_sic_device
 
         dev = create_sic_device(device_name=f"reg300_ni_{uuid.uuid4().hex[:6]}", T=300)
         assert dev["n_i"] == pytest.approx(5e-9, rel=1e-10)
 
     def test_device_mobility_at_300k(self):
         """create_sic_device(T=300) must produce identical mu_n, mu_p to v1.0."""
-        from petringa.core.device import create_sic_device
+        from etna.core.device import create_sic_device
 
         dev = create_sic_device(device_name=f"reg300_mu_{uuid.uuid4().hex[:6]}", T=300)
         # v1.0 uses mobility_caughey_thomas(N_D) with N_D=1.07e15
@@ -312,14 +312,14 @@ class TestTemperaturePhysics:
 
     def test_device_350k_higher_ni(self):
         """n_i at T=350K must be greater than 5e-9."""
-        from petringa.core.device import create_sic_device
+        from etna.core.device import create_sic_device
 
         dev = create_sic_device(device_name=f"tphys350_{uuid.uuid4().hex[:6]}", T=350)
         assert dev["n_i"] > 5e-9
 
     def test_device_350k_lower_mobility(self):
         """mu_n at T=350K must be less than mu_n at T=300K."""
-        from petringa.core.device import create_sic_device
+        from etna.core.device import create_sic_device
 
         dev300 = create_sic_device(
             device_name=f"tphys300a_{uuid.uuid4().hex[:6]}", T=300
@@ -331,7 +331,7 @@ class TestTemperaturePhysics:
 
     def test_device_280k_lower_ni(self):
         """n_i at T=280K must be less than 5e-9."""
-        from petringa.core.device import create_sic_device
+        from etna.core.device import create_sic_device
 
         dev = create_sic_device(device_name=f"tphys280_{uuid.uuid4().hex[:6]}", T=280)
         assert dev["n_i"] < 5e-9

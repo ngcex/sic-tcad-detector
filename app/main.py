@@ -1,4 +1,4 @@
-"""st.navigation entry script: petringa — SiC TCAD Simulator.
+"""st.navigation entry script: ETNA — SiC TCAD Simulator.
 
 Run with: streamlit run app/main.py
 
@@ -25,7 +25,7 @@ from app.workflows.microdosimetry import render as render_microdosimetry
 from app.workflows.batch_sweep import render as render_batch_sweep
 
 st.set_page_config(
-    page_title="petringa — SiC TCAD Simulator",
+    page_title="ETNA — SiC TCAD Simulator",
     page_icon=":material/memory:",
     layout="wide",
     initial_sidebar_state="expanded",
