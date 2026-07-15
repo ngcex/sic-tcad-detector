@@ -25,19 +25,19 @@ Requirements for Simulator Library & Streamlit UI milestone. Phases 35+.
 
 ### UI Core (UI)
 
-- [ ] **UI-01**: User can launch the Streamlit app with `streamlit run app/main.py` and see a multi-page navigation with all simulation workflow pages listed
-- [ ] **UI-02**: User can configure all `DeviceConfig` parameters (geometry, doping profile, temperature, area) via sidebar form controls on any page, with values persisted in `st.session_state`
+- [x] **UI-01**: User can launch the Streamlit app with `streamlit run app/main.py` and see a multi-page navigation with all simulation workflow pages listed
+- [x] **UI-02**: User can configure all `DeviceConfig` parameters (geometry, doping profile, temperature, area) via sidebar form controls on any page, with values persisted in `st.session_state`
 - [x] **UI-03**: User can click "Run simulation" on the C-V page to execute `run_cv()` and see an interactive Plotly C-V curve and 1/C² vs V (Mott-Schottky) plot
 - [~] **UI-04**: User can click "Run simulation" on the CCE page to execute `run_cce()` and see an interactive Plotly CCE vs bias plot — UI wiring complete and AppTest-verified. `run_cce()` raises an uncaught devsim `RuntimeError` ("failed to converge at V≈60.5V") for the default DeviceConfig, so the plot is never reached with default parameters — this is an upstream solver bug, not a UI defect (see phase VERIFICATION.md). The page now catches this `RuntimeError` and shows a friendly `st.error` with guidance instead of crashing (confirmed in the real browser); the underlying non-convergence itself remains open, tracked as a separate follow-up.
 - [~] **UI-05**: User can click "Run simulation" on the field map page to execute `run_field()` and see interactive Plotly plots of electric field and potential vs depth — UI wiring complete and AppTest-verified. `run_field()` raises the same uncaught devsim `RuntimeError` ("failed to converge at V=66.0V") for the default DeviceConfig. Same disposition as UI-04: graceful `st.error` now shown instead of a crash (confirmed in the real browser); upstream convergence fix tracked separately.
 - [~] **UI-06**: User can download simulation results as a CSV file from any result page — CSV download confirmed working end-to-end in the browser on the C-V page only (real file fetched, valid columns/header). CCE and field-map pages never reach the download button on the default config due to UI-04/UI-05's upstream blocker (now surfaced as a friendly error rather than a crash).
-- [ ] **UI-07**: User can navigate between all pages without losing the device configuration set in the sidebar
+- [x] **UI-07**: User can navigate between all pages without losing the device configuration set in the sidebar
 
 ### Geometry Viewer (VIZ)
 
-- [ ] **VIZ-01**: User can see a 2D Plotly heatmap of the electric field (or doping) on the device cross-section after running a field map simulation for a 2D device (`half_width_um` set in `DeviceConfig`)
-- [ ] **VIZ-02**: For 1D devices, user sees a depth-profile bar chart instead of a 2D heatmap, using the same `MeshData` interface
-- [ ] **VIZ-03**: User can select which quantity to visualize (electric field, net doping, electrostatic potential) from a dropdown; the heatmap updates without re-running the simulation
+- [x] **VIZ-01**: User can see a 2D Plotly heatmap of the electric field (or doping) on the device cross-section after running a field map simulation for a 2D device (`half_width_um` set in `DeviceConfig`)
+- [x] **VIZ-02**: For 1D devices, user sees a depth-profile bar chart instead of a 2D heatmap, using the same `MeshData` interface
+- [x] **VIZ-03**: User can select which quantity to visualize (electric field, net doping, electrostatic potential) from a dropdown; the heatmap updates without re-running the simulation
 
 ### Feature Complete (FEAT)
 
@@ -45,7 +45,7 @@ Requirements for Simulator Library & Streamlit UI milestone. Phases 35+.
 - [x] **FEAT-02**: User can run a dark current simulation and see dark current vs temperature with individual trap contributions (J_SRH, J_TAT, J_SRV) decomposed in the plot
 - [x] **FEAT-03**: User can upload a Geant4 MC CSV file on the microdosimetry page and see a y·d(y) vs log(y) lineal energy spectrum with y_F and y_D values displayed
 - [x] **FEAT-04**: User can configure and run a parametric sweep on the batch sweep page (select parameter, define range, choose simulation type), view overlaid results for all parameter values, and download all results as a bulk CSV
-- [ ] **FEAT-05**: All 20 notebook workflows (from `notebooks/01_*` through `notebooks/20_*`) have an equivalent UI workflow accessible via the Streamlit pages
+- [~] **FEAT-05**: All 20 notebook workflows (from `notebooks/01_*` through `notebooks/20_*`) have an equivalent UI workflow accessible via the Streamlit pages — partially satisfied: 21 actual workflow files (both `05_*` notebooks distinct), coverage tally FULL=4 / PARTIAL=10 / NONE=7; residual gaps logged as v6.0 tech debt in `.planning/milestones/v5.0-MILESTONE-AUDIT.md`
 
 ## v4.0 Requirements
 
@@ -197,21 +197,21 @@ Explicitly excluded.
 | LIB-05      | 36    | Complete                              |
 | LIB-06      | 37    | Complete                              |
 | LIB-07      | 37    | Complete                              |
-| UI-01       | 38    | Pending                               |
-| UI-02       | 38    | Pending                               |
+| UI-01       | 38    | Complete                              |
+| UI-02       | 38    | Complete                              |
 | UI-03       | 39    | Complete                              |
 | UI-04       | 39    | Blocked (upstream solver convergence) |
 | UI-05       | 39    | Blocked (upstream solver convergence) |
 | UI-06       | 39    | Partial (C-V page only)               |
-| UI-07       | 38    | Pending                               |
-| VIZ-01      | 40    | Pending                               |
-| VIZ-02      | 40    | Pending                               |
-| VIZ-03      | 40    | Pending                               |
+| UI-07       | 38    | Complete                              |
+| VIZ-01      | 40    | Complete                              |
+| VIZ-02      | 40    | Complete                              |
+| VIZ-03      | 40    | Complete                              |
 | FEAT-01     | 41    | Complete                              |
 | FEAT-02     | 41    | Complete                              |
-| FEAT-03     | 42    | Complete |
-| FEAT-04     | 42    | Complete |
-| FEAT-05     | 43    | Pending                               |
+| FEAT-03     | 42    | Complete                              |
+| FEAT-04     | 42    | Complete                              |
+| FEAT-05     | 43    | Partial (v6.0 tech debt)              |
 
 **v5.0 Coverage:**
 
