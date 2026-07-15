@@ -12,7 +12,7 @@ The codebase is well-positioned for this phase. The `RadiationDamageParams` data
 
 The parametric optimization (PARM-02) requires sweeping epi thickness, bulk doping, and bias voltage. The `cce_vs_fluence()` function hardcodes graded doping parameters (N_D_junction=2.90e15, N_D_bulk=8.50e13, L_transition=1.0e-4). For the sweep, these must become function parameters. Similarly, `dark_current_vs_fluence()` and `cv_at_fluence()` hardcode the same values. A thin wrapper or keyword passthrough is needed. The sensitivity/uncertainty bands (PARM-01) follow the exact pattern already established in notebook 10 (scaling all etas by 0.5x-2.0x), extending it to per-defect scatter where each defect's eta is varied independently.
 
-**Primary recommendation:** Implement three plans: (1) single-vs-multi-defect comparison functions and per-defect uncertainty bands, (2) parametric design sweep with ranked table output, (3) publication-quality validation notebook against Petringa/Burin experimental data.
+**Primary recommendation:** Implement three plans: (1) single-vs-multi-defect comparison functions and per-defect uncertainty bands, (2) parametric design sweep with ranked table output, (3) publication-quality validation notebook against etna/Burin experimental data.
 
 <phase_requirements>
 

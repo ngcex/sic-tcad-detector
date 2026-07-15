@@ -11,16 +11,16 @@ Requirements for Simulator Library & Streamlit UI milestone. Phases 35+.
 
 - [x] **PKG-01**: Developer can install the simulator with `pip install -e .` (or `uv pip install -e .`) from a `pyproject.toml` with hatchling build backend, replacing `requirements.txt`
 - [x] **PKG-02**: Package declares all runtime dependencies (`devsim`, `numpy`, `scipy`, `matplotlib`, `plotly`, `streamlit`, `pandas`) and optional `[dev]` extras (`pytest`, `jupyter`)
-- [x] **PKG-03**: All existing 25 pytest modules pass unchanged after the refactor (only import paths updated `src.X` → `petringa.core.X`); `tests/baselines/v3_frozen.json` baseline regression unchanged (verified via per-file/per-class isolation — bare single-process `pytest -q` is unsatisfiable due to pre-existing devsim resource exhaustion, see `35-02-SUMMARY.md`)
+- [x] **PKG-03**: All existing 25 pytest modules pass unchanged after the refactor (only import paths updated `src.X` → `etna.core.X`); `tests/baselines/v3_frozen.json` baseline regression unchanged (verified via per-file/per-class isolation — bare single-process `pytest -q` is unsatisfiable due to pre-existing devsim resource exhaustion, see `35-02-SUMMARY.md`)
 
 ### Library API (LIB)
 
-- [x] **LIB-01**: Developer can import `DeviceConfig` from `petringa` and instantiate it with named parameters covering geometry (epi/substrate thickness, half-width for 2D), doping (uniform or graded profile), and operating conditions (T, area)
-- [x] **LIB-02**: Developer can import `run_cv()` from `petringa` and call it with a `DeviceConfig` to get a `SimResult` containing bias array, capacitance array, and metadata (depletion width, 1/C²)
-- [x] **LIB-03**: Developer can import `run_field()` from `petringa` and call it with a `DeviceConfig` + bias to get a `SimResult` whose `.mesh` attribute (`MeshData`) contains node coordinates and field/doping values extracted from devsim post-build
-- [x] **LIB-04**: Developer can import `run_cce()` from `petringa` and call it with a `DeviceConfig` to get a `SimResult` containing bias array and CCE array
+- [x] **LIB-01**: Developer can import `DeviceConfig` from `etna` and instantiate it with named parameters covering geometry (epi/substrate thickness, half-width for 2D), doping (uniform or graded profile), and operating conditions (T, area)
+- [x] **LIB-02**: Developer can import `run_cv()` from `etna` and call it with a `DeviceConfig` to get a `SimResult` containing bias array, capacitance array, and metadata (depletion width, 1/C²)
+- [x] **LIB-03**: Developer can import `run_field()` from `etna` and call it with a `DeviceConfig` + bias to get a `SimResult` whose `.mesh` attribute (`MeshData`) contains node coordinates and field/doping values extracted from devsim post-build
+- [x] **LIB-04**: Developer can import `run_cce()` from `etna` and call it with a `DeviceConfig` to get a `SimResult` containing bias array and CCE array
 - [x] **LIB-05**: Developer can run `examples/cv_example.py` (vertical slice validation script) without errors; output capacitance values are physically reasonable (C decreasing with reverse bias)
-- [x] **LIB-06**: Developer can import `run_radiation_damage()`, `run_dark_current()`, `run_temperature_sweep()`, `run_flash_recombination()`, `run_transient()`, `run_microdosimetry()` from `petringa`
+- [x] **LIB-06**: Developer can import `run_radiation_damage()`, `run_dark_current()`, `run_temperature_sweep()`, `run_flash_recombination()`, `run_transient()`, `run_microdosimetry()` from `etna`
 - [x] **LIB-07**: Developer can use `ParametricSweep` to define a parameter name, values list, and simulation function, then call `.run()` to get a `list[SimResult]`
 
 ### UI Core (UI)

@@ -55,9 +55,9 @@ _Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky_
 - [ ] `app/components/results.py` — extend with `build_damage_figure`, `build_dark_current_figure` (pure, NaN-tolerant, `np.abs()` + zero-guard for decomposition traces), and two new `to_csv_bytes` branches (`"damage"`, `"dark_current"`)
 - [ ] `tests/test_app_csv_export.py` — extend with `test_damage_csv_columns_and_header`, `test_dark_current_csv_columns_and_header`, `test_build_dark_current_figure_guards_zero_and_negative`; fix `test_unknown_sim_type_raises_value_error` to use `sim_type="not_a_real_sim_type"` instead of `"damage"` (Pitfall 4 regression fix)
 - [ ] `.planning/phases/41-radiation-damage-dark-current-pages/41-01-SPIKE-NOTES.md` — new file, records confirmed-safe `ParametricSweep`/`run_dark_current`/`run_radiation_damage` widget defaults before Wave 2 pages are built
-- [ ] `app/workflows/radiation_damage.py` — replace placeholder body: persistent kappa-data-blocked `st.warning`, fluence/energy/V_bias widgets, Run button calling `petringa.run_radiation_damage`, NaN-tolerant render, CSV download
+- [ ] `app/workflows/radiation_damage.py` — replace placeholder body: persistent kappa-data-blocked `st.warning`, fluence/energy/V_bias widgets, Run button calling `etna.run_radiation_damage`, NaN-tolerant render, CSV download
 - [ ] `tests/test_app_radiation_damage_page.py` — new file, AppTest coverage including the empirically-verified NaN-in-array fixture (not just the happy path)
-- [ ] `app/workflows/dark_current.py` — replace placeholder body: T-range + fixed-bias widgets, Run button calling `petringa.ParametricSweep(param="T", sim_fn=petringa.run_dark_current, ...)`, list-to-SimResult aggregation, decomposition render, CSV download
+- [ ] `app/workflows/dark_current.py` — replace placeholder body: T-range + fixed-bias widgets, Run button calling `etna.ParametricSweep(param="T", sim_fn=etna.run_dark_current, ...)`, list-to-SimResult aggregation, decomposition render, CSV download
 - [ ] `tests/test_app_dark_current_page.py` — new file, AppTest coverage including the empirically-verified truncated-result fixture
 
 _(No framework install needed — pytest + AppTest already present per Phase 38-40.)_

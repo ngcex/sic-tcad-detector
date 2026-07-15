@@ -1,12 +1,12 @@
 # Phase 41: Radiation Damage + Dark Current Pages - Research
 
 **Researched:** 2026-07-13
-**Domain:** Streamlit UI wiring over existing `petringa.run_radiation_damage()` / `petringa.run_dark_current()` facades — no new physics/core code.
+**Domain:** Streamlit UI wiring over existing `etna.run_radiation_damage()` / `etna.run_dark_current()` facades — no new physics/core code.
 **Confidence:** HIGH (facade behavior empirically verified this session by actually calling both facades against a live devsim); MEDIUM on the "vs temperature" wording question (flagged as an open question requiring user confirmation).
 
 ## Summary
 
-Phase 41 is pure UI wiring: `petringa/api/simulation.py` already has fully-implemented,
+Phase 41 is pure UI wiring: `etna/api/simulation.py` already has fully-implemented,
 tested `run_radiation_damage()` (line 447) and `run_dark_current()` (line 665) facades.
 `app/main.py` already imports and registers `render_radiation_damage` / `render_dark_current`
 from `app/workflows/radiation_damage.py` and `app/workflows/dark_current.py` — both files
@@ -42,8 +42,8 @@ damage page.
 
 | Capability                                                                                               | Primary Tier                                                      | Secondary Tier | Rationale                                                                                               |
 | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------- |
-| Radiation-damage physics (κ(E), fluence sweep, CCE degradation)                                          | API/Backend (`petringa/core/`, `petringa/api/simulation.py`)      | —              | Already implemented; Phase 41 must not touch it                                                         |
-| Dark-current physics (SRH/TAT/SRV decomposition, bias sweep)                                             | API/Backend (`petringa/core/dark_current.py`, `run_dark_current`) | —              | Already implemented; Phase 41 must not touch it                                                         |
+| Radiation-damage physics (κ(E), fluence sweep, CCE degradation)                                          | API/Backend (`etna/core/`, `etna/api/simulation.py`)      | —              | Already implemented; Phase 41 must not touch it                                                         |
+| Dark-current physics (SRH/TAT/SRV decomposition, bias sweep)                                             | API/Backend (`etna/core/dark_current.py`, `run_dark_current`) | —              | Already implemented; Phase 41 must not touch it                                                         |
 | Widget inputs (fluence range, proton energy, dark-current v_start/v_stop/n_points, optional N_t/S_n/S_p) | Frontend Server (Streamlit `render()`)                            | —              | Page-local `st.*` widgets, not sidebar (sidebar is only for `DeviceConfig`, per Phase 38/39 convention) |
 | Kappa-data-blocked warning banner                                                                        | Frontend Server (Streamlit `render()`)                            | —              | Static/unconditional `st.warning`, no data dependency                                                   |
 | Result caching across reruns                                                                             | Frontend Server (`st.session_state`)                              | —              | `DeviceConfig` is unhashable so `st.cache_data` is impossible (established Phase 39)                    |
@@ -76,7 +76,7 @@ No `.claude/skills/` or `.agents/skills/` directory with `SKILL.md` files was fo
 | `streamlit`                       | already pinned in `pyproject.toml` | Page rendering, widgets, session_state                       | Established in Phases 38-40; no new dependency                          |
 | `plotly` (`plotly.graph_objects`) | already pinned                     | `go.Figure` construction in `results.py` builders            | Established in Phase 39; `app/components/results.py` already imports it |
 | `pandas`                          | already pinned                     | `to_csv_bytes` DataFrame construction                        | Established in Phase 39                                                 |
-| `numpy`                           | already pinned                     | Array construction for widget-derived fluence/voltage ranges | Already used throughout `petringa/api/simulation.py`                    |
+| `numpy`                           | already pinned                     | Array construction for widget-derived fluence/voltage ranges | Already used throughout `etna/api/simulation.py`                    |
 
 No new packages are needed for this phase — it consumes facades and libraries already declared in `pyproject.toml`. **Package Legitimacy Audit is not applicable** (no new installs).
 
@@ -89,7 +89,7 @@ No new packages are needed for this phase — it consumes facades and libraries 
 
 ## Package Legitimacy Audit
 
-Not applicable — this phase installs no new packages. All imports (`streamlit`, `plotly`, `pandas`, `numpy`, `petringa`) are already present in `pyproject.toml` and used by prior phases.
+Not applicable — this phase installs no new packages. All imports (`streamlit`, `plotly`, `pandas`, `numpy`, `etna`) are already present in `pyproject.toml` and used by prior phases.
 
 ## Architecture Patterns
 
@@ -107,7 +107,7 @@ app/main.py (st.navigation)  --------------------------------+
    |        [1] st.warning(kappa banner)  <-- UNCONDITIONAL, every rerun
    |        [2] widget inputs: fluence_min, fluence_max, n_points, proton_energy_MeV, V_bias
    |        [3] st.button("Run simulation")
-   |             -> petringa.run_radiation_damage(cfg, fluences=np.geomspace(...), V_bias=..., proton_energy_MeV=...)
+   |             -> etna.run_radiation_damage(cfg, fluences=np.geomspace(...), V_bias=..., proton_energy_MeV=...)
    |             -> try/except RuntimeError -> st.error(...)
    |             -> session_state["damage_result"] = SimResult(sim_type="damage")
    |        [4] result = session_state.get("damage_result")
@@ -119,7 +119,7 @@ app/main.py (st.navigation)  --------------------------------+
             |
             [1] widget inputs: v_start, v_stop, n_points, (optional expander: N_t, S_n, S_p)
             [2] st.button("Run simulation")
-                 -> petringa.run_dark_current(cfg, v_start=..., v_stop=..., n_points=..., N_t=..., S_n=..., S_p=...)
+                 -> etna.run_dark_current(cfg, v_start=..., v_stop=..., n_points=..., N_t=..., S_n=..., S_p=...)
                  -> try/except RuntimeError -> st.error(...)
                  -> session_state["dark_current_result"] = SimResult(sim_type="dark_current")
             [3] result = session_state.get("dark_current_result")
@@ -133,7 +133,7 @@ app/components/results.py (PURE, no st.* calls)
    build_dark_current_figure(result) -> go.Figure    [NEW]
    to_csv_bytes(result) -> bytes                     [EXTENDED: + "damage", "dark_current" branches]
 
-petringa/api/simulation.py (UNCHANGED, already implemented)
+etna/api/simulation.py (UNCHANGED, already implemented)
    run_radiation_damage(config, fluences=None, V_bias=-40.0, proton_energy_MeV=5.6) -> SimResult
    run_dark_current(config, v_start=0.0, v_stop=-100.0, n_points=20, N_t=None, S_n=None, S_p=None) -> SimResult
 ```
@@ -157,7 +157,7 @@ tests/
 
 ### Pattern 1: Run → cache → render → download (Phase 39 skeleton, verbatim)
 
-**What:** Every result page follows the identical 5-step shape: empty-state guard → optional pre-check → Run button calling the facade referenced as a **module attribute** (`petringa.run_x`, never `from petringa import run_x`) → `session_state` cache → pure-builder render → CSV download.
+**What:** Every result page follows the identical 5-step shape: empty-state guard → optional pre-check → Run button calling the facade referenced as a **module attribute** (`etna.run_x`, never `from etna import run_x`) → `session_state` cache → pure-builder render → CSV download.
 
 **When to use:** Both new pages, no exceptions.
 
@@ -169,7 +169,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-import petringa
+import etna
 from app.components.results import build_cce_figure, to_csv_bytes
 
 
@@ -187,7 +187,7 @@ def render() -> None:
 
     if st.button("Run simulation"):
         try:
-            st.session_state["cce_result"] = petringa.run_cce(cfg)
+            st.session_state["cce_result"] = etna.run_cce(cfg)
         except RuntimeError as e:
             st.error(f"Simulation failed to converge: {e}\n\n...")
 
@@ -219,7 +219,7 @@ raw arrays a user would type in directly.
 **When to use:** Both new pages need a "range → array" widget group.
 
 **Radiation damage page — fluence range (mirrors `run_radiation_damage`'s own default
-construction, `np.geomspace(1e13, 1e16, 6)`, confirmed in `petringa/api/simulation.py:496`):**
+construction, `np.geomspace(1e13, 1e16, 6)`, confirmed in `etna/api/simulation.py:496`):**
 
 ```python
 col1, col2, col3 = st.columns(3)
@@ -232,7 +232,7 @@ with col3:
 
 proton_energy_MeV = st.selectbox(
     "Proton energy (MeV)", [30, 62, 70, 150], index=1,
-)  # matches NIEL_HARDNESS_PROTON_SIC table keys exactly (petringa/core/radiation_damage.py:61-66)
+)  # matches NIEL_HARDNESS_PROTON_SIC table keys exactly (etna/core/radiation_damage.py:61-66)
 
 V_bias = st.number_input("Reverse bias V_bias (V)", value=-40.0)
 
@@ -240,7 +240,7 @@ fluences = np.geomspace(fluence_min, fluence_max, int(n_points))
 ```
 
 **Widget default rationale:** `proton_energy_MeV` as a `selectbox` (not free `number_input`) is
-recommended because `get_hardness_factor` (petringa/core/radiation_damage.py:407) only has real
+recommended because `get_hardness_factor` (etna/core/radiation_damage.py:407) only has real
 tabulated entries at {30, 62, 70, 150} MeV — any other value silently linearly interpolates
 between table entries via `np.interp`, which is fine numerically but misleadingly precise given
 the kappa values are placeholders. A `selectbox` of the 4 real table keys communicates this
@@ -285,7 +285,7 @@ def render() -> None:
 
     st.warning(
         "**Data-blocked placeholder:** kappa (NIEL hardness factor) values used here "
-        "are unvalidated placeholders (see petringa/core/radiation_damage.py "
+        "are unvalidated placeholders (see etna/core/radiation_damage.py "
         "NIEL_HARDNESS_PROTON_SIC table). The energy TREND is physically motivated but "
         "no ABSOLUTE Phi_crit or defect-concentration number is citable until real "
         "SR-NIEL SiC proton NIEL data replaces these placeholders. Treat CCE-vs-fluence "
@@ -308,11 +308,11 @@ to place it merely "outside the `if result is not None` block"; placing it befor
 under every possible page state, including first load before any device is configured.
 
 **Text sourcing:** Draw the banner text verbatim from two authoritative in-repo sources —
-`run_radiation_damage`'s own docstring Warning section (petringa/api/simulation.py:486-493,
+`run_radiation_damage`'s own docstring Warning section (etna/api/simulation.py:486-493,
 "RESEARCH Pitfall 4: the NIEL kappa hardness factors ... are DATA-BLOCKED placeholders") and
-the `NIEL_HARDNESS_PROTON_SIC` module-level comment block (petringa/core/radiation_damage.py:46-59,
-"AUDIT C-5 ... DATA-BLOCKED, NOT YET FIXED"). Both are `[CITED: petringa/api/simulation.py,
-petringa/core/radiation_damage.py]` — this is in-repo authoritative documentation, not an
+the `NIEL_HARDNESS_PROTON_SIC` module-level comment block (etna/core/radiation_damage.py:46-59,
+"AUDIT C-5 ... DATA-BLOCKED, NOT YET FIXED"). Both are `[CITED: etna/api/simulation.py,
+etna/core/radiation_damage.py]` — this is in-repo authoritative documentation, not an
 external source, but it establishes the exact scientific caveat that must reach the UI verbatim
 per FEAT-01's explicit requirement ("kappa values are data-blocked placeholders ... absolute
 Phi_crit numbers are unvalidated").
@@ -339,17 +339,17 @@ Phi_crit numbers are unvalidated").
 
 | Problem                                      | Don't Build                                                                | Use Instead                                                                                                                                            | Why                                                                                                                                                                                                                                                                                                                                                                                |
 | -------------------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| CCE-vs-fluence physics                       | A new fluence-sweep loop in the page                                       | `petringa.run_radiation_damage()`                                                                                                                      | Already implemented, tested (`test_api_facades.py`), and the ONLY sanctioned way to call this physics per phase scope ("no new physics/core code")                                                                                                                                                                                                                                 |
-| Dark-current decomposition physics           | A new SRH/TAT/SRV extraction loop                                          | `petringa.run_dark_current()`                                                                                                                          | Same — already implemented, returns `metadata["I_SRH"]`/`I_TAT`/`I_SRV"]` pre-decomposed                                                                                                                                                                                                                                                                                           |
+| CCE-vs-fluence physics                       | A new fluence-sweep loop in the page                                       | `etna.run_radiation_damage()`                                                                                                                      | Already implemented, tested (`test_api_facades.py`), and the ONLY sanctioned way to call this physics per phase scope ("no new physics/core code")                                                                                                                                                                                                                                 |
+| Dark-current decomposition physics           | A new SRH/TAT/SRV extraction loop                                          | `etna.run_dark_current()`                                                                                                                          | Same — already implemented, returns `metadata["I_SRH"]`/`I_TAT`/`I_SRV"]` pre-decomposed                                                                                                                                                                                                                                                                                           |
 | CSV serialization                            | A new ad-hoc CSV writer per page                                           | Extend `app/components/results.py::to_csv_bytes`                                                                                                       | Established Phase 39 convention: one dispatcher function, `sim_type`-keyed branches, commented `#` metadata header with software version + device config                                                                                                                                                                                                                           |
 | Figure construction                          | Inline `go.Figure(...)` calls directly in the page `render()`              | New pure builders in `app/components/results.py`                                                                                                       | Established Phase 39/40 convention: figure-building is pure and unit-testable without a Streamlit runtime; page code only calls `st.plotly_chart(build_x_figure(result))`                                                                                                                                                                                                          |
-| Log-scale multi-trace decomposition plotting | A naive `go.Scatter(..., y=result.metadata["I_TAT"])` on a log-axis figure | `np.abs()` + zero-value filtering per trace, mirroring `petringa.core.dark_current.plot_dark_current_decomposition` (matplotlib reference, line ~1205) | `I_TAT` is negative (generation, not recombination) and `I_SRV` is exactly 0.0 at default `S_n`/`S_p` in the empirically-verified run this session — a raw `semilogy`/log-y Plotly trace either drops negative points silently or raises on all-zero log(0); the existing core matplotlib plotter already solved this exact problem with `abs()` + `if np.any(I[mask] > 0)` guards |
+| Log-scale multi-trace decomposition plotting | A naive `go.Scatter(..., y=result.metadata["I_TAT"])` on a log-axis figure | `np.abs()` + zero-value filtering per trace, mirroring `etna.core.dark_current.plot_dark_current_decomposition` (matplotlib reference, line ~1205) | `I_TAT` is negative (generation, not recombination) and `I_SRV` is exactly 0.0 at default `S_n`/`S_p` in the empirically-verified run this session — a raw `semilogy`/log-y Plotly trace either drops negative points silently or raises on all-zero log(0); the existing core matplotlib plotter already solved this exact problem with `abs()` + `if np.any(I[mask] > 0)` guards |
 
 **Key insight:** Both facades are complete, tested, physically-reasoned black boxes from this
 phase's perspective. The entire engineering surface is: (1) turn simple widget scalars into the
 facade's expected array/kwarg shape, (2) render whatever comes back — including NaN and
-truncation — without crashing, (3) serialize it. Nothing here should touch `petringa/core/` or
-`petringa/api/simulation.py`.
+truncation — without crashing, (3) serialize it. Nothing here should touch `etna/core/` or
+`etna/api/simulation.py`.
 
 ## Common Pitfalls
 
@@ -361,7 +361,7 @@ is `voltages` (V), not temperature (K). There is no `run_dark_current_vs_tempera
 The closest existing temperature-sweep facade, `run_temperature_sweep`, sweeps **CCE**, not dark
 current (`sim_type="temperature"`, `y` = CCE values, not current).
 **Why it happens:** the ROADMAP/REQUIREMENTS wording was likely written from an early design
-intent (`petringa.core.dark_current.dark_current_vs_fluence` — note NOT vs-temperature either —
+intent (`etna.core.dark_current.dark_current_vs_fluence` — note NOT vs-temperature either —
 exists in core, and there's a `nt_temperature_scale(T)` helper in `dark_current.py` used
 internally, so temperature dependence of dark current IS modeled physically, just not exposed
 as a swept axis in any existing facade).
@@ -376,13 +376,13 @@ before the planner locks the page's x-axis. Two readings are both defensible:
   change to see the bias-sweep curve shift. This requires NO new facade code and satisfies
   the facade's actual return shape.
 - **Reading B:** Literally sweep temperature as the x-axis by looping `run_dark_current` at
-  a fixed bias across several `config.T` values in the page/app layer (NOT in `petringa/core`
-  or `petringa/api`, keeping "no new physics" intact) — this is more expensive (N devsim
+  a fixed bias across several `config.T` values in the page/app layer (NOT in `etna/core`
+  or `etna/api`, keeping "no new physics" intact) — this is more expensive (N devsim
   solves instead of 1) and duplicates ParametricSweep's job outside of `ParametricSweep`
   (which Phase 42's batch-sweep page is explicitly supposed to own).
   **Warning signs:** If the planner writes a task like "sweep dark current across temperatures
   using run_dark_current's built-in T axis" — that facade has no such axis; verify against the
-  actual signature in `petringa/api/simulation.py:665` before writing any task.
+  actual signature in `etna/api/simulation.py:665` before writing any task.
 
 ### Pitfall 2: Both facades silently produce partial/degenerate results at their own default parameters — try/except RuntimeError is not sufficient
 
@@ -395,7 +395,7 @@ before the planner locks the page's x-axis. Two readings are both defensible:
   Confirmed: with `n_points=5` requested, only 3 points (`V = 0, -25, -50`) were returned.
 - `run_radiation_damage(DeviceConfig())` with its own default `fluences=np.geomspace(1e13, 1e16, 6)`
   succeeds in returning a **full-length 6-element array**, but ONE interior element (fluence
-  ≈3.98e13) is `np.nan` — because `cce_vs_fluence` (petringa/core/charge_collection.py, catch
+  ≈3.98e13) is `np.nan` — because `cce_vs_fluence` (etna/core/charge_collection.py, catch
   block around line 801-803) wraps each per-fluence-point solve in `try/except Exception`,
   logging a warning and setting `cce_values[i] = np.nan`, never propagating the exception to the
   caller.
@@ -404,7 +404,7 @@ before the planner locks the page's x-axis. Two readings are both defensible:
   aborting the whole sweep on one bad point. This is good behavior for a sweep, but it means the
   UI cannot assume "no exception raised" implies "full clean data".
   **How to avoid:**
-  1. Keep the `try/except RuntimeError` wrapper around the `petringa.run_*` call (mirrors
+  1. Keep the `try/except RuntimeError` wrapper around the `etna.run_*` call (mirrors
      Phase 39 exactly) — it is still necessary for cases where the FIRST point fails outright
      (observed for `run_radiation_damage` in Phase 39's field/CCE precedent, and possible here too).
   2. Additionally render tolerantly: Plotly's `go.Scatter`/`go.Bar` silently skip/gap NaN y-values
@@ -440,10 +440,10 @@ non-positive.
 **Why it happens:** `I_TAT`'s physical sign (generation vs recombination) is not guaranteed
 positive; `I_SRV` is genuinely zero unless non-default `S_n`/`S_p` values are supplied.
 **How to avoid:** Mirror the existing core matplotlib reference plotter exactly —
-`petringa.core.dark_current.plot_dark_current_decomposition` (line ~1205-1251) does:
+`etna.core.dark_current.plot_dark_current_decomposition` (line ~1205-1251) does:
 
 ```python
-# Source: petringa/core/dark_current.py plot_dark_current_decomposition (existing reference)
+# Source: etna/core/dark_current.py plot_dark_current_decomposition (existing reference)
 for key, label, color, lw, ls in components:
     I = np.abs(np.asarray(sweep_result[key]))
     if np.any(I > 0):          # zero-guard: skip an all-zero trace entirely
@@ -480,10 +480,10 @@ plan's file list — it is easy to omit since it looks like an unrelated pre-exi
 
 **What goes wrong:** Unlike `run_cv`/`run_cce` (which explicitly raise `NotImplementedError` for
 `config.half_width_um is not None`), neither `run_radiation_damage` nor `run_dark_current` has
-any 2D guard in their source (`petringa/api/simulation.py:447-767`, read in full this session —
+any 2D guard in their source (`etna/api/simulation.py:447-767`, read in full this session —
 no `if config.half_width_um is not None: raise` block exists in either function). Both delegate
 to `create_dd_device`/`create_dark_current_device`, which are 1D constructors
-(`petringa.core.drift_diffusion.create_dd_device`) — passing a 2D-configured `DeviceConfig`
+(`etna.core.drift_diffusion.create_dd_device`) — passing a 2D-configured `DeviceConfig`
 would presumably either be silently ignored (if `half_width_um` isn't read by the 1D path at
 all) or cause an unrelated downstream error. **Not tested empirically this session** (would
 require constructing a 2D `DeviceConfig` and running a live devsim solve, out of scope for the
@@ -525,7 +525,7 @@ def build_damage_figure(result: SimResult) -> go.Figure:
 
 ```python
 # New addition to app/components/results.py.
-# Source pattern: petringa/core/dark_current.py::plot_dark_current_decomposition
+# Source pattern: etna/core/dark_current.py::plot_dark_current_decomposition
 # (matplotlib reference, ~line 1205) — abs() + zero-guard translated to Plotly.
 def build_dark_current_figure(result: SimResult) -> go.Figure:
     """|I| vs bias, log-y, 4 overlaid traces (total + 3 components), zero-guarded."""
@@ -582,7 +582,7 @@ elif result.sim_type == "dark_current":
 # shape returned by run_radiation_damage at defaults (verified this session),
 # not a hypothetical edge case. Testing only the happy path misses the actual bug class.
 def _fake_run_radiation_damage_with_nan(cfg, **kwargs):
-    return petringa.SimResult(
+    return etna.SimResult(
         config=cfg, sim_type="damage",
         x=np.array([1e13, 3.98e13, 1.58e14, 6.31e14, 2.51e15, 1e16]),
         y=np.array([0.996, np.nan, 0.985, 0.957, 0.860, 0.596]),  # NaN mid-array
@@ -592,7 +592,7 @@ def _fake_run_radiation_damage_with_nan(cfg, **kwargs):
 # tests/test_app_dark_current_page.py — the short-array (truncated, no metadata flag)
 # fixture is the REAL shape returned by run_dark_current at its own default v_stop=-100.0.
 def _fake_run_dark_current_truncated(cfg, **kwargs):
-    return petringa.SimResult(
+    return etna.SimResult(
         config=cfg, sim_type="dark_current",
         x=np.array([0.0, -25.0, -50.0]),          # requested n_points=5, got 3
         y=np.array([4.9e-17, 2.4e-13, 3.5e-13]),
@@ -612,7 +612,7 @@ def _fake_run_dark_current_truncated(cfg, **kwargs):
 | Jupyter notebooks calling `cce_vs_fluence`/`dark_current_sweep` directly (v2.0, Phases 14-15) | Streamlit UI calling `run_radiation_damage`/`run_dark_current` facades (v5.0, Phase 37 API, Phase 41 UI) | Phase 37 (2026-07-09) introduced the facade layer; Phase 41 is the first phase to expose it in the browser | Non-developers (Petringa group) can now run these sweeps without editing Python |
 
 **Deprecated/outdated:** None specific to this phase — the underlying physics modules
-(`petringa/core/radiation_damage.py`, `petringa/core/dark_current.py`) are unchanged from v2.0/v1.1
+(`etna/core/radiation_damage.py`, `etna/core/dark_current.py`) are unchanged from v2.0/v1.1
 and explicitly out of scope to modify.
 
 ## Assumptions Log
@@ -637,10 +637,10 @@ standard characterization plot with T on the x-axis), and Phase 43's integration
 check FEAT-02 against its literal wording) all point to B over the effort-based "zero new code"
 tiebreaker that originally favored Reading A.
 
-**Implementation path — use `petringa.ParametricSweep`, NOT a hand-rolled loop:**
+**Implementation path — use `etna.ParametricSweep`, NOT a hand-rolled loop:**
 
-`petringa/api/sweep.py::ParametricSweep` already exists and is exactly fit for this:
-`ParametricSweep(base_config=cfg, param="T", values=temperatures, sim_fn=petringa.run_dark_current,
+`etna/api/sweep.py::ParametricSweep` already exists and is exactly fit for this:
+`ParametricSweep(base_config=cfg, param="T", values=temperatures, sim_fn=etna.run_dark_current,
 sim_kwargs={"v_start": ..., "v_stop": fixed_bias, "n_points": 2}).run()` — clones `cfg` per
 temperature via `dataclasses.replace`, calls `run_dark_current` per clone, returns
 `list[SimResult]` of length `len(temperatures)`. This keeps "no new physics/core code" fully intact
@@ -655,7 +655,7 @@ sweep code instead of a page-local loop.
   `run_dark_current`'s own `v_stop=-100.0` default) at which dark current is evaluated for each T.
   Optional advanced expander for `N_t`/`S_n`/`S_p` overrides (unchanged from original Pattern 2).
 - Run button calls `ParametricSweep(base_config=cfg, param="T", values=temperatures,
-sim_fn=petringa.run_dark_current, sim_kwargs={"v_start": V_bias, "v_stop": V_bias, "n_points": 1}
+sim_fn=etna.run_dark_current, sim_kwargs={"v_start": V_bias, "v_stop": V_bias, "n_points": 1}
 or similar single-point-per-T kwargs).run()` — each per-temperature `run_dark_current` call should
   request a minimal bias sweep (e.g. `n_points=1` or `2`, `v_start=v_stop=V_bias`) since only the
   fixed-bias operating point is needed per temperature; verify `run_dark_current` tolerates
@@ -699,7 +699,7 @@ table keys). Retained below for provenance/history only — no further action ne
    - What we know: `run_dark_current(config, v_start, v_stop, n_points, ...)` sweeps **bias**
      (`SimResult.x = voltages`). There is no facade that sweeps temperature and returns dark
      current. `run_temperature_sweep` exists but sweeps **CCE**, not dark current. The core
-     module `petringa/core/dark_current.py` does have `nt_temperature_scale(T)`, making the
+     module `etna/core/dark_current.py` does have `nt_temperature_scale(T)`, making the
      effective generation rate `N_t` temperature-dependent — so `config.T` (already a normal
      `DeviceConfig` field, already exposed in the sidebar) genuinely does affect
      `run_dark_current`'s output, just not as the swept axis.
@@ -764,7 +764,7 @@ session — the file has `mode`, `parallelization`, `commit_docs`, `model_profil
 
 | Req ID                                              | Behavior                                                                                             | Test Type                                            | Automated Command                                                                                                                                                                                              | File Exists?                      |
 | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
-| FEAT-01 (criterion 1: run + CCE-vs-fluence plot)    | Radiation damage page Run button caches a `SimResult` and renders `build_damage_figure`              | AppTest (mocked `petringa.run_radiation_damage`)     | `uv run pytest tests/test_app_radiation_damage_page.py::test_run_caches_damage_result -x`                                                                                                                      | ❌ Wave 0 (new file)              |
+| FEAT-01 (criterion 1: run + CCE-vs-fluence plot)    | Radiation damage page Run button caches a `SimResult` and renders `build_damage_figure`              | AppTest (mocked `etna.run_radiation_damage`)     | `uv run pytest tests/test_app_radiation_damage_page.py::test_run_caches_damage_result -x`                                                                                                                      | ❌ Wave 0 (new file)              |
 | FEAT-01 (criterion 2: persistent kappa banner)      | `st.warning` with kappa-data-blocked text appears on every page load, even with no device configured | AppTest                                              | `uv run pytest tests/test_app_radiation_damage_page.py::test_kappa_banner_persistent -x`                                                                                                                       | ❌ Wave 0 (new file)              |
 | FEAT-01 (NaN-tolerant rendering — Pitfall 2)        | Page does not crash when `run_radiation_damage` returns a NaN mid-array                              | AppTest (mocked with the verified NaN fixture)       | `uv run pytest tests/test_app_radiation_damage_page.py::test_nan_in_result_does_not_crash -x`                                                                                                                  | ❌ Wave 0 (new file)              |
 | FEAT-02 (criterion 3: decomposition overlay)        | Dark current page renders 4 overlaid traces (total + SRH + TAT + SRV), zero/negative-guarded         | AppTest + pure builder unit test                     | `uv run pytest tests/test_app_dark_current_page.py::test_run_caches_dark_current_result -x` and `uv run pytest tests/test_app_results_builders.py::test_build_dark_current_figure_guards_zero_and_negative -x` | ❌ Wave 0 (both new files)        |
@@ -826,18 +826,18 @@ absent-key convention.
 
 ### Primary (HIGH confidence — verified this session via direct code read and/or live execution)
 
-- `petringa/api/simulation.py` (full file read) — `run_radiation_damage` (line 447),
+- `etna/api/simulation.py` (full file read) — `run_radiation_damage` (line 447),
   `run_dark_current` (line 665) exact signatures, defaults, docstrings, warnings
-- `petringa/core/radiation_damage.py` (full file read) — `NIEL_HARDNESS_PROTON_SIC` table,
+- `etna/core/radiation_damage.py` (full file read) — `NIEL_HARDNESS_PROTON_SIC` table,
   `get_hardness_factor`, `compute_phi_crit`, kappa-data-blocked provenance comments
-- `petringa/core/dark_current.py` (full file read) — `dark_current_sweep`,
+- `etna/core/dark_current.py` (full file read) — `dark_current_sweep`,
   `extract_dark_current_components`, `plot_dark_current_decomposition` (matplotlib reference),
   `nt_temperature_scale`
-- `petringa/core/charge_collection.py` — grep-verified the `except Exception ... cce_values[i] =
+- `etna/core/charge_collection.py` — grep-verified the `except Exception ... cce_values[i] =
 np.nan` pattern (lines 801-803) underlying `cce_vs_fluence`'s silent-NaN behavior
-- Live execution (this session): `petringa.run_dark_current(DeviceConfig(), n_points=5)` —
+- Live execution (this session): `etna.run_dark_current(DeviceConfig(), n_points=5)` —
   confirmed truncation to 3 points at V≈-62.5V, no `"truncated"` metadata key present
-- Live execution (this session): `petringa.run_radiation_damage(DeviceConfig())` — confirmed
+- Live execution (this session): `etna.run_radiation_damage(DeviceConfig())` — confirmed
   full-length array with NaN at fluence≈3.98e13, no exception raised
 - `app/workflows/cv.py`, `cce.py`, `field_map.py` (full files read) — Run→cache→render→download
   skeleton, 1D-only pre-check pattern, try/except RuntimeError pattern
@@ -885,7 +885,7 @@ None.
 
 **Research date:** 2026-07-13
 **Valid until:** No expiry driver — this research is tied to the current, frozen state of
-`petringa/api/simulation.py` and `petringa/core/{radiation_damage,dark_current}.py`, which are
+`etna/api/simulation.py` and `etna/core/{radiation_damage,dark_current}.py`, which are
 explicitly out of scope to modify in this phase or any v5.0 phase. Re-research only if those
 facades change (e.g. a future v6.0 phase adds real SR-NIEL data or a temperature-sweep dark
 current facade).

@@ -26,7 +26,7 @@ tech-stack:
   added: []
   patterns:
     - "Page-level list[SimResult]-to-single-SimResult aggregation: ParametricSweep.run() returns one SimResult per swept value; the page (not the shared results.py builder) reduces that list to one aggregated SimResult before calling a pure single-SimResult-in figure builder"
-    - 'petringa.ParametricSweep and petringa.run_dark_current referenced as module attributes (petringa.X) so monkeypatch.setattr(petringa, "run_dark_current", fake) intercepts the sim_fn while the real ParametricSweep.run() orchestration executes unmocked'
+    - 'etna.ParametricSweep and etna.run_dark_current referenced as module attributes (etna.X) so monkeypatch.setattr(etna, "run_dark_current", fake) intercepts the sim_fn while the real ParametricSweep.run() orchestration executes unmocked'
 
 key-files:
   created:
@@ -52,7 +52,7 @@ completed: 2026-07-14
 
 # Phase 41 Plan 03: Dark Current Temperature-Sweep Page Summary
 
-**Dark current page renders J_SRH/J_TAT/J_SRV vs temperature via `petringa.ParametricSweep(param="T", sim_fn=petringa.run_dark_current)`, with page-level list-to-SimResult aggregation, partial-failure tolerance, and CSV export.**
+**Dark current page renders J_SRH/J_TAT/J_SRV vs temperature via `etna.ParametricSweep(param="T", sim_fn=etna.run_dark_current)`, with page-level list-to-SimResult aggregation, partial-failure tolerance, and CSV export.**
 
 ## Performance
 
@@ -63,7 +63,7 @@ completed: 2026-07-14
 ## Accomplishments
 
 - Replaced the Phase 38 placeholder body of `app/workflows/dark_current.py` with a full Run -> cache -> render -> download page implementing FEAT-02
-- Temperature sweep implemented via `petringa.ParametricSweep(param="T", sim_fn=petringa.run_dark_current, sim_kwargs={"v_start": V_bias, "v_stop": V_bias, "n_points": 1, ...})`, using the Wave 1 spike-confirmed kwargs verbatim — no hand-rolled loop
+- Temperature sweep implemented via `etna.ParametricSweep(param="T", sim_fn=etna.run_dark_current, sim_kwargs={"v_start": V_bias, "v_stop": V_bias, "n_points": 1, ...})`, using the Wave 1 spike-confirmed kwargs verbatim — no hand-rolled loop
 - Page-level aggregation reduces the returned `list[SimResult]` (one per temperature) into a single temperature-indexed `SimResult`, skipping any per-temperature result with an empty `x` array so a partial sweep degrades gracefully instead of crashing
 - Partial-failure banner (`st.warning`, UI-SPEC copy verbatim) reports `n_ok` of `n_temperatures` succeeded; a `RuntimeError` on the sweep's first call shows `st.error` without polluting `session_state`
 - CSV download button (`dark_current_result.csv`) appears after a successful run, one row per temperature, via the existing `to_csv_bytes` dispatch
@@ -87,7 +87,7 @@ Each task was committed atomically:
 
 - Followed the plan's explicit supersession note: implemented ONLY the RESEARCH.md Decision Addendum's temperature-sweep architecture, not the earlier bias-sweep design described elsewhere in the same research file
 - Built the aggregated `x` array (`T_K`) from the swept `temperatures` values themselves (zipped with each per-temperature result), not from `result.x` (which is always `[V_bias]` for every temperature) — this was the single highest-risk bug identified during planning/advisory review, and Test 3 explicitly asserts `T_K` is monotonically increasing within `[T_min, T_max]` to catch a regression
-- Verified `SimResult` can be constructed without an explicit `mesh=` kwarg (defaults to `None` per `petringa/api/results.py`) before relying on it in the aggregation step
+- Verified `SimResult` can be constructed without an explicit `mesh=` kwarg (defaults to `None` per `etna/api/results.py`) before relying on it in the aggregation step
 
 ## Deviations from Plan
 
@@ -115,7 +115,7 @@ Each task was committed atomically:
 
 - **Found during:** Task 2, acceptance-criteria verification
 - **Issue:** The plan's acceptance criterion `grep -c "ParametricSweep" tests/test_app_dark_current_page.py` returns 0 is a strict literal-string check meant to prove the test file never monkeypatches or references `ParametricSweep` directly — but my initial docstring prose mentioned "ParametricSweep" by name several times for readability, causing the grep to return 5 instead of 0.
-- **Fix:** Reworded the module docstring to refer to the sweep orchestration class generically ("the sweep utility", "petringa/api/sweep.py") instead of by its literal class name, preserving the same explanatory content without tripping the grep.
+- **Fix:** Reworded the module docstring to refer to the sweep orchestration class generically ("the sweep utility", "etna/api/sweep.py") instead of by its literal class name, preserving the same explanatory content without tripping the grep.
 - **Files modified:** `tests/test_app_dark_current_page.py`
 - **Verification:** `grep -c "ParametricSweep" tests/test_app_dark_current_page.py` returns `0`; all 5 tests still pass after the docstring edit
 - **Committed in:** `dd12e65` (part of Task 2 commit)

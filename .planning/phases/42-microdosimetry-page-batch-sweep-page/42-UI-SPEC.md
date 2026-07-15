@@ -16,7 +16,7 @@ reviewed_at: 2026-07-14
 >
 > **Open questions resolved this session (no CONTEXT.md exists — user skipped discuss-phase; answered directly during this UI-SPEC pass):**
 >
-> 1. Batch sweep sim-type selectbox exposes `run_cce`, `run_cv`, `run_temperature_sweep` — excludes `run_field`, `run_microdosimetry`. (Confirmed all three exported from `petringa.__init__`.)
+> 1. Batch sweep sim-type selectbox exposes `run_cce`, `run_cv`, `run_temperature_sweep` — excludes `run_field`, `run_microdosimetry`. (Confirmed all three exported from `etna.__init__`.)
 > 2. Microdosimetry page **includes** a single-result "Download CSV" button (new `microdosimetry` branch added to `to_csv_bytes`).
 > 3. Microdosimetry page **keeps** the `device_config` empty-state guard, for cross-page consistency (config is provenance-only in the CSV header; spectrum math itself does not depend on it).
 
@@ -147,9 +147,9 @@ Batch sweep page:
 
 | Selectbox label                              | Facade                           |
 | -------------------------------------------- | -------------------------------- |
-| "CCE vs bias (run_cce)"                      | `petringa.run_cce`               |
-| "C-V (run_cv)"                               | `petringa.run_cv`                |
-| "CCE vs temperature (run_temperature_sweep)" | `petringa.run_temperature_sweep` |
+| "CCE vs bias (run_cce)"                      | `etna.run_cce`               |
+| "C-V (run_cv)"                               | `etna.run_cv`                |
+| "CCE vs temperature (run_temperature_sweep)" | `etna.run_temperature_sweep` |
 
 `run_field` and `run_microdosimetry` are explicitly excluded from this selectbox (Q1) — `run_field` has no partial-failure fallback (raises outright rather than truncating), and `run_microdosimetry` requires an MC CSV path that does not fit the config-sweep interaction model.
 

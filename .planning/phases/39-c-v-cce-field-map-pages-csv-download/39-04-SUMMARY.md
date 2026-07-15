@@ -7,7 +7,7 @@ tags: [streamlit, plotly, appTest, devsim, csv-export]
 # Dependency graph
 requires:
   - phase: 39-01
-    provides: proven petringa.run_field module-attribute mockability seam (monkeypatch.setattr under AppTest.from_function)
+    provides: proven etna.run_field module-attribute mockability seam (monkeypatch.setattr under AppTest.from_function)
   - phase: 39-02
     provides: app/components/results.py (build_field_figures, to_csv_bytes)
 provides:
@@ -31,7 +31,7 @@ key-decisions:
   - "Added optional st.expander('Net doping vs depth') per RESEARCH A4 bonus, plotting metadata['net_doping'] on a log y-axis, opt-in and not covered by acceptance criteria"
 
 patterns-established:
-  - "Facade referenced as petringa.run_field (module attribute), never `from petringa import run_field`, to preserve monkeypatch mockability"
+  - "Facade referenced as etna.run_field (module attribute), never `from etna import run_field`, to preserve monkeypatch mockability"
 
 requirements-completed: [UI-05, UI-06]
 
@@ -54,10 +54,10 @@ completed: 2026-07-11
 ## Accomplishments
 
 - Replaced the placeholder `app/workflows/field_map.py` with a full Run -> cache -> render -> download page
-- 1D-only guard implemented as a pre-check (`if cfg.half_width_um is not None: st.warning(...); st.stop()`) placed BEFORE any call to `petringa.run_field`, correctly handling the documented trap that `run_field` does not raise for 2D configs
+- 1D-only guard implemented as a pre-check (`if cfg.half_width_um is not None: st.warning(...); st.stop()`) placed BEFORE any call to `etna.run_field`, correctly handling the documented trap that `run_field` does not raise for 2D configs
 - Both required UI-05 charts (E-field vs depth, potential vs depth) rendered from a single cached `run_field` result via `build_field_figures`
 - CSV download wired via `to_csv_bytes`, satisfying the download half of UI-06 for this page
-- Added `tests/test_app_field_page.py` with three AppTest cases (happy path with cache verification, 2D pre-check guard, empty-state guard), all mocking `petringa.run_field` as a module attribute per the proven 39-01 seam
+- Added `tests/test_app_field_page.py` with three AppTest cases (happy path with cache verification, 2D pre-check guard, empty-state guard), all mocking `etna.run_field` as a module attribute per the proven 39-01 seam
 
 ## Task Commits
 
@@ -72,7 +72,7 @@ _Note: This task followed TDD in spirit (test file written and run to confirm RE
 ## Files Created/Modified
 
 - `app/workflows/field_map.py` - Field map page: empty-state guard, 1D-only pre-check, Run button, cached SimResult rendering, dual Plotly charts, CSV download, optional net-doping expander
-- `tests/test_app_field_page.py` - AppTest suite mocking `petringa.run_field`: run-caches-result, 2D-guard, empty-state-guard
+- `tests/test_app_field_page.py` - AppTest suite mocking `etna.run_field`: run-caches-result, 2D-guard, empty-state-guard
 
 ## Decisions Made
 

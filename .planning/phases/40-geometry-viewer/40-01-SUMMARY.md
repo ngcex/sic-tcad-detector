@@ -4,7 +4,7 @@ plan: 01
 subsystem: app-ui
 tags: [plotly, scipy, griddata, geometry-viewer, pure-builder, viz]
 requires:
-  - petringa.MeshData (top-level re-export of petringa.api.results.MeshData)
+  - etna.MeshData (top-level re-export of etna.api.results.MeshData)
   - scipy.interpolate.griddata
   - plotly.graph_objects
 provides:

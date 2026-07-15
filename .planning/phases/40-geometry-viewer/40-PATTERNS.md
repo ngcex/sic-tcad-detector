@@ -26,7 +26,7 @@
 ```python
 """Geometry viewer: pure MeshData → Plotly figure builder.
 
-PURE — no `st.*` calls. Turns a petringa MeshData (irregular devsim node
+PURE — no `st.*` calls. Turns a etna MeshData (irregular devsim node
 coords + node_values) into a go.Figure: 2D griddata heatmap or 1D bar.
 Unit-testable without Streamlit or devsim, exactly like results.to_csv_bytes.
 """
@@ -36,10 +36,10 @@ import numpy as np
 import plotly.graph_objects as go
 from scipy.interpolate import griddata   # NEW dep-use; no repo precedent (see No Analog Found)
 
-from petringa import MeshData            # import the dataclass for the type hint
+from etna import MeshData            # import the dataclass for the type hint
 ```
 
-Note: `results.py` imports `petringa` and `from petringa import SimResult`. Mirror that with `from petringa import MeshData`. Confirm `MeshData` is re-exported from top-level `petringa` (results.py imports `SimResult` this way; MeshData lives in `petringa/api/results.py` alongside it).
+Note: `results.py` imports `etna` and `from etna import SimResult`. Mirror that with `from etna import MeshData`. Confirm `MeshData` is re-exported from top-level `etna` (results.py imports `SimResult` this way; MeshData lives in `etna/api/results.py` alongside it).
 
 **Pure builder signature pattern** — mirror `build_field_figures(result: SimResult) -> tuple[go.Figure, go.Figure]` (results.py:63) and `build_cv_figure(result: SimResult) -> go.Figure` (results.py:25):
 
@@ -122,7 +122,7 @@ The persistent `key=` (as `cfg_doping_profile` does) is what makes the selection
 from __future__ import annotations
 import numpy as np
 import pytest
-from petringa import MeshData
+from etna import MeshData
 from app.components.geometry_viewer import build_geometry_figure, QUANTITIES
 
 def _mesh_1d():
@@ -163,7 +163,7 @@ Use `pytest.approx` for float compares (test_app_csv_export.py:56-59 precedent) 
 
 **Analog:** itself (extend). Full file read.
 
-**Reuse the mock seam** — `_fake_run_field` + `monkeypatch.setattr(petringa, "run_field", fake)` (lines 27-49). For a 2D fake, return a SimResult with `x=np.array([])`, `y=np.array([])`, and a **populated `mesh`** with `y_coords` non-None:
+**Reuse the mock seam** — `_fake_run_field` + `monkeypatch.setattr(etna, "run_field", fake)` (lines 27-49). For a 2D fake, return a SimResult with `x=np.array([])`, `y=np.array([])`, and a **populated `mesh`** with `y_coords` non-None:
 
 ```python
 def _fake_run_field_2d(cfg, **kwargs):
@@ -212,11 +212,11 @@ The `st.selectbox` / `st.plotly_chart` calls live ONLY in `field_map.py`; the bu
 **Apply to:** all AppTest tests touching the field page
 
 ```python
-monkeypatch.setattr(petringa, "run_field", _fake)   # patch the MODULE attribute
+monkeypatch.setattr(etna, "run_field", _fake)   # patch the MODULE attribute
 # _fake returns a hand-built SimResult; the real devsim solve never runs
 ```
 
-Never call real `petringa.run_field`/devsim in a viewer or page test (RESEARCH Pitfall 5; 2D convergence unverified).
+Never call real `etna.run_field`/devsim in a viewer or page test (RESEARCH Pitfall 5; 2D convergence unverified).
 
 ### Streamlit widget with persistent key
 
@@ -231,7 +231,7 @@ The `key=` makes the selection persist across reruns automatically — this is t
 
 ### Label / colormap / coordinate spec (matplotlib → Plotly translation)
 
-**Source:** `petringa/core/plotting2d.py` (authoritative spec — do NOT import it; it is matplotlib `tricontourf`)
+**Source:** `etna/core/plotting2d.py` (authoritative spec — do NOT import it; it is matplotlib `tricontourf`)
 **Apply to:** `geometry_viewer.py` axis titles, colorbar labels, colorscales
 
 | Quantity                                                                                                                                                                                                         | Title                         | Colorbar label                 | Colorscale | Scaling                                | plotting2d.py line |
@@ -267,7 +267,7 @@ fig.update_yaxes(autorange="reversed")
 
 ## Metadata
 
-**Analog search scope:** `app/components/`, `app/workflows/`, `tests/`, `petringa/core/plotting2d.py`, `petringa/api/results.py`
+**Analog search scope:** `app/components/`, `app/workflows/`, `tests/`, `etna/core/plotting2d.py`, `etna/api/results.py`
 **Files scanned:** 6 read verbatim (results.py, field_map.py, test_app_field_page.py, test_app_csv_export.py, api/results.py, plotting2d.py:106-275) + grep for `st.selectbox`/dimensionality across `app/`
 **Key finding:** selectbox has a real analog (`device_sidebar.py:69`), overturning the assumption it was analog-less. griddata/heatmap body confirmed analog-less.
 **Pattern extraction date:** 2026-07-13

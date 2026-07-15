@@ -7,7 +7,7 @@ tags: [streamlit, plotly, devsim, parametric-sweep, csv-export]
 # Dependency graph
 requires:
   - phase: 37-core-api-cce-facades-parametric-sweep
-    provides: petringa.ParametricSweep, petringa.run_dark_current, petringa.run_radiation_damage facades
+    provides: etna.ParametricSweep, etna.run_dark_current, etna.run_radiation_damage facades
 provides:
   - build_damage_figure(result) -> go.Figure (CCE vs proton fluence, log-x, NaN-tolerant)
   - build_dark_current_figure(result) -> go.Figure (4-trace decomposition vs temperature, log-y, abs()+zero-guarded)

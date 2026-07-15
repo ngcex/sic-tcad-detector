@@ -6,7 +6,7 @@
 
 ## Summary
 
-Phase 38 establishes the Streamlit shell for the petringa SiC TCAD simulator: a multi-page app whose sidebar collects **all** `DeviceConfig` fields into a single config object that persists across page navigation. It runs **no** simulations — every page is a placeholder/empty-state page. Because Phases 39-43 build on whatever navigation and session_state pattern this phase sets, the foundational contract must be right.
+Phase 38 establishes the Streamlit shell for the etna SiC TCAD simulator: a multi-page app whose sidebar collects **all** `DeviceConfig` fields into a single config object that persists across page navigation. It runs **no** simulations — every page is a placeholder/empty-state page. Because Phases 39-43 build on whatever navigation and session_state pattern this phase sets, the foundational contract must be right.
 
 Three facts drive every recommendation below, all verified this session against official Streamlit docs (v1.58.0, the installed version) and the actual source code:
 
@@ -23,9 +23,9 @@ Three facts drive every recommendation below, all verified this session against 
 | Multi-page navigation              | Streamlit runtime (entry script)           | —                                   | `st.navigation` in `app/main.py` owns page registration and routing                                                   |
 | Device config form controls        | Streamlit UI (sidebar, entry script)       | —                                   | Entry-script sidebar renders on every page, so config is editable "on any page" (UI-02) `[CITED: st.navigation docs]` |
 | Config persistence across nav      | `st.session_state` (single non-widget key) | —                                   | session_state persists across pages within a session `[CITED: session-state docs]`                                    |
-| DeviceConfig assembly / validation | App layer (`app/` helper)                  | `petringa.DeviceConfig` (dataclass) | The dataclass is the contract; the app marshals form values into it                                                   |
+| DeviceConfig assembly / validation | App layer (`app/` helper)                  | `etna.DeviceConfig` (dataclass) | The dataclass is the contract; the app marshals form values into it                                                   |
 | Empty-state guard on pages         | Streamlit UI (each page)                   | —                                   | Pages check for `device_config` and prompt if absent (success criterion 4)                                            |
-| Simulation execution               | **NOT this phase**                         | `petringa` facades                  | Phase 38 runs no simulations; facades are used starting Phase 39                                                      |
+| Simulation execution               | **NOT this phase**                         | `etna` facades                  | Phase 38 runs no simulations; facades are used starting Phase 39                                                      |
 
 ## Standard Stack
 
@@ -34,7 +34,7 @@ Three facts drive every recommendation below, all verified this session against 
 | Library   | Version                               | Purpose                                           | Why Standard                                                              |
 | --------- | ------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------- |
 | streamlit | 1.58.0 (installed; declared `>=1.30`) | Multi-page app shell, sidebar form, session_state | Project-mandated UI framework (pyproject.toml) `[VERIFIED: pip list]`     |
-| petringa  | local editable install                | `DeviceConfig` dataclass consumed by the form     | The config contract this phase exposes `[VERIFIED: petringa/__init__.py]` |
+| etna  | local editable install                | `DeviceConfig` dataclass consumed by the form     | The config contract this phase exposes `[VERIFIED: etna/__init__.py]` |
 
 ### Supporting
 
@@ -59,7 +59,7 @@ Three facts drive every recommendation below, all verified this session against 
 
 ## Package Legitimacy Audit
 
-> This phase installs **no** external packages. All required libraries (streamlit, plotly, pandas, petringa) are already declared in `pyproject.toml` and installed in the environment. No slopcheck / registry verification needed — nothing is being added.
+> This phase installs **no** external packages. All required libraries (streamlit, plotly, pandas, etna) are already declared in `pyproject.toml` and installed in the environment. No slopcheck / registry verification needed — nothing is being added.
 
 | Package                         | Registry | Age | Downloads | Source Repo | slopcheck | Disposition |
 | ------------------------------- | -------- | --- | --------- | ----------- | --------- | ----------- |
@@ -122,7 +122,7 @@ Data flow: user edits sidebar → Streamlit reruns entry script → sidebar re-r
 | `app/main.py`                                  | Entry script: `st.navigation` registration, `pg.run()`, calls the sidebar renderer                      |
 | `app/components/device_sidebar.py` (suggested) | Renders all DeviceConfig controls, assembles `DeviceConfig`, writes `st.session_state["device_config"]` |
 | `app/pages/*.py` (or page functions)           | One placeholder per workflow; empty-state guard + config summary                                        |
-| `petringa.DeviceConfig`                        | The dataclass contract the sidebar populates (do NOT redefine fields in the app)                        |
+| `etna.DeviceConfig`                        | The dataclass contract the sidebar populates (do NOT redefine fields in the app)                        |
 
 ### Recommended Project Structure
 
@@ -145,7 +145,7 @@ Note: with `st.navigation` these page modules do **not** need to live in a magic
 
 ### DeviceConfig → Form Control Mapping (ALL fields — read from source)
 
-Source of truth: `petringa/api/device.py` (verified this session). All 11 fields:
+Source of truth: `etna/api/device.py` (verified this session). All 11 fields:
 
 | Field                    | Type / Default         | Gated by                                        | Suggested control                                     |
 | ------------------------ | ---------------------- | ----------------------------------------------- | ----------------------------------------------------- |
@@ -221,7 +221,7 @@ else:  # uniform
 **Example:**
 
 ```python
-from petringa import DeviceConfig
+from etna import DeviceConfig
 
 st.session_state["device_config"] = DeviceConfig(
     epi_thickness_um=epi_thickness_um,
@@ -257,7 +257,7 @@ Because the entry-script sidebar always runs before `pg.run()`, `device_config` 
 - **Reading config from individual widget keys on result pages:** those keys are GC'd when not rendered on that run. Read the single `device_config` object instead. `[CITED: widget-behavior docs]`
 - **Adding `st.cache_resource`/`st.cache_data` in Phase 38:** no expensive object creation happens here; module imports are already cached by `sys.modules`. Premature and unnecessary (see State of the Art).
 - **Using the legacy `pages/` magic directory AND `st.navigation`:** once `st.navigation` runs, the `pages/` directory is ignored — mixing them causes confusion. Pick `st.navigation`. `[CITED: st.navigation docs]`
-- **Redefining DeviceConfig fields in the app:** import `DeviceConfig` from `petringa`; the dataclass is the single source of truth. If a field is added to the dataclass later, the form should be updated in lockstep (see Open Questions).
+- **Redefining DeviceConfig fields in the app:** import `DeviceConfig` from `etna`; the dataclass is the single source of truth. If a field is added to the dataclass later, the form should be updated in lockstep (see Open Questions).
 
 ## Don't Hand-Roll
 
@@ -265,8 +265,8 @@ Because the entry-script sidebar always runs before `pg.run()`, `device_config` 
 | ------------------------------------ | ---------------------------------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | Multi-page routing                   | Custom `st.radio` page switcher + `if/elif` dispatch | `st.navigation` + `st.Page`               | Native, gives real URLs, sidebar nav, and runs the entry-script sidebar on every page `[CITED: st.navigation docs]` |
 | Cross-page state                     | Query params / cookies / files                       | `st.session_state["device_config"]`       | session_state persists across pages within a session by design `[CITED: session-state docs]`                        |
-| Config schema                        | Hand-written dict of fields in the app               | `petringa.DeviceConfig` dataclass         | Already the API contract; avoids drift between UI and library                                                       |
-| Config cloning for sweeps (Phase 42) | `setattr`/`eval`                                     | `dataclasses.replace` / `ParametricSweep` | Already implemented; injection-safe `[VERIFIED: petringa/api/sweep.py]`                                             |
+| Config schema                        | Hand-written dict of fields in the app               | `etna.DeviceConfig` dataclass         | Already the API contract; avoids drift between UI and library                                                       |
+| Config cloning for sweeps (Phase 42) | `setattr`/`eval`                                     | `dataclasses.replace` / `ParametricSweep` | Already implemented; injection-safe `[VERIFIED: etna/api/sweep.py]`                                             |
 
 **Key insight:** Streamlit's native primitives (`st.navigation`, `st.session_state`) already solve routing and state persistence. The only real design work in Phase 38 is faithfully mapping the 11 `DeviceConfig` fields (with two conditional dimensions) to reactive controls and choosing the single storage key — the rest is framework-provided.
 
@@ -295,9 +295,9 @@ Because the entry-script sidebar always runs before `pg.run()`, `device_config` 
 
 ### Pitfall 4: devsim banner noise on startup
 
-**What goes wrong:** `import petringa` eagerly imports devsim, which prints a BLAS/LAPACK/UMFPACK banner to stderr and takes ~1.4s import time (measured this session). Streamlit will show this once at server start.
-**Why it happens:** `petringa/__init__.py` imports the facades, which import devsim at module load. Verified: `import petringa` → `'devsim' in sys.modules` is `True`. `[VERIFIED: python -c timing this session]`
-**How to avoid:** This is paid **once per server process** (Python caches modules in `sys.modules`), not per rerun — so it is not a performance problem for Phase 38. Do NOT wrap the import in `st.cache_resource` (that's for objects, not modules). If the banner is cosmetically undesirable, importing `petringa` (or just `DeviceConfig`) lazily inside the sidebar function is optional but unnecessary. Since Phase 38 only needs `DeviceConfig`, `from petringa import DeviceConfig` is sufficient and still triggers the eager devsim import — acceptable.
+**What goes wrong:** `import etna` eagerly imports devsim, which prints a BLAS/LAPACK/UMFPACK banner to stderr and takes ~1.4s import time (measured this session). Streamlit will show this once at server start.
+**Why it happens:** `etna/__init__.py` imports the facades, which import devsim at module load. Verified: `import etna` → `'devsim' in sys.modules` is `True`. `[VERIFIED: python -c timing this session]`
+**How to avoid:** This is paid **once per server process** (Python caches modules in `sys.modules`), not per rerun — so it is not a performance problem for Phase 38. Do NOT wrap the import in `st.cache_resource` (that's for objects, not modules). If the banner is cosmetically undesirable, importing `etna` (or just `DeviceConfig`) lazily inside the sidebar function is optional but unnecessary. Since Phase 38 only needs `DeviceConfig`, `from etna import DeviceConfig` is sufficient and still triggers the eager devsim import — acceptable.
 **Warning signs:** Slow first page load (~1-2s), devsim text in the server console — both benign.
 
 ## Code Examples
@@ -308,7 +308,7 @@ Because the entry-script sidebar always runs before `pg.run()`, `device_config` 
 # app/components/device_sidebar.py
 # Source: composed from docs.streamlit.io st.navigation / session-state / widget-behavior
 import streamlit as st
-from petringa import DeviceConfig
+from etna import DeviceConfig
 
 def render_device_sidebar() -> None:
     st.sidebar.header("Device configuration")
@@ -403,10 +403,10 @@ st.caption("Running C-V simulations is implemented in Phase 39.")
 | Dependency              | Required By                         | Available | Version        | Fallback |
 | ----------------------- | ----------------------------------- | --------- | -------------- | -------- |
 | streamlit               | UI-01/02/07                         | ✓         | 1.58.0         | —        |
-| petringa (DeviceConfig) | UI-02                               | ✓         | local editable | —        |
+| etna (DeviceConfig) | UI-02                               | ✓         | local editable | —        |
 | plotly                  | (Phase 39+) not this phase          | ✓         | 6.8.0          | —        |
 | pandas                  | (Phase 39+) not this phase          | ✓         | 3.0.3          | —        |
-| devsim                  | transitively imported by `petringa` | ✓         | 2.10.0         | —        |
+| devsim                  | transitively imported by `etna` | ✓         | 2.10.0         | —        |
 
 **Missing dependencies with no fallback:** none.
 **Missing dependencies with fallback:** none.
@@ -468,7 +468,7 @@ Testing note: Streamlit UIs are testable headlessly via `streamlit.testing.v1.Ap
 
 | Pattern                                                             | STRIDE          | Standard Mitigation                                                                                                                                                                                                                  |
 | ------------------------------------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Arbitrary attribute injection into config (relevant Phase 42 sweep) | Tampering       | Already mitigated in library: `ParametricSweep` uses `dataclasses.replace`, never `setattr`/`eval` `[VERIFIED: petringa/api/sweep.py]`. Phase 38 assembles `DeviceConfig` with explicit named kwargs — no dynamic attribute setting. |
+| Arbitrary attribute injection into config (relevant Phase 42 sweep) | Tampering       | Already mitigated in library: `ParametricSweep` uses `dataclasses.replace`, never `setattr`/`eval` `[VERIFIED: etna/api/sweep.py]`. Phase 38 assembles `DeviceConfig` with explicit named kwargs — no dynamic attribute setting. |
 | Malformed numeric input (NaN/inf/negative thickness)                | Tampering / DoS | `st.number_input` `min_value` guards; optional validation before storing config. No simulation runs in Phase 38 so blast radius is nil.                                                                                              |
 | (No file upload in this phase)                                      | —               | File-input threat surface (`run_microdosimetry` CSV) is Phase 42, not here.                                                                                                                                                          |
 
@@ -480,9 +480,9 @@ Testing note: Streamlit UIs are testable headlessly via `streamlit.testing.v1.Ap
 - `docs.streamlit.io/develop/concepts/architecture/session-state` — persistence across reruns and pages, no persistence on server crash
 - `docs.streamlit.io/develop/concepts/architecture/widget-behavior` — keyed widget state GC when not rendered; placeholder-key pattern
 - `docs.streamlit.io/develop/api-reference/execution-flow/st.form` — form batching, no conditional rendering before submit, callback constraints
-- Source code (verified this session): `petringa/api/device.py` (DeviceConfig 11 fields), `petringa/api/results.py` (SimResult/MeshData), `petringa/api/sweep.py` (ParametricSweep), `petringa/__init__.py` (public API), `petringa/api/simulation.py` (facade signatures)
+- Source code (verified this session): `etna/api/device.py` (DeviceConfig 11 fields), `etna/api/results.py` (SimResult/MeshData), `etna/api/sweep.py` (ParametricSweep), `etna/__init__.py` (public API), `etna/api/simulation.py` (facade signatures)
 - `pip list` this session: streamlit 1.58.0, plotly 6.8.0, pandas 3.0.3, devsim 2.10.0
-- `python -c "import petringa"` timing: eager devsim import confirmed (~1.4s, `'devsim' in sys.modules` True)
+- `python -c "import etna"` timing: eager devsim import confirmed (~1.4s, `'devsim' in sys.modules` True)
 
 ### Secondary (MEDIUM confidence)
 
@@ -498,7 +498,7 @@ Testing note: Streamlit UIs are testable headlessly via `streamlit.testing.v1.Ap
 
 - Standard stack: HIGH — all versions verified via `pip list`; no new packages
 - Architecture (st.navigation, session_state, form): HIGH — verified against official docs this session
-- DeviceConfig field mapping: HIGH — read directly from source `petringa/api/device.py`
+- DeviceConfig field mapping: HIGH — read directly from source `etna/api/device.py`
 - Pitfalls: HIGH — widget-GC and form-batching confirmed verbatim in docs; import cost measured empirically
 - Test architecture: MEDIUM — AppTest specifics to be confirmed by planner
 

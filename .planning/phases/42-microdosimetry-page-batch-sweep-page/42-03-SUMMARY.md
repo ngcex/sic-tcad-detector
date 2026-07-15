@@ -9,7 +9,7 @@ requires:
   - phase: 42-microdosimetry-page-batch-sweep-page (plan 01)
     provides: build_sweep_overlay_figure (4-arg), sweep_results_to_csv_bytes, convergence-safe default combo (run_cce + epi_thickness_um=[10,15,20])
 provides:
-  - Batch Sweep Streamlit page (app/workflows/batch_sweep.py) driving the real petringa.ParametricSweep(...).run()
+  - Batch Sweep Streamlit page (app/workflows/batch_sweep.py) driving the real etna.ParametricSweep(...).run()
   - Curated SWEEPABLE_FIELDS (8 numeric 1D-safe fields) and SIM_FACADES (run_cce/run_cv/run_temperature_sweep) selectboxes
   - Value-list float()-per-token parse (no code eval); partial-failure-tolerant overlay; bulk "Download all results as CSV" export
   - AppTest suite (6 cases) monkeypatching the facade only, exercising real ParametricSweep orchestration
@@ -34,7 +34,7 @@ key-files:
     - app/workflows/batch_sweep.py
 
 key-decisions:
-  - "Referenced petringa.ParametricSweep and facades as module attributes via getattr so tests monkeypatch the facade (run_cce) while the real .run() executes"
+  - "Referenced etna.ParametricSweep and facades as module attributes via getattr so tests monkeypatch the facade (run_cce) while the real .run() executes"
   - "float() per token inside try/except ValueError for the value list; never eval/exec (T-42-03-T2 mitigation)"
   - "Hardcoded the 42-01-SPIKE-confirmed convergence-safe defaults: run_cce + epi_thickness_um + '10, 15, 20'"
 
@@ -50,7 +50,7 @@ completed: 2026-07-14
 
 # Phase 42 Plan 03: Batch Sweep Page Summary
 
-**General-case parametric-sweep Streamlit page: curated param/facade selectboxes drive the real petringa.ParametricSweep(...).run(), rendering one overlay trace per swept value with a partial-failure-tolerant chart and a bulk "Download all results as CSV" export.**
+**General-case parametric-sweep Streamlit page: curated param/facade selectboxes drive the real etna.ParametricSweep(...).run(), rendering one overlay trace per swept value with a partial-failure-tolerant chart and a bulk "Download all results as CSV" export.**
 
 ## Performance
 
@@ -84,7 +84,7 @@ _Note: Task 2 is a `tdd="true"` task, but Task 1 delivered the implementation fi
 
 ## Decisions Made
 
-- Referenced `petringa.ParametricSweep` and facades as module attributes (`getattr(petringa, ...)`) so tests monkeypatch the facade (`run_cce`) while the real `.run()` orchestration executes — asserts genuine sweep wiring, not a hand-rolled loop.
+- Referenced `etna.ParametricSweep` and facades as module attributes (`getattr(etna, ...)`) so tests monkeypatch the facade (`run_cce`) while the real `.run()` orchestration executes — asserts genuine sweep wiring, not a hand-rolled loop.
 - Value list parsed with `float()` per token inside `try/except ValueError`; no `eval`/`exec` anywhere in source (T-42-03-T2).
 - Run snapshot written to renamed keys `sweep_run_param`/`sweep_run_values` (disjoint from the `sweep_param`/`sweep_values` widget keys) to avoid the streamlit 1.58 `StreamlitAPIException`.
 - Hardcoded the 42-01-SPIKE-confirmed default combo (`run_cce` + `epi_thickness_um` + `"10, 15, 20"`).

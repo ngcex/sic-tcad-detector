@@ -1,7 +1,7 @@
 # Phase 42: Microdosimetry Page + Batch Sweep Page - Research
 
 **Researched:** 2026-07-14
-**Domain:** Streamlit page wiring (file upload + parametric sweep) over the existing `petringa` pure-Python/devsim facades
+**Domain:** Streamlit page wiring (file upload + parametric sweep) over the existing `etna` pure-Python/devsim facades
 **Confidence:** HIGH
 
 ## Summary
@@ -29,9 +29,9 @@ The **batch sweep page** is a direct generalization of the already-shipped Dark 
 | Capability                           | Primary Tier                                         | Secondary Tier | Rationale                                                                                                          |
 | ------------------------------------ | ---------------------------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------ |
 | MC CSV upload + validation           | Frontend (Streamlit page)                            | —              | `st.file_uploader` is a UI widget; validation (schema/columns) happens page-side before calling the pure facade    |
-| Microdosimetric spectrum computation | Library (`petringa.run_microdosimetry`)              | —              | Pure data pipeline already implemented; page never re-implements spectrum math                                     |
+| Microdosimetric spectrum computation | Library (`etna.run_microdosimetry`)              | —              | Pure data pipeline already implemented; page never re-implements spectrum math                                     |
 | File bytes → path bridge             | Frontend (Streamlit page)                            | —              | Temp-file lifecycle is a page concern; the facade contract is path-based and must not change                       |
-| Parametric sweep orchestration       | Library (`petringa.ParametricSweep`)                 | —              | `.run()` clones config via `dataclasses.replace` and calls the facade N times; page must NOT hand-roll the loop    |
+| Parametric sweep orchestration       | Library (`etna.ParametricSweep`)                 | —              | `.run()` clones config via `dataclasses.replace` and calls the facade N times; page must NOT hand-roll the loop    |
 | Per-run TCAD solve                   | Library (facade `sim_fn`, e.g. `run_cce`)            | —              | Each facade builds + tears down its own devsim device; page is devsim-agnostic                                     |
 | Overlay figure + bulk CSV            | Frontend (`app/components/results.py` pure builders) | —              | Pure `go.Figure`/`bytes` functions, no `st.*`, consumed by the page — matches the established `results.py` pattern |
 | Result caching across reruns         | Frontend (`st.session_state`)                        | —              | Same cache-in-session_state pattern as all prior result pages                                                      |
@@ -46,7 +46,7 @@ The **batch sweep page** is a direct generalization of the already-shipped Dark 
 | plotly    | (installed)     | `go.Figure` builders (spectrum + overlay)                                                         | Established plot layer across all Phase 39–41 pages `[VERIFIED: codebase]`                                                    |
 | pandas    | ≥2.0            | `to_csv` serialization; `load_mc_events_csv` uses `read_csv` internally                           | Already a runtime dep (STATE.md); used by existing `to_csv_bytes` `[VERIFIED: pyproject/STATE.md]`                            |
 | numpy     | (installed)     | array assembly for sweep aggregation                                                              | Ubiquitous in facades `[VERIFIED: codebase]`                                                                                  |
-| petringa  | 0.x (this repo) | `run_microdosimetry`, `ParametricSweep`, `run_cce`, `SimResult`, `DeviceConfig`                   | The library under UI — all facades already implemented and tested `[VERIFIED: codebase]`                                      |
+| etna  | 0.x (this repo) | `run_microdosimetry`, `ParametricSweep`, `run_cce`, `SimResult`, `DeviceConfig`                   | The library under UI — all facades already implemented and tested `[VERIFIED: codebase]`                                      |
 
 **Standard library only (no install):** `tempfile` (upload bridge), `os`/`pathlib` (temp cleanup), `dataclasses.fields`/`asdict` (field introspection for the sweepable-param selectbox).
 
@@ -74,7 +74,7 @@ The **batch sweep page** is a direct generalization of the already-shipped Dark 
 
 ## Package Legitimacy Audit
 
-> No external packages are installed by this phase. Every dependency (streamlit, plotly, pandas, numpy, petringa) is already present and vetted in prior phases; `tempfile`/`os`/`dataclasses` are Python standard library.
+> No external packages are installed by this phase. Every dependency (streamlit, plotly, pandas, numpy, etna) is already present and vetted in prior phases; `tempfile`/`os`/`dataclasses` are Python standard library.
 
 | Package | Registry | Age | Downloads | Source Repo | slopcheck | Disposition                |
 | ------- | -------- | --- | --------- | ----------- | --------- | -------------------------- |
@@ -100,7 +100,7 @@ _No install step exists in this phase. Planner must NOT invent one._
         v                                              |
    try/finally  ------------------------------------>  |  .name (server-generated path)
         |                                              v
-        |                          petringa.run_microdosimetry(cfg, path, sv_t, sv_w)
+        |                          etna.run_microdosimetry(cfg, path, sv_t, sv_w)
         |                                              |  (PURE data pipeline, no devsim)
         |                                              v
         |                                SimResult(sim_type="microdosimetry",
@@ -119,12 +119,12 @@ _No install step exists in this phase. Planner must NOT invent one._
 [selectbox: swept field] [text_input: value list] [selectbox: sim type]
         |                        |                        |
         v                        v (parse: float() per token, reject non-numeric)
-    param="epi_thickness_um"  values=[10,15,20]     sim_fn=petringa.run_cce
+    param="epi_thickness_um"  values=[10,15,20]     sim_fn=etna.run_cce
         |                        |                        |
         +------------------------+------------------------+
                                  |  (Run button, try/except RuntimeError)
                                  v
-        petringa.ParametricSweep(base_config=cfg, param, values, sim_fn,
+        etna.ParametricSweep(base_config=cfg, param, values, sim_fn,
                                  sim_kwargs).run()   # real orchestration, NOT hand-rolled
                                  |
                                  v
@@ -163,13 +163,13 @@ data/
 **Example:**
 
 ```python
-# Source: derived from run_microdosimetry signature (petringa/api/simulation.py:843)
+# Source: derived from run_microdosimetry signature (etna/api/simulation.py:843)
 #         + Streamlit st.file_uploader contract (v1.58). Pattern verified safe: no
 #         path traversal (server-generated temp path), no eval (pd.read_csv only).
 import os
 import tempfile
 import streamlit as st
-import petringa
+import etna
 
 uploaded = st.file_uploader("Upload MC events CSV", type=["csv"], key="micro_csv")
 sv_thickness = st.number_input("Sensitive-volume thickness (µm)", value=10.0, key="micro_sv_t")
@@ -184,7 +184,7 @@ if st.button("Run simulation"):
         with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as tmp:
             tmp.write(uploaded.getvalue())   # UploadedFile bytes
             tmp_path = tmp.name              # server-generated path — NOT user-controlled
-        result = petringa.run_microdosimetry(
+        result = etna.run_microdosimetry(
             cfg, mc_csv_path=tmp_path,
             sv_thickness_um=sv_thickness, sv_width_um=sv_width,
         )
@@ -196,17 +196,17 @@ if st.button("Run simulation"):
             os.remove(tmp_path)
 ```
 
-`petringa.run_microdosimetry` MUST be referenced as a **module attribute** (`import petringa; petringa.run_microdosimetry(...)`), never `from petringa import run_microdosimetry`, so tests can `monkeypatch.setattr(petringa, "run_microdosimetry", fake)` — the mockability seam locked in 39-01 and reused by every page. `[VERIFIED: STATE.md decision + all 5 prior pages]`
+`etna.run_microdosimetry` MUST be referenced as a **module attribute** (`import etna; etna.run_microdosimetry(...)`), never `from etna import run_microdosimetry`, so tests can `monkeypatch.setattr(etna, "run_microdosimetry", fake)` — the mockability seam locked in 39-01 and reused by every page. `[VERIFIED: STATE.md decision + all 5 prior pages]`
 
 ### Pattern 2: ParametricSweep page (batch sweep) — copy Dark Current verbatim
 
-**What:** Drive `petringa.ParametricSweep(...).run()` and render one trace per swept value.
+**What:** Drive `etna.ParametricSweep(...).run()` and render one trace per swept value.
 **When to use:** The batch sweep page IS the general case of the dark current page.
 **Example:**
 
 ```python
 # Source: app/workflows/dark_current.py (41-03, the canonical ParametricSweep page)
-import petringa
+import etna
 from app.components.results import build_sweep_overlay_figure, sweep_results_to_csv_bytes
 
 SWEEPABLE_FIELDS = [   # CURATED — numeric, 1D-facade-safe (see "Curated sweep fields" below)
@@ -233,9 +233,9 @@ if st.button("Run simulation"):
     if len(values) < 1:
         st.warning("Enter at least one value.")
         st.stop()
-    sim_fn = getattr(petringa, SIM_FACADES[sim_label])
+    sim_fn = getattr(etna, SIM_FACADES[sim_label])
     try:
-        results = petringa.ParametricSweep(   # REAL .run() — never hand-roll the loop
+        results = etna.ParametricSweep(   # REAL .run() — never hand-roll the loop
             base_config=cfg, param=param, values=values, sim_fn=sim_fn,
         ).run()
         st.session_state["sweep_results"] = results
@@ -263,8 +263,8 @@ if st.button("Run simulation"):
 
 | Problem                               | Don't Build                                              | Use Instead                                                                                                     | Why                                                                                                            |
 | ------------------------------------- | -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| Sweeping a config field over N values | A manual `for value in values:` loop that mutates config | `petringa.ParametricSweep(...).run()`                                                                           | Success-criterion 4 requires it; `dataclasses.replace` cloning is the security-hardened path (no setattr/eval) |
-| MC CSV parsing/validation             | Custom CSV reader                                        | `petringa.core.mc_coupling.load_mc_events_csv` (called inside `run_microdosimetry`)                             | Already handles the column map + unit conversion; page only needs to catch its exceptions                      |
+| Sweeping a config field over N values | A manual `for value in values:` loop that mutates config | `etna.ParametricSweep(...).run()`                                                                           | Success-criterion 4 requires it; `dataclasses.replace` cloning is the security-hardened path (no setattr/eval) |
+| MC CSV parsing/validation             | Custom CSV reader                                        | `etna.core.mc_coupling.load_mc_events_csv` (called inside `run_microdosimetry`)                             | Already handles the column map + unit conversion; page only needs to catch its exceptions                      |
 | Lineal-energy spectrum math           | Reimplement ICRU-36 binning                              | `run_microdosimetry`                                                                                            | Pure pipeline already implemented, tested, and frozen                                                          |
 | Config cloning                        | `copy.deepcopy` + setattr                                | `dataclasses.replace` (inside ParametricSweep)                                                                  | Rejects unknown fields with `TypeError`; no attribute injection                                                |
 | CSV metadata header / timestamp       | New header format                                        | Mirror existing `to_csv_bytes` header convention (`#` comment lines, ISO-8601, software_version, device fields) | Consistency with 5 existing CSV exports                                                                        |
@@ -327,7 +327,7 @@ event_id,x,y,z,edep
 
 `[VERIFIED: head -6 data/synthetic_mc_events.csv]`
 
-- **Default column map** (`load_mc_events_csv`): `event_id`, `x`(→x_cm), `y`(→y_cm), `z`(→z_cm), `edep`(→edep_keV). Default `pos_unit="cm"`, `energy_unit="keV"`. `[VERIFIED: petringa/core/mc_coupling.py:107-158]`
+- **Default column map** (`load_mc_events_csv`): `event_id`, `x`(→x_cm), `y`(→y_cm), `z`(→z_cm), `edep`(→edep_keV). Default `pos_unit="cm"`, `energy_unit="keV"`. `[VERIFIED: etna/core/mc_coupling.py:107-158]`
 - **Fixture stats:** 11116 rows, 2000 unique `event_id`s, edep range ~0.0002–2255 keV. `[VERIFIED: pandas describe]`
 - **Facade output for this fixture** (`sv_thickness_um=10, sv_width_um=150`): `sim_type="microdosimetry"`, `x`/`y` length **300**, `y_F=17.23 keV/µm`, `y_D=53.22 keV/µm`, `l_bar_um=20.0`, x-range 0.0102 – 9772 keV/µm. `[VERIFIED: live uv run]`
 - **In-UI format hint copy** (suggested): "CSV columns: `event_id, x, y, z, edep` — positions in cm, energy deposit in keV. One row per MC step; steps are summed per `event_id`."
@@ -382,8 +382,8 @@ def sweep_results_to_csv_bytes(results: list[SimResult], param: str, values: lis
         frames.append(df)
     combined = pd.concat(frames, ignore_index=True)
     header = [
-        f"# petringa SiC TCAD Simulator — parametric sweep ({param})",
-        f"# software_version: {petringa.__version__}",
+        f"# etna SiC TCAD Simulator — parametric sweep ({param})",
+        f"# software_version: {etna.__version__}",
         f"# generated: {datetime.now(timezone.utc).isoformat()}",
         f"# swept_values: {values}",
     ]
@@ -511,12 +511,12 @@ def sweep_results_to_csv_bytes(results: list[SimResult], param: str, values: lis
 
 ### Primary (HIGH confidence)
 
-- `petringa/api/simulation.py` (run_microdosimetry:843, run_cce:337, run_field:144, run_cv:34, run_dark_current:665) — facade signatures, sweep suitability, convergence-envelope docstrings `[VERIFIED: Read]`
-- `petringa/api/sweep.py` — `ParametricSweep` contract, `dataclasses.replace` security note `[VERIFIED: Read]`
-- `petringa/api/results.py` — `SimResult`/`MeshData` dataclasses `[VERIFIED: Read]`
-- `petringa/api/device.py` — `DeviceConfig` full field list + types (sweepable-field curation) `[VERIFIED: Read]`
-- `petringa/core/mc_coupling.py` (load_mc_events_csv:107) — CSV column map, units, `pd.read_csv` only `[VERIFIED: Read]`
-- `petringa/core/microdosimetry.py` (lineal_energy_spectrum:117) — spectrum output keys `[VERIFIED: Read]`
+- `etna/api/simulation.py` (run_microdosimetry:843, run_cce:337, run_field:144, run_cv:34, run_dark_current:665) — facade signatures, sweep suitability, convergence-envelope docstrings `[VERIFIED: Read]`
+- `etna/api/sweep.py` — `ParametricSweep` contract, `dataclasses.replace` security note `[VERIFIED: Read]`
+- `etna/api/results.py` — `SimResult`/`MeshData` dataclasses `[VERIFIED: Read]`
+- `etna/api/device.py` — `DeviceConfig` full field list + types (sweepable-field curation) `[VERIFIED: Read]`
+- `etna/core/mc_coupling.py` (load_mc_events_csv:107) — CSV column map, units, `pd.read_csv` only `[VERIFIED: Read]`
+- `etna/core/microdosimetry.py` (lineal_energy_spectrum:117) — spectrum output keys `[VERIFIED: Read]`
 - `app/components/results.py` — existing pure-builder + `to_csv_bytes` conventions (sim_type branches, header format) `[VERIFIED: Read]`
 - `app/workflows/dark_current.py` (41-03) — canonical ParametricSweep-page precedent `[VERIFIED: Read]`
 - `app/workflows/microdosimetry.py` / `batch_sweep.py` — current placeholders `[VERIFIED: Read]`

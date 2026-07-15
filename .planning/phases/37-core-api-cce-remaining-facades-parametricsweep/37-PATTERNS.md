@@ -16,15 +16,15 @@ The **Data Flow** column encodes the three-bucket spine from RESEARCH (not flatt
 
 | New/Modified File / Symbol                              | Role    | Data Flow (bucket)                      | Closest Analog                                                                     | Match Quality                                    |
 | ------------------------------------------------------- | ------- | --------------------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------ |
-| `petringa/api/simulation.py :: run_cce`                 | facade  | CRUD / bucket-a                         | `simulation.py::run_cv` (structure) + `run_field` (2D guard)                       | role-match (device lifecycle differs — bucket-a) |
-| `petringa/api/simulation.py :: run_radiation_damage`    | facade  | CRUD / bucket-a                         | `simulation.py::run_cv` (shell)                                                    | role-match                                       |
-| `petringa/api/simulation.py :: run_temperature_sweep`   | facade  | transform / bucket-a (DataFrame return) | `simulation.py::run_cv` (shell)                                                    | role-match                                       |
-| `petringa/api/simulation.py :: run_flash_recombination` | facade  | CRUD / bucket-a                         | `simulation.py::run_cv` (shell)                                                    | role-match                                       |
-| `petringa/api/simulation.py :: run_dark_current`        | facade  | CRUD / bucket-b                         | `simulation.py::run_cv` (full reset→try→finally lifecycle)                         | exact (lifecycle)                                |
-| `petringa/api/simulation.py :: run_transient`           | facade  | streaming / bucket-b (or a)             | `simulation.py::run_cv` (shell); signature UNDEFINED in spec                       | partial (no signature analog)                    |
-| `petringa/api/simulation.py :: run_microdosimetry`      | facade  | file-I/O / bucket-c                     | `mc_coupling`/`microdosimetry` core fns (no facade analog)                         | partial (events→energies bridge has NO analog)   |
-| `petringa/api/sweep.py :: ParametricSweep`              | utility | batch                                   | none (new orchestration class); spec §3.5 is canonical                             | no analog (fully specified by spec)              |
-| `petringa/__init__.py` (modify)                         | config  | —                                       | existing `__init__.py` (add 7 fns + ParametricSweep)                               | exact                                            |
+| `etna/api/simulation.py :: run_cce`                 | facade  | CRUD / bucket-a                         | `simulation.py::run_cv` (structure) + `run_field` (2D guard)                       | role-match (device lifecycle differs — bucket-a) |
+| `etna/api/simulation.py :: run_radiation_damage`    | facade  | CRUD / bucket-a                         | `simulation.py::run_cv` (shell)                                                    | role-match                                       |
+| `etna/api/simulation.py :: run_temperature_sweep`   | facade  | transform / bucket-a (DataFrame return) | `simulation.py::run_cv` (shell)                                                    | role-match                                       |
+| `etna/api/simulation.py :: run_flash_recombination` | facade  | CRUD / bucket-a                         | `simulation.py::run_cv` (shell)                                                    | role-match                                       |
+| `etna/api/simulation.py :: run_dark_current`        | facade  | CRUD / bucket-b                         | `simulation.py::run_cv` (full reset→try→finally lifecycle)                         | exact (lifecycle)                                |
+| `etna/api/simulation.py :: run_transient`           | facade  | streaming / bucket-b (or a)             | `simulation.py::run_cv` (shell); signature UNDEFINED in spec                       | partial (no signature analog)                    |
+| `etna/api/simulation.py :: run_microdosimetry`      | facade  | file-I/O / bucket-c                     | `mc_coupling`/`microdosimetry` core fns (no facade analog)                         | partial (events→energies bridge has NO analog)   |
+| `etna/api/sweep.py :: ParametricSweep`              | utility | batch                                   | none (new orchestration class); spec §3.5 is canonical                             | no analog (fully specified by spec)              |
+| `etna/__init__.py` (modify)                         | config  | —                                       | existing `__init__.py` (add 7 fns + ParametricSweep)                               | exact                                            |
 | `tests/test_api_cce.py` (new)                           | test    | slow integration + fast guard           | `tests/test_api_cv.py`                                                             | exact                                            |
 | `tests/test_api_facades.py` (new)                       | test    | fast contract (import/signature)        | `tests/test_api_device.py` (fast-assertion style)                                  | role-match                                       |
 | `tests/test_api_microdosimetry.py` (new)                | test    | fast data-pipeline                      | `tests/test_microdosimetry.py` (fixtures) + `tests/test_mc_coupling.py` (CSV load) | role-match                                       |
@@ -34,7 +34,7 @@ The **Data Flow** column encodes the three-bucket spine from RESEARCH (not flatt
 
 ### `run_cce` (facade, bucket-a) — flagship
 
-**Analogs:** `petringa/api/simulation.py::run_cv` (SimResult packaging + 2D guard), wrapping `petringa/core/charge_collection.py::cce_vs_bias`.
+**Analogs:** `etna/api/simulation.py::run_cv` (SimResult packaging + 2D guard), wrapping `etna/core/charge_collection.py::cce_vs_bias`.
 
 **2D guard pattern** — copy from `run_cv` (simulation.py:75-81):
 
@@ -86,7 +86,7 @@ RESEARCH recommends Option A + documentation, but flags it for explicit lock. **
 
 ### `run_radiation_damage` (facade, bucket-a)
 
-**Analog:** `run_cv` shell (SimResult packaging only — no device lifecycle in facade). Wraps `petringa/core/charge_collection.py::cce_vs_fluence` (charge_collection.py:597-608):
+**Analog:** `run_cv` shell (SimResult packaging only — no device lifecycle in facade). Wraps `etna/core/charge_collection.py::cce_vs_fluence` (charge_collection.py:597-608):
 
 ```python
 def cce_vs_fluence(fluence_range, V_bias=-40.0, epi_thickness_cm=10e-4,
@@ -105,7 +105,7 @@ Returns dict (charge_collection.py:648-654): `{"fluences", "cce_values", "V_bias
 
 ### `run_temperature_sweep` (facade, bucket-a, DataFrame return)
 
-**Analog:** `run_cv` shell. Wraps `petringa/core/temperature_sweep.py::sweep_cce_vs_temperature` (temperature_sweep.py:215-219):
+**Analog:** `run_cv` shell. Wraps `etna/core/temperature_sweep.py::sweep_cce_vs_temperature` (temperature_sweep.py:215-219):
 
 ```python
 def sweep_cce_vs_temperature(temperatures, voltages=None, method="hecht", **device_kwargs):
@@ -126,7 +126,7 @@ x = df["T"].to_numpy(); y = df["CCE"].to_numpy()
 
 ### `run_flash_recombination` (facade, bucket-a)
 
-**Analog:** `run_cv` shell. Wraps `petringa/core/flash_recombination.py::cce_vs_dose_rate` (flash_recombination.py:263-272):
+**Analog:** `run_cv` shell. Wraps `etna/core/flash_recombination.py::cce_vs_dose_rate` (flash_recombination.py:263-272):
 
 ```python
 def cce_vs_dose_rate(dose_rates_Gy_s, V_bias=-30.0, epi_thickness_cm=10e-4, E_MeV=62,
@@ -144,7 +144,7 @@ Returns dict (flash_recombination.py:305+): `{"dose_rates", "cce_values", "cce_n
 
 **Analog:** `run_cv` device lifecycle (simulation.py:86-123) — this is an **exact** structural match. Two-step core call:
 
-1. Build device WITH TAT+SRV setup (do NOT use bare `build_device()` — it omits TAT/SRV). `petringa/core/dark_current.py::create_dark_current_device` (dark_current.py:538-564):
+1. Build device WITH TAT+SRV setup (do NOT use bare `build_device()` — it omits TAT/SRV). `etna/core/dark_current.py::create_dark_current_device` (dark_current.py:538-564):
 
 ```python
 def create_dark_current_device(T=300, N_t=None, S_n=None, S_p=None, **kwargs):
@@ -182,7 +182,7 @@ finally:
 
 **Do not invent a signature in the plan without flagging it undefined.** Two core entry points exist:
 
-- Minimal satisfier (self-building, bucket-a shaped): `petringa/core/transient.py::transient_cce_vs_dose_rate(V_bias=-30.0, dose_rates=None, t_rise=1e-6, t_duration=1e-3, t_fall=1e-6, dt_min=1e-8, dt_max=1e-4, epi_thickness_cm=10e-4)` (transient.py:545). **⚠ Returns `pd.DataFrame`** with columns `["dose_rate_Gy_s", "transient_cce"]` (transient.py:582-583) — Pitfall 3 applies.
+- Minimal satisfier (self-building, bucket-a shaped): `etna/core/transient.py::transient_cce_vs_dose_rate(V_bias=-30.0, dose_rates=None, t_rise=1e-6, t_duration=1e-3, t_fall=1e-6, dt_min=1e-8, dt_max=1e-4, epi_thickness_cm=10e-4)` (transient.py:545). **⚠ Returns `pd.DataFrame`** with columns `["dose_rate_Gy_s", "transient_cce"]` (transient.py:582-583) — Pitfall 3 applies.
 - Full solver (bucket-b): `transient.TransientSolver(device_info, contact, method)` needs `.initialize()` then `.simulate_pulse(...)` (transient.py:172-431).
 
 **Recommendation (RESEARCH A3):** wrap `transient_cce_vs_dose_rate` for the minimal bar; leave final signature to planner. Map `x=df["dose_rate_Gy_s"]`, `y=df["transient_cce"]`, `sim_type="transient"`.
@@ -191,7 +191,7 @@ finally:
 
 ### `run_microdosimetry` (facade, bucket-c) — pure data pipeline, NO devsim
 
-**Analogs:** `petringa/core/mc_coupling.py::load_mc_events_csv` + `petringa/core/microdosimetry.py::{mean_chord_length, lineal_energy_spectrum}`. No `reset_devsim_fully`, no `build_device`, no cleanup.
+**Analogs:** `etna/core/mc_coupling.py::load_mc_events_csv` + `etna/core/microdosimetry.py::{mean_chord_length, lineal_energy_spectrum}`. No `reset_devsim_fully`, no `build_device`, no cleanup.
 
 **Pipeline:**
 
@@ -211,7 +211,7 @@ spec = lineal_energy_spectrum(collected_energies_keV, l_bar)         # microdosi
 
 ---
 
-### `ParametricSweep` (utility, batch) — `petringa/api/sweep.py` (new)
+### `ParametricSweep` (utility, batch) — `etna/api/sweep.py` (new)
 
 **No codebase analog** — fully specified by design spec §3.5. Implement exactly (RESEARCH Code Examples):
 
@@ -238,25 +238,25 @@ class ParametricSweep:
 
 ---
 
-### `petringa/__init__.py` (modify)
+### `etna/__init__.py` (modify)
 
 **Analog:** current `__init__.py:1-17` (exact pattern). Add the 7 `run_*` facades + `ParametricSweep` to imports and `__all__`:
 
 ```python
-from petringa.api.simulation import (
+from etna.api.simulation import (
     run_cv, run_field, run_cce, run_radiation_damage, run_dark_current,
     run_temperature_sweep, run_flash_recombination, run_transient, run_microdosimetry,
 )
-from petringa.api.sweep import ParametricSweep
+from etna.api.sweep import ParametricSweep
 ```
 
-Add each name to `__all__`. Acceptance criteria require `from petringa import run_X` to work (import-location-agnostic).
+Add each name to `__all__`. Acceptance criteria require `from etna import run_X` to work (import-location-agnostic).
 
 ## Shared Patterns
 
 ### Device lifecycle (bucket-b facades only)
 
-**Source:** `petringa/api/simulation.py::run_cv` lines 86-123 (reset → build → try → finally delete → fallback reset).
+**Source:** `etna/api/simulation.py::run_cv` lines 86-123 (reset → build → try → finally delete → fallback reset).
 **Apply to:** `run_dark_current`, `run_transient` (if using `TransientSolver` path).
 **Do NOT apply to:** `run_cce`, `run_radiation_damage`, `run_temperature_sweep`, `run_flash_recombination` (bucket-a, core self-cleans), `run_microdosimetry` (bucket-c, no device).
 
@@ -307,7 +307,7 @@ finally:
 
 ## Metadata
 
-**Analog search scope:** `petringa/api/` (simulation.py, device.py, results.py), `petringa/core/` (charge_collection.py, dark_current.py, temperature_sweep.py, flash_recombination.py, transient.py, mc_coupling.py, microdosimetry.py), `tests/` (test_api_cv.py, test_api_field.py, test_api_device.py, test_microdosimetry.py, test_mc_coupling.py), `data/synthetic_mc_events.csv`.
+**Analog search scope:** `etna/api/` (simulation.py, device.py, results.py), `etna/core/` (charge_collection.py, dark_current.py, temperature_sweep.py, flash_recombination.py, transient.py, mc_coupling.py, microdosimetry.py), `tests/` (test_api_cv.py, test_api_field.py, test_api_device.py, test_microdosimetry.py, test_mc_coupling.py), `data/synthetic_mc_events.csv`.
 **Files scanned:** ~15 source/test files + 1 data fixture.
 **Pattern extraction date:** 2026-07-08
 **Key unresolved item for planner:** `run_cce` doping-forwarding decision (no CONTEXT.md exists to resolve it).

@@ -494,7 +494,7 @@ each item gives the answer that downstream plans (Plans 01–04) operate against
 
 ## Project Constraints (from CLAUDE.md)
 
-> `./CLAUDE.md` does **not exist** in the working directory. [VERIFIED: `ls /Users/ngcex/projects/physics/petringa/CLAUDE.md` → "No such file or directory"]
+> `./CLAUDE.md` does **not exist** in the working directory. [VERIFIED: `ls /Users/ngcex/projects/physics/etna/CLAUDE.md` → "No such file or directory"]
 
 Project-wide constraints discovered from auto-memory and STATE.md instead:
 

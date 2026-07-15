@@ -11,8 +11,8 @@ requires:
   - phase: 36-02
     provides: run_cv() facade pattern (build_device + core call + SimResult wrapping + cleanup) mirrored here
 provides:
-  - run_field() facade in petringa/api/simulation.py — post-build MeshData extraction (novel piece of Phase 36)
-  - run_field re-exported from petringa (completes Phase 36 public export set)
+  - run_field() facade in etna/api/simulation.py — post-build MeshData extraction (novel piece of Phase 36)
+  - run_field re-exported from etna (completes Phase 36 public export set)
   - tests/test_api_field.py — 1D + required 2D MeshData/physical-sanity integration tests
 affects: [40-geometry-viewer]
 
@@ -27,8 +27,8 @@ key-files:
   created:
     - tests/test_api_field.py
   modified:
-    - petringa/api/simulation.py
-    - petringa/__init__.py
+    - etna/api/simulation.py
+    - etna/__init__.py
 
 key-decisions:
   - "run_field's bias_V follows the exact cv_sweep sign/contact convention (cv_analysis.py:171): conventional-negative reverse bias -> ramp_bias(device_info, V_target=-bias_V, contact='cathode', V_step=0.5); confirmed by reading cv_analysis.py at execution time"
@@ -60,26 +60,26 @@ completed: 2026-07-02
 
 ## Accomplishments
 
-- `run_field(config, bias_V=-100.0)` implemented in `petringa/api/simulation.py`: builds via `build_device()`, ramps via `core.drift_diffusion.ramp_bias(device_info, V_target=-bias_V, contact="cathode", V_step=0.5)` — the identical sign/contact convention as `cv_analysis.py::cv_sweep` (verified against source at execution time, line 171: `V_cathode_target = -V_target`)
+- `run_field(config, bias_V=-100.0)` implemented in `etna/api/simulation.py`: builds via `build_device()`, ramps via `core.drift_diffusion.ramp_bias(device_info, V_target=-bias_V, contact="cathode", V_step=0.5)` — the identical sign/contact convention as `cv_analysis.py::cv_sweep` (verified against source at execution time, line 171: `V_cathode_target = -V_target`)
 - Post-build node extraction via `devsim.get_node_model_values()` for x, (y for 2D only), NetDoping, Potential
 - ElectricField (a devsim EDGE model) converted to a node-aligned magnitude entirely in the api layer using numpy: 1D via `np.interp` onto node x from `extract_electric_field`'s edge centers, 2D via the exact `plotting2d.py` LinearNDInterpolator + gradient + interpolate-back pattern — no new devsim physics
 - Full `MeshData` contract populated: `x_coords`, `y_coords` (None for 1D, populated for 2D), `node_values` (NetDoping/Potential/ElectricField, all node-length), `regions` (single-region list with name/x_min/x_max/y_min/y_max), `contacts` (anode at 0.0, cathode at `total_length`)
-- `run_field` re-exported from `petringa/__init__.py`; Phase 36 public export set now complete: `{DeviceConfig, SimResult, MeshData, run_cv, run_field, __version__}`
+- `run_field` re-exported from `etna/__init__.py`; Phase 36 public export set now complete: `{DeviceConfig, SimResult, MeshData, run_cv, run_field, __version__}`
 - `tests/test_api_field.py`: two `@pytest.mark.slow` integration tests — 1D (mesh populated, node counts match, y_coords None, physical sanity: finite/non-trivial ElectricField and finite Potential at bias_V=-50) and 2D (`half_width_um=50.0`, bias_V=-10 — the required regression guard for the Plan 01 2D-DD-init fix, never bypassed)
 - Verified end-to-end with live devsim runs during execution (not just source inspection): 1D run at bias_V=-50 (327 nodes, max|E|~115 kV/cm), 2D run at bias_V=-10 (8502 nodes, max|E|~65 kV/cm) — both finite, both non-trivial
 
 ## Task Commits
 
 1. **Task 1: Implement run_field() with post-build MeshData extraction (1D + 2D)** - `9c5b2e9` (feat)
-2. **Task 2: Re-export run_field from petringa** - `12668d1` (feat)
+2. **Task 2: Re-export run_field from etna** - `12668d1` (feat)
 3. **Task 3: Add tests/test_api_field.py (MeshData populated + correct node count + physical field sanity)** - `c80bfe5` (test)
 
 _Note: Task 3 is `tdd="true"`; because the implementation (`run_field`) already existed from Task 1, this task's single commit adds the test asserting the already-implemented behavior — matching the plan's own sequencing (implement Task 1, wire Task 2, test Task 3), identical to Plan 02's precedent._
 
 ## Files Created/Modified
 
-- `petringa/api/simulation.py` - added `run_field(config, bias_V=-100.0)`: `reset_devsim_fully()` + `build_device()` + `ramp_bias()` + node extraction + 1D/2D ElectricField node-conversion + `MeshData`/`SimResult` assembly + `devsim.delete_device()` cleanup in `finally`; added imports for `MeshData`, `ramp_bias`, `extract_electric_field`
-- `petringa/__init__.py` - added `run_field` to the import from `petringa.api.simulation` and to `__all__`
+- `etna/api/simulation.py` - added `run_field(config, bias_V=-100.0)`: `reset_devsim_fully()` + `build_device()` + `ramp_bias()` + node extraction + 1D/2D ElectricField node-conversion + `MeshData`/`SimResult` assembly + `devsim.delete_device()` cleanup in `finally`; added imports for `MeshData`, `ramp_bias`, `extract_electric_field`
+- `etna/__init__.py` - added `run_field` to the import from `etna.api.simulation` and to `__all__`
 - `tests/test_api_field.py` - `TestRunFieldIntegration1D` and `TestRunFieldIntegration2D`, both `@pytest.mark.slow`
 
 ## Decisions Made
@@ -104,7 +104,7 @@ None - no external service configuration required.
 
 ## Next Phase Readiness
 
-- `run_field` is importable from `petringa`, in `__all__`, and validated end-to-end for both 1D and 2D via `tests/test_api_field.py` (LIB-03 satisfied)
+- `run_field` is importable from `etna`, in `__all__`, and validated end-to-end for both 1D and 2D via `tests/test_api_field.py` (LIB-03 satisfied)
 - The Phase 36 public API surface is complete: `DeviceConfig`, `SimResult`, `MeshData`, `run_cv`, `run_field`
 - `MeshData` is genuinely populated post-build (not a stub) with all fields Phase 40's geometry viewer needs (x_coords, y_coords, node_values, regions, contacts) — the "geometry viewer never calls devsim" invariant is preserved since all devsim reads happen inside `run_field`
 - `tests/test_api_field.py` passes in per-file isolation (2 passed, 17.28s); regression-checked `tests/test_api_cv.py` (1 passed) and `tests/test_cv.py` (13 passed) — no core or Plan 02 regressions
@@ -113,8 +113,8 @@ None - no external service configuration required.
 ## Self-Check: PASSED
 
 - FOUND: `tests/test_api_field.py`
-- FOUND: `petringa/api/simulation.py` (modified, contains `run_field`)
-- FOUND: `petringa/__init__.py` (modified, re-exports `run_field`)
+- FOUND: `etna/api/simulation.py` (modified, contains `run_field`)
+- FOUND: `etna/__init__.py` (modified, re-exports `run_field`)
 - FOUND commit: 9c5b2e9
 - FOUND commit: 12668d1
 - FOUND commit: c80bfe5
