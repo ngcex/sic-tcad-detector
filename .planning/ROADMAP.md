@@ -109,7 +109,7 @@ Full details: [milestones/v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md)
 - [x] **Phase 40: Geometry Viewer** — `app/components/geometry_viewer.py`: `MeshData` → 2D Plotly heatmap for 2D devices, depth-profile bar for 1D devices, quantity selector dropdown _(GROUP B)_ (completed 2026-07-13)
 - [x] **Phase 41: Radiation Damage + Dark Current Pages** — Radiation damage page with CCE vs fluence and kappa warning banner; dark current page with J component decomposition _(GROUP C)_ (completed 2026-07-13)
 - [ ] **Phase 42: Microdosimetry Page + Batch Sweep Page** — Microdosimetry page with MC CSV upload and y·d(y) spectrum; batch sweep page with parametric run and overlaid results _(GROUP C)_
-- [ ] **Phase 43: Integration Audit — All 20 Notebook Workflows** — Verify all 20 notebook workflows are reproducible via UI; confirm all 25 v5.0 requirements satisfied _(GROUP C, audit — no new code)_
+- [x] **Phase 43: Integration Audit — All 20 Notebook Workflows** — Verify all 20 notebook workflows are reproducible via UI; confirm all 25 v5.0 requirements satisfied _(GROUP C, audit — no new code)_ (completed 2026-07-15)
 
 ## Phase Details
 
@@ -576,7 +576,7 @@ Plans:
 
 **Wave 2** _(depends on 43-01)_
 
-- [ ] 43-02-PLAN.md — Human-verify checkpoint: click-test all 21 notebook workflows against the running UI (CCE/field at bias_V=-20.0), confirm the documented coverage matrix
+- [x] 43-02-PLAN.md — Human-verify checkpoint: click-test all 21 notebook workflows against the running UI (CCE/field at bias_V=-20.0), confirm the documented coverage matrix
 
 ## Progress
 
@@ -624,4 +624,4 @@ Plans:
 | 40. Geometry Viewer                             | v5.0      | 2/2            | Complete    | 2026-07-13 |
 | 41. Radiation Damage + Dark Current Pages       | v5.0      | 3/3            | Complete    | 2026-07-13 |
 | 42. Microdosimetry Page + Batch Sweep Page      | v5.0      | 3/3            | Complete    | 2026-07-14 |
-| 43. Integration Audit — All 20 Notebooks        | v5.0      | 1/2 | In Progress|  |
+| 43. Integration Audit — All 20 Notebooks        | v5.0      | 2/2 | Complete    | 2026-07-15 |
