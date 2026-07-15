@@ -8,13 +8,13 @@
 
 ## Summary
 
-Phase 35 is a pure refactoring phase: move the existing flat `src/` directory to `petringa/core/`, rewrite ~330+ `from src.X` import statements across source modules, tests, scripts, and notebooks, and introduce a `pyproject.toml` with hatchling as the build backend. No physics logic changes. No new dependencies (all eight runtime deps are already installed in the project venv). The acceptance gate — `pytest -q` green on all 25 test modules with `tests/baselines/v3_frozen.json` byte-for-byte unchanged — requires a fully working devsim installation because the slow-marked integration tests run on a bare `pytest -q` invocation.
+Phase 35 is a pure refactoring phase: move the existing flat `src/` directory to `etna/core/`, rewrite ~330+ `from src.X` import statements across source modules, tests, scripts, and notebooks, and introduce a `pyproject.toml` with hatchling as the build backend. No physics logic changes. No new dependencies (all eight runtime deps are already installed in the project venv). The acceptance gate — `pytest -q` green on all 25 test modules with `tests/baselines/v3_frozen.json` byte-for-byte unchanged — requires a fully working devsim installation because the slow-marked integration tests run on a bare `pytest -q` invocation.
 
-The single architectural complexity is a scope boundary: Success Criterion #2 (`python -c "from petringa import DeviceConfig"`) requires `DeviceConfig` to exist in the package, but `DeviceConfig` is formally assigned to Phase 36 (LIB-01). Resolution strategy: ship a minimal `DeviceConfig` skeleton dataclass in `petringa/__init__.py` during Phase 35 so the smoke test passes, and hand off the full implementation to Phase 36. The planner must make this boundary explicit.
+The single architectural complexity is a scope boundary: Success Criterion #2 (`python -c "from etna import DeviceConfig"`) requires `DeviceConfig` to exist in the package, but `DeviceConfig` is formally assigned to Phase 36 (LIB-01). Resolution strategy: ship a minimal `DeviceConfig` skeleton dataclass in `etna/__init__.py` during Phase 35 so the smoke test passes, and hand off the full implementation to Phase 36. The planner must make this boundary explicit.
 
-The rename scope is wider than just `src/` → `petringa/core/`: 17 of 24 source modules also import each other with `from src.X`, scripts contain 59 such imports (some as string literals embedded inside notebook-creation scripts), and 22 notebooks contain 81 more. All must be addressed — failing to touch the string-literal `patch("src.single_particle....")` call in `tests/test_mc_coupling.py` will silently break mock assertions after the rename.
+The rename scope is wider than just `src/` → `etna/core/`: 17 of 24 source modules also import each other with `from src.X`, scripts contain 59 such imports (some as string literals embedded inside notebook-creation scripts), and 22 notebooks contain 81 more. All must be addressed — failing to touch the string-literal `patch("src.single_particle....")` call in `tests/test_mc_coupling.py` will silently break mock assertions after the rename.
 
-**Primary recommendation:** Mechanical textual rewrite — `from src.` → `from petringa.core.` and `import src.` → `import petringa.core.` — using a reliable sed-or-Python script, then hand-fix the six string/path/logger-name references. Do not switch to relative imports; the diff would be larger and harder to review without any benefit for this phase.
+**Primary recommendation:** Mechanical textual rewrite — `from src.` → `from etna.core.` and `import src.` → `import etna.core.` — using a reliable sed-or-Python script, then hand-fix the six string/path/logger-name references. Do not switch to relative imports; the diff would be larger and harder to review without any benefit for this phase.
 
 ---
 
@@ -24,10 +24,10 @@ The rename scope is wider than just `src/` → `petringa/core/`: 17 of 24 source
 
 ### Locked Decisions (from STATE.md)
 
-- Package name: `petringa` (installable with `pip install -e .` / `uv pip install -e .`)
+- Package name: `etna` (installable with `pip install -e .` / `uv pip install -e .`)
 - Build backend: hatchling via `pyproject.toml` (replaces `requirements.txt`)
-- Public API lives in `petringa/api/`; internal modules in `petringa/core/` are not public contract
-- Source rename: `src/` → `petringa/core/`
+- Public API lives in `etna/api/`; internal modules in `etna/core/` are not public contract
+- Source rename: `src/` → `etna/core/`
 - Acceptance gate: `pytest -q` green + `v3_frozen.json` baseline byte-for-byte unchanged
 - Tool for all installs: **uv** (not pip/venv) — per project memory
 - No physics changes in any v5.0 phase — refactor only
@@ -49,7 +49,7 @@ The rename scope is wider than just `src/` → `petringa/core/`: 17 of 24 source
 | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
 | PKG-01 | Developer can install with `uv pip install -e .` from a `pyproject.toml` with hatchling build backend, replacing `requirements.txt`                                         | pyproject.toml structure verified from hatch docs; hatchling 1.30.1 available on PyPI                           |
 | PKG-02 | Package declares all runtime deps (`devsim`, `numpy`, `scipy`, `matplotlib`, `plotly`, `streamlit`, `pandas`) and optional `[dev]` extras (`pytest`, `jupyter`)             | All deps confirmed present in .venv; pyproject.toml optional-dependencies pattern documented                    |
-| PKG-03 | All 25 pytest modules pass unchanged after refactor (only import paths updated `src.X` → `petringa.core.X`); `tests/baselines/v3_frozen.json` regression baseline unchanged | 25 test files confirmed; import-scope audit complete; baseline file confirmed at tests/baselines/v3_frozen.json |
+| PKG-03 | All 25 pytest modules pass unchanged after refactor (only import paths updated `src.X` → `etna.core.X`); `tests/baselines/v3_frozen.json` regression baseline unchanged | 25 test files confirmed; import-scope audit complete; baseline file confirmed at tests/baselines/v3_frozen.json |
 
 </phase_requirements>
 
@@ -62,7 +62,7 @@ The rename scope is wider than just `src/` → `petringa/core/`: 17 of 24 source
 | Package build metadata                     | Build system (pyproject.toml)   | —                         | Standard Python packaging; hatchling reads pyproject.toml at install time |
 | Module discovery (editable install)        | Build system (hatchling)        | —                         | hatchling wheel target's `packages` key controls what lands on sys.path   |
 | Import-path rewrite                        | Source files (all .py + .ipynb) | —                         | Mechanical text transform; no runtime tier boundary                       |
-| Public API export (`petringa/__init__.py`) | Package root                    | petringa/api/ (Phase 36+) | `__init__.py` re-exports symbols; internal modules stay in core/          |
+| Public API export (`etna/__init__.py`) | Package root                    | etna/api/ (Phase 36+) | `__init__.py` re-exports symbols; internal modules stay in core/          |
 | Regression guard (v3_frozen.json)          | Test layer                      | devsim runtime            | Slow tests call devsim; devsim must be functional for PKG-03 to pass      |
 
 ---
@@ -146,7 +146,7 @@ Before Phase 35:
 
 After Phase 35:
   project root
-  ├── petringa/               ← installable Python package
+  ├── etna/               ← installable Python package
   │   ├── __init__.py         ← exports DeviceConfig stub + future public API
   │   ├── core/               ← renamed from src/
   │   │   ├── __init__.py
@@ -154,9 +154,9 @@ After Phase 35:
   │   │   ├── device2d.py
   │   │   └── ... (22 more .py, internal imports rewritten)
   │   └── _version.py
-  ├── tests/                  ← from petringa.core.X import Y
-  ├── scripts/                ← from petringa.core.X import Y
-  ├── notebooks/              ← from petringa.core.X import Y
+  ├── tests/                  ← from etna.core.X import Y
+  ├── scripts/                ← from etna.core.X import Y
+  ├── notebooks/              ← from etna.core.X import Y
   └── pyproject.toml          ← replaces requirements.txt; hatchling backend
 ```
 
@@ -165,11 +165,11 @@ Data flow for PKG-01/PKG-03:
 ```
 uv pip install -e .
   → hatchling reads pyproject.toml
-  → discovers petringa/ package (packages = ["petringa"])
-  → registers petringa/ on sys.path (editable)
+  → discovers etna/ package (packages = ["etna"])
+  → registers etna/ on sys.path (editable)
 
 pytest -q
-  → test_*.py: from petringa.core.X import Y
+  → test_*.py: from etna.core.X import Y
   → [fast] unit tests: no devsim required
   → [slow] @pytest.mark.slow: devsim called directly; v3_frozen.json compared
 ```
@@ -177,7 +177,7 @@ pytest -q
 ### Recommended Project Structure
 
 ```
-petringa/               ← package root (renamed from src/)
+etna/               ← package root (renamed from src/)
 ├── __init__.py         ← minimal: exports DeviceConfig stub for SC#2
 ├── _version.py         ← version = "5.0.0"
 └── core/               ← all existing src/ modules
@@ -211,7 +211,7 @@ petringa/               ← package root (renamed from src/)
 
 ### Pattern 1: pyproject.toml with hatchling — Explicit Package Selection
 
-**What:** Declare the `petringa/` package explicitly so hatchling does not accidentally include `app/`, `tests/`, `scripts/`, `notebooks/`, `data/` in the wheel.
+**What:** Declare the `etna/` package explicitly so hatchling does not accidentally include `app/`, `tests/`, `scripts/`, `notebooks/`, `data/` in the wheel.
 **When to use:** Whenever the project root contains sibling directories that are NOT part of the package.
 **Example:**
 
@@ -222,7 +222,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "petringa"
+name = "etna"
 version = "5.0.0"
 description = "SiC TCAD Simulator Library for the Petringa group"
 requires-python = ">=3.13"
@@ -243,14 +243,14 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["petringa"]
+packages = ["etna"]
 ```
 
-**Critical:** Without `packages = ["petringa"]`, hatchling auto-discovers all Python packages in the project root, which may include unintended directories. [CITED: https://hatch.pypa.io/latest/config/build/]
+**Critical:** Without `packages = ["etna"]`, hatchling auto-discovers all Python packages in the project root, which may include unintended directories. [CITED: https://hatch.pypa.io/latest/config/build/]
 
 ### Pattern 2: Editable Install for Development
 
-**What:** `uv pip install -e .` registers the package in editable mode so changes to `petringa/` take effect immediately without reinstalling.
+**What:** `uv pip install -e .` registers the package in editable mode so changes to `etna/` take effect immediately without reinstalling.
 **Example:**
 
 ```bash
@@ -258,15 +258,15 @@ packages = ["petringa"]
 uv pip install -e ".[dev]"
 
 # Verify
-python -c "from petringa import DeviceConfig"
-python -c "import petringa; print(petringa.__version__)"
+python -c "from etna import DeviceConfig"
+python -c "import etna; print(etna.__version__)"
 ```
 
-The editable install makes `petringa/` the importable namespace; `from petringa.core.device import ...` resolves to `./petringa/core/device.py` directly.
+The editable install makes `etna/` the importable namespace; `from etna.core.device import ...` resolves to `./etna/core/device.py` directly.
 
 ### Pattern 3: Mechanical Import Rewrite — sed-based
 
-**What:** Transform all `from src.X` → `from petringa.core.X` and `import src.X` → `import petringa.core.X` across all Python source files.
+**What:** Transform all `from src.X` → `from etna.core.X` and `import src.X` → `import etna.core.X` across all Python source files.
 **Why not relative imports:** Switching from `from src.X import Y` to `from .X import Y` is a larger semantic change, makes the code harder to grep, and offers no benefit for this refactor phase.
 **Example script:**
 
@@ -275,8 +275,8 @@ The editable install makes `petringa/` the importable namespace; `from petringa.
 find /path/to/project -name '*.py' \
   ! -path '*/.venv/*' ! -path '*/.git/*' \
   -exec sed -i '' \
-    -e 's/from src\.\([^ ]*\)/from petringa.core.\1/g' \
-    -e 's/import src\.\([^ ]*\)/import petringa.core.\1/g' \
+    -e 's/from src\.\([^ ]*\)/from etna.core.\1/g' \
+    -e 's/import src\.\([^ ]*\)/import etna.core.\1/g' \
   {} +
 ```
 
@@ -294,8 +294,8 @@ for nb_path in pathlib.Path("notebooks").glob("*.ipynb"):
     for cell in nb.get("cells", []):
         new_src = []
         for line in cell.get("source", []):
-            new_line = re.sub(r"from src\.([^ ]+)", r"from petringa.core.\1", line)
-            new_line = re.sub(r"import src\.([^ ]+)", r"import petringa.core.\1", new_line)
+            new_line = re.sub(r"from src\.([^ ]+)", r"from etna.core.\1", line)
+            new_line = re.sub(r"import src\.([^ ]+)", r"import etna.core.\1", new_line)
             if new_line != line:
                 changed = True
             new_src.append(new_line)
@@ -318,13 +318,13 @@ Post-rewrite verification: `grep -r 'from src\.' notebooks/` must return zero re
 
 ### Pattern 4: Minimal DeviceConfig Stub for SC#2
 
-**What:** A minimal dataclass in `petringa/__init__.py` that satisfies `python -c "from petringa import DeviceConfig"` without implementing the full API (which belongs to Phase 36).
+**What:** A minimal dataclass in `etna/__init__.py` that satisfies `python -c "from etna import DeviceConfig"` without implementing the full API (which belongs to Phase 36).
 **When to use:** Phase 35 — the full implementation is Phase 36 (LIB-01).
 **Example:**
 
 ```python
-# petringa/__init__.py  — Phase 35 skeleton
-"""petringa: SiC TCAD Simulator Library."""
+# etna/__init__.py  — Phase 35 skeleton
+"""etna: SiC TCAD Simulator Library."""
 
 from __future__ import annotations
 from dataclasses import dataclass, field
@@ -356,9 +356,9 @@ This stub is intentionally minimal — it carries the right field names per the 
 
 ### Anti-Patterns to Avoid
 
-- **Adding `src/` back to sys.path in conftest.py:** The old approach was that pytest found `src.` imports because the project root was on `sys.path`. After the rename and `uv pip install -e .`, sys.path gets `petringa/` via the editable install. Adding a conftest.py that re-inserts `src/` would mask rename failures silently.
-- **Switching to relative imports:** `from .device import X` inside `petringa/core/device.py` works, but changes 91 import lines in source modules to a different semantic form. Unnecessary for a pure rename.
-- **`hatchling` auto-discovery without `packages = [...]`:** Without explicit package declaration, hatchling may vacuum up `tests/`, `scripts/`, `notebooks/` as sub-packages if they contain `__init__.py` files. Set `[tool.hatch.build.targets.wheel] packages = ["petringa"]` explicitly.
+- **Adding `src/` back to sys.path in conftest.py:** The old approach was that pytest found `src.` imports because the project root was on `sys.path`. After the rename and `uv pip install -e .`, sys.path gets `etna/` via the editable install. Adding a conftest.py that re-inserts `src/` would mask rename failures silently.
+- **Switching to relative imports:** `from .device import X` inside `etna/core/device.py` works, but changes 91 import lines in source modules to a different semantic form. Unnecessary for a pure rename.
+- **`hatchling` auto-discovery without `packages = [...]`:** Without explicit package declaration, hatchling may vacuum up `tests/`, `scripts/`, `notebooks/` as sub-packages if they contain `__init__.py` files. Set `[tool.hatch.build.targets.wheel] packages = ["etna"]` explicitly.
 - **Using `pip install -e .` instead of `uv pip install -e .`:** Project memory mandates uv; all install steps in the plan must use uv.
 
 ---
@@ -367,7 +367,7 @@ This stub is intentionally minimal — it carries the right field names per the 
 
 | Problem           | Don't Build            | Use Instead                          | Why                                                                                                                                                         |
 | ----------------- | ---------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Import rewriting  | Custom AST transformer | sed/Python string replace            | The rewrite is purely textual — `from src.X` → `from petringa.core.X`; regex handles it exactly; AST transform adds risk of touching non-import occurrences |
+| Import rewriting  | Custom AST transformer | sed/Python string replace            | The rewrite is purely textual — `from src.X` → `from etna.core.X`; regex handles it exactly; AST transform adds risk of touching non-import occurrences |
 | Package discovery | Custom finder          | hatchling `packages` key             | PEP 517/518; hatchling handles editable installs, wheel builds, and metadata automatically                                                                  |
 | Version string    | Duplicated literals    | `_version.py` imported by `__init__` | Single source of truth; hatchling can read it dynamically or use static value                                                                               |
 
@@ -385,17 +385,17 @@ This stub is intentionally minimal — it carries the right field names per the 
 | Live service config                                                  | None — no external services reference `src.` module names                                                                                                                      | None                                                                                                                                                                                                                                                                          |
 | OS-registered state                                                  | None — no launchd/cron/pm2 entries reference `src.*`                                                                                                                           | None                                                                                                                                                                                                                                                                          |
 | Secrets/env vars                                                     | None — no `.env` files or CI env vars reference `src.*`                                                                                                                        | None                                                                                                                                                                                                                                                                          |
-| Build artifacts                                                      | `.venv/lib/python3.13/site-packages/` — no `petringa.egg-info` or `src.egg-info` or `.pth` file for `src/` found; existing venv has devsim+deps but NOT the `petringa` package | After install: `uv pip install -e .` creates editable link for `petringa/`; no stale artifact cleanup needed                                                                                                                                                                  |
-| **Code references** — `from src.X` / `import src.X`                  | **326 import statements** across: src/ (91), tests/ (176), scripts/ (59)                                                                                                       | Mechanical textual rewrite: `from src.` → `from petringa.core.`, `import src.` → `import petringa.core.`                                                                                                                                                                      |
-| **String-literal src refs** (6 total — not caught by import rewrite) | 1. `tests/test_mc_coupling.py:301` — `patch("src.single_particle.ion_track_generation_2d")`                                                                                    | Change to `patch("petringa.core.single_particle.ion_track_generation_2d")`                                                                                                                                                                                                    |
+| Build artifacts                                                      | `.venv/lib/python3.13/site-packages/` — no `etna.egg-info` or `src.egg-info` or `.pth` file for `src/` found; existing venv has devsim+deps but NOT the `etna` package | After install: `uv pip install -e .` creates editable link for `etna/`; no stale artifact cleanup needed                                                                                                                                                                  |
+| **Code references** — `from src.X` / `import src.X`                  | **326 import statements** across: src/ (91), tests/ (176), scripts/ (59)                                                                                                       | Mechanical textual rewrite: `from src.` → `from etna.core.`, `import src.` → `import etna.core.`                                                                                                                                                                      |
+| **String-literal src refs** (6 total — not caught by import rewrite) | 1. `tests/test_mc_coupling.py:301` — `patch("src.single_particle.ion_track_generation_2d")`                                                                                    | Change to `patch("etna.core.single_particle.ion_track_generation_2d")`                                                                                                                                                                                                    |
 |                                                                      | 2. `tests/test_mc_coupling.py:330` — same patch target                                                                                                                         | Same fix                                                                                                                                                                                                                                                                      |
-|                                                                      | 3. `tests/test_radiation_damage.py:452` — `module_path = "src/radiation_damage.py"` (AST-parsed for structural test)                                                           | Change to `"petringa/core/radiation_damage.py"`                                                                                                                                                                                                                               |
-|                                                                      | 4. `scripts/run_calibration_2d.py:51` — `DEVICE2D_PATH = pathlib.Path("src/device2d.py")`                                                                                      | Change to `pathlib.Path("petringa/core/device2d.py")`                                                                                                                                                                                                                         |
-|                                                                      | 5. `scripts/create_notebook_16.py:110` — `logging.getLogger('src.single_particle')`                                                                                            | Change to `logging.getLogger('petringa.core.single_particle')`                                                                                                                                                                                                                |
-|                                                                      | 6. `scripts/create_notebook_20.py:189` — `logging.getLogger('src.optimization')`                                                                                               | Change to `logging.getLogger('petringa.core.optimization')`                                                                                                                                                                                                                   |
-| **String-literal src refs in scripts (notebook-building code)**      | scripts/create_notebook_03.py, 04, 05, 08, 15, 15_v2, 16, 17, 18, 19, 20 embed `from src.X` as string literals inside Python source strings they write to .ipynb cells         | These scripts generate notebook cells; fix the string content so generated notebooks get `from petringa.core.X`                                                                                                                                                               |
+|                                                                      | 3. `tests/test_radiation_damage.py:452` — `module_path = "src/radiation_damage.py"` (AST-parsed for structural test)                                                           | Change to `"etna/core/radiation_damage.py"`                                                                                                                                                                                                                               |
+|                                                                      | 4. `scripts/run_calibration_2d.py:51` — `DEVICE2D_PATH = pathlib.Path("src/device2d.py")`                                                                                      | Change to `pathlib.Path("etna/core/device2d.py")`                                                                                                                                                                                                                         |
+|                                                                      | 5. `scripts/create_notebook_16.py:110` — `logging.getLogger('src.single_particle')`                                                                                            | Change to `logging.getLogger('etna.core.single_particle')`                                                                                                                                                                                                                |
+|                                                                      | 6. `scripts/create_notebook_20.py:189` — `logging.getLogger('src.optimization')`                                                                                               | Change to `logging.getLogger('etna.core.optimization')`                                                                                                                                                                                                                   |
+| **String-literal src refs in scripts (notebook-building code)**      | scripts/create_notebook_03.py, 04, 05, 08, 15, 15_v2, 16, 17, 18, 19, 20 embed `from src.X` as string literals inside Python source strings they write to .ipynb cells         | These scripts generate notebook cells; fix the string content so generated notebooks get `from etna.core.X`                                                                                                                                                               |
 | **Notebook imports** (22 notebooks, 81 import statements)            | All 22 .ipynb files have cells with `from src.X import Y`                                                                                                                      | Phase 35 scope decision: rewrite notebook imports now (cheap, mechanical) while noting their full execution is validated in Phase 43 — see Open Questions                                                                                                                     |
-| **sys.path manipulation in scripts**                                 | `scripts/freeze_v3_baselines.py`, `scripts/diagnose_1d_2d_parity.py`, `scripts/run_calibration_2d.py` — insert project root into sys.path so `import src.*` resolves           | After rename + editable install, the sys.path insert is still needed for scripts run as `uv run python scripts/...`; the project root stays valid since `petringa/` lives there. No action needed on the sys.path lines themselves, only on the `from src.` lines below them. |
+| **sys.path manipulation in scripts**                                 | `scripts/freeze_v3_baselines.py`, `scripts/diagnose_1d_2d_parity.py`, `scripts/run_calibration_2d.py` — insert project root into sys.path so `import src.*` resolves           | After rename + editable install, the sys.path insert is still needed for scripts run as `uv run python scripts/...`; the project root stays valid since `etna/` lives there. No action needed on the sys.path lines themselves, only on the `from src.` lines below them. |
 
 **Canonical question — after all files updated, what runtime systems still have the old string cached/stored/registered?**
 Answer: None. All references are in version-controlled Python source files. No external service, OS registry, or datastore keys on `src.*` module names.
@@ -420,15 +420,15 @@ Answer: None. All references are in version-controlled Python source files. No e
 
 ### Pitfall 3: hatchling auto-discovering unintended packages
 
-**What goes wrong:** If `[tool.hatch.build.targets.wheel] packages = ["petringa"]` is omitted, hatchling scans for all Python packages in the project root. If `tests/`, `scripts/`, `notebooks/`, or `data/` directories happen to have `__init__.py` files, they get included in the wheel and pollute the installed package.
+**What goes wrong:** If `[tool.hatch.build.targets.wheel] packages = ["etna"]` is omitted, hatchling scans for all Python packages in the project root. If `tests/`, `scripts/`, `notebooks/`, or `data/` directories happen to have `__init__.py` files, they get included in the wheel and pollute the installed package.
 **Why it happens:** Hatchling's default auto-discovery is greedy.
-**How to avoid:** Always specify `packages = ["petringa"]` explicitly in the wheel target.
-**Warning signs:** `pip show petringa` lists unexpected files; `python -c "import tests"` succeeds after install.
+**How to avoid:** Always specify `packages = ["etna"]` explicitly in the wheel target.
+**Warning signs:** `pip show etna` lists unexpected files; `python -c "import tests"` succeeds after install.
 
 ### Pitfall 4: Script sys.path manipulation survives rename but masks failures
 
-**What goes wrong:** Scripts like `freeze_v3_baselines.py` do `sys.path.insert(0, project_root)` before `from src.X import Y`. After rename, `project_root` is still valid (petringa/ lives there), BUT if the `from src.X` lines are not updated, Python finds neither `src/` (renamed) nor the new path, throwing `ModuleNotFoundError`. However, if only the sys.path line is removed and lines not updated, failure mode is the same.
-**How to avoid:** Update the `from src.X` lines in scripts to `from petringa.core.X`; the sys.path insert becomes redundant after `uv pip install -e .` but can remain for scripts that pre-date the install.
+**What goes wrong:** Scripts like `freeze_v3_baselines.py` do `sys.path.insert(0, project_root)` before `from src.X import Y`. After rename, `project_root` is still valid (etna/ lives there), BUT if the `from src.X` lines are not updated, Python finds neither `src/` (renamed) nor the new path, throwing `ModuleNotFoundError`. However, if only the sys.path line is removed and lines not updated, failure mode is the same.
+**How to avoid:** Update the `from src.X` lines in scripts to `from etna.core.X`; the sys.path insert becomes redundant after `uv pip install -e .` but can remain for scripts that pre-date the install.
 
 ### Pitfall 5: Notebook cell string-embedded `from src.` imports
 
@@ -441,7 +441,7 @@ Answer: None. All references are in version-controlled Python source files. No e
 
 Verified patterns from official sources:
 
-### Complete pyproject.toml for petringa
+### Complete pyproject.toml for etna
 
 ```toml
 # Source: https://hatch.pypa.io/latest/config/build/ + https://hatch.pypa.io/latest/config/metadata/
@@ -450,7 +450,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "petringa"
+name = "etna"
 version = "5.0.0"
 description = "SiC TCAD Simulator Library"
 requires-python = ">=3.13"
@@ -471,7 +471,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["petringa"]
+packages = ["etna"]
 ```
 
 ### Import rewrite: before and after
@@ -481,9 +481,9 @@ packages = ["petringa"]
 from src.poisson import setup_poisson, solve_equilibrium
 from src.sic_material import SiC4H_Parameters
 
-# AFTER (petringa/core/device.py and all callers)
-from petringa.core.poisson import setup_poisson, solve_equilibrium
-from petringa.core.sic_material import SiC4H_Parameters
+# AFTER (etna/core/device.py and all callers)
+from etna.core.poisson import setup_poisson, solve_equilibrium
+from etna.core.sic_material import SiC4H_Parameters
 ```
 
 ### mock.patch string target: before and after
@@ -493,7 +493,7 @@ from petringa.core.sic_material import SiC4H_Parameters
 with patch("src.single_particle.ion_track_generation_2d") as mock_itg:
 
 # AFTER
-with patch("petringa.core.single_particle.ion_track_generation_2d") as mock_itg:
+with patch("etna.core.single_particle.ion_track_generation_2d") as mock_itg:
 ```
 
 ### AST structural test path: before and after
@@ -503,15 +503,15 @@ with patch("petringa.core.single_particle.ion_track_generation_2d") as mock_itg:
 module_path = "src/radiation_damage.py"
 
 # AFTER
-module_path = "petringa/core/radiation_damage.py"
+module_path = "etna/core/radiation_damage.py"
 ```
 
 ### Editable install smoke test sequence
 
 ```bash
 uv pip install -e ".[dev]"
-python -c "from petringa import DeviceConfig; print('OK')"
-python -c "from petringa.core.device import create_sic_device; print('core OK')"
+python -c "from etna import DeviceConfig; print('OK')"
+python -c "from etna.core.device import create_sic_device; print('core OK')"
 pytest -q
 ```
 
@@ -519,7 +519,7 @@ pytest -q
 
 ## Open Questions (RESOLVED)
 
-1. **DeviceConfig scope boundary between Phase 35 and Phase 36** — RESOLVED: Ship a minimal `@dataclass` skeleton in `petringa/__init__.py` during Phase 35 (fields only, no `__post_init__`, no `build_device()`). This satisfies SC#2 (`from petringa import DeviceConfig`) with < 20 lines. Phase 36 upgrades it with validation and full API (LIB-01). Plan 01 encodes this boundary explicitly.
+1. **DeviceConfig scope boundary between Phase 35 and Phase 36** — RESOLVED: Ship a minimal `@dataclass` skeleton in `etna/__init__.py` during Phase 35 (fields only, no `__post_init__`, no `build_device()`). This satisfies SC#2 (`from etna import DeviceConfig`) with < 20 lines. Phase 36 upgrades it with validation and full API (LIB-01). Plan 01 encodes this boundary explicitly.
 
 2. **Notebook import rewrite: in or out of Phase 35 scope?** — RESOLVED: Include notebook import rewrite in Phase 35 (Plan 02 Task 1 Step 4) as a mechanical json-walker pass. Notebook execution validation remains Phase 43 scope. This avoids all 22 notebooks being in broken-import state for the entire v5.0 window.
 
@@ -573,10 +573,10 @@ pytest -q
 
 | Req ID   | Behavior                                        | Test Type   | Automated Command                                                                       | File Exists?                            |
 | -------- | ----------------------------------------------- | ----------- | --------------------------------------------------------------------------------------- | --------------------------------------- |
-| PKG-01   | `uv pip install -e .` completes without error   | smoke       | `uv pip install -e . && python -c "import petringa"`                                    | ❌ Wave 0 — add to plan as install step |
-| PKG-02   | pyproject.toml declares all deps and dev extras | smoke       | `python -c "import importlib.metadata; print(importlib.metadata.requires('petringa'))"` | ❌ Wave 0                               |
+| PKG-01   | `uv pip install -e .` completes without error   | smoke       | `uv pip install -e . && python -c "import etna"`                                    | ❌ Wave 0 — add to plan as install step |
+| PKG-02   | pyproject.toml declares all deps and dev extras | smoke       | `python -c "import importlib.metadata; print(importlib.metadata.requires('etna'))"` | ❌ Wave 0                               |
 | PKG-03   | All 25 test modules pass                        | integration | `pytest -q`                                                                             | ✅ 25 existing test\_\*.py files        |
-| SC#2     | `from petringa import DeviceConfig` works       | smoke       | `python -c "from petringa import DeviceConfig; print('OK')"`                            | ❌ Wave 0 — need petringa/**init**.py   |
+| SC#2     | `from etna import DeviceConfig` works       | smoke       | `python -c "from etna import DeviceConfig; print('OK')"`                            | ❌ Wave 0 — need etna/**init**.py   |
 | Baseline | v3_frozen.json byte-for-byte unchanged          | regression  | `git diff --exit-code tests/baselines/v3_frozen.json` (VCS check — see note)            | ✅ file in git                          |
 
 **Baseline integrity note:** `test_v3_baseline_regression.py` reads `v3_frozen.json` and asserts that the _current code_ reproduces the frozen values within tolerance. It does NOT assert the JSON file itself is unmodified — if `freeze_v3_baselines.py` were re-run (which also gets its imports rewritten in this phase), it would overwrite the baseline and the test would still pass with new numbers. The only correct way to assert byte-for-byte baseline integrity is: `git diff --exit-code tests/baselines/v3_frozen.json`. This must be a distinct phase-gate step, separate from `pytest -q`.
@@ -585,13 +585,13 @@ pytest -q
 
 - **Per task commit:** `pytest -q -m "not slow"` (fast tests only; < 30 s)
 - **Per wave merge:** `pytest -q` (full suite including slow)
-- **Phase gate:** Full suite green (`pytest -q`) + `python -c "from petringa import DeviceConfig"` + `python -c "from petringa.core.device import create_sic_device"` + `git diff --exit-code tests/baselines/v3_frozen.json` (confirms baseline was not regenerated) before verification
+- **Phase gate:** Full suite green (`pytest -q`) + `python -c "from etna import DeviceConfig"` + `python -c "from etna.core.device import create_sic_device"` + `git diff --exit-code tests/baselines/v3_frozen.json` (confirms baseline was not regenerated) before verification
 
 ### Wave 0 Gaps
 
-- [ ] `petringa/__init__.py` — stub DeviceConfig + `__version__`; covers SC#2 and PKG smoke
-- [ ] `petringa/core/__init__.py` — empty; required for package namespace
-- [ ] `petringa/_version.py` — version = "5.0.0"
+- [ ] `etna/__init__.py` — stub DeviceConfig + `__version__`; covers SC#2 and PKG smoke
+- [ ] `etna/core/__init__.py` — empty; required for package namespace
+- [ ] `etna/_version.py` — version = "5.0.0"
 - [ ] `pyproject.toml` — replaces requirements.txt; covers PKG-01, PKG-02
 - [ ] `pytest.ini` update — add `testpaths = tests` if needed after rename (currently no testpaths directive; pytest finds tests/ by convention)
 

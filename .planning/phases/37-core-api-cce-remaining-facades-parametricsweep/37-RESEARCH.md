@@ -6,9 +6,9 @@
 
 ## Summary
 
-Phase 37 completes the `petringa` public API by adding seven simulation facades (`run_cce`, `run_radiation_damage`, `run_dark_current`, `run_temperature_sweep`, `run_flash_recombination`, `run_transient`, `run_microdosimetry`) plus a `ParametricSweep` utility class. All underlying physics already exists in `petringa/core/*` and was written in v3.0/v4.0 — this phase wraps it, it does NOT reimplement it (STATE.md: "No physics changes allowed in any v5.0 phase — refactor only").
+Phase 37 completes the `etna` public API by adding seven simulation facades (`run_cce`, `run_radiation_damage`, `run_dark_current`, `run_temperature_sweep`, `run_flash_recombination`, `run_transient`, `run_microdosimetry`) plus a `ParametricSweep` utility class. All underlying physics already exists in `etna/core/*` and was written in v3.0/v4.0 — this phase wraps it, it does NOT reimplement it (STATE.md: "No physics changes allowed in any v5.0 phase — refactor only").
 
-**The single most important finding:** Phase 37 CANNOT clone the Phase 36 `build_device(config) → core_fn(device_info)` pattern for most facades. The Phase 37 core functions split into three structurally incompatible shapes. Five of them (`cce_vs_bias`, `sweep_cce_vs_temperature`, `cce_vs_dose_rate`, `cce_vs_fluence`, `transient_cce_vs_dose_rate`) build their _own_ devsim device internally from scalar kwargs and do **not** accept a pre-built `device_info`. Refactoring them to accept `device_info` would break the 20 validated notebooks that call `petringa.core.*` directly and would itself constitute a structural change. The correct Phase 37 pattern is a **`DeviceConfig` → core-kwargs adapter**, not the Phase 36 device-passing pattern.
+**The single most important finding:** Phase 37 CANNOT clone the Phase 36 `build_device(config) → core_fn(device_info)` pattern for most facades. The Phase 37 core functions split into three structurally incompatible shapes. Five of them (`cce_vs_bias`, `sweep_cce_vs_temperature`, `cce_vs_dose_rate`, `cce_vs_fluence`, `transient_cce_vs_dose_rate`) build their _own_ devsim device internally from scalar kwargs and do **not** accept a pre-built `device_info`. Refactoring them to accept `device_info` would break the 20 validated notebooks that call `etna.core.*` directly and would itself constitute a structural change. The correct Phase 37 pattern is a **`DeviceConfig` → core-kwargs adapter**, not the Phase 36 device-passing pattern.
 
 **Primary recommendation:** Classify each of the 7 facades into one of three buckets (see Architecture Patterns) and wrap the core function at its _existing_ entry point. `run_cce` is the flagship (only facade with a real physics gate: CCE ∈ [0,1]) — give it a slow integration test like `run_cv` got. The other 6 have a weaker acceptance bar (imports + accepts `DeviceConfig` first arg) — give them light contract tests. `ParametricSweep` should be tested with a **fake `sim_fn`** so its unit tests never touch devsim.
 
@@ -27,7 +27,7 @@ Phase 37 completes the `petringa` public API by adding seven simulation facades 
 
 ## Standard Stack
 
-No new external packages are introduced by this phase. All work is internal Python over the already-declared dependency set (`numpy`, `scipy`, `pandas`, `devsim`). [VERIFIED: petringa/pyproject.toml + codebase]
+No new external packages are introduced by this phase. All work is internal Python over the already-declared dependency set (`numpy`, `scipy`, `pandas`, `devsim`). [VERIFIED: etna/pyproject.toml + codebase]
 
 ### Core (already installed, already declared)
 
@@ -66,7 +66,7 @@ No new external packages are introduced by this phase. All work is internal Pyth
 
 ### The Phase 36 template (what run_cv / run_field established)
 
-Located in `petringa/api/simulation.py`. The established shape is:
+Located in `etna/api/simulation.py`. The established shape is:
 
 ```python
 def run_cv(config: DeviceConfig, ...) -> SimResult:
@@ -85,7 +85,7 @@ def run_cv(config: DeviceConfig, ...) -> SimResult:
             reset_devsim_fully()
 ```
 
-`SimResult` and `MeshData` are frozen dataclasses in `petringa/api/results.py`:
+`SimResult` and `MeshData` are frozen dataclasses in `etna/api/results.py`:
 
 ```python
 @dataclass
@@ -98,7 +98,7 @@ class SimResult:
     mesh: MeshData | None = None
 ```
 
-[VERIFIED: petringa/api/simulation.py, petringa/api/results.py]
+[VERIFIED: etna/api/simulation.py, etna/api/results.py]
 
 ### The three-bucket classification (backbone of this phase)
 
@@ -153,7 +153,7 @@ User code / Streamlit page
         │  DeviceConfig(...)  +  facade-specific args
         ▼
 ┌─────────────────────────────────────────────────────────┐
-│  petringa/api/simulation.py  (facade layer — Phase 37)   │
+│  etna/api/simulation.py  (facade layer — Phase 37)   │
 │                                                          │
 │  run_cce ─────────► adapter (bucket a) ──► cce_vs_bias   │
 │  run_radiation_damage ► adapter (a) ────► cce_vs_fluence │
@@ -166,7 +166,7 @@ User code / Streamlit page
 └───────────────┬──────────────────────────┬──────────────┘
                 │ (a,b) devsim solve         │ (c) numpy/pandas only
                 ▼                            ▼
-        petringa/core/*.py            data/synthetic_mc_events.csv
+        etna/core/*.py            data/synthetic_mc_events.csv
         (UNCHANGED physics)           (MC input fixture)
                 │
                 ▼
@@ -180,15 +180,15 @@ ParametricSweep(base_config, param, values, sim_fn, sim_kwargs)
 
 ### Recommended Project Structure
 
-Design spec §2 shows facades split across `simulation.py`, `damage.py`, `microdosimetry.py`. **However, Phase 36 placed both `run_cv` and `run_field` in a single `simulation.py`.** Recommendation: follow the _actual_ Phase 36 convention (one `simulation.py`) unless the planner prefers the spec's split; the acceptance criteria only require `from petringa import run_X` to work, which is import-location-agnostic.
+Design spec §2 shows facades split across `simulation.py`, `damage.py`, `microdosimetry.py`. **However, Phase 36 placed both `run_cv` and `run_field` in a single `simulation.py`.** Recommendation: follow the _actual_ Phase 36 convention (one `simulation.py`) unless the planner prefers the spec's split; the acceptance criteria only require `from etna import run_X` to work, which is import-location-agnostic.
 
 ```
-petringa/api/
+etna/api/
 ├── simulation.py    # all run_* facades (extends existing file) — or split per spec §2
 ├── sweep.py         # ParametricSweep class (new)  [or inline in simulation.py]
 ├── device.py        # DeviceConfig, build_device (existing, unchanged)
 └── results.py       # SimResult, MeshData (existing, unchanged)
-petringa/__init__.py # add 7 run_* + ParametricSweep to imports + __all__
+etna/__init__.py # add 7 run_* + ParametricSweep to imports + __all__
 tests/
 ├── test_api_cce.py             # slow integration (physics gate)
 ├── test_api_facades.py         # light contract tests for the other 5 devsim facades
@@ -276,8 +276,8 @@ tests/
 ### run_cce (bucket a — flagship)
 
 ```python
-# Source: pattern derived from petringa/api/simulation.py::run_cv (Phase 36)
-#         wrapping petringa/core/charge_collection.py::cce_vs_bias
+# Source: pattern derived from etna/api/simulation.py::run_cv (Phase 36)
+#         wrapping etna/core/charge_collection.py::cce_vs_bias
 def run_cce(config, v_start=-10.0, v_stop=-200.0, n_points=30):
     if config.half_width_um is not None:
         raise NotImplementedError("run_cce: 2D CCE out of scope; pass half_width_um=None")
@@ -305,7 +305,7 @@ Note: `cce_vs_bias` return keys are `"voltages"`, `"cce_values"`, `"I_collected"
 ### run_microdosimetry (bucket c — data pipeline, no devsim)
 
 ```python
-# Source: petringa/core/mc_coupling.py + petringa/core/microdosimetry.py
+# Source: etna/core/mc_coupling.py + etna/core/microdosimetry.py
 def run_microdosimetry(config, mc_csv_path, sv_thickness_um=10.0, sv_width_um=None):
     events = load_mc_events_csv(mc_csv_path)                 # DataFrame of MC events
     l_bar = mean_chord_length(sv_thickness_um, sv_width_um=sv_width_um)
@@ -361,7 +361,7 @@ def test_parametric_sweep_returns_list_of_correct_length():
 
 | Old Approach                                                     | Current Approach                                              | When Changed       | Impact                                                 |
 | ---------------------------------------------------------------- | ------------------------------------------------------------- | ------------------ | ------------------------------------------------------ |
-| Notebooks import `petringa.core.*` and call physics fns directly | Public facades in `petringa.api.*` return uniform `SimResult` | v5.0 (Phase 36-37) | UI + external users never touch core                   |
+| Notebooks import `etna.core.*` and call physics fns directly | Public facades in `etna.api.*` return uniform `SimResult` | v5.0 (Phase 36-37) | UI + external users never touch core                   |
 | Phase 36 `build_device → core(device_info)` device-passing       | Phase 37 config→kwargs adapter (buckets a/c)                  | Phase 37           | Core fns keep building own devices; notebooks unbroken |
 
 **Deprecated/outdated:** Nothing deprecated. Core physics is frozen (refactor-only milestone).
@@ -371,7 +371,7 @@ def test_parametric_sweep_returns_list_of_correct_length():
 | #   | Claim                                                                                                                                                                                       | Section                       | Risk if Wrong                                                                                                                                                                     |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | A1  | `run_cce` should forward `config` doping values into `cce_vs_bias.device_kwargs` (making `run_cce(DeviceConfig())` self-consistent) rather than use the core fn's hardcoded CCE calibration | Pitfall 2, Code Examples      | If wrong, `run_cce` either silently ignores user config OR diverges from CCE notebook results — this is the one real design decision in the phase; must be locked by planner/user |
-| A2  | Single-file `simulation.py` (Phase 36 actual convention) is preferred over the spec's `damage.py`/`microdosimetry.py` split                                                                 | Recommended Project Structure | Low — import location is invisible to acceptance criteria (`from petringa import run_X`)                                                                                          |
+| A2  | Single-file `simulation.py` (Phase 36 actual convention) is preferred over the spec's `damage.py`/`microdosimetry.py` split                                                                 | Recommended Project Structure | Low — import location is invisible to acceptance criteria (`from etna import run_X`)                                                                                          |
 | A3  | `transient_cce_vs_dose_rate` (self-building) is an acceptable minimal satisfier for `run_transient` given the criterion-2 weak bar and the spec omitting a `run_transient` signature        | Bucket (b), Open Q #3         | Low — criterion only requires import + `DeviceConfig` first arg; but the "natural" signature is undefined                                                                         |
 | A4  | `data/synthetic_mc_events.csv` is the correct default MC fixture for `run_microdosimetry` tests                                                                                             | Pitfall 5, Environment        | Low — file verified present and already used by existing MC/microdosim tests                                                                                                      |
 
@@ -384,7 +384,7 @@ def test_parametric_sweep_returns_list_of_correct_length():
 
 2. **Facade file layout: single `simulation.py` vs spec's per-domain split (`damage.py`, `microdosimetry.py`). RESOLVED: single `simulation.py`.**
    - What we know: Phase 36 put both facades in one `simulation.py`; spec §2 shows a split.
-   - **RESOLVED (planner decision, low-risk / acceptance-agnostic):** Follow Phase 36's single-file convention (`petringa/api/simulation.py`) for all `run_*` facades, per D-02 in plans.
+   - **RESOLVED (planner decision, low-risk / acceptance-agnostic):** Follow Phase 36's single-file convention (`etna/api/simulation.py`) for all `run_*` facades, per D-02 in plans.
 
 3. **`run_transient` signature — undefined. RESOLVED: minimal wrapper over `transient_cce_vs_dose_rate`.**
    - What we know: Design spec §3.4 lists every facade signature EXCEPT `run_transient`. Core offers both `TransientSolver` (device_info + init + pulse) and the self-building `transient_cce_vs_dose_rate`.
@@ -470,11 +470,11 @@ No new external attack surface is introduced. The phase adds no network, no dese
 
 ### Primary (HIGH confidence — in-repo verification)
 
-- `petringa/api/simulation.py`, `petringa/api/device.py`, `petringa/api/results.py` — Phase 36 facade template, `SimResult`/`MeshData`/`DeviceConfig` contracts
-- `petringa/core/charge_collection.py` (cce_vs_bias:432, cce_vs_fluence:597, self-cleanup:54-56) — CCE + fluence entry points and device-lifecycle behavior
-- `petringa/core/dark_current.py` (create_dark_current_device:538, dark_current_sweep:435) — dark current entry + required model setup
-- `petringa/core/temperature_sweep.py` (sweep_cce_vs_temperature:215), `flash_recombination.py` (cce_vs_dose_rate:263), `transient.py` (TransientSolver:172, transient_cce_vs_dose_rate:545), `radiation_damage.py` (kappa placeholders:62-65)
-- `petringa/core/mc_coupling.py` (load_mc_events_csv:107), `microdosimetry.py` (mean_chord_length:36, lineal_energy_spectrum:117) — microdosimetry pipeline
+- `etna/api/simulation.py`, `etna/api/device.py`, `etna/api/results.py` — Phase 36 facade template, `SimResult`/`MeshData`/`DeviceConfig` contracts
+- `etna/core/charge_collection.py` (cce_vs_bias:432, cce_vs_fluence:597, self-cleanup:54-56) — CCE + fluence entry points and device-lifecycle behavior
+- `etna/core/dark_current.py` (create_dark_current_device:538, dark_current_sweep:435) — dark current entry + required model setup
+- `etna/core/temperature_sweep.py` (sweep_cce_vs_temperature:215), `flash_recombination.py` (cce_vs_dose_rate:263), `transient.py` (TransientSolver:172, transient_cce_vs_dose_rate:545), `radiation_damage.py` (kappa placeholders:62-65)
+- `etna/core/mc_coupling.py` (load_mc_events_csv:107), `microdosimetry.py` (mean_chord_length:36, lineal_energy_spectrum:117) — microdosimetry pipeline
 - `docs/superpowers/specs/2026-06-26-simulator-library-ui-design.md` §3.4-§3.5 — canonical facade + ParametricSweep signatures
 - `tests/test_api_cv.py`, `tests/test_api_field.py`, `tests/test_api_device.py` — Phase 36 test conventions
 - `.planning/REQUIREMENTS.md` (LIB-04/06/07), `.planning/STATE.md` (refactor-only constraint, devsim exhaustion blocker), `.planning/phases/36-*/36-REVIEW-FIX.md` + `36-VALIDATION.md` — Phase 36 lessons

@@ -7,7 +7,7 @@ tags: [streamlit, plotly, appTest, devsim, csv-export]
 # Dependency graph
 requires:
   - phase: 39-01
-    provides: proven petringa.run_cv / run_cce module-attribute mockability seam (monkeypatch.setattr under AppTest.from_function)
+    provides: proven etna.run_cv / run_cce module-attribute mockability seam (monkeypatch.setattr under AppTest.from_function)
   - phase: 39-02
     provides: app/components/results.py (build_cv_figure, build_mott_schottky_figure, build_cce_figure, to_csv_bytes)
 provides:
@@ -34,7 +34,7 @@ key-decisions:
   - "C-V page implements the optional depletion-width-vs-V expander (RESEARCH A4 bonus), converting cm to um for display"
 
 patterns-established:
-  - "Facades referenced as petringa.run_cv / petringa.run_cce (module attribute), never `from petringa import run_cv`, to preserve monkeypatch mockability"
+  - "Facades referenced as etna.run_cv / etna.run_cce (module attribute), never `from etna import run_cv`, to preserve monkeypatch mockability"
 
 requirements-completed: [UI-03, UI-04, UI-06]
 
@@ -58,7 +58,7 @@ completed: 2026-07-11
 
 - Replaced the placeholder `app/workflows/cv.py` with a full Run -> cache -> render -> download page: C-V curve + Mott-Schottky Plotly figures, CSV download, optional depletion-width expander (UI-03)
 - Replaced the placeholder `app/workflows/cce.py` with a full Run -> cache -> render -> download page: CCE-vs-bias Plotly figure, CSV download, I_collected/I_generated caption (UI-04)
-- 1D-only guard implemented as a pre-check (`if cfg.half_width_um is not None: st.warning(...); st.stop()`) placed BEFORE `petringa.run_cv`/`petringa.run_cce` on both pages — no try/except around the facade call
+- 1D-only guard implemented as a pre-check (`if cfg.half_width_um is not None: st.warning(...); st.stop()`) placed BEFORE `etna.run_cv`/`etna.run_cce` on both pages — no try/except around the facade call
 - Added `tests/test_app_cv_page.py` and `tests/test_app_cce_page.py`, each with three AppTest cases (happy path with cache verification, 2D pre-check guard, empty-state guard), mocking the respective facade as a module attribute per the proven 39-01 seam
 - Download half of UI-06 delivered for both pages via `to_csv_bytes`
 
@@ -76,9 +76,9 @@ _Note: Both tasks followed TDD in spirit (test file written first and confirmed 
 ## Files Created/Modified
 
 - `app/workflows/cv.py` - C-V page: empty-state guard, 1D-only pre-check, Run button, cached SimResult rendering (C-V + Mott-Schottky Plotly figures), CSV download, optional depletion-width expander
-- `tests/test_app_cv_page.py` - AppTest suite mocking `petringa.run_cv`: run-caches-result, 2D-guard, empty-state-guard
+- `tests/test_app_cv_page.py` - AppTest suite mocking `etna.run_cv`: run-caches-result, 2D-guard, empty-state-guard
 - `app/workflows/cce.py` - CCE page: empty-state guard, 1D-only pre-check, Run button, cached SimResult rendering (CCE-vs-bias Plotly figure), CSV download, I_collected/I_generated caption
-- `tests/test_app_cce_page.py` - AppTest suite mocking `petringa.run_cce`: run-caches-result, 2D-guard, empty-state-guard
+- `tests/test_app_cce_page.py` - AppTest suite mocking `etna.run_cce`: run-caches-result, 2D-guard, empty-state-guard
 
 ## Decisions Made
 

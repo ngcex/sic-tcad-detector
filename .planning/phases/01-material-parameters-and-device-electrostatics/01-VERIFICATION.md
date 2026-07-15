@@ -114,7 +114,7 @@ No blockers (TODO, FIXME, empty stubs, placeholder returns) found in any source 
 
 #### 1. Notebook execution and output inspection
 
-**Test:** Open `/Users/ngcex/projects/physics/petringa/notebooks/01_phase1_validation.ipynb` in Jupyter and run all cells (Kernel > Restart & Run All)
+**Test:** Open `/Users/ngcex/projects/physics/etna/notebooks/01_phase1_validation.ipynb` in Jupyter and run all cells (Kernel > Restart & Run All)
 **Expected:** All 9 cells execute without error. Cell 8 validation summary table clearly shows W(0V)=1.72 um vs 1.7 um experimental (pass) and W(-10V), W(-30V) mismatch documented as the known graded-doping limitation. No exception tracebacks visible.
 **Why human:** Requires Jupyter environment and visual confirmation that all cells execute cleanly end-to-end.
 

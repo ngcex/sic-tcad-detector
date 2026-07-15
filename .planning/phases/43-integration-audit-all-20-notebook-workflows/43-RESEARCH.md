@@ -74,7 +74,7 @@ empty). Constraints are therefore taken from ROADMAP.md, REQUIREMENTS.md, and ST
 | ------------------------- | --------------------------------- | ------------------------------ | -------------------------------------------------------------------------------- |
 | Notebook workflow catalog | Documentation / audit             | —                              | Read-only inspection of `notebooks/*.ipynb`                                      |
 | UI page inventory         | Streamlit app (`app/workflows/`)  | —                              | Each page is a `render()` callable registered in `app/main.py`                   |
-| Simulation execution      | Public API (`petringa.run_*`)     | devsim core (`petringa/core/`) | Pages call facades as module attributes; facades wrap core physics               |
+| Simulation execution      | Public API (`etna.run_*`)     | devsim core (`etna/core/`) | Pages call facades as module attributes; facades wrap core physics               |
 | Requirement verification  | Audit doc + source read + AppTest | Live browser click-through     | SC2 requires checking against the _running_ app, not just checkboxes             |
 | Test gate                 | pytest (per-file isolation)       | —                              | devsim single-process exhaustion forbids a bare `pytest -q`                      |
 | Gap logging               | `.planning/` audit doc            | —                              | v6.0 tech-debt destination (no TECH-DEBT.md exists; use milestone-audit pattern) |
@@ -105,7 +105,7 @@ FEAT-05's intent is "every workflow across all 21 files" (both `05_*` count as d
 does not) — planner should confirm this framing, since the matrix below has **21 rows** (05a + 05b),
 one more than the literal "20."
 
-| #   | Notebook                         | Workflow                                                       | Key `petringa.core` imports                                                 | Nearest UI facade                                             |
+| #   | Notebook                         | Workflow                                                       | Key `etna.core` imports                                                 | Nearest UI facade                                             |
 | --- | -------------------------------- | -------------------------------------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------- |
 | 01  | `01_phase1_validation`           | 1D material params, analytical electrostatics, Poisson E-field | `analytical`, `poisson`, `device`, `incomplete_ionization`, `sic_material`  | (field map / no direct page for analytical)                   |
 | 02  | `02_electrical_characterization` | C-V analysis, graded doping, IV/DD                             | `cv_analysis`, `drift_diffusion`, `validation`                              | `run_cv` (C-V page)                                           |
@@ -136,15 +136,15 @@ one more than the literal "20."
 | Page              | File                  | Facade(s) called                                                  | Notes                                                                                                                                      |
 | ----------------- | --------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | Home              | `home.py`             | none                                                              | Landing / config summary                                                                                                                   |
-| C-V Analysis      | `cv.py`               | `petringa.run_cv`                                                 | Plotly C-V + Mott-Schottky, CSV download. Works end-to-end (browser-confirmed)                                                             |
-| Charge Collection | `cce.py`              | `petringa.run_cce`                                                | CCE vs bias + CSV. **Blocked at default config by `ramp_bias` non-convergence** (graceful `st.error`)                                      |
-| Field Map         | `field_map.py`        | `petringa.run_field`                                              | 1D depth profiles + 2D geometry heatmap (Geometry Viewer). 2D at shallow bias browser-confirmed; 1D default deep bias hits convergence bug |
-| Radiation Damage  | `radiation_damage.py` | `petringa.run_radiation_damage`                                   | CCE vs fluence + persistent kappa-placeholder warning banner + CSV                                                                         |
+| C-V Analysis      | `cv.py`               | `etna.run_cv`                                                 | Plotly C-V + Mott-Schottky, CSV download. Works end-to-end (browser-confirmed)                                                             |
+| Charge Collection | `cce.py`              | `etna.run_cce`                                                | CCE vs bias + CSV. **Blocked at default config by `ramp_bias` non-convergence** (graceful `st.error`)                                      |
+| Field Map         | `field_map.py`        | `etna.run_field`                                              | 1D depth profiles + 2D geometry heatmap (Geometry Viewer). 2D at shallow bias browser-confirmed; 1D default deep bias hits convergence bug |
+| Radiation Damage  | `radiation_damage.py` | `etna.run_radiation_damage`                                   | CCE vs fluence + persistent kappa-placeholder warning banner + CSV                                                                         |
 | Dark Current      | `dark_current.py`     | `ParametricSweep(param="T", sim_fn=run_dark_current)`             | J_SRH/J_TAT/J_SRV decomposition vs T + CSV                                                                                                 |
-| Microdosimetry    | `microdosimetry.py`   | `petringa.run_microdosimetry`                                     | CSV upload → tempfile bridge → y·d(y) spectrum + y_F/y_D + CSV                                                                             |
+| Microdosimetry    | `microdosimetry.py`   | `etna.run_microdosimetry`                                     | CSV upload → tempfile bridge → y·d(y) spectrum + y_F/y_D + CSV                                                                             |
 | Batch Sweep       | `batch_sweep.py`      | `ParametricSweep` over `run_cce`/`run_cv`/`run_temperature_sweep` | Curated `SWEEPABLE_FIELDS` (8 numeric fields) × 3 `SIM_FACADES`; overlay + bulk CSV                                                        |
 
-**Public API vs pages [VERIFIED: `petringa/__init__.py` + grep of `app/workflows/`]:** The public
+**Public API vs pages [VERIFIED: `etna/__init__.py` + grep of `app/workflows/`]:** The public
 API exports 9 `run_*` facades + `ParametricSweep`. Of these, **`run_flash_recombination` and
 `run_transient` are surfaced by NO page** (grep of `app/workflows/` returns zero hits). These are
 notebooks 04 (FLASH), 05b (FLASH parametric), and 08 (transient).
@@ -202,7 +202,7 @@ browser-confirmed verification). The audit should correct these.
 | PKG-01      | `[x]`               | SATISFIED                      | `pyproject.toml` hatchling; editable install works                                                           |
 | PKG-02      | `[x]`               | SATISFIED                      | runtime + `[dev]` deps declared                                                                              |
 | PKG-03      | `[x]`               | SATISFIED (per-file isolation) | see Open Questions Q1                                                                                        |
-| LIB-01..07  | `[x]`×7             | SATISFIED                      | `petringa/__init__.py` exports all 9 facades + `DeviceConfig`/`SimResult`/`MeshData`/`ParametricSweep`       |
+| LIB-01..07  | `[x]`×7             | SATISFIED                      | `etna/__init__.py` exports all 9 facades + `DeviceConfig`/`SimResult`/`MeshData`/`ParametricSweep`       |
 | **UI-01**   | **`[ ]`**           | **SATISFIED (stale box)**      | `38-VERIFICATION.md`: `st.navigation` w/ 8 pages boots cleanly, browser-confirmed                            |
 | **UI-02**   | **`[ ]`**           | **SATISFIED (stale box)**      | `38-VERIFICATION.md`: all 11 `DeviceConfig` fields as sidebar controls, persistence fixed                    |
 | UI-03       | `[x]`               | SATISFIED                      | C-V page browser-confirmed (chart + CSV)                                                                     |
@@ -334,7 +334,7 @@ controls change. (`security_enforcement` not set in config; noting N/A is the ho
 ## Environment Availability
 
 **N/A for external installs** — but the audit does depend on the existing local toolchain being
-runnable: `uv` + the editable `petringa` install + devsim (C extension, local-only). All are
+runnable: `uv` + the editable `etna` install + devsim (C extension, local-only). All are
 already present (every prior v5.0 phase ran against them). No fallback needed; if `uv run pytest`
 silently falls back to a non-project `pytest`, sync with `uv sync --extra dev` first (STATE.md
 line 110).
@@ -382,8 +382,8 @@ line 110).
 - `.planning/REQUIREMENTS.md` — full v5.0 section + traceability tables (read verbatim)
 - `.planning/ROADMAP.md` — Phase 35–43 descriptions + success criteria (read verbatim)
 - `.planning/STATE.md` — accumulated decisions, blockers (ramp_bias, pytest exhaustion)
-- `app/main.py`, `app/workflows/*.py`, `app/components/*.py`, `petringa/__init__.py` — source read
-- `notebooks/01_*` … `notebooks/20_*` — programmatic extraction of titles + `petringa.core` imports
+- `app/main.py`, `app/workflows/*.py`, `app/components/*.py`, `etna/__init__.py` — source read
+- `notebooks/01_*` … `notebooks/20_*` — programmatic extraction of titles + `etna.core` imports
 - `.planning/phases/38-*/38-VERIFICATION.md` — UI-01/02/07 actual SATISFIED status
 - `.planning/phases/39-*/39-VERIFICATION.md` — ramp_bias convergence blocker, UI-04/05/06
 - `.planning/phases/40-*/40-VERIFICATION.md` — VIZ-01/02/03 SATISFIED (browser-confirmed)

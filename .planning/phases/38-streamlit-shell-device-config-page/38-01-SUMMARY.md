@@ -7,7 +7,7 @@ tags: [streamlit, pytest, dataclass, tdd]
 # Dependency graph
 requires:
   - phase: 37-core-api-cce-facades-parametricsweep
-    provides: "petringa.DeviceConfig public API (11-field dataclass) and stable facade contract"
+    provides: "etna.DeviceConfig public API (11-field dataclass) and stable facade contract"
 provides:
   - "Pure assemble_config(values: dict) -> DeviceConfig seam, Streamlit-free, unit-tested"
   - "render_device_sidebar() Streamlit renderer writing st.session_state['device_config']"

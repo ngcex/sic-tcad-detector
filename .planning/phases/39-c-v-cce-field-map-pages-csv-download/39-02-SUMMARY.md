@@ -7,10 +7,10 @@ tags: [plotly, pandas, streamlit, csv-export, results-rendering]
 # Dependency graph
 requires:
   - phase: 39-01
-    provides: plotly materialized in venv via uv sync; proved petringa.run_* module-attribute mockability under AppTest
+    provides: plotly materialized in venv via uv sync; proved etna.run_* module-attribute mockability under AppTest
 provides:
   - app/components/results.py — five pure Plotly go.Figure builders (build_cv_figure, build_mott_schottky_figure, build_cce_figure, build_field_figures) plus to_csv_bytes(result) CSV serializer, all st.*-free
-  - Confirmed shape ground truth: I_collected is a bias-aligned numpy array, I_generated is a scalar total generated current (read directly from petringa/core/charge_collection.py cce_vs_bias return block)
+  - Confirmed shape ground truth: I_collected is a bias-aligned numpy array, I_generated is a scalar total generated current (read directly from etna/core/charge_collection.py cce_vs_bias return block)
 affects: [39-03, 39-04]
 
 # Tech tracking
@@ -27,7 +27,7 @@ key-files:
   modified: []
 
 key-decisions:
-  - "CCE metadata: I_collected is a bias-aligned array -> becomes the I_collected_A_per_cm2 column; I_generated is a scalar total generated current -> moved to a '# I_generated_A_per_cm2:' header line instead of a misleading broadcast column. Confirmed by reading cce_vs_bias's return block in petringa/core/charge_collection.py (I_collected=I_sorted array, I_generated=Q*np.trapezoid(...) scalar) before finalizing the column split, per plan instruction — matches RESEARCH's [ASSUMED] A4 exactly, no deviation needed."
+  - "CCE metadata: I_collected is a bias-aligned array -> becomes the I_collected_A_per_cm2 column; I_generated is a scalar total generated current -> moved to a '# I_generated_A_per_cm2:' header line instead of a misleading broadcast column. Confirmed by reading cce_vs_bias's return block in etna/core/charge_collection.py (I_collected=I_sorted array, I_generated=Q*np.trapezoid(...) scalar) before finalizing the column split, per plan instruction — matches RESEARCH's [ASSUMED] A4 exactly, no deviation needed."
   - "uv sync only materializes pyproject.toml's base [project.dependencies] group; pytest lives in [project.optional-dependencies].dev and was not present in .venv (uv run pytest silently fell back to a system/conda pytest lacking the project's installed packages, causing a plotly ModuleNotFoundError on collection). Fixed by uv sync --extra dev to materialize pytest into the project's own venv."
 
 patterns-established:
@@ -54,7 +54,7 @@ completed: 2026-07-11
 
 ## Accomplishments
 
-- Five pure `go.Figure` builders (`build_cv_figure`, `build_mott_schottky_figure`, `build_cce_figure`, `build_field_figures`) that transform a `SimResult` into Plotly figures with no `st.*` calls, mirroring `petringa/core/plotting.py`'s matplotlib titles/axis labels/reference lines exactly (C-V, Mott-Schottky, CCE-vs-bias with y=1.0 reference line, E-field/potential vs depth).
+- Five pure `go.Figure` builders (`build_cv_figure`, `build_mott_schottky_figure`, `build_cce_figure`, `build_field_figures`) that transform a `SimResult` into Plotly figures with no `st.*` calls, mirroring `etna/core/plotting.py`'s matplotlib titles/axis labels/reference lines exactly (C-V, Mott-Schottky, CCE-vs-bias with y=1.0 reference line, E-field/potential vs depth).
 - `to_csv_bytes(result: SimResult) -> bytes` dispatches on `result.sim_type` to produce exact-schema CSV columns per type (cv/cce/field) with a leading `#`-commented metadata header (software version, ISO-8601 UTC timestamp, full `asdict(config)` device provenance, and a CCE-only `I_generated_A_per_cm2` header line).
 - Confirmed via direct source read (not devsim execution) that `I_collected` from `cce_vs_bias` is a bias-aligned numpy array while `I_generated` is a scalar — validated the plan's pre-adopted assumption A4 and avoided a misleading broadcast column.
 - `tests/test_app_csv_export.py`: 4 pure unit tests (cv, cce, field, unknown-sim_type ValueError) — all pass without Streamlit or devsim.
@@ -77,7 +77,7 @@ _Note: Task 1's commit also included the `to_csv_bytes` function body since both
 
 ## Decisions Made
 
-- CCE column split (I_collected as array column, I_generated as scalar header line) confirmed by reading `petringa/core/charge_collection.py`'s `cce_vs_bias` return block directly, per the plan's mandatory read-the-source-first instruction — no devsim run was needed or performed.
+- CCE column split (I_collected as array column, I_generated as scalar header line) confirmed by reading `etna/core/charge_collection.py`'s `cce_vs_bias` return block directly, per the plan's mandatory read-the-source-first instruction — no devsim run was needed or performed.
 - `uv sync --extra dev` was run to materialize `pytest` (declared under `[project.optional-dependencies].dev` in `pyproject.toml`, not the base dependency group) into the project's own `.venv`, fixing a `uv run pytest` fallback to a system pytest that could not see `plotly` in the project venv, causing a collection-time `ModuleNotFoundError`. No `pyproject.toml` changes were needed — the dependency was already correctly declared; only the venv sync state was stale (consistent with the same observation logged in 39-01-SUMMARY.md).
 
 ## Deviations from Plan
@@ -90,7 +90,7 @@ _Note: Task 1's commit also included the `to_csv_bytes` function body since both
 - **Issue:** `uv run pytest tests/test_app_csv_export.py -x` collected via a system/conda `pytest` (found on `PATH`, not in `.venv/bin`) that could not import `plotly` from the project's own venv, failing test collection with `ModuleNotFoundError: No module named 'plotly'`. `pytest` was declared in `pyproject.toml`'s `[project.optional-dependencies].dev` group but had never been synced into `.venv` (base `uv sync` only materializes `[project.dependencies]`).
 - **Fix:** Ran `uv sync --extra dev`, which installed `pytest==9.1.1` (plus `jupyter` and transitive deps) into `.venv`. No `pyproject.toml` edits were needed — the dependency pin was already correct.
 - **Files modified:** None tracked (venv-only change, `pyproject.toml`/`uv.lock` diff is empty — same non-tracked-deliverable pattern noted in 39-01-SUMMARY.md).
-- **Verification:** `uv run pytest tests/test_app_csv_export.py -x -v` now runs from `/Users/ngcex/projects/physics/petringa/.venv/bin/python3` and all 4 tests pass.
+- **Verification:** `uv run pytest tests/test_app_csv_export.py -x -v` now runs from `/Users/ngcex/projects/physics/etna/.venv/bin/python3` and all 4 tests pass.
 - **Committed in:** N/A (no file change to commit; environment-only fix)
 
 **2. [Process note, not a Rule 1-4 deviation] Task 1 and Task 2's edits to `results.py` landed in one file-write, split across two commits**

@@ -6,9 +6,9 @@
 
 ## Summary
 
-Phase 40 adds a **geometry viewer** to the existing field-map workflow. The heavy lifting is already done: `run_field(config)` (petringa/api/simulation.py:144) populates a `MeshData` on `SimResult.mesh` for **both** 1D and 2D devices — irregular devsim node coordinates plus `node_values` for `NetDoping`, `Potential`, and `ElectricField` (already NaN-cleaned and node-aligned by the API layer). This phase is pure presentation: read `SimResult.mesh` from the cached result and render it — never call devsim.
+Phase 40 adds a **geometry viewer** to the existing field-map workflow. The heavy lifting is already done: `run_field(config)` (etna/api/simulation.py:144) populates a `MeshData` on `SimResult.mesh` for **both** 1D and 2D devices — irregular devsim node coordinates plus `node_values` for `NetDoping`, `Potential`, and `ElectricField` (already NaN-cleaned and node-aligned by the API layer). This phase is pure presentation: read `SimResult.mesh` from the cached result and render it — never call devsim.
 
-The rendering approach is a **locked decision** (STATE.md:92): _"2D Plotly heatmap via `scipy.interpolate.griddata` onto regular grid; 1D bar for 1D devices."_ The existing matplotlib module `petringa/core/plotting2d.py` is the authoritative **spec** for axis labels, colormaps, coordinate convention, and the log10 doping treatment — but it is matplotlib (`tricontourf`), not importable into `st.plotly_chart`, so the Plotly builder is written from scratch mirroring its labels/units. `griddata((x,y), z, (Xi,Yi)) → go.Heatmap(x=xi, y=yi, z=Zi)` is verified working this session (NaN outside the convex hull renders as transparent gaps; `update_yaxes(autorange="reversed")` reproduces matplotlib's `invert_yaxis()`).
+The rendering approach is a **locked decision** (STATE.md:92): _"2D Plotly heatmap via `scipy.interpolate.griddata` onto regular grid; 1D bar for 1D devices."_ The existing matplotlib module `etna/core/plotting2d.py` is the authoritative **spec** for axis labels, colormaps, coordinate convention, and the log10 doping treatment — but it is matplotlib (`tricontourf`), not importable into `st.plotly_chart`, so the Plotly builder is written from scratch mirroring its labels/units. `griddata((x,y), z, (Xi,Yi)) → go.Heatmap(x=xi, y=yi, z=Zi)` is verified working this session (NaN outside the convex hull renders as transparent gaps; `update_yaxes(autorange="reversed")` reproduces matplotlib's `invert_yaxis()`).
 
 **Three integration seams dominate the plan** and are NOT stated in the success criteria: **(1)** the current field-map page has a hard 2D guard (`if cfg.half_width_um is not None: st.warning(...); st.stop()`) that short-circuits 2D **before** `run_field` runs — Phase 40's job is to route 2D _through_, so that guard must be removed/replaced. **(2)** For 2D, `run_field` returns **empty `result.x`/`result.y`** and routes all data to `mesh`, so the existing `build_field_figures(result)` line charts operate on empty arrays for 2D and must be skipped on the 2D branch. **(3)** VIZ-03's "without re-running the simulation" is a **server-side Streamlit rerun** that reads the cached `SimResult.mesh` from `session_state` — the devsim solve does not re-run, but the griddata interpolation _does_ re-execute per dropdown change (fast, acceptable). It is NOT client-side.
 
@@ -18,7 +18,7 @@ The rendering approach is a **locked decision** (STATE.md:92): _"2D Plotly heatm
 
 | Capability                      | Primary Tier                      | Secondary Tier                | Rationale                                                             |
 | ------------------------------- | --------------------------------- | ----------------------------- | --------------------------------------------------------------------- |
-| Physics solve + mesh extraction | petringa API (`run_field`)        | devsim                        | Already done; `mesh` populated post-build via `get_node_model_values` |
+| Physics solve + mesh extraction | etna API (`run_field`)        | devsim                        | Already done; `mesh` populated post-build via `get_node_model_values` |
 | Irregular→grid interpolation    | app UI (`geometry_viewer.py`)     | scipy `griddata`              | Locked decision (STATE.md:92); pure transform on `MeshData`           |
 | Heatmap / bar construction      | app UI (`geometry_viewer.py`)     | Plotly `go.Figure`            | No Plotly code exists; `plotting2d.py` is matplotlib spec only        |
 | Quantity selection              | Streamlit widget (`field_map.py`) | session_state (cached result) | `st.selectbox` triggers rerun; reads cached `mesh`, no re-solve       |
@@ -64,7 +64,7 @@ The rendering approach is a **locked decision** (STATE.md:92): _"2D Plotly heatm
 
 ## 1. `MeshData` Contract (verbatim) — what the viewer consumes
 
-`petringa/api/results.py:20-33`:
+`etna/api/results.py:20-33`:
 
 ```python
 @dataclass
@@ -115,7 +115,7 @@ if cfg.half_width_um is not None:
 ...
 if st.button("Run simulation"):
     try:
-        st.session_state["field_result"] = petringa.run_field(cfg)
+        st.session_state["field_result"] = etna.run_field(cfg)
     except RuntimeError as e:
         st.error(...)                      # <-- keep: 2D ramp may not converge
 result = st.session_state.get("field_result")
@@ -244,7 +244,7 @@ Coordinate convention **x=lateral, y=depth** is locked (STATE.md:79). Mesh `x_co
 DeviceConfig (sidebar, session_state["device_config"])
       │
       ▼
-[Run simulation] button ──► petringa.run_field(cfg)  ──► devsim solve (ONCE)
+[Run simulation] button ──► etna.run_field(cfg)  ──► devsim solve (ONCE)
       │                            │
       │                            ▼
       │                     SimResult (cached in session_state["field_result"])
@@ -328,7 +328,7 @@ Keep `geometry_viewer.py` **pure** (no `st.*`) so it is unit-testable exactly li
 
 **What goes wrong:** 2D `ramp_bias` convergence is unverified and devsim resource-exhaustion is a documented CI blocker (STATE.md). A test that runs `run_field` on a 2D config may hang, crash the pool, or hit non-convergence.
 **How to avoid:** Test `build_geometry_figure` against a **hand-built synthetic `MeshData`** (irregular `x_coords`/`y_coords`, fabricated `node_values`) — pure, no devsim, no Streamlit. Same pattern as `tests/test_app_csv_export.py`.
-**Warning sign:** A viewer test imports/calls `petringa.run_field` or `devsim`.
+**Warning sign:** A viewer test imports/calls `etna.run_field` or `devsim`.
 
 ## Runtime State Inventory
 
@@ -369,7 +369,7 @@ Not applicable — Phase 40 is a greenfield presentation component (one new pure
 | -------- | ----------------------------------------------------------------------------- | ----------------------------------------------------------------- | ---------------------------------------------------- | ------------------ |
 | VIZ-01   | 2D MeshData → `go.Heatmap` (trace type, z shape, axis titles)                 | Pure unit on `build_geometry_figure` (synthetic 2D MeshData)      | `uv run pytest tests/test_app_geometry_viewer.py -x` | ❌ Wave 0          |
 | VIZ-02   | 1D MeshData (`y_coords=None`) → `go.Bar`, same builder                        | Pure unit (synthetic 1D MeshData)                                 | (same file)                                          | ❌ Wave 0          |
-| VIZ-03   | selectbox present; changing it re-renders from cached result without re-solve | AppTest (`at.selectbox`) + monkeypatch `petringa.run_field`       | `uv run pytest tests/test_app_field_page.py -x`      | ⚠️ extend existing |
+| VIZ-03   | selectbox present; changing it re-renders from cached result without re-solve | AppTest (`at.selectbox`) + monkeypatch `etna.run_field`       | `uv run pytest tests/test_app_field_page.py -x`      | ⚠️ extend existing |
 | 2D route | 2D config no longer hits `st.stop()`; heatmap path reached                    | AppTest, monkeypatched `run_field` returns synthetic 2D SimResult | (in field page test)                                 | ⚠️ extend existing |
 
 **AppTest accessor facts (verified this session, streamlit 1.55):**
@@ -378,7 +378,7 @@ Not applicable — Phase 40 is a greenfield presentation component (one new pure
 - There is still **NO** `plotly_chart` and **NO** `download_button` accessor. So AppTest asserts on `at.exception == []`, `at.selectbox` label/options/value, `at.warning`/`at.info`, and `at.session_state["field_result"]` — **not** on the chart itself.
 - Chart-content assertions (heatmap vs bar, axis titles, z shape) go in the **pure unit test** on `build_geometry_figure`, which needs neither Streamlit nor devsim.
 
-**Mocking:** Continue referencing the facade as `petringa.run_field` (module attribute) so tests `monkeypatch.setattr(petringa, "run_field", fake)` returning a synthetic `SimResult` with a populated `mesh` (STATE.md:103; proven in `tests/test_app_field_page.py`). For a 2D fake, set `x=np.array([])`, `y=np.array([])`, and `mesh.y_coords` populated.
+**Mocking:** Continue referencing the facade as `etna.run_field` (module attribute) so tests `monkeypatch.setattr(etna, "run_field", fake)` returning a synthetic `SimResult` with a populated `mesh` (STATE.md:103; proven in `tests/test_app_field_page.py`). For a 2D fake, set `x=np.array([])`, `y=np.array([])`, and `mesh.y_coords` populated.
 
 ### Wave 0 Gaps
 
@@ -427,9 +427,9 @@ _(No framework install needed — pytest + AppTest already present.)_
 
 ### Primary (HIGH — read verbatim this session)
 
-- `petringa/api/results.py:20-46` — `MeshData`, `SimResult`
-- `petringa/api/simulation.py:144-317` — `run_field` full body (1D + 2D mesh population, empty-array 2D return, E-field magnitude + NaN cleanup)
-- `petringa/core/plotting2d.py:106-269` — matplotlib label/colormap/coordinate spec (`plot_potential_2d`, `plot_efield_2d`, `plot_doping_2d`; `invert_yaxis`, log10 doping)
+- `etna/api/results.py:20-46` — `MeshData`, `SimResult`
+- `etna/api/simulation.py:144-317` — `run_field` full body (1D + 2D mesh population, empty-array 2D return, E-field magnitude + NaN cleanup)
+- `etna/core/plotting2d.py:106-269` — matplotlib label/colormap/coordinate spec (`plot_potential_2d`, `plot_efield_2d`, `plot_doping_2d`; `invert_yaxis`, log10 doping)
 - `app/workflows/field_map.py` (full) — existing page, 2D `st.stop()` guard to remove, `try/except`, render flow
 - `app/components/results.py` (full) — `build_field_figures`, `to_csv_bytes` (no 2D branch)
 - `.planning/STATE.md` — locked decisions (griddata:92, no-devsim:91, x=lateral:79, no-physics:49, unhashable-config/caching, `run_field` referenced as module attr:103, `uv run pytest`:106)

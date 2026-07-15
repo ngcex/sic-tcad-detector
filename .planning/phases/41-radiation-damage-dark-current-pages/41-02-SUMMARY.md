@@ -19,7 +19,7 @@ affects: [42-batch-sweep-and-export]
 tech-stack:
   added: []
   patterns:
-    - "Module-attribute facade reference (petringa.run_radiation_damage) for monkeypatch mockability, matching cce.py/cv.py/field_map.py precedent"
+    - "Module-attribute facade reference (etna.run_radiation_damage) for monkeypatch mockability, matching cce.py/cv.py/field_map.py precedent"
     - "Unconditional warning banner placed before the empty-state guard so it is visible even without a configured device"
     - "NaN-tolerant rendering: np.any(np.isnan(result.y)) check drives an st.info message; build_damage_figure never drops NaN, Plotly renders it as a native line gap"
 
@@ -43,7 +43,7 @@ completed: 2026-07-14
 
 # Phase 41 Plan 02: Radiation Damage Page Summary
 
-**Radiation damage page wired to petringa.run_radiation_damage with a persistent kappa-data-blocked banner, fluence-range/proton-energy/V_bias widgets, and NaN-tolerant CCE-vs-fluence rendering via build_damage_figure.**
+**Radiation damage page wired to etna.run_radiation_damage with a persistent kappa-data-blocked banner, fluence-range/proton-energy/V_bias widgets, and NaN-tolerant CCE-vs-fluence rendering via build_damage_figure.**
 
 ## Performance
 

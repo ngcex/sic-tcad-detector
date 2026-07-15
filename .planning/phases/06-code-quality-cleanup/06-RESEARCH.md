@@ -225,7 +225,7 @@ def compute_ni(T=300):
 
 **What goes wrong:** `pytest.ini` placed in wrong directory; markers still unregistered.
 **Why it happens:** pytest searches for config starting from the invocation directory.
-**How to avoid:** Place `pytest.ini` in the project root (`/Users/ngcex/projects/physics/petringa/pytest.ini`). Verify with `pytest --markers | grep slow`.
+**How to avoid:** Place `pytest.ini` in the project root (`/Users/ngcex/projects/physics/etna/pytest.ini`). Verify with `pytest --markers | grep slow`.
 **Warning signs:** `PytestUnknownMarkWarning` still appears after adding config.
 
 ## Code Examples

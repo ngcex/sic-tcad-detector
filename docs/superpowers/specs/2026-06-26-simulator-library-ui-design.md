@@ -1,4 +1,4 @@
-# Design Spec: petringa — From Notebooks to Simulator Library + UI
+# Design Spec: etna — From Notebooks to Simulator Library + UI
 
 **Date:** 2026-06-26  
 **Status:** Approved for planning  
@@ -19,8 +19,8 @@ The project currently has ~15k lines of physics code spread across `src/` (20 mo
 ## 2. Architecture Overview
 
 ```
-petringa/                       ← installable Python package
-├── petringa/                   ← renamed from src/ (public API lives here)
+etna/                       ← installable Python package
+├── etna/                   ← renamed from src/ (public API lives here)
 │   ├── __init__.py             ← exports stable public API
 │   ├── api/                    ← thin facades over internal modules
 │   │   ├── device.py           ← DeviceConfig + build_device()
@@ -70,7 +70,7 @@ petringa/                       ← installable Python package
 │       ├── geometry_viewer.py  ← 2D plotly mesh/field visualizer
 │       ├── result_panel.py     ← standard result display widget
 │       └── param_sidebar.py    ← reusable parameter input sidebar
-├── notebooks/                  ← kept as-is; update imports to petringa.*
+├── notebooks/                  ← kept as-is; update imports to etna.*
 ├── tests/                      ← kept as-is; update imports
 ├── pyproject.toml              ← replaces requirements.txt
 └── docs/
@@ -80,12 +80,12 @@ petringa/                       ← installable Python package
 
 ## 3. Public API Design
 
-The public API lives in `petringa/api/`. Internal modules in `petringa/core/` are not part of the public contract and may change. Users (including the Streamlit UI) only import from `petringa.*`.
+The public API lives in `etna/api/`. Internal modules in `etna/core/` are not part of the public contract and may change. Users (including the Streamlit UI) only import from `etna.*`.
 
 ### 3.1 DeviceConfig
 
 ```python
-from petringa import DeviceConfig
+from etna import DeviceConfig
 
 cfg = DeviceConfig(
     # Geometry
@@ -137,7 +137,7 @@ class MeshData:
 ### 3.4 Simulation functions
 
 ```python
-from petringa import run_cv, run_cce, run_field, run_radiation_damage, run_microdosimetry
+from etna import run_cv, run_cce, run_field, run_radiation_damage, run_microdosimetry
 
 # C-V sweep
 result = run_cv(cfg, v_start=0, v_stop=-200, n_points=40)
@@ -164,7 +164,7 @@ result = run_microdosimetry(cfg, mc_csv_path, sv_thickness_um=10, sv_width_um=15
 ### 3.5 Batch sweep
 
 ```python
-from petringa import ParametricSweep
+from etna import ParametricSweep
 
 sweep = ParametricSweep(
     base_config=cfg,
@@ -182,17 +182,17 @@ results = sweep.run()    # list[SimResult]
 
 ### Phase 1 — Installable Library + Vertical Slice (C-V)
 
-**Goal:** `pip install -e .` works; `from petringa import DeviceConfig, run_cv` works; all existing tests pass unchanged.
+**Goal:** `pip install -e .` works; `from etna import DeviceConfig, run_cv` works; all existing tests pass unchanged.
 
 **Scope:**
 
-- Add `pyproject.toml` (replaces `requirements.txt`); declare `petringa` as package
-- Rename `src/` → `petringa/core/` (mechanical move, zero logic change)
-- Create `petringa/api/` with `DeviceConfig`, `SimResult`, `MeshData` dataclasses
-- Implement `petringa/api/simulation.py::run_cv()` as thin facade over `core/cv_analysis.py`
-- Implement `petringa/api/simulation.py::run_field()` (populates `MeshData` via devsim node extraction)
-- Update all `from src.X import Y` → `from petringa.core.X import Y` across `src/`, `tests/`, `notebooks/`
-- `petringa/__init__.py` exports: `DeviceConfig`, `SimResult`, `run_cv`, `run_field`
+- Add `pyproject.toml` (replaces `requirements.txt`); declare `etna` as package
+- Rename `src/` → `etna/core/` (mechanical move, zero logic change)
+- Create `etna/api/` with `DeviceConfig`, `SimResult`, `MeshData` dataclasses
+- Implement `etna/api/simulation.py::run_cv()` as thin facade over `core/cv_analysis.py`
+- Implement `etna/api/simulation.py::run_field()` (populates `MeshData` via devsim node extraction)
+- Update all `from src.X import Y` → `from etna.core.X import Y` across `src/`, `tests/`, `notebooks/`
+- `etna/__init__.py` exports: `DeviceConfig`, `SimResult`, `run_cv`, `run_field`
 
 **Acceptance gate:** `pytest -q` green (all 25 modules); `v3_frozen.json` baseline unchanged.
 
@@ -201,7 +201,7 @@ results = sweep.run()    # list[SimResult]
 **Vertical slice validation:** After Phase 1, write a one-file script `examples/cv_example.py` that does:
 
 ```python
-from petringa import DeviceConfig, run_cv
+from etna import DeviceConfig, run_cv
 cfg = DeviceConfig()
 result = run_cv(cfg, v_start=0, v_stop=-200, n_points=20)
 print(result.y)   # capacitance array
@@ -305,7 +305,7 @@ Replace `requirements.txt` with `pyproject.toml`:
 
 ```toml
 [project]
-name = "petringa"
+name = "etna"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
@@ -334,7 +334,7 @@ Use `uv` for all dependency operations (project convention).
 
 **Phase 1:**
 
-- All existing 25 pytest modules pass without modification (import paths updated `src.X` → `petringa.core.X`)
+- All existing 25 pytest modules pass without modification (import paths updated `src.X` → `etna.core.X`)
 - `v3_frozen.json` baseline regression unchanged
 - One new test: `tests/test_api_cv.py` — calls `run_cv(DeviceConfig())`, checks output shape and that C values are in physically reasonable range
 
@@ -377,7 +377,7 @@ Use `uv` for all dependency operations (project convention).
 
 | GSD Phase | Name              | Deliverable                                                     |
 | --------- | ----------------- | --------------------------------------------------------------- |
-| Phase A   | Library packaging | `petringa` installable, C-V API slice, all tests green          |
+| Phase A   | Library packaging | `etna` installable, C-V API slice, all tests green          |
 | Phase B   | Streamlit MVP     | Working UI: device config + C-V + CCE + field + geometry viewer |
 | Phase C   | Feature complete  | All workflows in UI + batch sweep + microdosimetry              |
 
@@ -385,6 +385,6 @@ Each phase should have its own GSD PLAN.md. Phase A is a prerequisite for Phase 
 
 **Suggested GSD phase goal statements:**
 
-- **Phase A:** "Users can `pip install -e .` the petringa package and call `run_cv(DeviceConfig())` from a Python script. All existing tests pass unchanged."
+- **Phase A:** "Users can `pip install -e .` the etna package and call `run_cv(DeviceConfig())` from a Python script. All existing tests pass unchanged."
 - **Phase B:** "Users can `streamlit run app/main.py`, configure a device via a form, and interactively view C-V curves, CCE vs bias, electric field profiles, and a 2D geometry heatmap."
 - **Phase C:** "All 20 notebook workflows are reproducible via the Streamlit UI. Parametric sweeps are launchable from the batch page. The microdosimetry page accepts a Geant4 CSV and outputs y·d(y) spectra."

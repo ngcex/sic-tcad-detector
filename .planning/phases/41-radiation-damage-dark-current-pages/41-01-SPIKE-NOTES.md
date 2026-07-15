@@ -13,11 +13,11 @@ contingency.
 Exact call that succeeded:
 
 ```python
-petringa.ParametricSweep(
-    base_config=petringa.DeviceConfig(),
+etna.ParametricSweep(
+    base_config=etna.DeviceConfig(),
     param="T",
     values=[250.0, 325.0, 400.0],
-    sim_fn=petringa.run_dark_current,
+    sim_fn=etna.run_dark_current,
     sim_kwargs={"v_start": -20.0, "v_stop": -20.0, "n_points": 1},
 ).run()
 ```

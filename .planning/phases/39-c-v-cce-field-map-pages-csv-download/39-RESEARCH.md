@@ -1,12 +1,12 @@
 # Phase 39: C-V, CCE, Field Map Pages + CSV Download — Research
 
 **Researched:** 2026-07-11
-**Domain:** Streamlit UI (v1.55.0) wiring petringa API facades to interactive Plotly charts + CSV export
+**Domain:** Streamlit UI (v1.55.0) wiring etna API facades to interactive Plotly charts + CSV export
 **Confidence:** HIGH (all contracts read verbatim from source; all technical claims empirically verified in this session)
 
 ## Summary
 
-Phase 39 wires three existing, fully-implemented petringa API facades (`run_cv`, `run_cce`, `run_field`) into three placeholder Streamlit pages that currently only echo the device config as JSON. The API contracts are precise and stable — every `run_*` returns a uniform `SimResult` dataclass (`x`, `y`, `metadata`, `mesh`), and I quote the exact fields below. The heavy lifting (devsim solves, unit conversions, physics) is done; Phase 39 is pure presentation + serialization glue.
+Phase 39 wires three existing, fully-implemented etna API facades (`run_cv`, `run_cce`, `run_field`) into three placeholder Streamlit pages that currently only echo the device config as JSON. The API contracts are precise and stable — every `run_*` returns a uniform `SimResult` dataclass (`x`, `y`, `metadata`, `mesh`), and I quote the exact fields below. The heavy lifting (devsim solves, unit conversions, physics) is done; Phase 39 is pure presentation + serialization glue.
 
 Three findings materially shape the plan and are not in the success criteria: **(1)** the sidebar can produce a 2D config, but all three workflows are 1D-only — `run_cv`/`run_cce` raise `NotImplementedError` for 2D and `run_field` silently returns empty `x`/`y` — so every page needs a 1D-only pre-check guard. **(2)** `plotly` is declared in `pyproject.toml` (`plotly>=5.0`) but is **NOT installed** in the venv (verified: `ModuleNotFoundError`), and no code anywhere imports it yet — it must be installed via `uv` (per project memory) as Wave 0, or every AppTest breaks at import. **(3)** `DeviceConfig` is unhashable (verified `TypeError`), so `st.cache_data` keyed on config is impossible — result caching MUST be manual `st.session_state`, and this is load-bearing for UI-06 (the download button rerun would otherwise wipe the result).
 
@@ -16,11 +16,11 @@ Three findings materially shape the plan and are not in the success criteria: **
 
 | Capability             | Primary Tier                | Secondary Tier                                | Rationale                                                                          |
 | ---------------------- | --------------------------- | --------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Physics solve (devsim) | petringa API (`run_*`)      | —                                             | Already implemented; pages call, never touch devsim                                |
+| Physics solve (devsim) | etna API (`run_*`)      | —                                             | Already implemented; pages call, never touch devsim                                |
 | Result caching         | Streamlit session_state     | —                                             | Reruns are per-interaction; unhashable config forbids `st.cache_data`              |
 | Chart construction     | app UI (Plotly builders)    | —                                             | No reusable Plotly code exists; matplotlib `plotting.py` not reusable in Streamlit |
 | CSV serialization      | app UI helper               | pandas                                        | No API-level CSV export exists; pattern is `df.to_csv`                             |
-| Provenance metadata    | app UI helper               | `dataclasses.asdict` + `petringa.__version__` | DeviceConfig carried on every SimResult; version available                         |
+| Provenance metadata    | app UI helper               | `dataclasses.asdict` + `etna.__version__` | DeviceConfig carried on every SimResult; version available                         |
 | 2D dispatch guard      | app UI (per-page pre-check) | —                                             | Workflows are 1D-only; sidebar can emit 2D config                                  |
 
 ## User Constraints
@@ -40,9 +40,9 @@ Three findings materially shape the plan and are not in the success criteria: **
 
 ## 1. API Contract (verbatim from source)
 
-All three facades are re-exported at package top level (`petringa/__init__.py:8-18`), so pages import `from petringa import run_cv, run_cce, run_field, DeviceConfig, SimResult`. `petringa/api/__init__.py` is empty (just a docstring) — the real exports live in `petringa/__init__.py`.
+All three facades are re-exported at package top level (`etna/__init__.py:8-18`), so pages import `from etna import run_cv, run_cce, run_field, DeviceConfig, SimResult`. `etna/api/__init__.py` is empty (just a docstring) — the real exports live in `etna/__init__.py`.
 
-### `SimResult` / `MeshData` envelope (`petringa/api/results.py:20-46`)
+### `SimResult` / `MeshData` envelope (`etna/api/results.py:20-46`)
 
 ```python
 @dataclass
@@ -63,7 +63,7 @@ class SimResult:
     mesh: "MeshData | None" = None
 ```
 
-### `run_cv` (`petringa/api/simulation.py:34-39`)
+### `run_cv` (`etna/api/simulation.py:34-39`)
 
 ```python
 def run_cv(
@@ -78,7 +78,7 @@ Returns (docstring lines 64-69, code lines 106-119): `sim_type="cv"`, `x=cv_resu
 
 **2D guard (lines 82-88):** raises `NotImplementedError` if `config.half_width_um is not None`.
 
-### `run_cce` (`petringa/api/simulation.py:320-325`)
+### `run_cce` (`etna/api/simulation.py:320-325`)
 
 ```python
 def run_cce(
@@ -93,7 +93,7 @@ Returns (docstring lines 371-375, code lines 401-411): `sim_type="cce"`, `x=resu
 
 **2D guard (lines 377-383):** raises `NotImplementedError` if `config.half_width_um is not None`.
 
-### `run_field` (`petringa/api/simulation.py:133`)
+### `run_field` (`etna/api/simulation.py:133`)
 
 ```python
 def run_field(config: DeviceConfig, bias_V: float = -100.0) -> SimResult:
@@ -109,7 +109,7 @@ Returns (docstring lines 160-172, code lines 299-306). For **1D** (`config.half_
 
 For **2D** (`config.half_width_um is not None`): `run_field` does **NOT raise** — it returns `x=np.array([])`, `y=np.array([])` (lines 293-294) and routes all data to `mesh`. This is the CR-01-bug-avoidance behavior (lines 285-292).
 
-**DeviceConfig** (`petringa/api/device.py:25-43`) is a plain `@dataclass` with 11 fields, all defaulted. Key field for the 2D guard: `half_width_um: Optional[float] = None` (line 31) — `None`=1D, float=2D.
+**DeviceConfig** (`etna/api/device.py:25-43`) is a plain `@dataclass` with 11 fields, all defaulted. Key field for the 2D guard: `half_width_um: Optional[float] = None` (line 31) — `None`=1D, float=2D.
 
 ---
 
@@ -145,9 +145,9 @@ The exact string `"Configure a device in the sidebar to begin."` is asserted by 
 
 ## 3. Plotly Usage Precedent
 
-**There is NO existing Plotly code anywhere** in `petringa/` or `notebooks/` (verified: `grep -rln "plotly|go.Figure|px\." petringa/ notebooks/` returns nothing). The UI must build all charts from scratch.
+**There is NO existing Plotly code anywhere** in `etna/` or `notebooks/` (verified: `grep -rln "plotly|go.Figure|px\." etna/ notebooks/` returns nothing). The UI must build all charts from scratch.
 
-`petringa/core/plotting.py` and `plotting2d.py` exist but are **matplotlib-only** (`import matplotlib.pyplot as plt`, return `matplotlib.axes.Axes`) — **not reusable** in a Streamlit `st.plotly_chart`. However, they are an authoritative reference for **data keys, axis labels, and unit conversions** to mirror in the Plotly builders:
+`etna/core/plotting.py` and `plotting2d.py` exist but are **matplotlib-only** (`import matplotlib.pyplot as plt`, return `matplotlib.axes.Axes`) — **not reusable** in a Streamlit `st.plotly_chart`. However, they are an authoritative reference for **data keys, axis labels, and unit conversions** to mirror in the Plotly builders:
 
 - `plot_cv_curve` (plotting.py:339) consumes `{"voltages", "capacitance", "one_over_C_squared", "depletion_widths"}` — same keys `run_cv` produces. Labels: C-V → "Capacitance (F/cm²)"; Mott-Schottky → "1/C² (cm⁴/F²)", title "Mott-Schottky Plot (1/C² vs V)", x "Voltage (V)".
 - `plot_cce_vs_bias` (plotting.py:472) consumes `{"voltages", "cce_values"}`, plots `|V|` on x (`np.abs`), y-limit `[0, 1.1]`, ref line at CCE=1.0, labels "|Reverse Bias| (V)" / "Charge Collection Efficiency".
@@ -166,9 +166,9 @@ The exact string `"Configure a device in the sidebar to begin."` is asserted by 
 
 **No metadata-header (commented `#` lines) CSV precedent exists** anywhere (verified: grep for `comment=`, `StringIO`, header-comment patterns returns nothing). So the traceability-header format is a new decision → tag `[ASSUMED]`.
 
-**No `to_dict()` on DeviceConfig** — but `dataclasses.asdict(config)` works cleanly (verified: returns all 11 fields as a plain dict). The app already uses `{k: getattr(cfg, k) for k in cfg.__dataclass_fields__}`. `petringa.__version__ = "5.0.0"` (`petringa/_version.py`) is available for the metadata header.
+**No `to_dict()` on DeviceConfig** — but `dataclasses.asdict(config)` works cleanly (verified: returns all 11 fields as a plain dict). The app already uses `{k: getattr(cfg, k) for k in cfg.__dataclass_fields__}`. `etna.__version__ = "5.0.0"` (`etna/_version.py`) is available for the metadata header.
 
-`petringa/api/sweep.py` (`ParametricSweep`) uses `dataclasses.replace` for config cloning but has **no** `to_csv`/`to_dataframe` method — no serialization convention to inherit there.
+`etna/api/sweep.py` (`ParametricSweep`) uses `dataclasses.replace` for config cloning but has **no** `to_csv`/`to_dataframe` method — no serialization convention to inherit there.
 
 ### Recommended CSV format (all `[ASSUMED]`)
 
@@ -186,7 +186,7 @@ Build CSV bytes in-memory (`df.to_csv(index=False).encode()` or a `StringIO`) �
 Prepend commented lines before the column table — this matches the PSTAR/SRIM commented-header convention the project already _consumes_ elsewhere, and is the audit-flagged gap (a bare number CSV isn't traceable to its run):
 
 ```
-# petringa SiC TCAD Simulator — <sim_type> result
+# etna SiC TCAD Simulator — <sim_type> result
 # software_version: 5.0.0
 # generated: 2026-07-11T14:32:05Z
 # bias_range_V: <v_start> to <v_stop>, n_points: <n>
@@ -209,7 +209,7 @@ Prepend commented lines before the column table — this matches the PSTAR/SRIM 
 
 ```python
 if st.button("Run simulation"):
-    st.session_state["cv_result"] = run_cv(cfg)   # or petringa.run_cv (see §testing)
+    st.session_state["cv_result"] = run_cv(cfg)   # or etna.run_cv (see §testing)
 
 result = st.session_state.get("cv_result")
 if result is not None:
@@ -317,12 +317,12 @@ Must be a **pre-check, not try/except** — `run_field` doesn't raise, so an exc
 
 **Critical testing decision (verified):** AppTest 1.55 has **no `plotly_chart` and no `download_button` accessor** (verified: accessor list contains `button`, `caption`, `title`, `info`, `json`, `dataframe`, `exception`, etc. — no chart/download). `at.get("plotly_chart")` also fails (element_type must be an AppTest attribute). So AppTest tests assert on: `at.exception == []`, `at.button` label, `at.caption`/`at.markdown` marker text, and `session_state` result keys — NOT on the chart or download widget directly. Put the CSV-content assertions in a **pure unit test** on the serializer (`to_csv_bytes(SimResult) -> bytes`), which is fully testable without Streamlit or devsim.
 
-**Mocking (avoid real devsim solves):** Reference the facades as `petringa.run_cv(...)` (i.e. `import petringa; petringa.run_cv`) so tests can `monkeypatch.setattr(petringa, "run_cv", fake_run_cv)`. `from petringa import run_cv` binds at page-import time and would require patching the page-module attribute instead — more fragile. Wave 0 must include a spike verifying AppTest + monkeypatch actually intercepts the call (this dictates page import structure).
+**Mocking (avoid real devsim solves):** Reference the facades as `etna.run_cv(...)` (i.e. `import etna; etna.run_cv`) so tests can `monkeypatch.setattr(etna, "run_cv", fake_run_cv)`. `from etna import run_cv` binds at page-import time and would require patching the page-module attribute instead — more fragile. Wave 0 must include a spike verifying AppTest + monkeypatch actually intercepts the call (this dictates page import structure).
 
 ### Wave 0 Gaps
 
 - [ ] Install `plotly` via uv (blocking — all AppTests fail without it)
-- [ ] Verify AppTest + monkeypatch interception of `petringa.run_*` (dictates page structure)
+- [ ] Verify AppTest + monkeypatch interception of `etna.run_*` (dictates page structure)
 - [ ] `app/components/results.py` — shared Plotly builders + `to_csv_bytes()`
 - [ ] `tests/test_app_csv_export.py` — pure serializer test (columns, metadata header, no-devsim)
 - [ ] Per-page AppTest files (cv/cce/field) with mocked `run_*`
@@ -361,10 +361,10 @@ Must be a **pre-check, not try/except** — `run_field` doesn't raise, so an exc
 | --- | -------------------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------- |
 | A1  | CSV columns per page as listed in §4                                 | CSV Export  | Low — cosmetic; user may want different names/units                                                           |
 | A2  | Commented `#` metadata header format                                 | §4          | Medium — affects re-readability (needs `comment='#'`); user may prefer separate params file or in-UI expander |
-| A3  | Timestamp + `petringa.__version__` + full `asdict(config)` in header | §4          | Low — this is the audit-flagged traceability requirement; format is the only open part                        |
+| A3  | Timestamp + `etna.__version__` + full `asdict(config)` in header | §4          | Low — this is the audit-flagged traceability requirement; format is the only open part                        |
 | A4  | Bonus plots (depletion width, net doping) offered opt-in             | Extra Plots | Low — additive, removable                                                                                     |
 | A5  | 2D config → `st.warning` + `st.stop` (vs. disabling Run)             | Pitfall 1   | Low — UX choice; behavior (no crash) is required either way                                                   |
-| A6  | Reference facades as `petringa.run_*` for mockability                | Validation  | Low — but changes page import style; verify in Wave 0 spike                                                   |
+| A6  | Reference facades as `etna.run_*` for mockability                | Validation  | Low — but changes page import style; verify in Wave 0 spike                                                   |
 
 ---
 
@@ -372,21 +372,21 @@ Must be a **pre-check, not try/except** — `run_field` doesn't raise, so an exc
 
 ### Primary (HIGH — read verbatim this session)
 
-- `petringa/api/simulation.py` (877 lines) — `run_cv` (34-131), `run_field` (133-317), `run_cce` (320-411)
-- `petringa/api/results.py` (20-46) — `SimResult`, `MeshData`
-- `petringa/api/device.py` (25-115) — `DeviceConfig`, `build_device`
-- `petringa/__init__.py` (8-36) — public exports
+- `etna/api/simulation.py` (877 lines) — `run_cv` (34-131), `run_field` (133-317), `run_cce` (320-411)
+- `etna/api/results.py` (20-46) — `SimResult`, `MeshData`
+- `etna/api/device.py` (25-115) — `DeviceConfig`, `build_device`
+- `etna/__init__.py` (8-36) — public exports
 - `app/main.py`, `app/components/device_sidebar.py`, `app/workflows/{cv,cce,field_map,home}.py`, `tests/test_app_pages.py`
-- `petringa/core/plotting.py` (matplotlib reference: 339-530)
+- `etna/core/plotting.py` (matplotlib reference: 339-530)
 - `pyproject.toml`, `.planning/config.json`, `.planning/ROADMAP.md` (450-480)
 
 ### Empirically verified this session
 
 - plotly NOT installed (`ModuleNotFoundError`); pyproject declares `plotly>=5.0`
-- `import devsim; import petringa` chain OK (petringa 5.0.0, UMFPACK loads)
+- `import devsim; import etna` chain OK (etna 5.0.0, UMFPACK loads)
 - streamlit 1.55.0; AppTest accessor list confirms NO `plotly_chart`/`download_button` accessors
 - `DeviceConfig` unhashable (`TypeError`); `dataclasses.asdict(DeviceConfig())` works
-- `petringa.__version__ = "5.0.0"`
+- `etna.__version__ = "5.0.0"`
 
 ## Metadata
 

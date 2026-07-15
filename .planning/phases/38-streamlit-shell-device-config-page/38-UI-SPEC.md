@@ -134,7 +134,7 @@ Icons are discretionary defaults — the executor may substitute equivalent Mate
 
 **`st.set_page_config`** (called first in `app/main.py`, before any other Streamlit call):
 
-- `page_title="petringa — SiC TCAD Simulator"`
+- `page_title="etna — SiC TCAD Simulator"`
 - `page_icon=":material/memory:"` (chip icon) or emoji fallback
 - `layout="wide"` — a scientific tool with wide plots and a persistent config sidebar benefits from full width. Confirmed against the design-spec layout sketch (sidebar + wide main panel).
 - `initial_sidebar_state="expanded"` — the config form must be visible on first load.
@@ -154,7 +154,7 @@ Because the entry-script sidebar always writes `device_config` before `pg.run()`
 
 ## Sidebar Device-Config Contract (interaction + copy)
 
-Rendered by a single function (e.g. `render_device_sidebar()`) called in the entry script. **Not** wrapped in `st.form` — the two mode selectors must be reactive so conditional fields appear/disappear immediately. The assembled `DeviceConfig` is stored under the single non-widget key `st.session_state["device_config"]` (the downstream contract for Phases 39–43). Read all 11 fields from `petringa.DeviceConfig` — never redefine them in the app.
+Rendered by a single function (e.g. `render_device_sidebar()`) called in the entry script. **Not** wrapped in `st.form` — the two mode selectors must be reactive so conditional fields appear/disappear immediately. The assembled `DeviceConfig` is stored under the single non-widget key `st.session_state["device_config"]` (the downstream contract for Phases 39–43). Read all 11 fields from `etna.DeviceConfig` — never redefine them in the app.
 
 **Field grouping** (each group headed by `st.sidebar.header` — the single section-heading primitive — separated by `st.sidebar.divider()`):
 

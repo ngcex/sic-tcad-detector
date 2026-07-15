@@ -2,13 +2,13 @@
 
 ## Current Milestone: v5.0 Simulator Library & Streamlit UI
 
-**Goal:** Trasformare il toolkit notebook-based in un package Python installabile (`petringa`) con un'interfaccia Streamlit usabile dal gruppo Petringa senza leggere il codice sorgente, replicando il workflow dei software commerciali (Sentaurus, Silvaco) con configurazione parametrica, visualizzazione geometrica 2D e risultati interattivi.
+**Goal:** Trasformare il toolkit notebook-based in un package Python installabile (`etna`) con un'interfaccia Streamlit usabile dal gruppo Petringa senza leggere il codice sorgente, replicando il workflow dei software commerciali (Sentaurus, Silvaco) con configurazione parametrica, visualizzazione geometrica 2D e risultati interattivi.
 
 **Target features:**
 
 - Package Python installabile `pip install -e .` con `pyproject.toml` (rimpiazza `requirements.txt`)
 - API pubblica stabile: `DeviceConfig`, `SimResult`, `MeshData`, `run_cv()`, `run_cce()`, `run_field()`
-- Refactor `src/` → `petringa/core/` + `petringa/api/` (nessuna modifica alla fisica, tutti i test invariati)
+- Refactor `src/` → `etna/core/` + `etna/api/` (nessuna modifica alla fisica, tutti i test invariati)
 - Streamlit UI multi-pagina: configurazione device via form, C-V, CCE vs bias, field map
 - Geometry viewer 2D: heatmap Plotly sulla mesh devsim estratta post-build via `MeshData`
 - Feature complete: radiation damage, dark current, microdosimetria, sweep batch parametriche
@@ -81,9 +81,9 @@ Explore how charge collection efficiency (CCE) in the SiC detector behaves under
 
 ### Active (v5.0)
 
-- ✓ Package Python `petringa` installabile con `pyproject.toml` e hatchling build backend — v5.0 (Phase 35)
-- ✓ Refactor `src/` → `petringa/core/` (nessuna modifica alla fisica, tutti i test passano invariati) — v5.0 (Phase 35)
-- ✓ API pubblica `petringa/api/`: `DeviceConfig`, `SimResult`, `MeshData` dataclasses — v5.0 (Phase 36)
+- ✓ Package Python `etna` installabile con `pyproject.toml` e hatchling build backend — v5.0 (Phase 35)
+- ✓ Refactor `src/` → `etna/core/` (nessuna modifica alla fisica, tutti i test passano invariati) — v5.0 (Phase 35)
+- ✓ API pubblica `etna/api/`: `DeviceConfig`, `SimResult`, `MeshData` dataclasses — v5.0 (Phase 36)
 - ✓ Facade `run_cv()` su `core/cv_analysis.py` + `run_field()` che popola `MeshData` — v5.0 (Phase 36)
 - ✓ Vertical slice validation: `examples/cv_example.py` funziona end-to-end — v5.0 (Phase 36)
 - ✓ Facade `run_cce()` su `core/charge_collection.py` (CCE ∈ [0,1], 2D guard, config-forwarding) — v5.0 (Phase 37)

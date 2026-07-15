@@ -33,11 +33,11 @@ from __future__ import annotations
 import numpy as np
 import streamlit as st
 
-import petringa
+import etna
 from app.components.results import build_sweep_overlay_figure, sweep_results_to_csv_bytes
 ```
 
-`petringa.ParametricSweep` and the facades MUST be referenced as **module attributes** (`petringa.run_cce`, `getattr(petringa, ...)`), never `from petringa import ...`, so tests can `monkeypatch.setattr(petringa, "run_cce", fake)` while real `ParametricSweep.run()` executes — the seam proven in `tests/test_app_run_mockability.py` (39-01).
+`etna.ParametricSweep` and the facades MUST be referenced as **module attributes** (`etna.run_cce`, `getattr(etna, ...)`), never `from etna import ...`, so tests can `monkeypatch.setattr(etna, "run_cce", fake)` while real `ParametricSweep.run()` executes — the seam proven in `tests/test_app_run_mockability.py` (39-01).
 
 > **State-key namespace discipline (mirror dark_current.py):** dark_current.py keeps its WIDGET keys (`dc_t_min`, `dc_v_bias`, …) and its result-SNAPSHOT keys (`dark_current_result`, `dark_current_n_ok`, …) in **disjoint namespaces** — a widget's `key=` is NEVER re-written via `st.session_state[...] = ` later in the same `render()`. streamlit 1.58 enforces this: writing `st.session_state["sweep_param"] = param` **after** a `st.selectbox(..., key="sweep_param")` was instantiated raises `StreamlitAPIException: st.session_state.sweep_param cannot be modified after the widget with key sweep_param is instantiated`. On this page the WIDGET keys are `sweep_param` / `sweep_values` (on the selectbox / text_input); the run-snapshot the render/download block depends on MUST therefore use the **renamed** keys `sweep_run_param` / `sweep_run_values` (plus the already-disjoint `sweep_results`, `sweep_sim_label`, `sweep_n_ok`, `sweep_n_requested`).
 
@@ -93,9 +93,9 @@ if st.button("Run simulation"):
     if len(values) < 1:
         st.warning("Enter at least one value.")
         st.stop()
-    sim_fn = getattr(petringa, SIM_FACADES[sim_label])
+    sim_fn = getattr(etna, SIM_FACADES[sim_label])
     try:
-        results = petringa.ParametricSweep(          # REAL .run() — never hand-roll the loop
+        results = etna.ParametricSweep(          # REAL .run() — never hand-roll the loop
             base_config=cfg, param=param, values=values, sim_fn=sim_fn,
         ).run()
         # per-swept-value skip-empty aggregation (mirror dark_current.py:121-128):
@@ -167,7 +167,7 @@ import tempfile
 
 import streamlit as st
 
-import petringa
+import etna
 from app.components.results import build_microdosimetry_figure, to_csv_bytes
 ```
 
@@ -192,7 +192,7 @@ sv_thickness = st.number_input("Sensitive-volume thickness (µm)", value=10.0, k
 sv_width = st.number_input("Sensitive-volume width (µm)", value=150.0, key="micro_sv_w")
 ```
 
-**Run + tempfile bridge + malformed-CSV guard** (NEW bridge — RESEARCH.md Pattern 1, lines 178-197; `run_microdosimetry` signature verified `petringa/api/simulation.py:843`, `mc_csv_path: str`):
+**Run + tempfile bridge + malformed-CSV guard** (NEW bridge — RESEARCH.md Pattern 1, lines 178-197; `run_microdosimetry` signature verified `etna/api/simulation.py:843`, `mc_csv_path: str`):
 
 ```python
 if st.button("Run simulation"):
@@ -204,7 +204,7 @@ if st.button("Run simulation"):
         with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as tmp:
             tmp.write(uploaded.getvalue())   # UploadedFile bytes; server-generated path (no traversal)
             tmp_path = tmp.name
-        st.session_state["microdosimetry_result"] = petringa.run_microdosimetry(
+        st.session_state["microdosimetry_result"] = etna.run_microdosimetry(
             cfg, mc_csv_path=tmp_path,
             sv_thickness_um=sv_thickness, sv_width_um=sv_width,
         )
@@ -237,7 +237,7 @@ if result is not None:
 
 ### `app/components/results.py` (builders + serializer, pure transform)
 
-All four additions are PURE (no `st.*`), matching the module's existing contract (`results.py:1-11`). Imports already present: `petringa`, `numpy as np`, `pandas as pd`, `plotly.graph_objects as go`, `datetime`/`timezone`, `SimResult`.
+All four additions are PURE (no `st.*`), matching the module's existing contract (`results.py:1-11`). Imports already present: `etna`, `numpy as np`, `pandas as pd`, `plotly.graph_objects as go`, `datetime`/`timezone`, `SimResult`.
 
 **(1) `build_microdosimetry_figure` — analog `build_damage_figure` (`results.py:63-86`)** (single trace, log-x, `#1F6FEB`):
 
@@ -291,8 +291,8 @@ def sweep_results_to_csv_bytes(results, param, values) -> bytes:
               for val, res in zip(values, results)]
     combined = pd.concat(frames, ignore_index=True)
     header_lines = [
-        f"# petringa SiC TCAD Simulator — parametric sweep ({param})",
-        f"# software_version: {petringa.__version__}",
+        f"# etna SiC TCAD Simulator — parametric sweep ({param})",
+        f"# software_version: {etna.__version__}",
         f"# generated: {datetime.now(timezone.utc).isoformat()}",
         f"# swept_values: {list(values)}",
     ]
@@ -313,11 +313,11 @@ def sweep_results_to_csv_bytes(results, param, values) -> bytes:
 from __future__ import annotations
 import numpy as np
 from streamlit.testing.v1 import AppTest
-import petringa
-from petringa import DeviceConfig, SimResult
+import etna
+from etna import DeviceConfig, SimResult
 ```
 
-**Fake facade** — mirror `_fake_run_dark_current` (`test_app_dark_current_page.py:30-43`), but shaped for the swept facade (e.g. `run_cce` returns an x/y curve). Monkeypatch `petringa.run_cce` (the facade), NEVER `ParametricSweep` — the real `.run()` must execute (asserts genuine sweep wiring, `test_app_dark_current_page.py:8-13`).
+**Fake facade** — mirror `_fake_run_dark_current` (`test_app_dark_current_page.py:30-43`), but shaped for the swept facade (e.g. `run_cce` returns an x/y curve). Monkeypatch `etna.run_cce` (the facade), NEVER `ParametricSweep` — the real `.run()` must execute (asserts genuine sweep wiring, `test_app_dark_current_page.py:8-13`).
 
 **Page wrapper + tests to mirror:**
 
@@ -339,7 +339,7 @@ Assertions limited to `at.exception`, `at.session_state`, `at.button`, `at.warni
 
 Mirror `test_app_radiation_damage_page.py`:
 
-- module-attribute monkeypatch of `petringa.run_microdosimetry` (`test_app_radiation_damage_page.py:1-12`)
+- module-attribute monkeypatch of `etna.run_microdosimetry` (`test_app_radiation_damage_page.py:1-12`)
 - `_fake_run_microdosimetry(cfg, mc_csv_path, sv_thickness_um=10.0, sv_width_um=150.0)` returning a `SimResult(sim_type="microdosimetry", x=..., y=..., metadata={"y_F":..., "y_D":..., "l_bar_um":...})` (shape from `test_app_radiation_damage_page.py:23-35`)
 - empty-state guard test (`test_app_radiation_damage_page.py:72-81`)
 - no-file-on-Run → `st.warning("Upload an MC events CSV to run.")` (NEW — assert `at.warning`)
@@ -362,7 +362,7 @@ Mirror `test_app_radiation_damage_page.py`:
 
 **Source:** `app/workflows/dark_current.py:32-36` + `tests/test_app_run_mockability.py` (39-01)
 **Apply to:** both new pages + both new page tests
-`import petringa; petringa.run_X(...)` (never `from petringa import run_X`) so tests `monkeypatch.setattr(petringa, "run_X", fake)`. For batch sweep, monkeypatch the **facade** (`run_cce`), never `ParametricSweep` — the real `.run()` must execute.
+`import etna; etna.run_X(...)` (never `from etna import run_X`) so tests `monkeypatch.setattr(etna, "run_X", fake)`. For batch sweep, monkeypatch the **facade** (`run_cce`), never `ParametricSweep` — the real `.run()` must execute.
 
 ### Widget-key vs snapshot-key namespace discipline
 
@@ -418,7 +418,7 @@ Two genuinely new mechanisms — no codebase precedent. Planner should use RESEA
 
 ## Metadata
 
-**Analog search scope:** `app/workflows/`, `app/components/`, `tests/`, `petringa/api/` (signature verification only)
+**Analog search scope:** `app/workflows/`, `app/components/`, `tests/`, `etna/api/` (signature verification only)
 **Files scanned:** dark_current.py, radiation_damage.py, microdosimetry.py, batch_sweep.py (workflows); results.py (components); test_app_csv_export.py, test_app_dark_current_page.py, test_app_radiation_damage_page.py (tests); sweep.py, simulation.py (signatures)
-**Signatures verified:** `ParametricSweep(base_config, param, values, sim_fn, sim_kwargs).run() -> list[SimResult]` (`petringa/api/sweep.py:31-70`); `run_microdosimetry(config, mc_csv_path: str, sv_thickness_um=10.0, sv_width_um=150.0) -> SimResult` (`petringa/api/simulation.py:843-848`)
+**Signatures verified:** `ParametricSweep(base_config, param, values, sim_fn, sim_kwargs).run() -> list[SimResult]` (`etna/api/sweep.py:31-70`); `run_microdosimetry(config, mc_csv_path: str, sv_thickness_um=10.0, sv_width_um=150.0) -> SimResult` (`etna/api/simulation.py:843-848`)
 **Pattern extraction date:** 2026-07-14

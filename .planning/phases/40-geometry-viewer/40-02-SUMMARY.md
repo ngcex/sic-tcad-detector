@@ -6,8 +6,8 @@ tags: [streamlit, plotly, geometry-viewer, field-map, selectbox, viz, apptest]
 requires:
   - "app.components.geometry_viewer.build_geometry_figure (from 40-01)"
   - "app.components.geometry_viewer.QUANTITIES (from 40-01)"
-  - "petringa.run_field (module-attribute monkeypatch seam)"
-  - "petringa.MeshData (top-level re-export)"
+  - "etna.run_field (module-attribute monkeypatch seam)"
+  - "etna.MeshData (top-level re-export)"
 provides:
   - "app/workflows/field_map.py: 2D-through routing, dimensionality-branched render, quantity selectbox feeding build_geometry_figure"
   - "tests/test_app_field_page.py: 2D-route + selectbox-present + selectbox-no-resolve (VIZ-03) coverage"
@@ -41,14 +41,14 @@ Wired the plan 40-01 geometry viewer into the field-map page and removed the Pha
 ## What Was Built
 
 - **`app/workflows/field_map.py`** (modified):
-  - DELETED the 2D stop-guard (`if cfg.half_width_um is not None: st.warning("...1D-only..."); st.stop()`). 2D now routes through `petringa.run_field`.
+  - DELETED the 2D stop-guard (`if cfg.half_width_um is not None: st.warning("...1D-only..."); st.stop()`). 2D now routes through `etna.run_field`.
   - REWROTE the module docstring to describe 2D-through routing, the `result.mesh.y_coords is None` render branch, and the preserved `try/except RuntimeError` convergence guard.
   - Added `from app.components.geometry_viewer import build_geometry_figure, QUANTITIES`.
   - Render is now guarded by `if result is not None and result.mesh is not None:` and branches:
     - **1D** (`y_coords is None`): keeps `build_field_figures` line charts, the `to_csv_bytes` download button, and the net-doping expander UNCHANGED, THEN appends the supplemental geometry bar (A1).
     - **2D** (`y_coords is not None`): SKIPS line charts and CSV (empty `result.x`/`result.y`; `to_csv_bytes` has no 2D branch), renders only the geometry heatmap (A2).
   - BOTH branches: `quantity = st.selectbox("Quantity", list(QUANTITIES.keys()), index=0, key="geo_quantity")` then `st.plotly_chart(build_geometry_figure(result.mesh, quantity))`. The persistent key + cached-result reread satisfies VIZ-03 "without re-running" (Run button returns False on a selectbox rerun).
-  - PRESERVED: `try/except RuntimeError` around `st.session_state["field_result"] = petringa.run_field(cfg)` and the module-attribute `petringa.run_field` reference (no `from petringa import run_field`). No `@st.cache_data` added (DeviceConfig unhashable).
+  - PRESERVED: `try/except RuntimeError` around `st.session_state["field_result"] = etna.run_field(cfg)` and the module-attribute `etna.run_field` reference (no `from etna import run_field`). No `@st.cache_data` added (DeviceConfig unhashable).
 
 - **`tests/test_app_field_page.py`** (rewritten):
   - Updated docstring: Phase 40 routes 2D through, fakes return a populated mesh, VIZ-03 verified via a call counter.

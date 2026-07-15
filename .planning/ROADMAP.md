@@ -91,7 +91,7 @@ Full details: [milestones/v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md)
 
 ### v5.0 Simulator Library & Streamlit UI
 
-**Milestone Goal:** Transform the notebook-based toolkit into an installable Python package (`petringa`) with a Streamlit UI usable by the Petringa group without reading source code — replicating the workflow of commercial TCAD tools (Sentaurus, Silvaco) with parametric configuration, 2D geometry visualization, and interactive results.
+**Milestone Goal:** Transform the notebook-based toolkit into an installable Python package (`etna`) with a Streamlit UI usable by the Petringa group without reading source code — replicating the workflow of commercial TCAD tools (Sentaurus, Silvaco) with parametric configuration, 2D geometry visualization, and interactive results.
 
 **Depends on:** v3.0 complete (Phase 25); v4.0 Phase 26 (stable 2D solver)
 
@@ -101,7 +101,7 @@ Full details: [milestones/v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md)
 - **GROUP B (Phases 38-40)** — Streamlit MVP; depends on Group A complete
 - **GROUP C (Phases 41-43)** — Feature complete; depends on Group B complete
 
-- [x] **Phase 35: Package Setup & Refactor** — `pyproject.toml`, `src/` → `petringa/core/` rename, all 25 test modules pass unchanged _(GROUP A, prerequisite — no physics changes)_ (completed 2026-07-01)
+- [x] **Phase 35: Package Setup & Refactor** — `pyproject.toml`, `src/` → `etna/core/` rename, all 25 test modules pass unchanged _(GROUP A, prerequisite — no physics changes)_ (completed 2026-07-01)
 - [x] **Phase 36: Core API — DeviceConfig + C-V + Field + Vertical Slice** — `DeviceConfig`, `SimResult`, `MeshData` dataclasses; `run_cv()`, `run_field()` facades; `examples/cv_example.py` vertical slice _(GROUP A)_ — **3 plans planned** (completed 2026-07-02)
 - [x] **Phase 37: Core API — CCE + Remaining Facades + ParametricSweep** — `run_cce()`, `run_radiation_damage()`, `run_dark_current()`, `run_temperature_sweep()`, `run_flash_recombination()`, `run_transient()`, `run_microdosimetry()`, `ParametricSweep` _(GROUP A)_ (completed 2026-07-09)
 - [x] **Phase 38: Streamlit Shell + Device Config Page** — `app/main.py` multi-page shell, device config sidebar form, `st.session_state` persistence, navigation between pages _(GROUP B)_ (completed 2026-07-10)
@@ -368,21 +368,21 @@ Plans:
 
 ### Phase 35: Package Setup & Refactor
 
-**Goal**: Developers can install the `petringa` package with `pip install -e .`, import `DeviceConfig` from it, and run the full test suite without any regressions — the codebase is refactored but physics is identical
+**Goal**: Developers can install the `etna` package with `pip install -e .`, import `DeviceConfig` from it, and run the full test suite without any regressions — the codebase is refactored but physics is identical
 **Depends on**: v3.0 complete (Phase 25); v4.0 Phase 26 (stable import paths)
 **Requirements**: PKG-01, PKG-02, PKG-03
 **Success Criteria** (what must be TRUE):
 
 1. `pip install -e .` (or `uv pip install -e .`) completes without error from a fresh virtual environment using `pyproject.toml` with hatchling build backend
-2. `python -c "from petringa import DeviceConfig"` executes without error, confirming the public package is importable
+2. `python -c "from etna import DeviceConfig"` executes without error, confirming the public package is importable
 3. `pytest -q` runs all 25 existing test modules and all pass; the `tests/baselines/v3_frozen.json` regression baseline is byte-for-byte unchanged
 4. All runtime dependencies (`devsim`, `numpy`, `scipy`, `matplotlib`, `plotly`, `streamlit`, `pandas`) and optional `[dev]` extras (`pytest`, `jupyter`) are declared in `pyproject.toml`
    **Plans**: 2 plans
 
 Plans:
 
-- [x] 35-01-PLAN.md — Package scaffold: pyproject.toml (hatchling), petringa/**init**.py (DeviceConfig stub), editable install
-- [x] 35-02-PLAN.md — src/ → petringa/core/ rename, import rewrite (326 statements + 6 string-literal fixes + 81 notebook imports), full test gate
+- [x] 35-01-PLAN.md — Package scaffold: pyproject.toml (hatchling), etna/**init**.py (DeviceConfig stub), editable install
+- [x] 35-02-PLAN.md — src/ → etna/core/ rename, import rewrite (326 statements + 6 string-literal fixes + 81 notebook imports), full test gate
 
 ### Phase 36: Core API — DeviceConfig + C-V + Field + Vertical Slice
 
@@ -391,9 +391,9 @@ Plans:
 **Requirements**: LIB-01, LIB-02, LIB-03, LIB-05
 **Success Criteria** (what must be TRUE):
 
-1. `from petringa import DeviceConfig` and instantiation with named parameters covering geometry, doping profile (uniform or graded), and operating conditions (T, area) works without error
-2. `from petringa import run_cv` and a call returning a `SimResult` with bias array, capacitance array, depletion width, and 1/C² metadata works; capacitance values decrease monotonically with increasing reverse bias
-3. `from petringa import run_field` returns a `SimResult` whose `.mesh` attribute is a populated `MeshData` with node coordinates, electric field, and net doping values extracted from devsim post-build
+1. `from etna import DeviceConfig` and instantiation with named parameters covering geometry, doping profile (uniform or graded), and operating conditions (T, area) works without error
+2. `from etna import run_cv` and a call returning a `SimResult` with bias array, capacitance array, depletion width, and 1/C² metadata works; capacitance values decrease monotonically with increasing reverse bias
+3. `from etna import run_field` returns a `SimResult` whose `.mesh` attribute is a populated `MeshData` with node coordinates, electric field, and net doping values extracted from devsim post-build
 4. `python examples/cv_example.py` runs end-to-end without error and prints a capacitance array with physically reasonable values (C decreasing with reverse bias)
    **Plans**: 3 plans
    **UI hint**: yes
@@ -406,14 +406,14 @@ Plans:
 
 ### Phase 37: Core API — CCE + Remaining Facades + ParametricSweep
 
-**Goal**: Developers can import all simulation facades and `ParametricSweep` from `petringa` and run them successfully — the complete library API is available before any UI work begins
+**Goal**: Developers can import all simulation facades and `ParametricSweep` from `etna` and run them successfully — the complete library API is available before any UI work begins
 **Depends on**: Phase 36
 **Requirements**: LIB-04, LIB-06, LIB-07
 **Success Criteria** (what must be TRUE):
 
-1. `from petringa import run_cce` and a call returning a `SimResult` with bias array and CCE array (values in [0, 1]) works without error
-2. `from petringa import run_radiation_damage, run_dark_current, run_temperature_sweep, run_flash_recombination, run_transient, run_microdosimetry` all import successfully and each function accepts a `DeviceConfig` as first argument
-3. `from petringa import ParametricSweep` works; `.run()` on a sweep over 2+ parameter values returns a `list[SimResult]` of correct length; unit tests for the sweep class pass
+1. `from etna import run_cce` and a call returning a `SimResult` with bias array and CCE array (values in [0, 1]) works without error
+2. `from etna import run_radiation_damage, run_dark_current, run_temperature_sweep, run_flash_recombination, run_transient, run_microdosimetry` all import successfully and each function accepts a `DeviceConfig` as first argument
+3. `from etna import ParametricSweep` works; `.run()` on a sweep over 2+ parameter values returns a `list[SimResult]` of correct length; unit tests for the sweep class pass
 4. All new API unit tests (`tests/test_api_*.py`) pass in `pytest -q`
    **Plans**: 3 plans
 
@@ -477,7 +477,7 @@ Plans:
 
 **Wave 1**
 
-- [x] 39-01-PLAN.md — Wave 0 prerequisites: materialize plotly via `uv sync` + AppTest/monkeypatch mockability spike proving `petringa.run_*` is interceptable (UI-03, UI-04, UI-05)
+- [x] 39-01-PLAN.md — Wave 0 prerequisites: materialize plotly via `uv sync` + AppTest/monkeypatch mockability spike proving `etna.run_*` is interceptable (UI-03, UI-04, UI-05)
 
 **Wave 2** _(depends on 39-01)_
 

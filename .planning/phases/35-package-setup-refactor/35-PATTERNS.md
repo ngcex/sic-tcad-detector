@@ -10,7 +10,7 @@
 
 Phase 35 is a rename/refactor — not a feature phase. The deliverable splits into:
 
-- **Bucket A — Genuinely new files (3):** `pyproject.toml`, `petringa/__init__.py`, `petringa/core/__init__.py` / `petringa/_version.py`. These need copy-from patterns.
+- **Bucket A — Genuinely new files (3):** `pyproject.toml`, `etna/__init__.py`, `etna/core/__init__.py` / `etna/_version.py`. These need copy-from patterns.
 - **Bucket B — Moved/rewritten files (~55):** All `src/*.py` modules, all `tests/*.py`, `scripts/*.py`, `notebooks/*.ipynb`. The "pattern" is the textual transformation rule, not a per-file analog. One worked exemplar covers all.
 
 ---
@@ -20,10 +20,10 @@ Phase 35 is a rename/refactor — not a feature phase. The deliverable splits in
 | New/Modified File                  | Role         | Data Flow                    | Closest Analog                              | Match Quality                     |
 | ---------------------------------- | ------------ | ---------------------------- | ------------------------------------------- | --------------------------------- |
 | `pyproject.toml`                   | config       | N/A                          | `requirements.txt` (same dep list, partial) | no-analog (content from RESEARCH) |
-| `petringa/__init__.py`             | package-root | N/A                          | `src/sic_material.py` (dataclass style)     | style-match only                  |
-| `petringa/_version.py`             | config       | N/A                          | none                                        | no-analog (trivial one-liner)     |
-| `petringa/core/__init__.py`        | namespace    | N/A                          | `src/__init__.py` (empty)                   | exact (both empty)                |
-| `petringa/core/*.py` (25 modules)  | transform    | import-rewrite               | `src/*.py` (same file, renamed)             | exact (same file)                 |
+| `etna/__init__.py`             | package-root | N/A                          | `src/sic_material.py` (dataclass style)     | style-match only                  |
+| `etna/_version.py`             | config       | N/A                          | none                                        | no-analog (trivial one-liner)     |
+| `etna/core/__init__.py`        | namespace    | N/A                          | `src/__init__.py` (empty)                   | exact (both empty)                |
+| `etna/core/*.py` (25 modules)  | transform    | import-rewrite               | `src/*.py` (same file, renamed)             | exact (same file)                 |
 | `tests/*.py` (25 test files)       | transform    | import-rewrite               | `tests/*.py` (same file)                    | exact (same file)                 |
 | `scripts/*.py` (15 scripts)        | transform    | import-rewrite               | `scripts/*.py` (same file)                  | exact (same file)                 |
 | `notebooks/*.ipynb` (22 notebooks) | transform    | import-rewrite (json-walker) | `notebooks/*.ipynb` (same file)             | exact (same file)                 |
@@ -40,7 +40,7 @@ Phase 35 is a rename/refactor — not a feature phase. The deliverable splits in
 
 **Analog:** `requirements.txt` (partial — use as dep-list cross-check only)
 
-**requirements.txt contents** (current, `/Users/ngcex/projects/physics/petringa/requirements.txt`):
+**requirements.txt contents** (current, `/Users/ngcex/projects/physics/etna/requirements.txt`):
 
 ```
 devsim>=2.10.0
@@ -60,7 +60,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "petringa"
+name = "etna"
 version = "5.0.0"
 description = "SiC TCAD Simulator Library for the Petringa group"
 requires-python = ">=3.13"
@@ -81,18 +81,18 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["petringa"]
+packages = ["etna"]
 ```
 
-**Critical:** `packages = ["petringa"]` must be explicit. Without it, hatchling auto-discovery may include `tests/`, `scripts/`, `notebooks/` if they contain `__init__.py`. `tests/__init__.py` exists (confirmed by `ls tests/`), so this is a real risk.
+**Critical:** `packages = ["etna"]` must be explicit. Without it, hatchling auto-discovery may include `tests/`, `scripts/`, `notebooks/` if they contain `__init__.py`. `tests/__init__.py` exists (confirmed by `ls tests/`), so this is a real risk.
 
 ---
 
-### `petringa/__init__.py` (package-root, DeviceConfig stub)
+### `etna/__init__.py` (package-root, DeviceConfig stub)
 
 **Analog:** `src/sic_material.py` — this codebase's dataclass style convention
 
-**Dataclass style pattern** (`/Users/ngcex/projects/physics/petringa/src/sic_material.py`, lines 12-30):
+**Dataclass style pattern** (`/Users/ngcex/projects/physics/etna/src/sic_material.py`, lines 12-30):
 
 ```python
 from dataclasses import dataclass
@@ -125,8 +125,8 @@ class SiC4H_Parameters:
 **Full stub content** (from RESEARCH §Pattern 4):
 
 ```python
-# petringa/__init__.py  — Phase 35 skeleton
-"""petringa: SiC TCAD Simulator Library."""
+# etna/__init__.py  — Phase 35 skeleton
+"""etna: SiC TCAD Simulator Library."""
 
 from __future__ import annotations
 from dataclasses import dataclass, field
@@ -154,11 +154,11 @@ class DeviceConfig:
 __all__ = ["DeviceConfig", "__version__"]
 ```
 
-**Phase boundary note:** This stub satisfies SC#2 (`python -c "from petringa import DeviceConfig"`). Phase 36 (LIB-01) adds `__post_init__` validation and `build_device()` without changing the public interface. Planner must mark this explicitly in the Phase 35 plan so Phase 36 knows it is upgrading, not creating.
+**Phase boundary note:** This stub satisfies SC#2 (`python -c "from etna import DeviceConfig"`). Phase 36 (LIB-01) adds `__post_init__` validation and `build_device()` without changing the public interface. Planner must mark this explicitly in the Phase 35 plan so Phase 36 knows it is upgrading, not creating.
 
 ---
 
-### `petringa/_version.py` (config)
+### `etna/_version.py` (config)
 
 **Analog:** None — trivial one-liner.
 
@@ -166,15 +166,15 @@ __all__ = ["DeviceConfig", "__version__"]
 __version__ = "5.0.0"
 ```
 
-`petringa/__init__.py` imports this as: `from petringa._version import __version__` (or simply define `__version__` inline in `__init__.py` directly — either approach works; the RESEARCH recommendation is `_version.py` as single source of truth).
+`etna/__init__.py` imports this as: `from etna._version import __version__` (or simply define `__version__` inline in `__init__.py` directly — either approach works; the RESEARCH recommendation is `_version.py` as single source of truth).
 
 ---
 
-### `petringa/core/__init__.py` (namespace)
+### `etna/core/__init__.py` (namespace)
 
 **Analog:** `src/__init__.py` — confirmed empty (1-line file, blank).
 
-Copy exactly: empty file (or single-line docstring `"""petringa.core: internal simulation modules."""`). No exports — internal namespace only per RESEARCH §Decisions.
+Copy exactly: empty file (or single-line docstring `"""etna.core: internal simulation modules."""`). No exports — internal namespace only per RESEARCH §Decisions.
 
 ---
 
@@ -182,7 +182,7 @@ Copy exactly: empty file (or single-line docstring `"""petringa.core: internal s
 
 ### Cross-Cutting Import Rewrite Rule
 
-**Source of truth:** `/Users/ngcex/projects/physics/petringa/src/charge_collection_2d.py`, lines 32-39 (densest cluster of internal cross-module imports in the codebase):
+**Source of truth:** `/Users/ngcex/projects/physics/etna/src/charge_collection_2d.py`, lines 32-39 (densest cluster of internal cross-module imports in the codebase):
 
 ```python
 # BEFORE (src/charge_collection_2d.py lines 32-39)
@@ -197,27 +197,27 @@ from src.charge_collection import add_generation_to_dd
 ```
 
 ```python
-# AFTER (petringa/core/charge_collection_2d.py — same lines, rewritten)
-from petringa.core.device2d import create_sic_2d_device
-from petringa.core.poisson import setup_poisson, solve_equilibrium
-from petringa.core.drift_diffusion import (
+# AFTER (etna/core/charge_collection_2d.py — same lines, rewritten)
+from etna.core.device2d import create_sic_2d_device
+from etna.core.poisson import setup_poisson, solve_equilibrium
+from etna.core.drift_diffusion import (
     setup_sic_drift_diffusion,
     extract_contact_current,
     ramp_bias,
 )
-from petringa.core.charge_collection import add_generation_to_dd
+from etna.core.charge_collection import add_generation_to_dd
 ```
 
-**Rule:** `from src.X` → `from petringa.core.X` and `import src.X` → `import petringa.core.X`. Do NOT switch to relative imports (`from .X import`); the diff is larger and grep becomes harder.
+**Rule:** `from src.X` → `from etna.core.X` and `import src.X` → `import etna.core.X`. Do NOT switch to relative imports (`from .X import`); the diff is larger and grep becomes harder.
 
 **Mechanical rewrite command (`.py` files only):**
 
 ```bash
-find /Users/ngcex/projects/physics/petringa -name '*.py' \
+find /Users/ngcex/projects/physics/etna -name '*.py' \
   ! -path '*/.venv/*' ! -path '*/.git/*' \
   -exec sed -i '' \
-    -e 's/from src\.\([^ ]*\)/from petringa.core.\1/g' \
-    -e 's/import src\.\([^ ]*\)/import petringa.core.\1/g' \
+    -e 's/from src\.\([^ ]*\)/from etna.core.\1/g' \
+    -e 's/import src\.\([^ ]*\)/import etna.core.\1/g' \
   {} +
 ```
 
@@ -232,8 +232,8 @@ for nb_path in pathlib.Path("notebooks").glob("*.ipynb"):
     for cell in nb.get("cells", []):
         new_src = []
         for line in cell.get("source", []):
-            new_line = re.sub(r"from src\.([^ ]+)", r"from petringa.core.\1", line)
-            new_line = re.sub(r"import src\.([^ ]+)", r"import petringa.core.\1", new_line)
+            new_line = re.sub(r"from src\.([^ ]+)", r"from etna.core.\1", line)
+            new_line = re.sub(r"import src\.([^ ]+)", r"import etna.core.\1", new_line)
             if new_line != line:
                 changed = True
             new_src.append(new_line)
@@ -245,10 +245,10 @@ for nb_path in pathlib.Path("notebooks").glob("*.ipynb"):
 **Verification after rewrite:**
 
 ```bash
-grep -r 'from src\.' /Users/ngcex/projects/physics/petringa/src/ \
-  /Users/ngcex/projects/physics/petringa/tests/ \
-  /Users/ngcex/projects/physics/petringa/scripts/ \
-  /Users/ngcex/projects/physics/petringa/notebooks/
+grep -r 'from src\.' /Users/ngcex/projects/physics/etna/src/ \
+  /Users/ngcex/projects/physics/etna/tests/ \
+  /Users/ngcex/projects/physics/etna/scripts/ \
+  /Users/ngcex/projects/physics/etna/notebooks/
 # Must return zero results
 ```
 
@@ -262,12 +262,12 @@ These are hard-coded string values that reference `src.*` module paths, not Pyth
 
 | #   | File                             | Line | Current value                                          | Required value                                                   |
 | --- | -------------------------------- | ---- | ------------------------------------------------------ | ---------------------------------------------------------------- |
-| 1   | `tests/test_mc_coupling.py`      | 301  | `patch("src.single_particle.ion_track_generation_2d")` | `patch("petringa.core.single_particle.ion_track_generation_2d")` |
-| 2   | `tests/test_mc_coupling.py`      | 330  | `patch("src.single_particle.ion_track_generation_2d")` | `patch("petringa.core.single_particle.ion_track_generation_2d")` |
-| 3   | `tests/test_radiation_damage.py` | 452  | `module_path = "src/radiation_damage.py"`              | `module_path = "petringa/core/radiation_damage.py"`              |
-| 4   | `scripts/run_calibration_2d.py`  | 51   | `DEVICE2D_PATH = pathlib.Path("src/device2d.py")`      | `pathlib.Path("petringa/core/device2d.py")`                      |
-| 5   | `scripts/create_notebook_16.py`  | 110  | `logging.getLogger('src.single_particle')`             | `logging.getLogger('petringa.core.single_particle')`             |
-| 6   | `scripts/create_notebook_20.py`  | 189  | `logging.getLogger('src.optimization')`                | `logging.getLogger('petringa.core.optimization')`                |
+| 1   | `tests/test_mc_coupling.py`      | 301  | `patch("src.single_particle.ion_track_generation_2d")` | `patch("etna.core.single_particle.ion_track_generation_2d")` |
+| 2   | `tests/test_mc_coupling.py`      | 330  | `patch("src.single_particle.ion_track_generation_2d")` | `patch("etna.core.single_particle.ion_track_generation_2d")` |
+| 3   | `tests/test_radiation_damage.py` | 452  | `module_path = "src/radiation_damage.py"`              | `module_path = "etna/core/radiation_damage.py"`              |
+| 4   | `scripts/run_calibration_2d.py`  | 51   | `DEVICE2D_PATH = pathlib.Path("src/device2d.py")`      | `pathlib.Path("etna/core/device2d.py")`                      |
+| 5   | `scripts/create_notebook_16.py`  | 110  | `logging.getLogger('src.single_particle')`             | `logging.getLogger('etna.core.single_particle')`             |
+| 6   | `scripts/create_notebook_20.py`  | 189  | `logging.getLogger('src.optimization')`                | `logging.getLogger('etna.core.optimization')`                |
 
 **Why items 1-2 are the highest risk:** `mock.patch` resolves the string as a dotted module path at runtime. If not updated, the mock silently does not apply — the test may pass for the wrong reason (no mock) or fail with `ModuleNotFoundError`. `assert mock_itg.call_count == 1` assertions in surrounding test logic will give false results.
 
@@ -276,7 +276,7 @@ These are hard-coded string values that reference `src.*` module paths, not Pyth
 Scripts `create_notebook_03.py`, `04`, `05`, `08`, `15`, `15_v2`, `16`, `17`, `18`, `19`, `20` embed `from src.X import Y` as Python string literals that get written into notebook cells. The mechanical sed pass handles these correctly because the scripts are `.py` files and sed processes all text in the file, including string content. No special handling required — but verify after the sed pass:
 
 ```bash
-grep -n 'from src\.' /Users/ngcex/projects/physics/petringa/scripts/create_notebook_*.py
+grep -n 'from src\.' /Users/ngcex/projects/physics/etna/scripts/create_notebook_*.py
 # Must return zero results after sed pass
 ```
 
@@ -289,12 +289,12 @@ Confirmed example before sed (`scripts/create_notebook_03.py` line 38):
 After sed, this becomes:
 
 ```python
-"from petringa.core.generation_profiles import (\n"
+"from etna.core.generation_profiles import (\n"
 ```
 
 ### sys.path Manipulation in Scripts (No Action Required)
 
-Scripts `freeze_v3_baselines.py`, `diagnose_1d_2d_parity.py`, `run_calibration_2d.py` insert the project root into `sys.path` before importing. After rename + `uv pip install -e .`, the project root is still the correct path (because `petringa/` lives there). The `sys.path.insert` lines themselves do not need to change — only the `from src.X` import lines below them.
+Scripts `freeze_v3_baselines.py`, `diagnose_1d_2d_parity.py`, `run_calibration_2d.py` insert the project root into `sys.path` before importing. After rename + `uv pip install -e .`, the project root is still the correct path (because `etna/` lives there). The `sys.path.insert` lines themselves do not need to change — only the `from src.X` import lines below them.
 
 **Pattern from** `scripts/run_calibration_2d.py` lines 39-43:
 
@@ -306,11 +306,11 @@ if str(_PROJECT_ROOT) not in sys.path:
 from src.device2d import calibrate_graded_doping_2d  # <- only this line changes
 ```
 
-After rewrite, the import becomes `from petringa.core.device2d import calibrate_graded_doping_2d`. The `sys.path.insert` block is retained as-is (harmless after editable install).
+After rewrite, the import becomes `from etna.core.device2d import calibrate_graded_doping_2d`. The `sys.path.insert` block is retained as-is (harmless after editable install).
 
 ### pytest.ini (No Change Required)
 
-Current `/Users/ngcex/projects/physics/petringa/pytest.ini`:
+Current `/Users/ngcex/projects/physics/etna/pytest.ini`:
 
 ```ini
 [pytest]
@@ -318,7 +318,7 @@ markers =
     slow: marks tests as slow (devsim integration tests, >10s each)
 ```
 
-No `testpaths` or `pythonpath` directive is present. pytest discovers `tests/` by convention. After editable install, `from petringa.core.X` imports resolve via the installed package — no `pythonpath` addition needed. pytest.ini stays unchanged.
+No `testpaths` or `pythonpath` directive is present. pytest discovers `tests/` by convention. After editable install, `from etna.core.X` imports resolve via the installed package — no `pythonpath` addition needed. pytest.ini stays unchanged.
 
 **However:** The planner should confirm that `[tool.pytest.ini_options]` testpaths are not needed. If the planner moves config to `pyproject.toml`, the equivalent section is:
 
@@ -334,7 +334,7 @@ markers = ["slow: marks tests as slow (devsim integration tests, >10s each)"]
 | File                   | Role   | Reason                                                                                                  |
 | ---------------------- | ------ | ------------------------------------------------------------------------------------------------------- |
 | `pyproject.toml`       | config | No existing pyproject.toml in project; content from RESEARCH §Code Examples and official hatchling docs |
-| `petringa/_version.py` | config | Trivial one-liner; no analog needed                                                                     |
+| `etna/_version.py` | config | Trivial one-liner; no analog needed                                                                     |
 
 ---
 

@@ -24,7 +24,7 @@ provides:
   - "run_radiation_damage / run_temperature_sweep / run_flash_recombination (bucket-a) public facades"
   - "run_dark_current (bucket-b full lifecycle) + run_transient (self-building wrapper) public facades"
   - "run_microdosimetry (bucket-c pure data pipeline) public facade"
-  - "all 6 facades re-exported from petringa (from petringa import run_*)"
+  - "all 6 facades re-exported from etna (from etna import run_*)"
   - "tests/test_api_facades.py (signature contract) + tests/test_api_microdosimetry.py (data pipeline)"
 affects: [37-03 ParametricSweep]
 
@@ -41,8 +41,8 @@ key-files:
     - tests/test_api_facades.py
     - tests/test_api_microdosimetry.py
   modified:
-    - petringa/api/simulation.py
-    - petringa/__init__.py
+    - etna/api/simulation.py
+    - etna/__init__.py
 
 key-decisions:
   - "bucket-a (run_radiation_damage, run_temperature_sweep, run_flash_recombination) + self-building run_transient add NO facade device build/reset/delete — the core fns self-clean; double-cleanup is forbidden"
@@ -60,7 +60,7 @@ completed: 2026-07-09
 
 # Phase 37 Plan 02: Remaining 6 Facades Summary
 
-**Six public simulation facades added to `petringa/api/simulation.py` — classified into the three-bucket devsim lifecycle (bucket-a self-cleaning, bucket-b facade-owned reset/finally-delete, bucket-c no-TCAD data pipeline) — each uniformly forwarding `DeviceConfig` doping/geometry into its core call so the whole API is self-consistent with `run_cce`.**
+**Six public simulation facades added to `etna/api/simulation.py` — classified into the three-bucket devsim lifecycle (bucket-a self-cleaning, bucket-b facade-owned reset/finally-delete, bucket-c no-TCAD data pipeline) — each uniformly forwarding `DeviceConfig` doping/geometry into its core call so the whole API is self-consistent with `run_cce`.**
 
 ## Performance
 
@@ -73,7 +73,7 @@ completed: 2026-07-09
 - **Bucket-a (3 facades)** — `run_radiation_damage` (over `cce_vs_fluence`), `run_temperature_sweep` (over `sweep_cce_vs_temperature`), `run_flash_recombination` (over `cce_vs_dose_rate`). None call `build_device`/`reset_devsim_fully`/`delete_device` — the core functions build and delete their own devices, so a facade-level cleanup would double-delete. All forward `config.N_D_junction`/`N_D_bulk`/`L_transition`/epi per D-01.
 - **Bucket-b (2 facades)** — `run_dark_current` owns the full `reset -> build -> try -> finally delete -> fallback reset` lifecycle copied from `run_cv`, building via `create_dark_current_device` (which adds TAT + surface-recombination models that a bare device-builder would omit). `run_transient` wraps the self-building `transient_cce_vs_dose_rate` and therefore adds NO facade device cleanup (bucket-a-shaped despite living in the bucket-b task — the counterintuitive case).
 - **Bucket-c (1 facade)** — `run_microdosimetry` is a pure data pipeline: loads MC events via `load_mc_events_csv`, aggregates per-step -> per-event collected energy with `groupby("event_id")["edep_keV"].sum()`, computes `mean_chord_length` + `lineal_energy_spectrum`, and returns a `y*d(y)` `SimResult`. It touches no devsim.
-- **Re-export** — all 6 facades imported and added to `__all__` in `petringa/__init__.py`.
+- **Re-export** — all 6 facades imported and added to `__all__` in `etna/__init__.py`.
 - **Tests** — `tests/test_api_facades.py` (11 signature-only contract tests; no devsim facade is called) and `tests/test_api_microdosimetry.py` (1 end-to-end data-pipeline test against `data/synthetic_mc_events.csv`, CWD-independent path). Both green in per-file isolation.
 
 ## Task Commits
@@ -91,8 +91,8 @@ _TDD gate compliance: `test(...)` RED commit (`1d6be78`) precedes the `feat(...)
 
 - `tests/test_api_facades.py` — Parametrized signature-only contract tests for the 5 devsim facades (callable + first param `config`), plus a `DeviceConfig` importability check. Uses `inspect.signature`; calls no facade (avoids devsim exhaustion).
 - `tests/test_api_microdosimetry.py` — Data-pipeline test: runs `run_microdosimetry` against `data/synthetic_mc_events.csv` (path via `Path(__file__).parent.parent`, CWD-independent), asserts `sim_type=="microdosimetry"`, equal-length non-empty finite x/y, and `y_D >= y_F` (Jensen's inequality).
-- `petringa/api/simulation.py` — Appended the 6 facades + imports for `cce_vs_fluence`, `sweep_cce_vs_temperature`, `cce_vs_dose_rate`, `create_dark_current_device`/`dark_current_sweep`, `transient_cce_vs_dose_rate`, `load_mc_events_csv`, `mean_chord_length`/`lineal_energy_spectrum`.
-- `petringa/__init__.py` — Re-export all 6 facades (import block + `__all__`).
+- `etna/api/simulation.py` — Appended the 6 facades + imports for `cce_vs_fluence`, `sweep_cce_vs_temperature`, `cce_vs_dose_rate`, `create_dark_current_device`/`dark_current_sweep`, `transient_cce_vs_dose_rate`, `load_mc_events_csv`, `mean_chord_length`/`lineal_energy_spectrum`.
+- `etna/__init__.py` — Re-export all 6 facades (import block + `__all__`).
 
 ## Decisions Made
 
@@ -106,8 +106,8 @@ _TDD gate compliance: `test(...)` RED commit (`1d6be78`) precedes the `feat(...)
 **1. [Rule 3 - Blocking] Test/verify invocation adjusted for worktree source resolution**
 
 - **Found during:** All tasks (verification).
-- **Issue:** The worktree has no `.venv`. The plan's literal verify commands use `.venv/bin/pytest` and bare `python -c`, which resolve the bare console script against the _main_ checkout's editable `petringa` install — silently testing the wrong source (identical to Wave 1's documented Rule-3 deviation).
-- **Fix:** Ran everything as `<main>/.venv/bin/python -m pytest ...` / `-c "..."` from the worktree root (`python -m` prepends cwd to `sys.path`, so the worktree `petringa/` wins). Verified twice via `python -c "import petringa; print(petringa.__file__)"` -> resolved to `agent-af96d70a96dd06256/petringa`. All physics/behavior assertions unchanged; only the harness invocation differs.
+- **Issue:** The worktree has no `.venv`. The plan's literal verify commands use `.venv/bin/pytest` and bare `python -c`, which resolve the bare console script against the _main_ checkout's editable `etna` install — silently testing the wrong source (identical to Wave 1's documented Rule-3 deviation).
+- **Fix:** Ran everything as `<main>/.venv/bin/python -m pytest ...` / `-c "..."` from the worktree root (`python -m` prepends cwd to `sys.path`, so the worktree `etna/` wins). Verified twice via `python -c "import etna; print(etna.__file__)"` -> resolved to `agent-af96d70a96dd06256/etna`. All physics/behavior assertions unchanged; only the harness invocation differs.
 - **Committed in:** N/A (harness-only).
 
 **2. [Rule 3 - Blocking] Reworded docstring/comment tokens to keep the plan's grep acceptance gates clean**
@@ -136,15 +136,15 @@ None — no external service configuration required.
 
 ## Next Phase Readiness
 
-- LIB-06 satisfied: `from petringa import run_radiation_damage, run_dark_current, run_temperature_sweep, run_flash_recombination, run_transient, run_microdosimetry` all import; each accepts `DeviceConfig` as its first positional arg.
+- LIB-06 satisfied: `from etna import run_radiation_damage, run_dark_current, run_temperature_sweep, run_flash_recombination, run_transient, run_microdosimetry` all import; each accepts `DeviceConfig` as its first positional arg.
 - The uniform config-forwarding + SimResult convention now spans all 9 facades (run_cv/run_field/run_cce + these 6), ready for Plan 37-03's ParametricSweep to iterate over any of them.
 
 ## Self-Check: PASSED
 
 - `tests/test_api_facades.py` — FOUND
 - `tests/test_api_microdosimetry.py` — FOUND
-- `petringa/api/simulation.py` 6 facades — FOUND (grep def count: run_radiation_damage/run_temperature_sweep/run_flash_recombination=3, run_dark_current/run_transient=2, run_microdosimetry=1)
-- `petringa/__init__.py` 6 re-exports — FOUND
+- `etna/api/simulation.py` 6 facades — FOUND (grep def count: run_radiation_damage/run_temperature_sweep/run_flash_recombination=3, run_dark_current/run_transient=2, run_microdosimetry=1)
+- `etna/__init__.py` 6 re-exports — FOUND
 - Commit `1d6be78` (Task 1 RED) — FOUND
 - Commit `4593519` (Task 2 bucket-a) — FOUND
 - Commit `c6460fb` (Task 3 bucket-b) — FOUND

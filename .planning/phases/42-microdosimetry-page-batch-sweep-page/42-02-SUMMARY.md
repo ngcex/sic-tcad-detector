@@ -66,7 +66,7 @@ completed: 2026-07-14
 
 ## Accomplishments
 
-- Replaced the `app/workflows/microdosimetry.py` placeholder with the app's first (and only) file-upload page: `st.file_uploader(type=["csv"])` -> `tempfile.NamedTemporaryFile` bridge -> `petringa.run_microdosimetry(cfg, mc_csv_path=...)` -> cache in `st.session_state["microdosimetry_result"]` -> spectrum + `st.caption` y_F/y_D readout + `st.download_button` via `to_csv_bytes`.
+- Replaced the `app/workflows/microdosimetry.py` placeholder with the app's first (and only) file-upload page: `st.file_uploader(type=["csv"])` -> `tempfile.NamedTemporaryFile` bridge -> `etna.run_microdosimetry(cfg, mc_csv_path=...)` -> cache in `st.session_state["microdosimetry_result"]` -> spectrum + `st.caption` y_F/y_D readout + `st.download_button` via `to_csv_bytes`.
 - Wired the security-critical tempfile lifecycle: server-generated path (no user-supplied path, no traversal), `os.remove` in a `finally` block guarded by `os.path.exists` (single-request temp lifetime, no disk accumulation) — mitigations T-42-02-T1/T2/D1/D2 all present.
 - Added `tests/test_app_microdosimetry_page.py` (4 tests): empty-state guard, no-file warning, upload->Run->cache happy path (driven with `data/synthetic_mc_events.csv` bytes), and malformed-CSV error-not-crash.
 - Full plan verification green: microdosimetry page (4) + frozen `test_api_microdosimetry.py` contract + 42-01 `test_app_csv_export.py` (14 tests total pass).
@@ -84,8 +84,8 @@ _Task 2 is a `tdd="true"` task, but by plan design Task 1 builds the page first,
 
 ## Files Created/Modified
 
-- `app/workflows/microdosimetry.py` - Fleshed out from placeholder into the full upload/run/render/download page with empty-state, no-file, and malformed-CSV guards; module-attribute `petringa.run_microdosimetry` seam; no 1D/NaN/kappa cruft.
-- `tests/test_app_microdosimetry_page.py` - New AppTest suite mirroring `test_app_radiation_damage_page.py`; monkeypatches `petringa.run_microdosimetry` as a module attribute; drives `at.file_uploader[0].upload(...)` with the synthetic fixture bytes.
+- `app/workflows/microdosimetry.py` - Fleshed out from placeholder into the full upload/run/render/download page with empty-state, no-file, and malformed-CSV guards; module-attribute `etna.run_microdosimetry` seam; no 1D/NaN/kappa cruft.
+- `tests/test_app_microdosimetry_page.py` - New AppTest suite mirroring `test_app_radiation_damage_page.py`; monkeypatches `etna.run_microdosimetry` as a module attribute; drives `at.file_uploader[0].upload(...)` with the synthetic fixture bytes.
 
 ## Decisions Made
 

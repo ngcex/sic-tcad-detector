@@ -18,11 +18,11 @@ full (non-truncated) CCE curve.
 Exact call that succeeded:
 
 ```python
-petringa.ParametricSweep(
-    base_config=petringa.DeviceConfig(),
+etna.ParametricSweep(
+    base_config=etna.DeviceConfig(),
     param="epi_thickness_um",
     values=[10, 15, 20],
-    sim_fn=petringa.run_cce,
+    sim_fn=etna.run_cce,
 ).run()
 ```
 

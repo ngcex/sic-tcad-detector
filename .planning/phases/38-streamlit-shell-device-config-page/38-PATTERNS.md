@@ -14,7 +14,7 @@
 | ---------------------------------- | -------------------- | ----------------------------------- | --------------------------------------------------------- | ---------------------------------- |
 | `.streamlit/config.toml`           | config               | —                                   | none (greenfield)                                         | no analog                          |
 | `app/main.py`                      | entry-script / route | request-response (rerun)            | none (greenfield)                                         | no analog — use RESEARCH Pattern 1 |
-| `app/components/device_sidebar.py` | component (form)     | transform (form values → dataclass) | `petringa/api/device.py` `build_device` (convention only) | partial — convention analog        |
+| `app/components/device_sidebar.py` | component (form)     | transform (form values → dataclass) | `etna/api/device.py` `build_device` (convention only) | partial — convention analog        |
 | `app/pages/home.py`                | page                 | request-response                    | none (greenfield)                                         | no analog — use RESEARCH Pattern 4 |
 | `app/pages/cv.py`                  | page                 | request-response                    | none (greenfield)                                         | no analog                          |
 | `app/pages/cce.py`                 | page                 | request-response                    | none (greenfield)                                         | no analog                          |
@@ -41,8 +41,8 @@
 import numpy as np
 import pytest
 
-from petringa import DeviceConfig, ParametricSweep
-from petringa.api.results import SimResult
+from etna import DeviceConfig, ParametricSweep
+from etna.api.results import SimResult
 ```
 
 For the app tests, import the pure logic under test instead — e.g. `from app.components.device_sidebar import assemble_config` (RESEARCH recommends refactoring config assembly into a pure `assemble_config(values) -> DeviceConfig` so it is unit-testable without Streamlit; Validation Architecture note).
@@ -119,11 +119,11 @@ Reuse the `pytest.raises(...)` structure for any validation guard the sidebar ad
 
 ### `app/components/device_sidebar.py` (component, transform)
 
-**Analog:** None for the Streamlit rendering (greenfield). **Convention analog** for the field-marshalling half: `petringa/api/device.py` → `build_device()` (lines 46-115).
+**Analog:** None for the Streamlit rendering (greenfield). **Convention analog** for the field-marshalling half: `etna/api/device.py` → `build_device()` (lines 46-115).
 
 **Why this is the convention analog:** RESEARCH recommends refactoring config assembly into a pure `assemble_config(values) -> DeviceConfig`. That function should mirror `build_device`'s core convention: **map every DeviceConfig field explicitly with named kwargs; never rely on defaults; never use `setattr`/`eval`.** `build_device` states this verbatim ("Every DeviceConfig field is mapped explicitly — core constructor defaults are never relied upon", lines 54-56).
 
-**Dispatch-on-mode convention** (`petringa/api/device.py` lines 75-96) — the sidebar's dimensionality logic mirrors this exact 1D/2D dispatch on `half_width_um is None`:
+**Dispatch-on-mode convention** (`etna/api/device.py` lines 75-96) — the sidebar's dimensionality logic mirrors this exact 1D/2D dispatch on `half_width_um is None`:
 
 ```python
 if config.half_width_um is None:
@@ -134,7 +134,7 @@ if config.half_width_um is None:
 
 Sidebar analog: `"1D"` selected → set `half_width_um=None`; `"2D"` → collect the float. Same None-vs-float switch the library already keys on.
 
-**Explicit named-kwarg assembly** (`petringa/api/device.py` lines 79-90 show the named-kwarg style; the sidebar's final assembly should look like RESEARCH Pattern 3 / Code Example):
+**Explicit named-kwarg assembly** (`etna/api/device.py` lines 79-90 show the named-kwarg style; the sidebar's final assembly should look like RESEARCH Pattern 3 / Code Example):
 
 ```python
 # From RESEARCH.md Code Examples (no in-repo Streamlit analog exists):
@@ -162,7 +162,7 @@ st.session_state["device_config"] = DeviceConfig(
 
 Non-negotiables from the docs:
 
-- `st.set_page_config(...)` called **first**, before any other Streamlit call, with `page_title="petringa — SiC TCAD Simulator"`, `layout="wide"`, `initial_sidebar_state="expanded"` (UI-SPEC).
+- `st.set_page_config(...)` called **first**, before any other Streamlit call, with `page_title="etna — SiC TCAD Simulator"`, `layout="wide"`, `initial_sidebar_state="expanded"` (UI-SPEC).
 - `render_device_sidebar()` called **before** `pg.run()` so the sidebar renders on every page (satisfies UI-02/UI-07).
 - Register Home + all 7 workflow pages via `st.Page(...)`; keep the list easy to append to (UI-SPEC page table; RESEARCH Open Question 1). Page titles/icons/order per UI-SPEC "Page list" table.
 - Do **not** use the legacy `pages/` magic directory (ignored once `st.navigation` runs — RESEARCH anti-pattern).
@@ -200,7 +200,7 @@ Iterating `cfg.__dataclass_fields__` (rather than hardcoding field names) is the
 
 ### DeviceConfig Contract (the source of truth — referenced by sidebar, pages, and all tests)
 
-**Source:** `petringa/api/device.py` lines 25-43. **NEVER redefine these fields in the app** (RESEARCH anti-pattern; UI-SPEC line 157). Import via `from petringa import DeviceConfig`. The full 11-field contract with defaults:
+**Source:** `etna/api/device.py` lines 25-43. **NEVER redefine these fields in the app** (RESEARCH anti-pattern; UI-SPEC line 157). Import via `from etna import DeviceConfig`. The full 11-field contract with defaults:
 
 ```python
 @dataclass
@@ -237,6 +237,6 @@ The Streamlit UI + config files are genuinely greenfield — no Streamlit, no `a
 
 ## Metadata
 
-**Analog search scope:** whole repo (`grep -rl "import streamlit"` → empty; `grep -rl "st.navigation|st.Page|session_state"` → empty), `tests/` (34 test modules scanned; `test_api_sweep.py` and `test_api_device.py` read in full), `petringa/api/` (`device.py`, `results.py`, `sweep.py`, `__init__.py` read in full).
-**Files scanned in depth:** 6 (`petringa/api/device.py`, `results.py`, `sweep.py`, `petringa/__init__.py`, `tests/test_api_sweep.py`, `tests/test_api_device.py`) + `pyproject.toml`, `pytest.ini`.
+**Analog search scope:** whole repo (`grep -rl "import streamlit"` → empty; `grep -rl "st.navigation|st.Page|session_state"` → empty), `tests/` (34 test modules scanned; `test_api_sweep.py` and `test_api_device.py` read in full), `etna/api/` (`device.py`, `results.py`, `sweep.py`, `__init__.py` read in full).
+**Files scanned in depth:** 6 (`etna/api/device.py`, `results.py`, `sweep.py`, `etna/__init__.py`, `tests/test_api_sweep.py`, `tests/test_api_device.py`) + `pyproject.toml`, `pytest.ini`.
 **Pattern extraction date:** 2026-07-10

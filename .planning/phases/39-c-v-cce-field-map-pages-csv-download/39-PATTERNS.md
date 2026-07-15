@@ -16,7 +16,7 @@
 | `app/workflows/cv.py` (modify)        | component/page | request-response     | `app/workflows/home.py`                                                                                                   | exact (same render() page shape)      |
 | `app/workflows/cce.py` (modify)       | component/page | request-response     | `app/workflows/home.py`                                                                                                   | exact                                 |
 | `app/workflows/field_map.py` (modify) | component/page | request-response     | `app/workflows/home.py`                                                                                                   | exact                                 |
-| `app/components/results.py` (new)     | utility        | transform / file-I/O | `app/components/device_sidebar.py` (pure-seam structure); `petringa/core/plotting.py` (labels/units spec, NOT importable) | role-match                            |
+| `app/components/results.py` (new)     | utility        | transform / file-I/O | `app/components/device_sidebar.py` (pure-seam structure); `etna/core/plotting.py` (labels/units spec, NOT importable) | role-match                            |
 | `tests/test_app_cv_page.py` (new)     | test           | request-response     | `tests/test_app_pages.py::test_empty_state_guard` (from_function shape)                                                   | role-match (mock layer has no analog) |
 | `tests/test_app_cce_page.py` (new)    | test           | request-response     | `tests/test_app_pages.py`                                                                                                 | role-match                            |
 | `tests/test_app_field_page.py` (new)  | test           | request-response     | `tests/test_app_pages.py`                                                                                                 | role-match                            |
@@ -79,13 +79,13 @@ if cfg.half_width_um is not None:
 No existing page runs a simulation; there is no analog. session_state key convention
 is inherited from `app/components/device_sidebar.py:150` (`st.session_state["device_config"] = ...`);
 namespace new keys distinctly as `cv_result` / `cce_result` / `field_result` (avoid the
-`cfg_*` widget prefix). Reference the facade as `petringa.run_cv` (module attribute) so
+`cfg_*` widget prefix). Reference the facade as `etna.run_cv` (module attribute) so
 tests can monkeypatch it — see RESEARCH §Validation A6.
 
 ```python
-import petringa
+import etna
 if st.button("Run simulation"):
-    st.session_state["cv_result"] = petringa.run_cv(cfg)
+    st.session_state["cv_result"] = etna.run_cv(cfg)
 
 result = st.session_state.get("cv_result")
 if result is not None:
@@ -115,19 +115,19 @@ Import convention (top of module) — mirror `device_sidebar.py:17-21`:
 ```python
 from __future__ import annotations
 import streamlit as st          # only if any st.* helper lives here; builders should stay pure
-from petringa import SimResult  # type hints; also DeviceConfig via result.config
+from etna import SimResult  # type hints; also DeviceConfig via result.config
 ```
 
 For serialization use `dataclasses.asdict(result.config)` (RESEARCH §4, verified) and
-`petringa.__version__` for the metadata header; use `pandas.DataFrame(...).to_csv(index=False)`
+`etna.__version__` for the metadata header; use `pandas.DataFrame(...).to_csv(index=False)`
 (project convention, RESEARCH §Don't-Hand-Roll) — no manual string joins, no temp file
 (`df.to_csv(index=False).encode()`).
 
 **Plotly builders — labels/units SPEC (do NOT import `plotting.py`; it is matplotlib-only).**
-`petringa/core/plotting.py` is the authoritative source for axis labels, titles, unit
+`etna/core/plotting.py` is the authoritative source for axis labels, titles, unit
 conversions, and reference lines. Mirror these into `go.Figure`:
 
-C-V + Mott-Schottky — `petringa/core/plotting.py:367-395`:
+C-V + Mott-Schottky — `etna/core/plotting.py:367-395`:
 
 ```python
 # C_vs_V:   x=voltages,             ylabel "Capacitance (F/cm²)",  title "C-V Characteristic"
@@ -136,7 +136,7 @@ C-V + Mott-Schottky — `petringa/core/plotting.py:367-395`:
 # shared xlabel "Voltage (V)"
 ```
 
-CCE — `petringa/core/plotting.py:491-517`:
+CCE — `etna/core/plotting.py:491-517`:
 
 ```python
 V = np.abs(np.asarray(cce_data["voltages"]))   # plot |V| on x
@@ -145,7 +145,7 @@ cce = np.asarray(cce_data["cce_values"])
 # xlabel "|Reverse Bias| (V)", ylabel "Charge Collection Efficiency", title "CCE vs Reverse Bias"
 ```
 
-Field / E-field vs depth — `petringa/core/plotting.py:59-68`:
+Field / E-field vs depth — `etna/core/plotting.py:59-68`:
 
 ```python
 x_um = np.asarray(x_cm) * 1e4  # cm -> um   <-- DO NOT replicate: run_field.x is ALREADY µm (RESEARCH §Pitfall 3, line 154)
@@ -172,7 +172,7 @@ asserted through the page test.
 Import style to mirror — `tests/test_app_device_sidebar.py:9-10`:
 
 ```python
-from petringa import DeviceConfig
+from etna import DeviceConfig
 from app.components.device_sidebar import assemble_config   # -> from app.components.results import to_csv_bytes
 ```
 
@@ -237,7 +237,7 @@ Verbatim string `"Configure a device in the sidebar to begin."` (asserted at `te
 
 **Source:** RESEARCH §Validation A6 (no in-repo analog)
 **Apply to:** all three pages
-Call `petringa.run_cv(...)` (i.e. `import petringa; petringa.run_cv`), NOT `from petringa import run_cv`, so tests can `monkeypatch.setattr(petringa, "run_cv", fake)`.
+Call `etna.run_cv(...)` (i.e. `import etna; etna.run_cv`), NOT `from etna import run_cv`, so tests can `monkeypatch.setattr(etna, "run_cv", fake)`.
 
 ### CSV serialization mechanics
 
@@ -256,13 +256,13 @@ Files/patterns with no close match in the codebase (planner should use RESEARCH.
 | Plotly `go.Figure` builders in `results.py`                                           | utility        | transform        | No Plotly code exists anywhere (RESEARCH §3, grep-verified). Build from scratch; use `plotting.py` labels/units as spec only — it is matplotlib, not importable into `st.plotly_chart`.                                           |
 | Run → cache → download flow in the three pages                                        | component/page | request-response | No existing page runs a simulation or caches a result; the session_state write convention is the only inherited piece. Spec = RESEARCH §5.                                                                                        |
 | 2D pre-check guard                                                                    | component/page | request-response | No page guards on `half_width_um`. Spec = RESEARCH §Pitfall 1.                                                                                                                                                                    |
-| monkeypatch + `AppTest.from_function` intercepting `petringa.run_*` in the page tests | test           | request-response | Nothing in the repo monkeypatches `petringa.run_cv`. `test_empty_state_guard` gives the `from_function` wrapper shape only. Spec = RESEARCH §Validation (A6 + Wave-0 spike verifying interception before writing page structure). |
+| monkeypatch + `AppTest.from_function` intercepting `etna.run_*` in the page tests | test           | request-response | Nothing in the repo monkeypatches `etna.run_cv`. `test_empty_state_guard` gives the `from_function` wrapper shape only. Spec = RESEARCH §Validation (A6 + Wave-0 spike verifying interception before writing page structure). |
 | Commented-`#` CSV metadata header                                                     | utility        | file-I/O         | No metadata-header CSV precedent in-repo (RESEARCH §4, grep-verified). Format is `[ASSUMED]` — RESEARCH §4 gives the recommended layout.                                                                                          |
 
 ---
 
 ## Metadata
 
-**Analog search scope:** `app/workflows/`, `app/components/`, `tests/`, `petringa/core/plotting.py`, `petringa/__init__.py`
+**Analog search scope:** `app/workflows/`, `app/components/`, `tests/`, `etna/core/plotting.py`, `etna/__init__.py`
 **Files scanned:** 9 (home.py, cv.py, cce.py, field_map.py, main.py, device_sidebar.py, test_app_pages.py, test_app_device_sidebar.py, plotting.py)
 **Pattern extraction date:** 2026-07-11

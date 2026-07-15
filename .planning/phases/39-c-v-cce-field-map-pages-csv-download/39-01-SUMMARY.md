@@ -10,25 +10,25 @@ requires:
     provides: app/workflows/ page structure, AppTest.from_function pattern (test_empty_state_guard), streamlit session_state conventions
 provides:
   - plotly materialized into the project venv (was declared but not installed)
-  - Empirical proof that petringa.run_* module-attribute references are mockable via monkeypatch under AppTest.from_function
-  - Mandated page import structure for all Phase 39 page plans: `import petringa; petringa.run_*(cfg)`
-affects: [39-02, 39-03, 39-04, "any future phase adding Streamlit pages that call petringa run_* facades"]
+  - Empirical proof that etna.run_* module-attribute references are mockable via monkeypatch under AppTest.from_function
+  - Mandated page import structure for all Phase 39 page plans: `import etna; etna.run_*(cfg)`
+affects: [39-02, 39-03, 39-04, "any future phase adding Streamlit pages that call etna run_* facades"]
 
 # Tech tracking
 tech-stack:
   added: []
   patterns:
-    - "petringa.run_* facades must be referenced as module attributes (import petringa; petringa.run_cv(cfg)) in page code, never `from petringa import run_cv`, so page tests can monkeypatch.setattr(petringa, 'run_cv', fake) to avoid real devsim solves"
+    - "etna.run_* facades must be referenced as module attributes (import etna; etna.run_cv(cfg)) in page code, never `from etna import run_cv`, so page tests can monkeypatch.setattr(etna, 'run_cv', fake) to avoid real devsim solves"
 
 key-files:
   created: [tests/test_app_run_mockability.py]
   modified: []
 
 key-decisions:
-  - "Confirmed RESEARCH A6 empirically: petringa.run_cv as a module attribute is interceptable by monkeypatch under AppTest.from_function, because AppTest.from_function runs the wrapper body in the same process as the test, so the monkeypatch-patched module object is the same object the wrapper's `import petringa` resolves to."
+  - "Confirmed RESEARCH A6 empirically: etna.run_cv as a module attribute is interceptable by monkeypatch under AppTest.from_function, because AppTest.from_function runs the wrapper body in the same process as the test, so the monkeypatch-patched module object is the same object the wrapper's `import etna` resolves to."
 
 patterns-established:
-  - "Spike-test pattern for facade mockability: define a fake_run_* returning a hand-built SimResult, monkeypatch.setattr(petringa, 'run_*', fake), call the facade inside a self-contained AppTest.from_function wrapper body, assert at.exception == [] and inspect at.session_state for the stashed result."
+  - "Spike-test pattern for facade mockability: define a fake_run_* returning a hand-built SimResult, monkeypatch.setattr(etna, 'run_*', fake), call the facade inside a self-contained AppTest.from_function wrapper body, assert at.exception == [] and inspect at.session_state for the stashed result."
 
 requirements-completed: []  # NOTE: plan frontmatter lists [UI-03, UI-04, UI-05], but this
   # plan's tasks/acceptance-criteria are entirely plotly materialization + mockability
@@ -43,7 +43,7 @@ completed: 2026-07-11
 
 # Phase 39 Plan 01: Wave 0 Spike — plotly materialization + run_cv mockability Summary
 
-**Materialized the already-declared plotly>=5.0 dependency via `uv sync` and empirically proved that `petringa.run_cv` referenced as a module attribute (`petringa.run_cv(cfg)`) is interceptable by `monkeypatch.setattr` under `AppTest.from_function`, dictating the mandatory page import structure for all Phase 39 page plans.**
+**Materialized the already-declared plotly>=5.0 dependency via `uv sync` and empirically proved that `etna.run_cv` referenced as a module attribute (`etna.run_cv(cfg)`) is interceptable by `monkeypatch.setattr` under `AppTest.from_function`, dictating the mandatory page import structure for all Phase 39 page plans.**
 
 ## Performance
 
@@ -56,15 +56,15 @@ completed: 2026-07-11
 ## Accomplishments
 
 - `plotly` and `plotly.graph_objects` now import cleanly in the project venv (`uv sync` materialized the pre-declared `plotly>=5.0` pin) — unblocks every downstream AppTest and page that imports plotly, per RESEARCH Pitfall 2
-- Empirically confirmed RESEARCH A6: `petringa.run_cv` used as a module attribute (`import petringa; petringa.run_cv(cfg)`) is mockable via `monkeypatch.setattr(petringa, "run_cv", fake_run_cv)` inside an `AppTest.from_function` wrapper — the fake (2-point array) is proven invoked instead of a real devsim solve (which defaults to 40 points)
-- Decided and documented the mandatory page import style for 39-03/39-04: `import petringa; petringa.run_*(cfg)`, never `from petringa import run_*`
+- Empirically confirmed RESEARCH A6: `etna.run_cv` used as a module attribute (`import etna; etna.run_cv(cfg)`) is mockable via `monkeypatch.setattr(etna, "run_cv", fake_run_cv)` inside an `AppTest.from_function` wrapper — the fake (2-point array) is proven invoked instead of a real devsim solve (which defaults to 40 points)
+- Decided and documented the mandatory page import style for 39-03/39-04: `import etna; etna.run_*(cfg)`, never `from etna import run_*`
 
 ## Task Commits
 
 Each task was committed atomically:
 
 1. **Task 1: Materialize plotly into the venv via uv** — no source files modified (dependency materialization only); verified inline, no separate commit (folded into Task 2's commit per plan's `files_modified` scope, which lists only the test file)
-2. **Task 2: Spike — prove petringa.run_cv is mockable under AppTest.from_function** - `c8d1c7d` (test)
+2. **Task 2: Spike — prove etna.run_cv is mockable under AppTest.from_function** - `c8d1c7d` (test)
 
 **Plan metadata:** (this commit, following SUMMARY write)
 
@@ -72,11 +72,11 @@ _Note: Task 1 has no `files_modified` entry in the plan frontmatter (dependency 
 
 ## Files Created/Modified
 
-- `tests/test_app_run_mockability.py` - Spike test proving `petringa.run_cv` is mockable as a module attribute under `AppTest.from_function`; establishes the monkeypatch seam pattern for all future page tests
+- `tests/test_app_run_mockability.py` - Spike test proving `etna.run_cv` is mockable as a module attribute under `AppTest.from_function`; establishes the monkeypatch seam pattern for all future page tests
 
 ## Decisions Made
 
-- Confirmed RESEARCH A6 (module-attribute reference style for `petringa.run_*` facades) via a passing empirical spike, rather than accepting it purely on paper. This is now a hard constraint for 39-03/39-04 page implementations.
+- Confirmed RESEARCH A6 (module-attribute reference style for `etna.run_*` facades) via a passing empirical spike, rather than accepting it purely on paper. This is now a hard constraint for 39-03/39-04 page implementations.
 - Task 1 (uv sync) produced no diff to commit on its own since `pyproject.toml` was correctly left untouched (dependency was already pinned) and `uv.lock`/venv state is not itself a tracked deliverable file per the plan's `files_modified` scope — verified via `uv run python -c "import plotly.graph_objects"` exiting 0 and `git diff --stat pyproject.toml` being empty.
 
 ## Deviations from Plan
@@ -108,7 +108,7 @@ None - no external service configuration required.
 ## Next Phase Readiness
 
 - plotly is confirmed importable in the venv; downstream page plans (39-02, 39-03, 39-04) can safely import `plotly.graph_objects` in AppTest-covered code without import failures.
-- The mock seam for `petringa.run_*` facades is proven and documented: all Phase 39 page implementations MUST use `import petringa; petringa.run_*(cfg)` (module-attribute call style), never `from petringa import run_*`, to remain testable via `monkeypatch.setattr(petringa, "run_*", fake)`.
+- The mock seam for `etna.run_*` facades is proven and documented: all Phase 39 page implementations MUST use `import etna; etna.run_*(cfg)` (module-attribute call style), never `from etna import run_*`, to remain testable via `monkeypatch.setattr(etna, "run_*", fake)`.
 - No blockers for Wave 1+ plans.
 
 ---
