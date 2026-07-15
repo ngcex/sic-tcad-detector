@@ -141,10 +141,13 @@ supply.
 
 ## Scientific status & known limitations
 
-This code has undergone deep physics audits (`.planning/PHYSICS_AUDIT_v*.md`)
-and a full v5.0 integration audit (`.planning/milestones/v5.0-MILESTONE-AUDIT.md`,
-21/25 requirements satisfied, 4 partial with disclosed upstream cause). In the
-interest of honesty, the current limitations are:
+This code has undergone deep physics audits (`.planning/PHYSICS_AUDIT_v*.md`),
+a full v5.0 integration audit (`.planning/milestones/v5.0-MILESTONE-AUDIT.md`,
+21/25 requirements satisfied, 4 partial with disclosed upstream cause), and a
+literature validation pass (`.planning/VALIDATION_LITERATURE.md`) comparing
+simulated C–V against an independently published, open-access 4H-SiC device
+(Bruzzi & Verroi 2023) — high-bias depletion width agrees to within 2% of the
+reported value. In the interest of honesty, the current limitations are:
 
 - ✅ **Solid / publishable:** electrostatics, C–V, CCE-vs-bias, the calibrated
   graded-doping 2D model (converges to −50 V, matches C–V R² ≥ 0.99 over 0…−50 V).
