@@ -572,7 +572,7 @@ Plans:
 
 **Wave 1**
 
-- [ ] 43-01-PLAN.md — Audit deliverable: pytest per-file isolation gate, correct 6 stale REQUIREMENTS.md checkboxes, write v5.0-MILESTONE-AUDIT.md (coverage matrix + FEAT-05 partial disposition + v6.0 tech-debt backlog)
+- [x] 43-01-PLAN.md — Audit deliverable: pytest per-file isolation gate, correct 6 stale REQUIREMENTS.md checkboxes, write v5.0-MILESTONE-AUDIT.md (coverage matrix + FEAT-05 partial disposition + v6.0 tech-debt backlog)
 
 **Wave 2** _(depends on 43-01)_
 
@@ -624,4 +624,4 @@ Plans:
 | 40. Geometry Viewer                             | v5.0      | 2/2            | Complete    | 2026-07-13 |
 | 41. Radiation Damage + Dark Current Pages       | v5.0      | 3/3            | Complete    | 2026-07-13 |
 | 42. Microdosimetry Page + Batch Sweep Page      | v5.0      | 3/3            | Complete    | 2026-07-14 |
-| 43. Integration Audit — All 20 Notebooks        | v5.0      | 0/0            | Not started | -          |
+| 43. Integration Audit — All 20 Notebooks        | v5.0      | 1/2 | In Progress|  |
