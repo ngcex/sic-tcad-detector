@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
-from petringa.core.plotting import (
+from etna.core.plotting import (
     plot_electric_field,
     plot_electric_field_multi,
     plot_depletion_width_vs_bias,
@@ -148,7 +148,7 @@ class TestSaveFigure:
 
     def test_creates_png_and_pdf(self, tmp_path, monkeypatch):
         """save_figure should create both .png and .pdf files."""
-        import petringa.core.plotting as plotting_mod
+        import etna.core.plotting as plotting_mod
 
         # Monkeypatch os.path.dirname to redirect figures directory
         original_dirname = os.path.dirname

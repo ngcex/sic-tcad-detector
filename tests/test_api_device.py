@@ -1,7 +1,7 @@
 """Tests for the public build_device() API facade.
 
 WR-03 regression guard: build_device() is the dispatch point between the
-1D and 2D construction paths (petringa/api/device.py) and was previously
+1D and 2D construction paths (etna/api/device.py) and was previously
 only exercised indirectly through run_cv/run_field. These tests assert its
 DD-initialization and dimension-tagging contract directly for both
 branches, so a regression that broke device_name uniqueness or the
@@ -11,8 +11,8 @@ a full run_cv/run_field solve.
 
 import pytest
 
-from petringa import DeviceConfig
-from petringa.api.device import build_device
+from etna import DeviceConfig
+from etna.api.device import build_device
 
 
 @pytest.mark.slow

@@ -14,7 +14,7 @@ import pytest
 import devsim
 import numpy as np
 
-from petringa.core.charge_collection_2d import (
+from etna.core.charge_collection_2d import (
     integrate_over_mesh_2d,
     create_2d_dd_device,
     compute_cce_2d,
@@ -23,13 +23,13 @@ from petringa.core.charge_collection_2d import (
     compare_cce_2d_vs_1d,
     _robust_dc_solve,
 )
-from petringa.core.device2d import create_sic_2d_device
-from petringa.core.poisson import setup_poisson, solve_equilibrium
-from petringa.core.drift_diffusion import (
+from etna.core.device2d import create_sic_2d_device
+from etna.core.poisson import setup_poisson, solve_equilibrium
+from etna.core.drift_diffusion import (
     setup_sic_drift_diffusion,
     ramp_bias,
 )
-from petringa.core.charge_collection import add_generation_to_dd, compute_cce_from_dd
+from etna.core.charge_collection import add_generation_to_dd, compute_cce_from_dd
 
 
 @pytest.fixture
@@ -126,7 +126,7 @@ class TestComputeCCE2D:
             cce_2d = compute_cce_2d(device_info_2d, gen_2d)
 
             # 1D reference
-            from petringa.core.drift_diffusion import create_dd_device
+            from etna.core.drift_diffusion import create_dd_device
 
             dev_id = uuid.uuid4().hex[:8]
             device_info_1d = create_dd_device(

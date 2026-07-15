@@ -11,8 +11,8 @@ literal "dark current vs temperature" wording. This module implements ONLY
 that design.
 
 The user picks a temperature range (T_min, T_max, n_temperatures) and a
-single FIXED operating bias (V_bias). `petringa.ParametricSweep(param="T",
-sim_fn=petringa.run_dark_current, ...)` clones the device config once per
+single FIXED operating bias (V_bias). `etna.ParametricSweep(param="T",
+sim_fn=etna.run_dark_current, ...)` clones the device config once per
 temperature (via `dataclasses.replace`) and calls `run_dark_current` at the
 fixed bias for each clone, returning a `list[SimResult]` of length
 `n_temperatures`. Because `run_dark_current` is itself a facade over a small
@@ -29,9 +29,9 @@ first (and only) point from each per-temperature result and skipping any
 temperature whose result came back empty (a per-temperature truncation/
 failure), so a partial sweep degrades gracefully instead of crashing.
 
-`petringa.ParametricSweep` and `petringa.run_dark_current` are referenced as
-MODULE ATTRIBUTES (not `from petringa import ...`) so tests can intercept
-`run_dark_current` via monkeypatch.setattr(petringa, "run_dark_current",
+`etna.ParametricSweep` and `etna.run_dark_current` are referenced as
+MODULE ATTRIBUTES (not `from etna import ...`) so tests can intercept
+`run_dark_current` via monkeypatch.setattr(etna, "run_dark_current",
 fake) -- the seam proven in tests/test_app_run_mockability.py (39-01) -- while
 the real `ParametricSweep.run()` orchestration logic still executes.
 """
@@ -41,7 +41,7 @@ from __future__ import annotations
 import numpy as np
 import streamlit as st
 
-import petringa
+import etna
 from app.components.results import build_dark_current_figure, to_csv_bytes
 
 
@@ -105,11 +105,11 @@ def render() -> None:
             "S_p": S_p,
         }
         try:
-            sweep_results = petringa.ParametricSweep(
+            sweep_results = etna.ParametricSweep(
                 base_config=cfg,
                 param="T",
                 values=temperatures,
-                sim_fn=petringa.run_dark_current,
+                sim_fn=etna.run_dark_current,
                 sim_kwargs=sim_kwargs,
             ).run()
 
@@ -127,7 +127,7 @@ def render() -> None:
                 I_TAT.append(result.metadata["I_TAT"][0])
                 I_SRV.append(result.metadata["I_SRV"][0])
 
-            aggregated = petringa.SimResult(
+            aggregated = etna.SimResult(
                 config=cfg,
                 sim_type="dark_current",
                 x=np.array(T_ok),

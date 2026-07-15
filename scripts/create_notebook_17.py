@@ -85,8 +85,8 @@ import numpy as np
 import pandas as pd
 import time
 
-from petringa.core.single_particle import load_cce_let_table
-from petringa.core.mc_coupling import load_mc_events_csv, process_mc_ensemble, pulse_height_distribution
+from etna.core.single_particle import load_cce_let_table
+from etna.core.mc_coupling import load_mc_events_csv, process_mc_ensemble, pulse_height_distribution
 
 # Publication-quality plot defaults
 plt.rcParams.update({
@@ -617,7 +617,7 @@ print("\\n--- Adapting for Real Geant4 Data ---")
 print(\"\"\"
     # For Geant4 ROOT output files:
     #
-    # from petringa.core.mc_coupling import load_mc_events_root
+    # from etna.core.mc_coupling import load_mc_events_root
     #
     # events = load_mc_events_root(
     #     'path/to/geant4_output.root',

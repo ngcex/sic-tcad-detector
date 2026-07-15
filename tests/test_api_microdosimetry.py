@@ -15,8 +15,8 @@ from pathlib import Path
 
 import numpy as np
 
-from petringa import DeviceConfig, run_microdosimetry
-from petringa.api.results import SimResult
+from etna import DeviceConfig, run_microdosimetry
+from etna.api.results import SimResult
 
 # CWD-independent path to the committed synthetic MC-events fixture.
 MC_CSV_PATH = Path(__file__).parent.parent / "data" / "synthetic_mc_events.csv"

@@ -33,8 +33,8 @@ class TestPoisson2DSolve:
 
     def test_equilibrium_converges_2d(self):
         """2D Poisson solve should converge at 0V equilibrium."""
-        from petringa.core.device2d import create_sic_2d_device
-        from petringa.core.poisson import setup_poisson, solve_equilibrium
+        from etna.core.device2d import create_sic_2d_device
+        from etna.core.poisson import setup_poisson, solve_equilibrium
 
         dev = create_sic_2d_device(
             device_name=_unique_name(), half_width_um=50, doping_profile="graded"
@@ -57,8 +57,8 @@ class TestPoisson2DSolve:
 
     def test_potential_range_physical(self):
         """Equilibrium potential should be in a physically reasonable range."""
-        from petringa.core.device2d import create_sic_2d_device
-        from petringa.core.poisson import setup_poisson, solve_equilibrium
+        from etna.core.device2d import create_sic_2d_device
+        from etna.core.poisson import setup_poisson, solve_equilibrium
 
         dev = create_sic_2d_device(
             device_name=_unique_name(), half_width_um=50, doping_profile="graded"
@@ -83,8 +83,8 @@ class TestPoisson2DSolve:
     def test_reverse_bias_solves(self):
         """2D Poisson should converge under +5V cathode reverse bias."""
         import devsim.python_packages.simple_physics as simple_physics
-        from petringa.core.device2d import create_sic_2d_device
-        from petringa.core.poisson import setup_poisson, solve_equilibrium
+        from etna.core.device2d import create_sic_2d_device
+        from etna.core.poisson import setup_poisson, solve_equilibrium
 
         dev = create_sic_2d_device(
             device_name=_unique_name(), half_width_um=50, doping_profile="graded"
@@ -123,9 +123,9 @@ class TestValidation2Dvs1D:
     @pytest.fixture(scope="class")
     def solved_devices(self):
         """Create and solve both 1D and 2D devices with matching parameters."""
-        from petringa.core.device import create_sic_device
-        from petringa.core.device2d import create_sic_2d_device
-        from petringa.core.poisson import setup_poisson, solve_equilibrium
+        from etna.core.device import create_sic_device
+        from etna.core.device2d import create_sic_2d_device
+        from etna.core.poisson import setup_poisson, solve_equilibrium
 
         # Matching parameters for fair comparison
         params = dict(
@@ -150,7 +150,7 @@ class TestValidation2Dvs1D:
 
     def test_potential_matches_1d_within_1pct(self, solved_devices):
         """2D center-column potential should match 1D within 1%."""
-        from petringa.core.plotting2d import validate_2d_vs_1d
+        from etna.core.plotting2d import validate_2d_vs_1d
 
         dev_1d, dev_2d = solved_devices
         result = validate_2d_vs_1d(dev_2d, dev_1d)
@@ -160,7 +160,7 @@ class TestValidation2Dvs1D:
 
     def test_efield_matches_1d_within_1pct(self, solved_devices):
         """2D center-column E-field should match 1D within 1%."""
-        from petringa.core.plotting2d import validate_2d_vs_1d
+        from etna.core.plotting2d import validate_2d_vs_1d
 
         dev_1d, dev_2d = solved_devices
         result = validate_2d_vs_1d(dev_2d, dev_1d)
@@ -175,8 +175,8 @@ class TestVisualization2D:
     @pytest.fixture(scope="class")
     def solved_2d_device(self):
         """Create and solve a 2D device for visualization tests."""
-        from petringa.core.device2d import create_sic_2d_device
-        from petringa.core.poisson import setup_poisson, solve_equilibrium
+        from etna.core.device2d import create_sic_2d_device
+        from etna.core.poisson import setup_poisson, solve_equilibrium
 
         dev = create_sic_2d_device(
             device_name=_unique_name(), half_width_um=50, doping_profile="graded"
@@ -187,7 +187,7 @@ class TestVisualization2D:
 
     def test_plot_potential_returns_figure(self, solved_2d_device):
         """plot_potential_2d should return (fig, ax)."""
-        from petringa.core.plotting2d import plot_potential_2d
+        from etna.core.plotting2d import plot_potential_2d
 
         dev = solved_2d_device
         fig, ax = plot_potential_2d(dev["device_name"], dev["region_name"])
@@ -197,7 +197,7 @@ class TestVisualization2D:
 
     def test_plot_efield_returns_figure(self, solved_2d_device):
         """plot_efield_2d should return (fig, ax)."""
-        from petringa.core.plotting2d import plot_efield_2d
+        from etna.core.plotting2d import plot_efield_2d
 
         dev = solved_2d_device
         fig, ax = plot_efield_2d(dev["device_name"], dev["region_name"])
@@ -207,7 +207,7 @@ class TestVisualization2D:
 
     def test_triangulation_has_correct_shape(self, solved_2d_device):
         """Triangulation should have correct node count and triangle shape."""
-        from petringa.core.plotting2d import get_triangulation
+        from etna.core.plotting2d import get_triangulation
 
         dev = solved_2d_device
         tri = get_triangulation(dev["device_name"], dev["region_name"])

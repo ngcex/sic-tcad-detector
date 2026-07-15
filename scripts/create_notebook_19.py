@@ -68,28 +68,28 @@ import numpy as np
 import pandas as pd
 import logging
 
-from petringa.core.alternative_structures import (
+from etna.core.alternative_structures import (
     create_mesa_device,
     create_3d_electrode_device,
     create_delta_e_e_device,
     create_guard_ring_device,
     restore_cartesian_coords,
 )
-from petringa.core.charge_collection_2d import (
+from etna.core.charge_collection_2d import (
     create_2d_dd_device,
     compute_cce_2d,
     cce_lateral_scan,
 )
-from petringa.core.poisson import setup_poisson, solve_equilibrium, ramp_voltage
-from petringa.core.drift_diffusion import setup_sic_drift_diffusion, ramp_bias
-from petringa.core.single_particle import (
+from etna.core.poisson import setup_poisson, solve_equilibrium, ramp_voltage
+from etna.core.drift_diffusion import setup_sic_drift_diffusion, ramp_bias
+from etna.core.single_particle import (
     ion_track_generation_2d,
     simulate_single_particle,
     build_cce_let_table,
     load_cce_let_table,
 )
-from petringa.core.mc_coupling import load_mc_events_csv, process_mc_ensemble
-from petringa.core.microdosimetry import (
+from etna.core.mc_coupling import load_mc_events_csv, process_mc_ensemble
+from etna.core.microdosimetry import (
     mean_chord_length,
     lineal_energy_spectrum,
     compute_kappa_table,
@@ -295,7 +295,7 @@ try:
     # CCE at a few radial positions (from column edge to outer radius)
     # Cannot use cce_lateral_scan directly -- need manual computation
     # for cylindrical geometry
-    from petringa.core.charge_collection_2d import compute_cce_2d
+    from etna.core.charge_collection_2d import compute_cce_2d
     region = elec3d_info['region_name']
     device = elec3d_info['device_name']
     x_nodes = np.array(devsim.get_node_model_values(
@@ -488,7 +488,7 @@ try:
     print(f"  E-stop region:  {dee_info.get('region_name_e', 'N/A')}")
 
     # Setup Poisson on both regions
-    from petringa.core.alternative_structures import _setup_poisson_region
+    from etna.core.alternative_structures import _setup_poisson_region
     region_de = dee_info.get('region_name_de', 'delta_e')
     region_e = dee_info.get('region_name_e', 'e_stop')
     device = dee_info['device_name']
@@ -510,7 +510,7 @@ try:
     print("  Equilibrium solved.")
 
     # Ramp bias on de_anode
-    from petringa.core.poisson import ramp_voltage
+    from etna.core.poisson import ramp_voltage
     ramp_voltage(dee_info, V_target=V_BIAS, contact="de_anode", V_step=5.0)
     print(f"  Bias ramped to {V_BIAS}V on de_anode.")
 

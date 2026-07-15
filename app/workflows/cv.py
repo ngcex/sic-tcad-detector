@@ -3,9 +3,9 @@
 All Streamlit calls live inside render() -- no module-level side effects --
 so this module can be imported for st.Page registration (app/main.py) and
 exercised headlessly via AppTest.from_function(render) in tests
-(tests/test_app_cv_page.py). petringa.run_cv is referenced as a MODULE
-ATTRIBUTE (not `from petringa import run_cv`) so tests can intercept it via
-monkeypatch.setattr(petringa, "run_cv", fake) -- the seam proven in
+(tests/test_app_cv_page.py). etna.run_cv is referenced as a MODULE
+ATTRIBUTE (not `from etna import run_cv`) so tests can intercept it via
+monkeypatch.setattr(etna, "run_cv", fake) -- the seam proven in
 tests/test_app_run_mockability.py (39-01).
 """
 
@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-import petringa
+import etna
 from app.components.results import (
     build_cv_figure,
     build_mott_schottky_figure,
@@ -39,7 +39,7 @@ def render() -> None:
 
     if st.button("Run simulation"):
         try:
-            st.session_state["cv_result"] = petringa.run_cv(cfg)
+            st.session_state["cv_result"] = etna.run_cv(cfg)
         except RuntimeError as e:
             st.error(
                 f"Simulation failed to converge: {e}\n\n"

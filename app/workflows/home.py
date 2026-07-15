@@ -11,7 +11,7 @@ import streamlit as st
 
 
 def render() -> None:
-    st.title("petringa — SiC TCAD Simulator")
+    st.title("ETNA — SiC TCAD Simulator")
     st.write(
         "Configure a device in the sidebar, then choose a simulation workflow "
         "from the navigation to explore its results."

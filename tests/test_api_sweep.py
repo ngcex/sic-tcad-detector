@@ -15,8 +15,8 @@ unknown field) while sidestepping devsim's process-global device exhaustion
 import numpy as np
 import pytest
 
-from petringa import DeviceConfig, ParametricSweep
-from petringa.api.results import SimResult
+from etna import DeviceConfig, ParametricSweep
+from etna.api.results import SimResult
 
 
 def fake_sim(cfg, **kw):

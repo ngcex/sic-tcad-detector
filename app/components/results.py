@@ -1,7 +1,7 @@
 """Shared result rendering: pure Plotly figure builders + CSV serializer.
 
 All functions in this module are PURE — no `st.*` calls anywhere. They turn a
-`petringa.SimResult` into either a `plotly.graph_objects.Figure` (or a tuple
+`etna.SimResult` into either a `plotly.graph_objects.Figure` (or a tuple
 of figures) or downloadable CSV bytes. Kept in one shared module (not
 duplicated per page) so plans 39-03 and 39-04 build against one blueprint.
 
@@ -12,14 +12,14 @@ and the figure builders are consumed identically by every results page.
 
 from __future__ import annotations
 
-import petringa
+import etna
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from dataclasses import asdict
 from datetime import datetime, timezone
 
-from petringa import SimResult
+from etna import SimResult
 
 
 def build_cv_figure(result: SimResult) -> go.Figure:
@@ -101,7 +101,7 @@ def build_dark_current_figure(result: SimResult) -> go.Figure:
     I_TAT can be negative (net generation, not recombination sign) and
     I_SRV can be exactly 0.0 at default S_n/S_p — each trace is abs()'d and
     only added if it has any positive value, mirroring
-    petringa.core.dark_current.plot_dark_current_decomposition's existing
+    etna.core.dark_current.plot_dark_current_decomposition's existing
     abs() + zero-guard pattern.
     """
     fig = go.Figure()
@@ -228,7 +228,7 @@ def to_csv_bytes(result: SimResult) -> bytes:
 
     Dispatches on `result.sim_type` ("cv" | "cce" | "field") to produce the
     correct columns, and prepends a commented "#" metadata header carrying
-    an ISO-8601 UTC timestamp, the petringa software version, and every
+    an ISO-8601 UTC timestamp, the etna software version, and every
     field of the device config (for traceability). Pure function — no
     `st.*` calls, no temp files; the CSV is built entirely in memory.
     """
@@ -310,8 +310,8 @@ def to_csv_bytes(result: SimResult) -> bytes:
     generated_at = datetime.now(timezone.utc).isoformat()
 
     header_lines = [
-        f"# petringa SiC TCAD Simulator — {result.sim_type} result",
-        f"# software_version: {petringa.__version__}",
+        f"# ETNA SiC TCAD Simulator — {result.sim_type} result",
+        f"# software_version: {etna.__version__}",
         f"# generated: {generated_at}",
         f"# device: {device_fields}",
         *extra_header_lines,
@@ -338,8 +338,8 @@ def sweep_results_to_csv_bytes(results, param, values) -> bytes:
     ]
     combined = pd.concat(frames, ignore_index=True)
     header_lines = [
-        f"# petringa SiC TCAD Simulator — parametric sweep ({param})",
-        f"# software_version: {petringa.__version__}",
+        f"# ETNA SiC TCAD Simulator — parametric sweep ({param})",
+        f"# software_version: {etna.__version__}",
         f"# generated: {datetime.now(timezone.utc).isoformat()}",
         f"# swept_values: {list(values)}",
     ]

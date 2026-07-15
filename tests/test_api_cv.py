@@ -2,7 +2,7 @@
 
 Mirrors tests/test_cv.py::TestCvSweepIntegration's physics assertions
 (W(0V) sane band, C decreasing with reverse bias) but exercises them
-through the public `petringa.run_cv()` facade rather than calling
+through the public `etna.run_cv()` facade rather than calling
 `core.cv_analysis.cv_sweep` directly, proving the DeviceConfig ->
 build_device -> cv_sweep -> SimResult contract end-to-end (LIB-02/LIB-05).
 """
@@ -10,8 +10,8 @@ build_device -> cv_sweep -> SimResult contract end-to-end (LIB-02/LIB-05).
 import numpy as np
 import pytest
 
-from petringa import DeviceConfig, run_cv
-from petringa.api.results import SimResult
+from etna import DeviceConfig, run_cv
+from etna.api.results import SimResult
 
 
 @pytest.mark.slow

@@ -1,7 +1,7 @@
 """Radiation Damage page AppTest coverage: persistent banner + Run->cache->
 render->download + NaN tolerance.
 
-Each test monkeypatches petringa.run_radiation_damage as a MODULE ATTRIBUTE
+Each test monkeypatches etna.run_radiation_damage as a MODULE ATTRIBUTE
 (the seam proven in tests/test_app_run_mockability.py / 39-01) BEFORE
 calling at.run(), so the real (expensive) devsim solve never executes.
 Mirrors tests/test_app_field_page.py's structure: a `_run_radiation_damage_page()`
@@ -16,8 +16,8 @@ from __future__ import annotations
 import numpy as np
 from streamlit.testing.v1 import AppTest
 
-import petringa
-from petringa import DeviceConfig, SimResult
+import etna
+from etna import DeviceConfig, SimResult
 
 
 def _fake_run_radiation_damage(cfg, **kwargs):
@@ -55,7 +55,7 @@ def _run_radiation_damage_page():
 
 
 def test_kappa_banner_persistent(monkeypatch):
-    monkeypatch.setattr(petringa, "run_radiation_damage", _fake_run_radiation_damage)
+    monkeypatch.setattr(etna, "run_radiation_damage", _fake_run_radiation_damage)
 
     at = AppTest.from_function(_run_radiation_damage_page)
     # session_state is empty by default (do not pre-seed device_config).
@@ -70,7 +70,7 @@ def test_kappa_banner_persistent(monkeypatch):
 
 
 def test_empty_state_guard(monkeypatch):
-    monkeypatch.setattr(petringa, "run_radiation_damage", _fake_run_radiation_damage)
+    monkeypatch.setattr(etna, "run_radiation_damage", _fake_run_radiation_damage)
 
     at = AppTest.from_function(_run_radiation_damage_page)
     at.run()
@@ -81,7 +81,7 @@ def test_empty_state_guard(monkeypatch):
 
 
 def test_run_caches_damage_result(monkeypatch):
-    monkeypatch.setattr(petringa, "run_radiation_damage", _fake_run_radiation_damage)
+    monkeypatch.setattr(etna, "run_radiation_damage", _fake_run_radiation_damage)
 
     at = AppTest.from_function(_run_radiation_damage_page)
     at.session_state["device_config"] = DeviceConfig()
@@ -100,7 +100,7 @@ def test_run_caches_damage_result(monkeypatch):
 
 def test_nan_in_result_does_not_crash(monkeypatch):
     monkeypatch.setattr(
-        petringa, "run_radiation_damage", _fake_run_radiation_damage_with_nan
+        etna, "run_radiation_damage", _fake_run_radiation_damage_with_nan
     )
 
     at = AppTest.from_function(_run_radiation_damage_page)
@@ -123,7 +123,7 @@ def test_solver_convergence_failure_shows_error_not_crash(monkeypatch):
             "ramp_bias: failed to converge at V=-20.000V: Convergence failure!"
         )
 
-    monkeypatch.setattr(petringa, "run_radiation_damage", _raise_run_radiation_damage)
+    monkeypatch.setattr(etna, "run_radiation_damage", _raise_run_radiation_damage)
 
     at = AppTest.from_function(_run_radiation_damage_page)
     at.session_state["device_config"] = DeviceConfig()
@@ -140,7 +140,7 @@ def test_solver_convergence_failure_shows_error_not_crash(monkeypatch):
 
 
 def test_2d_config_shows_1d_only_warning(monkeypatch):
-    monkeypatch.setattr(petringa, "run_radiation_damage", _fake_run_radiation_damage)
+    monkeypatch.setattr(etna, "run_radiation_damage", _fake_run_radiation_damage)
 
     at = AppTest.from_function(_run_radiation_damage_page)
     at.session_state["device_config"] = DeviceConfig(half_width_um=50.0)

@@ -13,7 +13,7 @@ import pytest
 
 def test_import_reset_devsim_fully():
     """Test 1: public API imports succeed."""
-    from petringa.core.devsim_reset import reset_devsim_fully, _CYLINDRICAL_GLOBALS
+    from etna.core.devsim_reset import reset_devsim_fully, _CYLINDRICAL_GLOBALS
 
     assert callable(reset_devsim_fully)
     assert isinstance(_CYLINDRICAL_GLOBALS, tuple)
@@ -21,7 +21,7 @@ def test_import_reset_devsim_fully():
 
 def test_cylindrical_globals_exact_contents():
     """Test 2: _CYLINDRICAL_GLOBALS is exactly the seven leaking globals."""
-    from petringa.core.devsim_reset import _CYLINDRICAL_GLOBALS
+    from etna.core.devsim_reset import _CYLINDRICAL_GLOBALS
 
     expected = (
         "raxis_zero",
@@ -39,7 +39,7 @@ def test_cylindrical_globals_exact_contents():
 def test_idempotent_on_empty_state():
     """Test 6 (partial): reset is safe to call on an empty session."""
     pytest.importorskip("devsim")
-    from petringa.core.devsim_reset import reset_devsim_fully
+    from etna.core.devsim_reset import reset_devsim_fully
 
     # Should not raise even with no devices / no cylindrical state.
     reset_devsim_fully()
@@ -52,7 +52,7 @@ class TestResetClearsState:
     def test_restores_cartesian_node_volume_model(self):
         """Test 3: after a cylindrical session, node_volume_model is Cartesian again."""
         devsim = pytest.importorskip("devsim")
-        from petringa.core.devsim_reset import reset_devsim_fully
+        from etna.core.devsim_reset import reset_devsim_fully
 
         # Simulate the leak: set the cylindrical assembly-model global.
         devsim.set_parameter(name="node_volume_model", value="CylindricalNodeVolume")
@@ -64,8 +64,8 @@ class TestResetClearsState:
     def test_deletes_all_devices(self):
         """Test 4: after reset, get_device_list() is empty."""
         devsim = pytest.importorskip("devsim")
-        from petringa.core.devsim_reset import reset_devsim_fully
-        from petringa.core.device2d import create_sic_2d_device
+        from etna.core.devsim_reset import reset_devsim_fully
+        from etna.core.device2d import create_sic_2d_device
 
         create_sic_2d_device(device_name="reset_canary_dev", half_width_um=50)
         assert len(devsim.get_device_list()) >= 1
@@ -75,7 +75,7 @@ class TestResetClearsState:
     def test_preserves_direct_solver(self):
         """Test 5: with preserve_solver=True the direct_solver is preserved."""
         devsim = pytest.importorskip("devsim")
-        from petringa.core.devsim_reset import reset_devsim_fully
+        from etna.core.devsim_reset import reset_devsim_fully
 
         devsim.set_parameter(name="direct_solver", value="mkl_pardiso")
         reset_devsim_fully(preserve_solver=True)

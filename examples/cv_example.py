@@ -1,7 +1,7 @@
 """LIB-05 vertical-slice validation script.
 
 Proves the DeviceConfig -> build_device -> core -> SimResult contract works
-end-to-end through the public `petringa` API: build a default device
+end-to-end through the public `etna` API: build a default device
 configuration, run a C-V sweep, and print the resulting bias and
 capacitance arrays. Capacitance must decrease monotonically as reverse bias
 increases (more negative bias -> lower C).
@@ -11,7 +11,7 @@ Run: python examples/cv_example.py
 
 from __future__ import annotations
 
-from petringa import DeviceConfig, run_cv
+from etna import DeviceConfig, run_cv
 
 
 def main() -> None:

@@ -12,7 +12,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from petringa import MeshData
+from etna import MeshData
 from app.components.geometry_viewer import build_geometry_figure, QUANTITIES
 
 

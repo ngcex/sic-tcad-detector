@@ -1,7 +1,7 @@
 """Microdosimetry page AppTest coverage: empty-state guard + no-file warning +
 upload->Run->cache happy path + malformed-CSV error-not-crash.
 
-Each test monkeypatches petringa.run_microdosimetry as a MODULE ATTRIBUTE
+Each test monkeypatches etna.run_microdosimetry as a MODULE ATTRIBUTE
 (the seam proven in tests/test_app_run_mockability.py / 39-01) BEFORE
 calling at.run(), so the real data pipeline never executes and the happy
 path stays deterministic. Mirrors tests/test_app_radiation_damage_page.py's
@@ -25,8 +25,8 @@ from pathlib import Path
 
 import numpy as np
 
-import petringa
-from petringa import DeviceConfig, SimResult
+import etna
+from etna import DeviceConfig, SimResult
 from streamlit.testing.v1 import AppTest
 
 
@@ -48,7 +48,7 @@ def _run_microdosimetry_page():
 
 
 def test_empty_state_guard(monkeypatch):
-    monkeypatch.setattr(petringa, "run_microdosimetry", _fake_run_microdosimetry)
+    monkeypatch.setattr(etna, "run_microdosimetry", _fake_run_microdosimetry)
 
     at = AppTest.from_function(_run_microdosimetry_page)
     # session_state is empty by default (do not pre-seed device_config).
@@ -60,7 +60,7 @@ def test_empty_state_guard(monkeypatch):
 
 
 def test_no_file_on_run_warns(monkeypatch):
-    monkeypatch.setattr(petringa, "run_microdosimetry", _fake_run_microdosimetry)
+    monkeypatch.setattr(etna, "run_microdosimetry", _fake_run_microdosimetry)
 
     at = AppTest.from_function(_run_microdosimetry_page)
     at.session_state["device_config"] = DeviceConfig()
@@ -80,7 +80,7 @@ def test_no_file_on_run_warns(monkeypatch):
 
 
 def test_upload_run_caches_spectrum(monkeypatch):
-    monkeypatch.setattr(petringa, "run_microdosimetry", _fake_run_microdosimetry)
+    monkeypatch.setattr(etna, "run_microdosimetry", _fake_run_microdosimetry)
 
     at = AppTest.from_function(_run_microdosimetry_page)
     at.session_state["device_config"] = DeviceConfig()
@@ -104,7 +104,7 @@ def test_malformed_csv_shows_error_not_crash(monkeypatch):
     def _raise_run_microdosimetry(cfg, mc_csv_path, **kwargs):
         raise ValueError("bad columns")
 
-    monkeypatch.setattr(petringa, "run_microdosimetry", _raise_run_microdosimetry)
+    monkeypatch.setattr(etna, "run_microdosimetry", _raise_run_microdosimetry)
 
     at = AppTest.from_function(_run_microdosimetry_page)
     at.session_state["device_config"] = DeviceConfig()

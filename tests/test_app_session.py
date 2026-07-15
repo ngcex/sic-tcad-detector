@@ -7,7 +7,7 @@ plain dict round-trip simulates st.session_state cross-page persistence
 without needing a running Streamlit server.
 """
 
-from petringa import DeviceConfig
+from etna import DeviceConfig
 from app.components.device_sidebar import assemble_config
 
 # Non-default values (mirrors tests/test_app_device_sidebar.py) so this test

@@ -1,6 +1,6 @@
 """Tests for the public run_field() API facade.
 
-Exercises run_field() through the public `petringa` package, proving the
+Exercises run_field() through the public `etna` package, proving the
 DeviceConfig -> build_device -> ramp_bias -> post-build MeshData extraction
 contract end-to-end (LIB-03), for both 1D (mesh.y_coords is None) and 2D
 (mesh.y_coords populated) devices. The 2D case is the regression guard for
@@ -12,8 +12,8 @@ the intended gate, so this test is always executed (never bypassed).
 import numpy as np
 import pytest
 
-from petringa import DeviceConfig, run_field
-from petringa.api.results import MeshData, SimResult
+from etna import DeviceConfig, run_field
+from etna.api.results import MeshData, SimResult
 
 
 @pytest.mark.slow
@@ -87,7 +87,7 @@ class TestRunFieldIntegration2D:
 
         # CR-01 regression guard: for 2D devices, SimResult.x/.y are not a
         # valid depth profile (the 2D mesh's x is lateral position, not
-        # depth; see petringa.core.device2d.create_sic_2d_device). They
+        # depth; see etna.core.device2d.create_sic_2d_device). They
         # must be empty, not a mislabeled lateral-position array — real
         # depth-profile data lives in `mesh` instead.
         assert len(result.x) == 0

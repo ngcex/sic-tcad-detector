@@ -2,7 +2,7 @@
 
 The LIB-06 acceptance bar is weak: each of the 5 devsim facades
 (run_radiation_damage, run_dark_current, run_temperature_sweep,
-run_flash_recombination, run_transient) must import from `petringa`, be
+run_flash_recombination, run_transient) must import from `etna`, be
 callable, and accept a `DeviceConfig` as its first positional argument.
 
 These are PURE introspection tests: no facade is actually called, so no
@@ -16,7 +16,7 @@ import inspect
 
 import pytest
 
-from petringa import (
+from etna import (
     DeviceConfig,
     run_dark_current,
     run_flash_recombination,
@@ -38,7 +38,7 @@ DEVSIM_FACADES = [
 
 @pytest.mark.parametrize("name,fn", DEVSIM_FACADES, ids=[n for n, _ in DEVSIM_FACADES])
 def test_facade_is_callable(name, fn):
-    """Each facade name imports from petringa and is callable."""
+    """Each facade name imports from etna and is callable."""
     assert callable(fn), f"{name} is not callable"
 
 
@@ -58,5 +58,5 @@ def test_facade_first_param_is_config(name, fn):
 
 
 def test_deviceconfig_importable():
-    """DeviceConfig is importable from petringa (first-arg type for all facades)."""
+    """DeviceConfig is importable from etna (first-arg type for all facades)."""
     assert DeviceConfig is not None

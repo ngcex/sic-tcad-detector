@@ -6,7 +6,7 @@ mapping (graded <-> uniform / N_D consistency), and dimensionality mapping
 assemble_config is a pure function, imported directly.
 """
 
-from petringa import DeviceConfig
+from etna import DeviceConfig
 from app.components.device_sidebar import assemble_config
 
 # Non-default values for all 11 DeviceConfig fields, uniform-profile mode
