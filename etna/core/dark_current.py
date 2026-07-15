@@ -34,7 +34,7 @@ from devsim.python_packages.model_create import (
     CreateNodeModelDerivative,
 )
 
-from petringa.core.drift_diffusion import (
+from etna.core.drift_diffusion import (
     create_dd_device,
     extract_contact_current,
     ramp_bias,
@@ -81,7 +81,7 @@ def nt_temperature_scale(T, params=None):
     float
         Dimensionless scale factor, 1.0 at T=300 K.
     """
-    from petringa.core.sic_material import SiC4H_Parameters, intrinsic_concentration
+    from etna.core.sic_material import SiC4H_Parameters, intrinsic_concentration
 
     if params is None:
         params = SiC4H_Parameters()
@@ -769,11 +769,11 @@ def dark_current_vs_fluence(
 
     import devsim.python_packages.simple_physics as simple_physics
 
-    from petringa.core.device import apply_damaged_params, create_sic_device
-    from petringa.core.drift_diffusion import setup_sic_drift_diffusion
-    from petringa.core.poisson import setup_poisson, solve_equilibrium
-    from petringa.core.radiation_damage import compute_damaged_params
-    from petringa.core.sic_material import srh_lifetime
+    from etna.core.device import apply_damaged_params, create_sic_device
+    from etna.core.drift_diffusion import setup_sic_drift_diffusion
+    from etna.core.poisson import setup_poisson, solve_equilibrium
+    from etna.core.radiation_damage import compute_damaged_params
+    from etna.core.sic_material import srh_lifetime
 
     fluence_range = np.asarray(fluence_range, dtype=float)
 
@@ -983,11 +983,11 @@ def dark_current_post_anneal(
 
     import devsim.python_packages.simple_physics as simple_physics
 
-    from petringa.core.device import apply_damaged_params, create_sic_device
-    from petringa.core.drift_diffusion import setup_sic_drift_diffusion
-    from petringa.core.poisson import setup_poisson, solve_equilibrium
-    from petringa.core.radiation_damage import compute_annealed_params
-    from petringa.core.sic_material import srh_lifetime
+    from etna.core.device import apply_damaged_params, create_sic_device
+    from etna.core.drift_diffusion import setup_sic_drift_diffusion
+    from etna.core.poisson import setup_poisson, solve_equilibrium
+    from etna.core.radiation_damage import compute_annealed_params
+    from etna.core.sic_material import srh_lifetime
 
     fluence = float(fluence)
 

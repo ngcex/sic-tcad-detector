@@ -29,9 +29,9 @@ import devsim
 import numpy as np
 import pandas as pd
 
-from petringa.core.charge_collection_2d import create_2d_dd_device, integrate_over_mesh_2d
-from petringa.core.charge_collection import add_generation_to_dd
-from petringa.core.drift_diffusion import extract_contact_current
+from etna.core.charge_collection_2d import create_2d_dd_device, integrate_over_mesh_2d
+from etna.core.charge_collection import add_generation_to_dd
+from etna.core.drift_diffusion import extract_contact_current
 
 logger = logging.getLogger(__name__)
 

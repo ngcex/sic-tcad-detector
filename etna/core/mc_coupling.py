@@ -28,7 +28,7 @@ import logging
 import numpy as np
 import pandas as pd
 
-from petringa.core.sic_material import SiC4H_Parameters
+from etna.core.sic_material import SiC4H_Parameters
 
 logger = logging.getLogger(__name__)
 
@@ -350,7 +350,7 @@ def events_to_charge_profiles(
         One dict per event with keys: event_id (int), LET_keV_um (float),
         generation (ndarray), Q_generated_C_per_cm (float).
     """
-    from petringa.core.single_particle import ion_track_generation_2d
+    from etna.core.single_particle import ion_track_generation_2d
 
     # Sum energy per event
     event_totals = events_df.groupby("event_id")["edep_keV"].sum()

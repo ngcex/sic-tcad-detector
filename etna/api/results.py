@@ -1,9 +1,9 @@
-"""Result dataclasses for the petringa public API.
+"""Result dataclasses for the etna public API.
 
 Defines `SimResult` and `MeshData` per design spec sections 3.2 and 3.3.
-This module must not import from the top-level `petringa` package (or
-`petringa.api.device`) at runtime, to avoid an import cycle once
-`petringa/__init__.py` re-exports these names alongside `DeviceConfig`.
+This module must not import from the top-level `etna` package (or
+`etna.api.device`) at runtime, to avoid an import cycle once
+`etna/__init__.py` re-exports these names alongside `DeviceConfig`.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 if TYPE_CHECKING:
-    from petringa.api.device import DeviceConfig
+    from etna.api.device import DeviceConfig
 
 
 @dataclass

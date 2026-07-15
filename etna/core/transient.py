@@ -28,10 +28,10 @@ import devsim
 import numpy as np
 import pandas as pd
 
-from petringa.core.charge_collection import add_generation_to_dd
-from petringa.core.drift_diffusion import create_dd_device, extract_contact_current, ramp_bias
-from petringa.core.flash_recombination import add_auger_recombination
-from petringa.core.generation_profiles import proton_generation_profile
+from etna.core.charge_collection import add_generation_to_dd
+from etna.core.drift_diffusion import create_dd_device, extract_contact_current, ramp_bias
+from etna.core.flash_recombination import add_auger_recombination
+from etna.core.generation_profiles import proton_generation_profile
 
 logger = logging.getLogger(__name__)
 

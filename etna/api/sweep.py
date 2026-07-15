@@ -1,4 +1,4 @@
-"""ParametricSweep utility for the petringa public API (design spec section 3.5).
+"""ParametricSweep utility for the etna public API (design spec section 3.5).
 
 `ParametricSweep` is pure-Python orchestration over any facade `sim_fn`
 (e.g. `run_cce`, `run_cv`): for each value in `values` it clones
@@ -13,8 +13,8 @@ Config cloning uses `dataclasses.replace`, which raises `TypeError` when
 + `eval`, which would allow arbitrary attribute injection into the config.
 
 This module must not import `DeviceConfig`/`SimResult` at runtime (only under
-TYPE_CHECKING), mirroring `petringa.api.results`, to avoid an import cycle
-once `petringa/__init__.py` re-exports these names alongside `DeviceConfig`.
+TYPE_CHECKING), mirroring `etna.api.results`, to avoid an import cycle
+once `etna/__init__.py` re-exports these names alongside `DeviceConfig`.
 """
 
 from __future__ import annotations
@@ -23,8 +23,8 @@ from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
-    from petringa.api.device import DeviceConfig
-    from petringa.api.results import SimResult
+    from etna.api.device import DeviceConfig
+    from etna.api.results import SimResult
 
 
 @dataclass
@@ -50,7 +50,7 @@ class ParametricSweep:
     --------
     Design spec section 3.5::
 
-        from petringa import DeviceConfig, ParametricSweep, run_cce
+        from etna import DeviceConfig, ParametricSweep, run_cce
 
         sweep = ParametricSweep(
             base_config=DeviceConfig(),

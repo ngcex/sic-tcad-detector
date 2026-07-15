@@ -29,13 +29,13 @@ import devsim
 import numpy as np
 import pandas as pd
 
-from petringa.core.analytical import built_in_potential, full_depletion_voltage_graded
-from petringa.core.charge_collection_2d import create_2d_dd_device, cce_lateral_scan
-from petringa.core.dark_current import setup_tat_model
-from petringa.core.devsim_reset import reset_devsim_fully
-from petringa.core.drift_diffusion import extract_contact_current
-from petringa.core.microdosimetry import mean_chord_length
-from petringa.core.sic_material import SiC4H_Parameters
+from etna.core.analytical import built_in_potential, full_depletion_voltage_graded
+from etna.core.charge_collection_2d import create_2d_dd_device, cce_lateral_scan
+from etna.core.dark_current import setup_tat_model
+from etna.core.devsim_reset import reset_devsim_fully
+from etna.core.drift_diffusion import extract_contact_current
+from etna.core.microdosimetry import mean_chord_length
+from etna.core.sic_material import SiC4H_Parameters
 
 # AUDIT Mj-3 (v5): minimum CCE for a config to be a trustworthy microdosimeter.
 # Below this, edge/center uniformity is meaningless (both-low CCE looks uniform).

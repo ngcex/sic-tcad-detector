@@ -1,9 +1,9 @@
-"""DeviceConfig dataclass and build_device() facade for the petringa public API.
+"""DeviceConfig dataclass and build_device() facade for the etna public API.
 
 `DeviceConfig` is the canonical, dimension-agnostic device configuration
 contract (design spec section 3.1). `build_device()` is a pure
 argument-marshalling + unit-conversion + standard-DD-setup facade over the
-existing `petringa.core.*` constructors — it performs no physics changes.
+existing `etna.core.*` constructors — it performs no physics changes.
 It dispatches on `config.half_width_um`: `None` builds a 1D device via
 `create_dd_device`, a float builds a 2D device via `create_sic_2d_device`
 followed by the same Poisson + drift-diffusion setup sequence used by
@@ -17,9 +17,9 @@ import uuid
 from dataclasses import dataclass
 from typing import Optional
 
-from petringa.core.device2d import create_sic_2d_device
-from petringa.core.drift_diffusion import create_dd_device, setup_sic_drift_diffusion
-from petringa.core.poisson import setup_poisson, solve_equilibrium
+from etna.core.device2d import create_sic_2d_device
+from etna.core.drift_diffusion import create_dd_device, setup_sic_drift_diffusion
+from etna.core.poisson import setup_poisson, solve_equilibrium
 
 
 @dataclass
@@ -47,8 +47,8 @@ def build_device(config: DeviceConfig, device_name: Optional[str] = None) -> dic
     """Build a DD-initialized devsim device from a DeviceConfig.
 
     Dispatches on `config.half_width_um`: None builds a 1D device
-    (`petringa.core.drift_diffusion.create_dd_device`), a float builds a 2D
-    device (`petringa.core.device2d.create_sic_2d_device`) followed by the
+    (`etna.core.drift_diffusion.create_dd_device`), a float builds a 2D
+    device (`etna.core.device2d.create_sic_2d_device`) followed by the
     same Poisson + drift-diffusion setup sequence used in
     `charge_collection_2d.py` (setup_poisson -> solve_equilibrium ->
     setup_sic_drift_diffusion -> dd_initialized=True). Every DeviceConfig

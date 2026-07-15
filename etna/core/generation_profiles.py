@@ -20,7 +20,7 @@ from scipy.special import erfc
 # Module-level constants
 # ---------------------------------------------------------------------------
 
-from petringa.core.sic_material import SiC4H_Parameters
+from etna.core.sic_material import SiC4H_Parameters
 
 _params = SiC4H_Parameters()
 RHO_SIC = _params.rho  # g/cm^3, 4H-SiC density
