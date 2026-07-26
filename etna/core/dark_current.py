@@ -4,7 +4,9 @@ Implements effective dark current generation for 4H-SiC detectors, combining:
 1. Modified SRH recombination with Z1/2 deep-level n1/p1 (not midgap)
 2. Effective depletion-region generation calibrated via N_t parameter
 3. Hurkx field-enhancement factor Gamma for voltage dependence
-4. Surface recombination velocity at contacts
+4. Surface recombination velocity at contacts (post-solve diagnostic
+   decomposition only, not a solver boundary condition — see
+   setup_surface_recombination() docstring)
 
 Physical context:
     Standard midgap SRH in 4H-SiC produces ~1e-49 A dark current because
@@ -299,9 +301,12 @@ def _compute_gamma_factors(device, region):
 def setup_surface_recombination(device_info, S_n=None, S_p=None, contact="cathode"):
     """Add surface recombination current at a contact.
 
-    Computes SRV current density at the contact and stores it for extraction.
-    The ohmic contact BC in devsim already enforces equilibrium carriers;
-    the SRV model provides an additional analytical current component.
+    Stores S_n/S_p on device_info for extract_dark_current_components(),
+    which computes J_SRV as post-solve Python/numpy from converged contact
+    Electrons/Holes. This is a diagnostic decomposition term, not a solver
+    boundary condition: the ohmic contact BC (CreateSiliconDriftDiffusionAtContact)
+    already pins Electrons/Holes at this contact via contact_equation(), so SRV
+    never appears in the DD residual and cannot be added as a competing BC here.
 
     Parameters
     ----------
@@ -316,36 +321,25 @@ def setup_surface_recombination(device_info, S_n=None, S_p=None, contact="cathod
     """
     device = device_info["device_name"]
     params = device_info["params"]
-    n_i = device_info["n_i"]
 
     if S_n is None:
         S_n = params.S_n
     if S_p is None:
         S_p = params.S_p
 
-    ni2 = n_i**2
-
     devsim.set_parameter(device=device, name=f"S_n_{contact}", value=S_n)
     devsim.set_parameter(device=device, name=f"S_p_{contact}", value=S_p)
 
-    srv_model = (
-        f"ElectronCharge * (Electrons * Holes - {ni2}) / "
-        f"((Electrons + {n_i}) / {S_p} + (Holes + {n_i}) / {S_n})"
-    )
-
-    model_name = f"srv_{contact}"
-    devsim.contact_node_model(
-        device=device, contact=contact, name=model_name, equation=srv_model
-    )
-
-    for var in ("Electrons", "Holes"):
-        deriv_name = f"{model_name}:{var}"
-        devsim.contact_node_model(
-            device=device,
-            contact=contact,
-            name=deriv_name,
-            equation="0",
-        )
+    # AUDIT v6 band-b: previously also created a `srv_{contact}` contact_node_model
+    # and hardcoded its `:Electrons`/`:Holes` Newton-Jacobian derivatives to "0".
+    # Investigation found that model was never attached via devsim.contact_equation()
+    # (the ohmic BC uses `{contact}nodeelectrons/holes` instead, see
+    # CreateSiliconDriftDiffusionAtContact) — so it was never part of the residual
+    # or Jacobian devsim assembles, and its derivative value (zero or symbolic) had
+    # no effect on the solve or on J_SRV (verified: byte-identical I_SRV with "0"
+    # vs `simplify(diff(...))` derivatives). It was dead/orphaned model state, not
+    # a Newton bug. Removed rather than "fixed" to avoid implying SRV is
+    # solver-coupled when it is a post-hoc diagnostic only.
 
     device_info["srv_initialized"] = True
     device_info["srv_contact"] = contact
