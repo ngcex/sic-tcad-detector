@@ -326,11 +326,11 @@ def sic_stopping_power_bragg(
     return grid, w_si * s_si_g + w_c * s_c_g
 
 
-def compute_kappa_table(water_csv_path=None, sic_csv_path=None, source="legacy"):
+def compute_kappa_table(water_csv_path=None, sic_csv_path=None, source=None):
     """Compute tissue-equivalence correction factor kappa(E) = S_water / S_SiC.
 
     .. danger::
-       AUDIT C-1 (v5) -- the ``source="legacy"`` path reads
+       AUDIT C-1 (v5) -- the ``source="legacy_unsafe"`` path reads
        ``data/stopping_power_{water,sic}.csv`` which are FABRICATED placeholders
        (kappa ~0.58, flat, sign-inverted). The physics requires kappa > 1 (water
        Z/A 0.555 vs SiC 0.499; I_water ~78 eV vs I_SiC ~136 eV); real NIST PSTAR
@@ -345,22 +345,47 @@ def compute_kappa_table(water_csv_path=None, sic_csv_path=None, source="legacy")
        error rather than returning a fabricated number. Network fetch is not used
        (offline/CI environment). See ``.planning/PHYSICS_AUDIT_v5.md`` (C-1/C-2).
 
+    .. important::
+       There is deliberately NO silent default. Omitting ``source`` (or passing
+       anything other than ``"bragg"``/``"legacy_unsafe"``) raises ``ValueError``.
+       This is a v6 physics-honesty fix: the old default (``source="legacy"``)
+       silently returned the fabricated, sign-inverted kappa with no exception --
+       only a log line nobody reads. See ``.planning/PHYSICS_REVIEW_v6.md``.
+
     Parameters
     ----------
     water_csv_path, sic_csv_path : str or Path, optional
-        Override input paths (legacy source only).
-    source : {"legacy", "bragg"}
-        "legacy" -- divide the (placeholder) water CSV by the SiC CSV (the v3.0
-        flat-kappa artefact; kept for regression continuity).
-        "bragg" -- compute SiC via Bragg additivity from elemental Si + C PSTAR
-        data in ``data/srim/`` and divide real water PSTAR by it (Phase 27).
+        Override input paths (``source="legacy_unsafe"`` only).
+    source : {"bragg", "legacy_unsafe"}
+        Required, no default. "bragg" -- compute SiC via Bragg additivity from
+        elemental Si + C PSTAR data in ``data/srim/`` and divide real water
+        PSTAR by it (Phase 27; currently DATA-BLOCKED, raises FileNotFoundError
+        until real data is dropped in). "legacy_unsafe" -- explicit opt-in to
+        the fabricated, sign-inverted v3.0 flat-kappa placeholder (~0.58); use
+        ONLY for illustrating the pipeline mechanics with a clearly-labeled fake
+        number, never as a stand-in for a real physics result.
 
     Returns
     -------
     dict
         energy_MeV : ndarray, kappa : ndarray, source : str
+
+    Raises
+    ------
+    ValueError
+        If ``source`` is omitted or not one of ``"bragg"``/``"legacy_unsafe"``.
     """
     data_dir = Path(__file__).parent.parent.parent / "data"
+
+    if source not in ("bragg", "legacy_unsafe"):
+        raise ValueError(
+            "compute_kappa_table() requires an explicit source= kwarg -- there "
+            "is no silent default. Pass source='bragg' for the real (currently "
+            "data-blocked) physics path, or source='legacy_unsafe' to "
+            "deliberately opt into the FABRICATED, sign-inverted placeholder "
+            "(~0.58, physically wrong -- real kappa is ~1.13-1.24) for pipeline "
+            f"illustration only. Got source={source!r}."
+        )
 
     if source == "bragg":
         srim = data_dir / "srim"
@@ -389,7 +414,7 @@ def compute_kappa_table(water_csv_path=None, sic_csv_path=None, source="legacy")
         )
         return {"energy_MeV": e_w, "kappa": kappa, "source": "bragg"}
 
-    # legacy (v3.0 flat-kappa artefact)
+    # legacy_unsafe (v3.0 flat-kappa artefact) -- explicit opt-in only, see above.
     if water_csv_path is None:
         water_csv_path = data_dir / "stopping_power_water.csv"
     if sic_csv_path is None:
@@ -398,13 +423,15 @@ def compute_kappa_table(water_csv_path=None, sic_csv_path=None, source="legacy")
     e_sic, s_sic = _load_stopping_powers(sic_csv_path)
     s_sic_interp = np.interp(e_water, e_sic, s_sic)
     kappa = s_water / s_sic_interp
-    logger.info(
-        "Kappa(legacy): %d points, range [%.3f, %.3f] (PLACEHOLDER -- see C-1)",
+    logger.warning(
+        "Kappa(legacy_unsafe): %d points, range [%.3f, %.3f] -- FABRICATED, "
+        "SIGN-INVERTED PLACEHOLDER, NOT REAL PHYSICS (real kappa ~1.13-1.24, "
+        "see C-1). Caller explicitly opted in via source='legacy_unsafe'.",
         len(kappa),
         float(np.min(kappa)),
         float(np.max(kappa)),
     )
-    return {"energy_MeV": e_water, "kappa": kappa, "source": "legacy"}
+    return {"energy_MeV": e_water, "kappa": kappa, "source": "legacy_unsafe"}
 
 
 def _is_placeholder_stopping_csv(path):
@@ -421,11 +448,14 @@ def _is_placeholder_stopping_csv(path):
 # ---------------------------------------------------------------------------
 
 
+_UNSET = object()
+
+
 def tissue_equivalence_correction(
     y_values,
     event_energies_keV=None,
     kappa_table=None,
-    kappa_constant=0.58,
+    kappa_constant=_UNSET,
     particle_energy_MeV=None,
 ):
     """Apply tissue-equivalence correction to lineal energy values.
@@ -446,6 +476,14 @@ def tissue_equivalence_correction(
     function falls back to the **energy-averaged** kappa (documented approximation)
     rather than silently using the wrong (deposited) energy variable.
 
+    .. important::
+       There is deliberately NO silent default for ``kappa_constant`` (v6
+       physics-honesty fix). If ``kappa_table`` is None, you must pass
+       ``kappa_constant`` explicitly: either a real physical value (~1.13-1.24,
+       see C-1) or the literal string ``"legacy_unsafe"`` to deliberately opt
+       into the fabricated, sign-inverted 0.58 placeholder. Omitting it raises
+       ``ValueError``. See ``.planning/PHYSICS_REVIEW_v6.md``.
+
     Parameters
     ----------
     y_values : array_like
@@ -455,9 +493,11 @@ def tissue_equivalence_correction(
         only for backward-compatible call signatures; ignored for the lookup.
     kappa_table : dict, optional
         From ``compute_kappa_table``. If None, uses ``kappa_constant``.
-    kappa_constant : float
-        Constant kappa when no table is given. Default 0.58 (legacy placeholder;
-        set to ~1.2 once real PSTAR data is in place, see C-1).
+    kappa_constant : float or "legacy_unsafe"
+        Constant kappa when no table is given. Required (no default) when
+        ``kappa_table`` is None: pass a real physical value (~1.13-1.24, see
+        C-1), or the literal string ``"legacy_unsafe"`` to explicitly opt into
+        the fabricated, sign-inverted 0.58 placeholder.
     particle_energy_MeV : float or array_like, optional
         Particle KINETIC energy (MeV) for the kappa(E) lookup -- scalar (beam) or
         per-event array. Correct variable per C-2.
@@ -466,15 +506,40 @@ def tissue_equivalence_correction(
     -------
     ndarray
         Tissue-equivalent lineal energy values in keV/um.
+
+    Raises
+    ------
+    ValueError
+        If ``kappa_table`` is None and ``kappa_constant`` is omitted.
     """
     y_values = np.asarray(y_values, dtype=np.float64)
 
     if kappa_table is None:
-        logger.warning(
-            "Constant kappa = %.3f (approximation; real kappa(E) varies ~10-30%%. "
-            "Use compute_kappa_table(source='bragg') once PSTAR data is in place).",
-            kappa_constant,
-        )
+        if kappa_constant is _UNSET:
+            raise ValueError(
+                "tissue_equivalence_correction() requires an explicit "
+                "kappa_constant= when kappa_table is None -- there is no "
+                "silent default. Pass a real physical value (~1.13-1.24, see "
+                "C-1) or kappa_constant='legacy_unsafe' to deliberately opt "
+                "into the FABRICATED, sign-inverted 0.58 placeholder for "
+                "pipeline illustration only."
+            )
+        if kappa_constant == "legacy_unsafe":
+            kappa_constant = 0.58
+            logger.warning(
+                "Constant kappa = %.3f -- FABRICATED, SIGN-INVERTED PLACEHOLDER, "
+                "NOT REAL PHYSICS (real kappa ~1.13-1.24, see C-1). Caller "
+                "explicitly opted in via kappa_constant='legacy_unsafe'.",
+                kappa_constant,
+            )
+        else:
+            logger.info(
+                "Constant kappa = %.3f (caller-supplied; real kappa(E) varies "
+                "~10-30%% with energy -- use compute_kappa_table(source='bragg') "
+                "for the energy-dependent correction once PSTAR data is in "
+                "place).",
+                kappa_constant,
+            )
         return kappa_constant * y_values
 
     E_grid = np.asarray(kappa_table["energy_MeV"], float)

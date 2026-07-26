@@ -108,7 +108,10 @@ md(
 - **SV half-width:** 50 um (100 um full width)
 - **Epitaxial thickness:** 10 um
 - **Bulk donor concentration:** 8.5 x 10^13 cm^-3 (calibrated value)
-- **Reverse bias:** 50 V (full depletion)
+- **Reverse bias:** 50 V (well above full depletion, V_fd ~10.5 V for the
+  10 um epi device with the current calibrated graded profile; 50 V is a
+  deep-depletion operating bias used for the sweep, not the depletion
+  threshold itself)
 
 ### Sweep Parameter Ranges
 The parametric optimization explores a reduced grid for practical wall-clock
@@ -592,8 +595,10 @@ md(
 **Important caveat:** These estimates represent the detector-intrinsic
 shot noise floor only. Real readout electronics (preamplifier noise,
 electromagnetic interference, leakage currents) will dominate the actual
-noise floor. Typical SiC dark currents (~18 pA at 50 V per our
-calibration) yield y_min well below the proton therapy range of interest.
+noise floor. Typical SiC dark currents (~18 pA, a single-point 1D
+calibration at -30 V, 300 K -- see DESIGN-1 caveats; not a live 2D
+computation at this cell's 50 V baseline) yield y_min well below the
+proton therapy range of interest.
 """
 )
 
@@ -628,10 +633,14 @@ weighted scoring framework from `src.optimization.score_structures()`.
 code(
     """
 # Define metrics for all 5 structures
-# CCE uniformity values from Phase 24 notebook 19 and parametric sweep
+# NOTE: these are hand-entered values, not live simulation output from this
+# cell. CCE uniformity values from Phase 24 notebook 19 and parametric sweep
 # Noise floor: proportional to dark current (same for similar SV geometry)
 # Spectral resolution: y_D/y_F ratio from Phase 23/24 spectra
 # Fabrication complexity: expert assessment (1=simplest, 4=most complex)
+# The guard_ring row in particular is an engineering estimate: ETNA's 2D
+# mesh does not model edge field crowding or guard-ring termination (see
+# DESIGN-1's "edge/guard-ring performance not modeled" caveat).
 
 metrics_dict = {
     'planar': {
@@ -770,6 +779,17 @@ md(
     """
 ### Structure Comparison Discussion
 
+**Caveat on the numbers driving this comparison:** the `metrics_dict` values
+above (CCE uniformity, noise floor, spectral resolution, fabrication
+complexity for all five structures) are hand-transcribed from the Phase 24
+notebook and prior parametric sweep results, not computed by a live
+simulation in this cell -- in particular, the guard-ring row is an
+engineering estimate, not a DD solve of an actual guard-ring geometry. ETNA's
+2D device mesh is laterally uniform and does not model edge field crowding or
+guard-ring termination, consistent with the "edge/guard-ring performance not
+modeled" limitation disclosed in DESIGN-1. Treat the ranking below as
+directional, not as a validated performance prediction.
+
 The multi-criteria scoring reveals the trade-off between performance and
 fabrication complexity:
 
@@ -885,7 +905,9 @@ md(
 - Standard 4H-SiC homoepitaxial growth on n+ substrate
 - Target p+/n-/n+ structure with 10 um n- epitaxial layer
 - p+ top contact via Al implantation (>10^18 cm^-3)
-- n- epi donor concentration: 8.5 x 10^13 cm^-3 (calibrated for full depletion at ~50 V)
+- n- epi donor concentration: 8.5 x 10^13 cm^-3 (calibrated; full depletion
+  at V_fd ~10.5 V for 10 um epi with the current graded profile -- the 50 V
+  operating bias used in this study is deep depletion, well above V_fd)
 
 **Guard ring implementation:**
 - Single p+ guard ring via acceptor ion implantation (Al or B)
@@ -896,7 +918,10 @@ md(
 
 **Target performance:**
 - Full depletion at recommended bias voltage
-- Dark current < 20 pA at room temperature (per calibration)
+- Dark current < 20 pA at room temperature (budget based on the ~18 pA
+  single-point 1D calibration at -30 V; this notebook's live 2D dark-current
+  cell at the 50 V baseline did not converge, so this is a carried-over
+  reference figure, not a value computed in this study)
 - Edge/center CCE ratio > 0.85 with guard ring
 - Two readout channels: main anode + guard ring for online edge correction
 
@@ -933,10 +958,13 @@ md(
   in the optimization. SiC's wide bandgap provides inherent temperature stability,
   but quantification requires dedicated thermal sweeps.
 
-- **Doping profile:** The current model uses uniform N_D in the epitaxial layer.
-  A graded doping profile (higher near junction, lower in bulk) would improve
-  electric field uniformity and may enhance CCE, particularly at reverse bias
-  (per project memory: uniform N_D fails at reverse bias conditions).
+- **Doping profile:** the model now defaults to a graded N_D(y) profile
+  (higher near the junction, lower in the bulk epi), calibrated for full
+  depletion at V_fd ~10.5 V for a 10 um epi device -- this was a fix
+  (Mj-1/Mj-2/Mj-3) landed after the original version of this section was
+  written, which described a uniform-N_D model that punched through at
+  reverse bias. All sweeps in this notebook already use the graded profile
+  via `create_2d_dd_device`'s default.
 
 **Future work priorities:**
 1. Experimental validation with fabricated guard ring prototypes
@@ -971,7 +999,10 @@ microdosimetry applications.
 3. **Guard ring is the recommended first upgrade** over the planar baseline,
    offering improved CCE uniformity (edge suppression) with minimal fabrication
    overhead (single p+ implant step). This is consistent with the Phase 24
-   structure comparison.
+   structure comparison -- though the Section 4 structure-comparison metrics
+   are hand-transcribed, not live-simulated (see the caveat in Section 4);
+   treat this recommendation as directional pending a live guard-ring
+   simulation.
 
 4. **Multi-criteria scoring** confirms that fabrication complexity is the
    dominant constraint: the 3D electrode achieves the best CCE uniformity but

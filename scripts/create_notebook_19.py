@@ -1018,20 +1018,42 @@ md(
 Apply the kappa = S_water / S_SiC correction to the planar baseline spectrum
 as a reference. The tissue-equivalent y*d(y) shows how the SiC detector
 response maps to tissue-relevant dosimetric quantities.
+
+Despite silicon's higher atomic number, water has the higher **mass**
+stopping power (Z/A 0.555 for water vs 0.499 for SiC; mean excitation energy
+I ~78 eV for water vs ~136 eV for SiC), so the physically correct kappa is
+**> 1** (NIST PSTAR: ~1.24 at 1 MeV, decreasing to ~1.13 at 100 MeV) --
+tissue-equivalent lineal energies should be **higher** than SiC-raw values.
+
+&#9888;&#65039; **PLACEHOLDER DATA WARNING:** the real PSTAR/SRIM stopping-power
+tables (`data/srim/*.csv`) are not yet populated in this environment (see
+`data/srim/README.md`). The cell below deliberately opts into the legacy
+fabricated placeholder (`source='legacy_unsafe'`) purely to **illustrate the
+correction pipeline mechanics** -- every kappa/tissue number below is
+**FABRICATED and SIGN-INVERTED** (kappa ~0.58 instead of the real ~1.13-1.24).
+Do not use these numbers for any physics conclusion; see
+`.planning/PHYSICS_REVIEW_v6.md`.
 """
 )
 
 code(
     """
-# Compute kappa table
+# [PLACEHOLDER PIPELINE ILLUSTRATION -- NOT REAL PHYSICS]
+# Real PSTAR/SRIM data is not yet available in this environment (see
+# data/srim/README.md). We explicitly opt into the fabricated, sign-inverted
+# legacy table (source='legacy_unsafe') solely to demonstrate the correction
+# pipeline mechanics below. The physically correct kappa is > 1 (~1.13-1.24);
+# these numbers are NOT that.
 kappa_table = compute_kappa_table(
     water_csv_path='data/stopping_power_water.csv',
     sic_csv_path='data/stopping_power_sic.csv',
+    source='legacy_unsafe',
 )
-print(f"Kappa table: {len(kappa_table['energy_MeV'])} points, "
-      f"mean kappa = {kappa_table['kappa'].mean():.3f}")
+print(f"[PLACEHOLDER] Kappa table: {len(kappa_table['energy_MeV'])} points, "
+      f"mean kappa = {kappa_table['kappa'].mean():.3f}  "
+      f"*** FABRICATED, SIGN-INVERTED -- real kappa is > 1 (~1.13-1.24) ***")
 
-# Apply tissue correction to planar spectrum
+# Apply tissue correction to planar spectrum (inherits the placeholder kappa)
 y_tissue = tissue_equivalence_correction(
     spec_planar['y_values'],
     result_planar['event_energies_keV'],
@@ -1044,7 +1066,7 @@ spec_tissue = lineal_energy_spectrum(
     y_min=0.01, y_max=1e4, bins_per_decade=50,
 )
 
-# Plot SiC vs tissue-equivalent for planar
+# Plot SiC vs [PLACEHOLDER] tissue-equivalent for planar
 fig, ax = plt.subplots(figsize=(10, 6))
 
 ax.semilogx(spec_planar['bin_centers'],
@@ -1052,14 +1074,14 @@ ax.semilogx(spec_planar['bin_centers'],
             color='#2196F3', linewidth=1.8, label='Planar (SiC raw)')
 ax.semilogx(spec_tissue['bin_centers'],
             spec_tissue['bin_centers'] * spec_tissue['d_y'],
-            color='#E91E63', linewidth=1.8, label='Planar (tissue-equiv.)')
+            color='#E91E63', linewidth=1.8, label='Planar ("tissue-equiv." [PLACEHOLDER])')
 
 ax.axvline(spec_planar['y_D'], color='#2196F3', linestyle='--', alpha=0.5)
 ax.axvline(spec_tissue['y_D'], color='#E91E63', linestyle='--', alpha=0.5)
 
 ax.set_xlabel('Lineal energy $y$ (keV/$\\mu$m)')
 ax.set_ylabel('$y \\cdot d(y)$')
-ax.set_title('Tissue-equivalence correction: SiC vs tissue-equivalent (planar)')
+ax.set_title('Tissue-equivalence correction: SiC vs [PLACEHOLDER] "tissue-equivalent" (planar)')
 ax.legend(fontsize=11)
 ax.grid(True, alpha=0.3, which='both')
 
@@ -1067,9 +1089,11 @@ plt.tight_layout()
 plt.savefig('figures/fig19_5_tissue_equivalence.png', bbox_inches='tight')
 plt.show()
 
-print(f"\\nSiC:    y_D = {spec_planar['y_D']:.3f} keV/um")
-print(f"Tissue: y_D = {spec_tissue['y_D']:.3f} keV/um")
-print(f"Kappa impact on y_D: {spec_tissue['y_D']/spec_planar['y_D']:.3f} ratio")
+print(f"\\n[PLACEHOLDER] SiC:    y_D = {spec_planar['y_D']:.3f} keV/um")
+print(f"[PLACEHOLDER] Tissue: y_D = {spec_tissue['y_D']:.3f} keV/um")
+print(f"[PLACEHOLDER] Kappa impact on y_D: {spec_tissue['y_D']/spec_planar['y_D']:.3f} ratio "
+      f"-- NOT REAL PHYSICS (real ratio should be > 1, not < 1). "
+      f"See .planning/PHYSICS_REVIEW_v6.md and data/srim/README.md.")
 """
 )
 
@@ -1181,8 +1205,15 @@ spectra analysis.
 4. **Delta-E/E telescope** uniquely enables particle identification via
    independent layer readout, valuable for mixed-field characterization.
 
-5. **Tissue-equivalence correction** shifts y_D and y_F to lower values
-   (kappa < 1), consistent with SiC's higher stopping power than water.
+5. **Tissue-equivalence correction pipeline** was demonstrated end-to-end, but
+   with PLACEHOLDER, sign-inverted kappa data (Section 6): real PSTAR/SRIM
+   stopping-power tables are not yet available in this environment
+   (`data/srim/README.md`). The physically correct kappa = S_water/S_SiC is
+   **> 1** (~1.13-1.24, NIST PSTAR) -- water has the higher *mass* stopping
+   power despite SiC's higher atomic number -- so the real correction should
+   shift y_D and y_F to **higher** values, not lower. Do not read the
+   "tissue-equivalent" numbers in Section 6 as a physics result; regenerate
+   with `source='bragg'` once real data is dropped into `data/srim/`.
 
 **Recommendations for Phase 25 optimization:**
 - Prioritize guard ring geometry for near-term fabrication
