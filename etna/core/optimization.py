@@ -142,10 +142,22 @@ def microdosimetric_sweep(
                 L_transition=device_info["L_transition"],
                 V_bi=V_bi,
             )
-            center_cce = float(cce_vals[0])
-            edge_cce = float(cce_vals[-1])
+            raw_center_cce = cce_vals[0]
+            raw_edge_cce = cce_vals[-1]
             is_fully_depleted = abs(vb) >= V_fd
-            passes_cce_floor = center_cce >= CCE_FLOOR and edge_cce >= CCE_FLOOR
+            if raw_center_cce is None or raw_edge_cce is None:
+                # Defensive: a degenerate/undepleted config can make
+                # cce_lateral_scan() yield a non-numeric (None) CCE entry
+                # instead of a float or NaN. Treat that explicitly as a
+                # floor failure rather than letting float() below raise a
+                # TypeError that gets swallowed by the generic except block.
+                center_cce = np.nan
+                edge_cce = np.nan
+                passes_cce_floor = False
+            else:
+                center_cce = float(raw_center_cce)
+                edge_cce = float(raw_edge_cce)
+                passes_cce_floor = center_cce >= CCE_FLOOR and edge_cce >= CCE_FLOOR
             records.append(
                 {
                     "half_width_um": hw,

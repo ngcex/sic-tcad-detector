@@ -65,8 +65,15 @@ def spectrum_mono(monoenergetic_energies):
 
 @pytest.fixture
 def kappa_table():
-    """Pre-computed kappa table from bundled stopping power data."""
-    return compute_kappa_table()
+    """Pre-computed kappa table from bundled stopping power data.
+
+    Uses the explicit 'legacy_unsafe' opt-in (v6 physics-honesty fix: there is
+    no silent default anymore). This fixture only needs *some* table to test
+    correction arithmetic/wiring -- it is NOT a claim that these values are
+    physically correct (they are the fabricated, sign-inverted placeholder;
+    see C-1 and TestComputeKappaTable.test_legacy_unsafe_is_placeholder).
+    """
+    return compute_kappa_table(source="legacy_unsafe")
 
 
 # ---------------------------------------------------------------------------
@@ -212,10 +219,26 @@ class TestComputeKappaTable:
         assert len(kappa_table["energy_MeV"]) > 20
         assert len(kappa_table["kappa"]) == len(kappa_table["energy_MeV"])
 
-    def test_kappa_range(self, kappa_table):
-        """Kappa values should be in physically reasonable range [0.3, 1.0]."""
+    def test_legacy_unsafe_is_placeholder(self, kappa_table):
+        """AUDIT C-1: the legacy_unsafe table is the FABRICATED, sign-inverted
+        placeholder (~0.3-1.0, kappa < 1). This is NOT physically reasonable --
+        real kappa = S_water/S_SiC is > 1 (~1.13-1.24, see data/srim/README.md).
+        This test documents/pins the known-wrong placeholder range so a future
+        change to the placeholder data doesn't silently drift; it is not an
+        endorsement of the range as correct physics."""
         assert np.all(kappa_table["kappa"] > 0.3)
         assert np.all(kappa_table["kappa"] < 1.0)
+
+    def test_no_source_raises(self):
+        """v6 physics-honesty fix: omitting source= must raise, not silently
+        return the fabricated placeholder."""
+        with pytest.raises(ValueError, match="source"):
+            compute_kappa_table()
+
+    def test_invalid_source_raises(self):
+        """Any source other than 'bragg'/'legacy_unsafe' must raise."""
+        with pytest.raises(ValueError, match="source"):
+            compute_kappa_table(source="legacy")
 
 
 # ---------------------------------------------------------------------------
@@ -245,24 +268,42 @@ class TestBraggKappaMachinery:
         with pytest.raises(FileNotFoundError, match="PSTAR"):
             compute_kappa_table(source="bragg")
 
-    def test_legacy_source_back_compat(self):
-        """Legacy source still returns the (placeholder) flat table + source key."""
+    def test_legacy_unsafe_requires_explicit_opt_in(self):
+        """v6 physics-honesty fix: the fabricated flat-kappa table is only
+        reachable via the explicit, unmistakable source='legacy_unsafe' -- the
+        old silent source='legacy' default no longer exists."""
         from etna.core.microdosimetry import compute_kappa_table
 
-        res = compute_kappa_table(source="legacy")
-        assert res["source"] == "legacy"
+        res = compute_kappa_table(source="legacy_unsafe")
+        assert res["source"] == "legacy_unsafe"
         assert len(res["kappa"]) == len(res["energy_MeV"])
 
 
 class TestTissueEquivalenceCorrection:
     def test_constant_kappa(self):
-        """y_tissue = kappa_constant * y_SiC for constant kappa."""
+        """y_tissue = kappa_constant * y_SiC for a caller-supplied constant kappa."""
         y_sic = np.array([1.0, 2.0, 5.0, 10.0])
         energies = np.array([100.0, 200.0, 500.0, 1000.0])
         y_tissue = tissue_equivalence_correction(
-            y_sic, energies, kappa_table=None, kappa_constant=0.58
+            y_sic, energies, kappa_table=None, kappa_constant=1.2
+        )
+        np.testing.assert_allclose(y_tissue, 1.2 * y_sic)
+
+    def test_constant_kappa_legacy_unsafe(self):
+        """kappa_constant='legacy_unsafe' explicitly opts into the fabricated
+        0.58 placeholder (v6 physics-honesty fix: no longer the silent default)."""
+        y_sic = np.array([1.0, 2.0, 5.0, 10.0])
+        y_tissue = tissue_equivalence_correction(
+            y_sic, kappa_table=None, kappa_constant="legacy_unsafe"
         )
         np.testing.assert_allclose(y_tissue, 0.58 * y_sic)
+
+    def test_no_kappa_table_no_constant_raises(self):
+        """v6 physics-honesty fix: omitting both kappa_table and kappa_constant
+        must raise, not silently fall back to the fabricated 0.58."""
+        y_sic = np.array([1.0, 2.0, 5.0, 10.0])
+        with pytest.raises(ValueError, match="kappa_constant"):
+            tissue_equivalence_correction(y_sic, kappa_table=None)
 
     def test_table_kappa_uses_kinetic_energy(self, kappa_table):
         """AUDIT C-2: kappa(E) lookup uses particle KINETIC energy, scalar or

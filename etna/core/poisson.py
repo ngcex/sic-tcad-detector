@@ -314,7 +314,8 @@ def extract_depletion_width(device_info, V_applied=0.0):
     See Also
     --------
     extract_depletion_width_numerical : Extracts W from the numerical
-        Poisson E-field solution (equilibrium only, uses 1% threshold).
+        Poisson E-field solution (equilibrium only, uses a 50% threshold
+        of the local Donors concentration to locate the depletion edge).
     """
     params = device_info["params"]
     N_A_ionized = device_info["N_A_ionized"]

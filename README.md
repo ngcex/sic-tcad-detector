@@ -16,8 +16,10 @@ Petringa group's 4H-SiC detector work at INFN-LNS Catania.
 ## What it does
 
 - **Electrostatics & C–V** — built-in potential, depletion width, electric
-  field, capacitance–voltage extraction. Validated against measured C–V
-  (R² = 0.998).
+  field, capacitance–voltage extraction. R² = 0.998 is fit-recovery (same
+  points used to calibrate the doping profile); an independently published
+  4H-SiC device (Bruzzi & Verroi 2023) matches to within 2% at high bias —
+  see `.planning/VALIDATION_LITERATURE.md`.
 - **Charge collection (CCE)** — drift-diffusion transport, Hecht analysis,
   CCE vs bias, single-particle and transient response.
 - **Dark current** — trap-assisted generation (SRH/TAT/SRV decomposition),

@@ -10,7 +10,9 @@
 > achievable doping windows, or epi grids, so every "fab fills in" cell below is
 > deliberately left to the foundry. The electrostatic targets (doping profile,
 > depletion, full-depletion voltage, CCE-when-depleted) are TCAD model outputs
-> validated against our calibrated 1D twin and C-V data (R² ≥ 0.99, 0 to −50 V).
+> checked for self-consistency between our 2D and calibrated 1D-twin C-V
+> (R² ≥ 0.99, 0 to −50 V); see §6 for what "C-V validated" does and does not
+> mean here, including the one independent external check we have.
 > The leakage, breakdown, and zero-bias-efficiency rows are explicitly NOT
 > predictive — see the caveats.
 
@@ -116,7 +118,23 @@ target and quote its verified W(0 V).
 ## 6. What is solid (publishable / hand-off-ready)
 
 Electrostatics: built-in potential, depletion vs bias, electric field, **C-V
-(R² = 0.998 vs data; 2D C-V matches 1D twin R² ≥ 0.99 over 0 to −50 V)**, the
-calibrated graded doping profile, full-depletion voltage, and CCE-vs-bias when
-depleted. These are the dimensioning core and are defensible as model targets
-with the tolerance bands above.
+(2D C-V matches 1D twin R² ≥ 0.99 over 0 to −50 V)**, the calibrated graded
+doping profile, full-depletion voltage, and CCE-vs-bias when depleted. These
+are the dimensioning core and are defensible as model targets with the
+tolerance bands above.
+
+**On the R² = 0.998 C-V figure:** this number scores `calibrate_graded_doping()`
+against the same three experimental points (W at 0/−10/−30 V = 1.7/9.5/9.73 µm)
+that were used to _fit_ the doping profile in the first place — it is a
+fit-recovery / self-consistency check, not independent validation, and should
+not be read as "matches measured C-V" without that qualifier. The one genuinely
+independent check available is a comparison against Bruzzi & Verroi ("Epitaxial
+SiC Dosimeters and Flux Monitoring Detectors for Proton Therapy Beams," Materials
+2023, 16(10), 3643), an unrelated published 4H-SiC device our model was never
+calibrated to: ETNA's predicted depletion width at −40 V deviates 2.0% from
+that paper's reported endpoint. This is a narrow but real absolute-scale sanity
+check (two fitted endpoints, not a dense point-by-point overlay) — see
+`.planning/VALIDATION_LITERATURE.md` for the full comparison and caveats. The
+electrostatics model itself (drift-diffusion/Poisson) is independently checked
+against Sze & Ng textbook forms and is not in question here — only the R² = 0.998
+_validation claim_, as originally worded, overstated what it demonstrated.
