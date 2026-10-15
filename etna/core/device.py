@@ -39,6 +39,52 @@ K_B_EV = 8.617e-5  # eV/K, Boltzmann constant
 K_B_J = 1.3806503e-23  # J/K, Boltzmann constant
 
 
+def build_diode_mesh(device_name, region_name, junction_pos, total_length):
+    """Build and finalize the graded 1D mesh of the p+/n- diode (mesh ``<device_name>_mesh``).
+
+    Anode contact at x = 0, cathode at ``total_length``, one region spanning the
+    device. Shared by ``create_sic_device`` and the batched engine's mesh probe
+    so both use the identical discretisation.
+    """
+    mesh_name = f"{device_name}_mesh"
+    devsim.create_1d_mesh(mesh=mesh_name)
+
+    # p+ substrate: x = 0 (anode contact) to junction_pos
+    # Coarse spacing in bulk (~100 nm = 1e-5 cm)
+    devsim.add_1d_mesh_line(mesh=mesh_name, pos=0.0, ps=1e-5, tag="top")
+
+    # Approach junction from p-side: finer spacing
+    devsim.add_1d_mesh_line(mesh=mesh_name, pos=junction_pos - 5e-6, ps=1e-6)
+
+    # Junction vicinity: very fine spacing (~1 nm = 1e-7 cm)
+    devsim.add_1d_mesh_line(mesh=mesh_name, pos=junction_pos, ps=1e-7)
+
+    # Depletion region in n-side: fine spacing near junction, coarser in bulk
+    # Only add intermediate mesh points if they fall strictly within the epi layer
+    epi_mid1 = junction_pos + 2e-4  # ~2 um from junction
+    epi_mid2 = junction_pos + 5e-4  # ~5 um from junction
+
+    if epi_mid1 < total_length - 1e-6:
+        devsim.add_1d_mesh_line(mesh=mesh_name, pos=epi_mid1, ps=5e-6)
+
+    if epi_mid2 < total_length - 1e-6:
+        devsim.add_1d_mesh_line(mesh=mesh_name, pos=epi_mid2, ps=5e-6)
+
+    # Far end of epi: coarser spacing
+    devsim.add_1d_mesh_line(mesh=mesh_name, pos=total_length, ps=1e-5, tag="bot")
+
+    # Contacts
+    devsim.add_1d_contact(mesh=mesh_name, name="anode", tag="top", material="metal")
+    devsim.add_1d_contact(mesh=mesh_name, name="cathode", tag="bot", material="metal")
+
+    # Region spanning entire device
+    devsim.add_1d_region(
+        mesh=mesh_name, material="SiC", region=region_name, tag1="top", tag2="bot"
+    )
+
+    devsim.finalize_mesh(mesh=mesh_name)
+
+
 def create_sic_device(
     device_name="sic_diode",
     region_name="sic",
@@ -97,43 +143,8 @@ def create_sic_device(
     total_length = substrate_thickness_cm + epi_thickness_cm
 
     # --- Create 1D mesh with non-uniform spacing ---
+    build_diode_mesh(device_name, region_name, junction_pos, total_length)
     mesh_name = f"{device_name}_mesh"
-    devsim.create_1d_mesh(mesh=mesh_name)
-
-    # p+ substrate: x = 0 (anode contact) to junction_pos
-    # Coarse spacing in bulk (~100 nm = 1e-5 cm)
-    devsim.add_1d_mesh_line(mesh=mesh_name, pos=0.0, ps=1e-5, tag="top")
-
-    # Approach junction from p-side: finer spacing
-    devsim.add_1d_mesh_line(mesh=mesh_name, pos=junction_pos - 5e-6, ps=1e-6)
-
-    # Junction vicinity: very fine spacing (~1 nm = 1e-7 cm)
-    devsim.add_1d_mesh_line(mesh=mesh_name, pos=junction_pos, ps=1e-7)
-
-    # Depletion region in n-side: fine spacing near junction, coarser in bulk
-    # Only add intermediate mesh points if they fall strictly within the epi layer
-    epi_mid1 = junction_pos + 2e-4  # ~2 um from junction
-    epi_mid2 = junction_pos + 5e-4  # ~5 um from junction
-
-    if epi_mid1 < total_length - 1e-6:
-        devsim.add_1d_mesh_line(mesh=mesh_name, pos=epi_mid1, ps=5e-6)
-
-    if epi_mid2 < total_length - 1e-6:
-        devsim.add_1d_mesh_line(mesh=mesh_name, pos=epi_mid2, ps=5e-6)
-
-    # Far end of epi: coarser spacing
-    devsim.add_1d_mesh_line(mesh=mesh_name, pos=total_length, ps=1e-5, tag="bot")
-
-    # Contacts
-    devsim.add_1d_contact(mesh=mesh_name, name="anode", tag="top", material="metal")
-    devsim.add_1d_contact(mesh=mesh_name, name="cathode", tag="bot", material="metal")
-
-    # Region spanning entire device
-    devsim.add_1d_region(
-        mesh=mesh_name, material="SiC", region=region_name, tag1="top", tag2="bot"
-    )
-
-    devsim.finalize_mesh(mesh=mesh_name)
     devsim.create_device(mesh=mesh_name, device=device_name)
 
     # --- Set 4H-SiC material parameters ---
