@@ -11,6 +11,26 @@ solver preservation) require a real devsim session.
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _restore_solver_state():
+    """Put devsim's solver parameters back after each test.
+
+    These tests deliberately set a bogus ``direct_solver`` and call resets that
+    can leave it "unknown"; without this restore the next ``devsim.solve`` in
+    the same process aborts the interpreter.
+    """
+    devsim = pytest.importorskip("devsim")
+    saved = {}
+    for key in ("direct_solver", "solver_callback"):
+        try:
+            saved[key] = devsim.get_parameter(name=key)
+        except Exception:
+            pass
+    yield
+    for key, value in saved.items():
+        devsim.set_parameter(name=key, value=value)
+
+
 def test_import_reset_devsim_fully():
     """Test 1: public API imports succeed."""
     from etna.core.devsim_reset import reset_devsim_fully, _CYLINDRICAL_GLOBALS
@@ -80,3 +100,12 @@ class TestResetClearsState:
         devsim.set_parameter(name="direct_solver", value="mkl_pardiso")
         reset_devsim_fully(preserve_solver=True)
         assert devsim.get_parameter(name="direct_solver") == "mkl_pardiso"
+
+
+def test_solve_still_works_after_reset_tests():
+    """The solver parameters are intact, so a real equilibrium solve converges."""
+    pytest.importorskip("devsim")
+    from etna.core.drift_diffusion import create_dd_device
+
+    info = create_dd_device(device_name="post_reset_canary")
+    assert info["dd_initialized"]
