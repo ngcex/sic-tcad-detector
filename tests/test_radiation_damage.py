@@ -14,6 +14,7 @@ Validates:
 import ast
 import subprocess
 import sys
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -433,7 +434,7 @@ class TestRegressionSafety:
             ],
             capture_output=True,
             text=True,
-            cwd="/Users/ngcex/projects/physics/etna",
+            cwd=str(Path(__file__).resolve().parents[1]),
             timeout=120,
         )
         assert result.returncode == 0, (
