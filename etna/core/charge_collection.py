@@ -693,10 +693,6 @@ def cce_vs_fluence(
 
     fluence_range = np.asarray(fluence_range, dtype=float)
 
-    # --- Extract pristine parameters for compute_damaged_params ---
-    pristine_tau_n = srh_lifetime(300.0, "electron")
-    pristine_tau_p = srh_lifetime(300.0, "hole")
-
     # Extract pristine N_D profile from a reference device (epi-only nodes)
     ref_id = uuid.uuid4().hex[:8]
     ref_name = f"fluence_ref_{ref_id}"
@@ -708,6 +704,10 @@ def cce_vs_fluence(
         L_transition=L_transition,
     )
     dev_kw.update(device_kwargs or {})
+    # --- Pristine parameters for compute_damaged_params, at the device T ---
+    T_dev = dev_kw.get("T", 300.0)
+    pristine_tau_n = srh_lifetime(T_dev, "electron")
+    pristine_tau_p = srh_lifetime(T_dev, "hole")
     ref_info = create_sic_device(device_name=ref_name, **dev_kw)
     try:
         ref_x = np.array(
@@ -745,6 +745,7 @@ def cce_vs_fluence(
                 energy_MeV=energy_MeV,
                 damage_params=damage_params,
                 lifetime_model=lifetime_model,
+                T=T_dev,
             )
 
             # Staged device creation

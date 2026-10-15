@@ -60,7 +60,15 @@ def test_facades_forward_full_config(monkeypatch, name, call, nested):
     with pytest.raises(_Stop):
         call()
     kw = got["device_kwargs"] if nested else got
-    for key in ("N_A", "N_D", "doping_profile", "substrate_thickness_cm"):
+    for key in (
+        "N_A",
+        "N_D",
+        "doping_profile",
+        "substrate_thickness_cm",
+        "N_D_junction",
+        "N_D_bulk",
+        "L_transition",
+    ):
         assert kw[key] == device_kwargs(CFG)[key]
     if nested:
         assert kw["T"] == 350.0
@@ -82,3 +90,85 @@ def test_run_cce_depends_on_temperature():
     lo = sim.run_cce(DeviceConfig(T=250.0), n_points=2)
     hi = sim.run_cce(DeviceConfig(T=350.0), n_points=2)
     assert not np.allclose(lo.y, hi.y, rtol=0, atol=1e-12)
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        lambda c: sim.run_radiation_damage(c),
+        lambda c: sim.run_temperature_sweep(c),
+        lambda c: sim.run_flash_recombination(c),
+        lambda c: sim.run_dark_current(c),
+        lambda c: sim.run_transient(c),
+    ],
+)
+def test_1d_only_facades_reject_2d_config(call):
+    with pytest.raises(NotImplementedError, match="half_width_um"):
+        call(DeviceConfig(half_width_um=50.0))
+
+
+# --- core passthroughs: the merged kwargs must reach the device constructors ---
+
+
+def _stop_after_capture(got):
+    def fake(*args, **kwargs):
+        got.update(kwargs)
+        raise _Stop
+
+    return fake
+
+
+def test_cce_vs_fluence_merges_device_kwargs(monkeypatch):
+    import etna.core.device as device_mod
+    from etna.core.charge_collection import cce_vs_fluence
+
+    got = {}
+    monkeypatch.setattr(device_mod, "create_sic_device", _stop_after_capture(got))
+    with pytest.raises(_Stop):
+        cce_vs_fluence(
+            [0.0], device_kwargs={"T": 350.0, "N_A": 5e18, "doping_profile": "uniform"}
+        )
+    assert (got["T"], got["N_A"], got["doping_profile"]) == (350.0, 5e18, "uniform")
+    assert got["N_D_junction"] == 2.90e15  # untouched defaults survive the merge
+
+
+def test_cce_vs_fluence_uses_device_temperature_for_lifetimes(monkeypatch):
+    """Pristine lifetimes and damage model must use the device T, not 300 K."""
+    import etna.core.charge_collection as cc
+
+    seen = {}
+
+    monkeypatch.setattr(
+        cc, "srh_lifetime", lambda T, carrier: seen.setdefault("T", T) or 1.0
+    )
+    import etna.core.device as device_mod
+
+    monkeypatch.setattr(device_mod, "create_sic_device", _stop_after_capture({}))
+    with pytest.raises(_Stop):
+        cc.cce_vs_fluence([0.0], device_kwargs={"T": 350.0})
+    assert seen["T"] == 350.0
+
+
+def test_cce_vs_dose_rate_merges_device_kwargs(monkeypatch):
+    import etna.core.drift_diffusion as dd
+    from etna.core.flash_recombination import cce_vs_dose_rate
+
+    got = {}
+    monkeypatch.setattr(dd, "create_dd_device", _stop_after_capture(got))
+    with pytest.raises(_Stop):
+        cce_vs_dose_rate([20.0], device_kwargs={"T": 350.0, "N_A": 5e18})
+    assert (got["T"], got["N_A"]) == (350.0, 5e18)
+    assert got["N_D_junction"] == 2.90e15
+
+
+def test_transient_merges_device_kwargs(monkeypatch):
+    import etna.core.transient as tr
+
+    got = {}
+    monkeypatch.setattr(tr, "create_dd_device", _stop_after_capture(got))
+    with pytest.raises(_Stop):
+        tr.transient_cce_vs_dose_rate(
+            dose_rates=[20.0], device_kwargs={"T": 350.0, "N_A": 5e18}
+        )
+    assert (got["T"], got["N_A"]) == (350.0, 5e18)
+    assert got["N_D_junction"] == 2.90e15
