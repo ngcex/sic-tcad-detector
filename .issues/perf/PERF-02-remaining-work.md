@@ -20,7 +20,7 @@ Read PERF-01 first. Audit issues A-*, B-* are still open (D-01, D-04, C-01, C-04
 - [ ] README "devsim note" (README.md ~line 90) still says run DD modules one file at a time; update it
       with the measured xdist command once the slow run is verified.
 - [ ] test_charge_collection_2d still costs ~100 s (one 2D device build). Could be cut by a lighter mesh.
-- [ ] Remove the leftover merged worktrees under `.claude/worktrees/` (testpaths now keeps pytest out).
+- [x] Leftover agent worktrees under `.claude/worktrees/` removed (2026-10-16).
 
 ## 2. Extend the engine (each needs a parity run vs devsim before widening the box)
 - [ ] run_field (psi/E at one bias) on the engine: `reverse_sweep(keep_psi=True)` already gives psi.
