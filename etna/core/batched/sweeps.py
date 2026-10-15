@@ -17,6 +17,7 @@ from etna.core.batched.extract import capacitance, depletion_width
 from etna.core.batched.material import PARAMS, Q, graded_doping, thermal_voltage
 from etna.core.batched.poisson import PoissonBatch
 from etna.core.batched.transport import ContinuityBatch
+from etna.core.devsim_lock import serialized
 from etna.core.generation_profiles import alpha_generation_profile
 from etna.core.incomplete_ionization import ionized_acceptor_concentration
 from etna.core.sic_material import (
@@ -42,6 +43,14 @@ def _per_device(fn, *args):
     return np.array([fn(*vals) for vals in zip(*arrays)], dtype=float)
 
 
+def _check_voltages(voltages):
+    voltages = np.asarray(voltages, dtype=float)
+    if not np.all(np.isfinite(voltages)):
+        raise ValueError("voltages must be finite")
+    return voltages
+
+
+@serialized
 def make_batch(x, junction_pos, N_A, N_D_junction, N_D_bulk, L_transition, T=300.0):
     """PoissonBatch for graded p+/n- diodes on mesh ``x`` (uniform: N_D_junction == N_D_bulk).
 
@@ -92,9 +101,15 @@ class SweepResult:
     converged: np.ndarray  # (K, B) bool, cumulative along the sweep
 
 
+@serialized
 def reverse_sweep(pb, voltages, junction_pos, epi_thickness_cm, tol=1e-8):
-    """Solve all devices at each of ``voltages`` (<= 0, in the order given)."""
-    voltages = np.asarray(voltages, dtype=float)
+    """Solve all devices at each of ``voltages`` (<= 0, in the order given).
+
+    Jumps of ~100 V (less at low T: the Newton clamp is in V_t units) between
+    consecutive points may not converge in one solve; check ``converged``
+    before trusting a result.
+    """
+    voltages = _check_voltages(voltages)
     ramp = _Ramp(pb, tol)
     W, psis, conv = [], [], []
     for V in voltages:
@@ -126,6 +141,7 @@ def alpha_generation(x, junction_pos, alpha_range_cm, generation_rate):
     return G
 
 
+@serialized
 def cce_sweep(
     pb, voltages, junction_pos, G, T=300.0, N_A=1e19, N_D=None,
     tol=1e-8, gummel_tol=1e-6,
@@ -140,7 +156,7 @@ def cce_sweep(
     from etna.core.device import DEFAULT_N_D
 
     N_D = DEFAULT_N_D if N_D is None else N_D
-    voltages = np.asarray(voltages, dtype=float)
+    voltages = _check_voltages(voltages)
     T = np.broadcast_to(np.asarray(T, dtype=float), (pb.B,))
     N_A = np.broadcast_to(np.asarray(N_A, dtype=float), (pb.B,))
     N_D = np.broadcast_to(np.asarray(N_D, dtype=float), (pb.B,))

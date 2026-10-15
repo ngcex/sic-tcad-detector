@@ -1,9 +1,9 @@
 """Simulation facades for the etna public API.
 
-`run_cv()` is a thin wrapper over `etna.core.cv_analysis.cv_sweep`: it
-builds a DD-initialized 1D device via `build_device()`, sweeps the requested
-bias range through `cv_sweep`, and packages the result as a `SimResult`. It
-performs no physics changes — all physics lives in `etna.core.*`.
+`run_cv()` and `run_cce()` run on the batched numba engine
+(`etna.core.batched`) inside its validated domain and otherwise on the devsim
+path (`cv_sweep` / `cce_vs_bias`); the other facades are thin adapters over
+`etna.core.*`. No facade changes physics — all physics lives in `etna.core.*`.
 """
 
 from __future__ import annotations
@@ -16,9 +16,18 @@ import devsim
 
 from etna.api.device import DeviceConfig, build_device, device_kwargs, serialized
 from etna.api.results import MeshData, SimResult
+from etna.core.batched import (
+    alpha_generation,
+    cce_sweep,
+    make_batch,
+    node_positions,
+    reverse_sweep,
+)
+from etna.core.batched.extract import capacitance
 from etna.core.charge_collection import cce_vs_bias, cce_vs_fluence
 from etna.core.cv_analysis import cv_sweep
 from etna.core.dark_current import create_dark_current_device, dark_current_sweep
+from etna.core.device import DEFAULT_N_D
 from etna.core.devsim_reset import reset_devsim_fully
 from etna.core.drift_diffusion import ramp_bias
 from etna.core.flash_recombination import cce_vs_dose_rate
@@ -30,6 +39,83 @@ from etna.core.transient import transient_cce_vs_dose_rate
 
 logger = logging.getLogger(__name__)
 
+# Domain in which the batched engine was validated against the devsim path
+# (parity to ~1e-14 for W/psi, <= 3e-6 for CCE; tests/test_batched_engine.py and
+# tests/test_api_engine_switch.py pin representative points).
+# Anything outside goes to devsim. Widening a bound only needs a parity run.
+_ENGINE_BOX = {
+    "T": (250.0, 400.0),
+    "N_A": (1e18, 1e19),
+    "N_D_junction": (1e15, 1e16),
+    "N_D_bulk": (5e13, 2e15),
+    "L_transition_um": (0.3, 3.0),
+    "N_D_uniform": (1e14, 1e16),
+    "epi_thickness_um": (5.0, 30.0),
+    "substrate_thickness_um": (1.0, 3.0),
+}
+# Largest single bias jump that converges in one Newton solve at 300 K (the Newton
+# clamp is in V_t units, so the limit scales with T; measured 85 V at 250 K).
+_ENGINE_MAX_JUMP_V_300K = 100.0
+
+
+def _engine_unsupported_reason(config: DeviceConfig, bias_array) -> "str | None":
+    """Why the batched engine cannot serve this call (None = it can)."""
+    if config.doping_profile not in ("graded", "uniform"):
+        return f"doping_profile={config.doping_profile!r}"
+    checks = {
+        "T": config.T,
+        "N_A": config.N_A,
+        "epi_thickness_um": config.epi_thickness_um,
+        "substrate_thickness_um": config.substrate_thickness_um,
+    }
+    if config.doping_profile == "graded":
+        checks.update(
+            N_D_junction=config.N_D_junction,
+            N_D_bulk=config.N_D_bulk,
+            L_transition_um=config.L_transition_um,
+        )
+    else:
+        checks["N_D_uniform"] = DEFAULT_N_D if config.N_D is None else config.N_D
+    for name, value in checks.items():
+        lo, hi = _ENGINE_BOX[name]
+        if not lo <= value <= hi:
+            return f"{name}={value:g} outside [{lo:g}, {hi:g}]"
+    if bias_array.size == 0 or not np.all(np.isfinite(bias_array)):
+        return "empty or non-finite bias grid"
+    if bias_array.max() > 0:
+        return "forward bias requested"
+    max_jump = _ENGINE_MAX_JUMP_V_300K * min(config.T, 300.0) / 300.0
+    if abs(bias_array[0]) > max_jump or (
+        bias_array.size > 1 and np.abs(np.diff(bias_array)).max() > max_jump
+    ):
+        return f"bias jump above {max_jump:g} V"
+    return None
+
+
+def _engine_batch(
+    *,
+    epi_thickness_cm,
+    substrate_thickness_cm,
+    N_A,
+    N_D,
+    T,
+    doping_profile,
+    N_D_junction,
+    N_D_bulk,
+    L_transition,
+):
+    """Engine batch (and mesh) for one device. Keyword-only so tests can capture
+    exactly what ``device_kwargs(config)`` forwards."""
+    x = node_positions(epi_thickness_cm, substrate_thickness_cm)
+    if doping_profile == "uniform":
+        nd = DEFAULT_N_D if N_D is None else N_D
+        N_D_junction = N_D_bulk = nd
+        L_transition = 1e-4  # irrelevant for a flat profile; must be > 0
+    pb = make_batch(
+        x, substrate_thickness_cm, N_A, N_D_junction, N_D_bulk, L_transition, T
+    )
+    return pb, x
+
 
 def _require_1d(config: DeviceConfig, facade: str) -> None:
     """Refuse 2D configs for facades whose core builds 1D devices only."""
@@ -38,6 +124,71 @@ def _require_1d(config: DeviceConfig, facade: str) -> None:
             f"{facade}: only 1D devices are supported (the core builds a 1D "
             "device); pass a DeviceConfig with half_width_um=None."
         )
+
+
+def _run_cv_batched(config: DeviceConfig, bias_array) -> "SimResult | None":
+    """C-V through the batched engine, or None to fall back to devsim."""
+    reason = _engine_unsupported_reason(config, bias_array)
+    if reason is not None:
+        logger.info("run_cv: using devsim (%s)", reason)
+        return None
+    kw = device_kwargs(config)
+    pb, _ = _engine_batch(**kw)
+    res = reverse_sweep(
+        pb, bias_array, kw["substrate_thickness_cm"], kw["epi_thickness_cm"]
+    )
+    if not res.converged.all():
+        logger.warning("run_cv: batched engine did not converge, using devsim")
+        return None
+    W = res.W[:, 0]
+    C = capacitance(W, config.area_cm2)
+    return SimResult(
+        config=config,
+        sim_type="cv",
+        x=bias_array.copy(),
+        y=C,
+        metadata={
+            "depletion_widths": W,
+            "one_over_C_squared": 1.0 / C**2,
+            "area_cm2": config.area_cm2,
+            "truncated": False,
+            "requested_v_stop": float(bias_array.min()),
+            "solver": "batched",
+        },
+        mesh=None,
+    )
+
+
+def _run_cce_batched(config: DeviceConfig, bias_array) -> "SimResult | None":
+    """CCE through the batched engine, or None to fall back to devsim."""
+    reason = _engine_unsupported_reason(config, bias_array)
+    if reason is not None:
+        logger.info("run_cce: using devsim (%s)", reason)
+        return None
+    kw = device_kwargs(config)
+    pb, x = _engine_batch(**kw)
+    sub = kw["substrate_thickness_cm"]
+    # cce_vs_bias defaults: alpha range 15 um, peak generation 1e18 cm^-3 s^-1.
+    G = alpha_generation(x, sub, 15e-4, 1e18)
+    # Mobility inputs mirror cce_vs_bias exactly (electrons from N_D, holes from N_A).
+    res = cce_sweep(pb, bias_array, sub, G, T=kw["T"], N_A=kw["N_A"], N_D=kw["N_D"])
+    if not res.converged.all():
+        logger.warning("run_cce: batched engine did not converge, using devsim")
+        return None
+    return SimResult(
+        config=config,
+        sim_type="cce",
+        x=bias_array.copy(),
+        y=res.cce[:, 0],
+        metadata={
+            "I_collected": res.J_collected[:, 0],
+            "I_generated": res.J_generated,
+            "truncated": False,
+            "requested_v_stop": float(bias_array.min()),
+            "solver": "batched",
+        },
+        mesh=None,
+    )
 
 
 @serialized
@@ -57,6 +208,15 @@ def run_cv(
     Only 1D devices (`config.half_width_um is None`) are supported — core
     `cv_sweep` operates on the 1D DD device returned by `create_dd_device`.
     2D C-V is out of scope for Phase 36.
+
+    Solver selection: inside the validated domain (see ``_ENGINE_BOX``) the
+    sweep runs on the batched numba engine (``etna.core.batched``), which
+    solves exactly at every requested bias (the devsim ``cv_sweep`` ramps on a
+    0.5 V lattice, audit A-01) and does not reproduce devsim's punch-through
+    ``truncated`` wall: such a call returns the full grid with
+    ``truncated=False``. Outside the domain, or if the engine does not
+    converge, the devsim path runs. ``metadata["solver"]`` is ``"batched"`` or
+    ``"devsim"``.
 
     Parameters
     ----------
@@ -88,8 +248,8 @@ def run_cv(
 
     Warning
     -------
-    Calling this function deletes all devsim devices currently in the
-    process, not just those created by etna. `run_cv` calls
+    On the devsim path, calling this function deletes all devsim devices
+    currently in the process, not just those created by etna. `run_cv` calls
     `reset_devsim_fully()` unconditionally at entry (see
     `etna.core.devsim_reset`), which enumerates and deletes every
     device registered with devsim in the process — devsim state is
@@ -107,6 +267,10 @@ def run_cv(
         )
 
     bias_array = np.linspace(v_start, v_stop, n_points)
+
+    result = _run_cv_batched(config, bias_array)
+    if result is not None:
+        return result
 
     # Guarantee a clean devsim session before building (avoids device/state
     # leakage between repeated run_cv calls in the same process).
@@ -128,6 +292,7 @@ def run_cv(
             "area_cm2": area,
             "truncated": cv_result["truncated"],
             "requested_v_stop": cv_result["requested_v_stop"],
+            "solver": "devsim",
         }
 
         return SimResult(
@@ -378,9 +543,16 @@ def run_cce(
 
     Device lifecycle (bucket-a)
     ---------------------------
-    run_cce does NOT build, reset, or delete any devsim device itself.
-    cce_vs_bias creates its own uniquely-named device and deletes it in a
-    `finally` block, so a facade-level cleanup here would double-delete.
+    On the devsim path run_cce does NOT build, reset, or delete any devsim
+    device itself. cce_vs_bias creates its own uniquely-named device and
+    deletes it in a `finally` block, so a facade-level cleanup here would
+    double-delete. (The batched path only builds and deletes a mesh-probe
+    device once per geometry, under the devsim lock.)
+
+    Solver selection mirrors ``run_cv``: inside the validated domain the
+    batched engine runs (``metadata["solver"] == "batched"``, no punch-through
+    ``truncated`` wall, full requested grid); otherwise or on non-convergence
+    the devsim ``cce_vs_bias`` path runs unchanged.
 
     Parameters
     ----------
@@ -427,6 +599,10 @@ def run_cce(
 
     bias_array = np.linspace(v_start, v_stop, n_points)
 
+    result = _run_cce_batched(config, bias_array)
+    if result is not None:
+        return result
+
     # Bucket-a: cce_vs_bias builds AND deletes its own devsim device. Forward
     # config doping via device_kwargs (D-01) so run_cce(DeviceConfig()) is
     # self-consistent with the user's configuration. Do NOT reset/build/delete
@@ -448,6 +624,7 @@ def run_cce(
             "I_generated": result["I_generated"],
             "truncated": result["truncated"],
             "requested_v_stop": result["requested_v_stop"],
+            "solver": "devsim",
         },
         mesh=None,
     )

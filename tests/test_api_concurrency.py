@@ -15,23 +15,36 @@ _SCRIPT = textwrap.dedent(
     from etna.api.simulation import run_cce, run_cv
 
     errors = []
+    solvers = set()
 
-    def work(fn, **kw):
+    def work(fn, cfg=None, **kw):
         try:
-            fn(DeviceConfig(), **kw)
+            res = fn(cfg or DeviceConfig(), **kw)
+            solvers.add(res.metadata["solver"])
         except BaseException as exc:  # noqa: BLE001
             errors.append(repr(exc))
 
+    def work_hot(fn, **kw):
+        work(fn, cfg=DeviceConfig(T=500.0), **kw)
+
+    # Default configs take the numba engine (aborts the process if several threads
+    # enter it at once); DeviceConfig(T=500) is outside its domain and takes devsim.
     threads = [
         threading.Thread(target=work, args=(run_cv,), kwargs=dict(n_points=3)),
         threading.Thread(target=work, args=(run_cv,), kwargs=dict(n_points=3)),
+        threading.Thread(target=work, args=(run_cv,), kwargs=dict(n_points=3)),
+        threading.Thread(target=work, args=(run_cv,), kwargs=dict(n_points=3)),
         threading.Thread(target=work, args=(run_cce,), kwargs=dict(n_points=3)),
+        threading.Thread(target=work_hot, args=(run_cv,), kwargs=dict(n_points=3)),
+        threading.Thread(target=work_hot, args=(run_cv,), kwargs=dict(n_points=3)),
+        threading.Thread(target=work_hot, args=(run_cce,), kwargs=dict(n_points=3)),
     ]
     for t in threads:
         t.start()
     for t in threads:
         t.join()
     assert not errors, errors
+    assert solvers == {"batched", "devsim"}, solvers
     print("OK")
     """
 )

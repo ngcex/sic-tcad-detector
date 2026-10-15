@@ -3,7 +3,7 @@ id: A-01
 title: cv_sweep ramps on a fixed 0.5 V lattice and records the requested bias, so off-grid sweeps are mislabelled and sub-0.5 V spacing never solves
 severity: high
 category: bug
-status: open
+status: fixed
 location: etna/core/cv_analysis.py:185-226 (cv_sweep ramp loop); callers etna/api/simulation.py:99,113 (run_cv), app/workflows/cv.py:42, scripts/validation/cv_vs_bruzzi2023.py:28
 labels: [audit-v7, slice-A, cv, solver, silent-failure]
 source: raw-A-core-solvers.md F1
