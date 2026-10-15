@@ -635,6 +635,7 @@ def cce_vs_fluence(
     energy_MeV=62.0,
     lifetime_model="linear",
     damage_params=None,
+    device_kwargs=None,
 ):
     """Compute CCE vs proton fluence at fixed reverse bias.
 
@@ -671,6 +672,9 @@ def cce_vs_fluence(
         "linear" or "logarithmic". Default: "linear".
     damage_params : RadiationDamageParams or None
         Custom damage parameters. Default: RadiationDamageParams().
+    device_kwargs : dict or None
+        Additional keyword arguments for create_sic_device (e.g. N_A, T,
+        substrate_thickness_cm, doping_profile, N_D); override the defaults.
 
     Returns
     -------
@@ -696,14 +700,15 @@ def cce_vs_fluence(
     # Extract pristine N_D profile from a reference device (epi-only nodes)
     ref_id = uuid.uuid4().hex[:8]
     ref_name = f"fluence_ref_{ref_id}"
-    ref_info = create_sic_device(
-        device_name=ref_name,
+    dev_kw = dict(
         epi_thickness_cm=epi_thickness_cm,
         doping_profile="graded",
         N_D_junction=N_D_junction,
         N_D_bulk=N_D_bulk,
         L_transition=L_transition,
     )
+    dev_kw.update(device_kwargs or {})
+    ref_info = create_sic_device(device_name=ref_name, **dev_kw)
     try:
         ref_x = np.array(
             devsim.get_node_model_values(
@@ -743,14 +748,7 @@ def cce_vs_fluence(
             )
 
             # Staged device creation
-            device_info = create_sic_device(
-                device_name=dev_name,
-                epi_thickness_cm=epi_thickness_cm,
-                doping_profile="graded",
-                N_D_junction=N_D_junction,
-                N_D_bulk=N_D_bulk,
-                L_transition=L_transition,
-            )
+            device_info = create_sic_device(device_name=dev_name, **dev_kw)
 
             # Apply damage BEFORE Poisson setup
             apply_damaged_params(device_info, damaged)

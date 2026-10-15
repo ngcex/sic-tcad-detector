@@ -14,7 +14,7 @@ import numpy as np
 
 import devsim
 
-from etna.api.device import DeviceConfig, build_device, serialized
+from etna.api.device import DeviceConfig, build_device, device_kwargs, serialized
 from etna.api.results import MeshData, SimResult
 from etna.core.charge_collection import cce_vs_bias, cce_vs_fluence
 from etna.core.cv_analysis import cv_sweep
@@ -422,14 +422,11 @@ def run_cce(
     # config doping via device_kwargs (D-01) so run_cce(DeviceConfig()) is
     # self-consistent with the user's configuration. Do NOT reset/build/delete
     # any device here — that would double-delete cce_vs_bias's own device.
+    kw = device_kwargs(config)
     result = cce_vs_bias(
         V_range=bias_array,
-        epi_thickness_cm=config.epi_thickness_um * 1e-4,
-        device_kwargs={
-            "N_D_junction": config.N_D_junction,
-            "N_D_bulk": config.N_D_bulk,
-            "L_transition": config.L_transition_um * 1e-4,
-        },
+        epi_thickness_cm=kw.pop("epi_thickness_cm"),
+        device_kwargs=kw,
     )
 
     return SimResult(
@@ -502,14 +499,13 @@ def run_radiation_damage(
     # Bucket-a: cce_vs_fluence builds AND deletes its own device per fluence.
     # Forward config doping/geometry (D-01) so this facade is self-consistent
     # with run_cce. Do NOT reset/build/delete any device here.
+    kw = device_kwargs(config)
     result = cce_vs_fluence(
         fluence_range=fluences,
         V_bias=V_bias,
-        epi_thickness_cm=config.epi_thickness_um * 1e-4,
-        N_D_junction=config.N_D_junction,
-        N_D_bulk=config.N_D_bulk,
-        L_transition=config.L_transition_um * 1e-4,
+        epi_thickness_cm=kw.pop("epi_thickness_cm"),
         energy_MeV=proton_energy_MeV,
+        device_kwargs=kw,
     )
 
     return SimResult(
@@ -569,15 +565,14 @@ def run_temperature_sweep(
 
     # Bucket-a: sweep_cce_vs_temperature self-cleans. Pass voltages=[voltage]
     # (single element) so x=T is a clean 1D curve. Do NOT forward config.T
-    # (T is the swept axis); DO forward geometry/doping (D-01).
+    # (T is the swept axis); DO forward every other config field.
+    kw = device_kwargs(config)
+    kw.pop("T")
     df = sweep_cce_vs_temperature(
         temperatures=temperatures,
         voltages=[voltage],
         method=method,
-        epi_thickness_cm=config.epi_thickness_um * 1e-4,
-        N_D_junction=config.N_D_junction,
-        N_D_bulk=config.N_D_bulk,
-        L_transition=config.L_transition_um * 1e-4,
+        **kw,
     )
 
     # Return is a long-format pd.DataFrame with columns T, V, CCE (Pitfall 3).
@@ -645,14 +640,13 @@ def run_flash_recombination(
 
     # Bucket-a: cce_vs_dose_rate self-cleans. Forward config geometry/doping
     # (D-01). Do NOT reset/build/delete any device here.
+    kw = device_kwargs(config)
     result = cce_vs_dose_rate(
         dose_rates_Gy_s=dose_rates_Gy_s,
         V_bias=V_bias,
-        epi_thickness_cm=config.epi_thickness_um * 1e-4,
+        epi_thickness_cm=kw.pop("epi_thickness_cm"),
         E_MeV=E_MeV,
-        N_D_junction=config.N_D_junction,
-        N_D_bulk=config.N_D_bulk,
-        L_transition=config.L_transition_um * 1e-4,
+        device_kwargs=kw,
     )
 
     return SimResult(
@@ -731,14 +725,7 @@ def run_dark_current(
     # geometry/doping via **kwargs to create_dd_device (D-01).
     reset_devsim_fully()
     device_info = create_dark_current_device(
-        T=config.T,
-        N_t=N_t,
-        S_n=S_n,
-        S_p=S_p,
-        epi_thickness_cm=config.epi_thickness_um * 1e-4,
-        N_D_junction=config.N_D_junction,
-        N_D_bulk=config.N_D_bulk,
-        L_transition=config.L_transition_um * 1e-4,
+        N_t=N_t, S_n=S_n, S_p=S_p, **device_kwargs(config)
     )
 
     try:
@@ -827,10 +814,13 @@ def run_transient(
 
     # transient_cce_vs_dose_rate builds AND deletes its own device per dose
     # rate, so run_transient adds NO device cleanup (bucket-a-shaped).
+    kw = device_kwargs(config)
+    kw.pop("epi_thickness_cm")
     df = transient_cce_vs_dose_rate(
         V_bias=V_bias,
         dose_rates=dose_rates,
         epi_thickness_cm=epi_cm,
+        device_kwargs=kw,
     )
 
     # Return is a pd.DataFrame with columns dose_rate_Gy_s, transient_cce

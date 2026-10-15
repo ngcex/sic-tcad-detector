@@ -551,6 +551,7 @@ def transient_cce_vs_dose_rate(
     dt_min=1e-8,
     dt_max=1e-4,
     epi_thickness_cm=10e-4,
+    device_kwargs=None,
 ):
     """Sweep dose rates and compute transient CCE at each.
 
@@ -576,6 +577,9 @@ def transient_cce_vs_dose_rate(
         Maximum time step (s). Default: 1e-4.
     epi_thickness_cm : float
         Epitaxial layer thickness (cm). Default: 10e-4 (10 um).
+    device_kwargs : dict or None
+        Additional keyword arguments for create_dd_device (e.g. N_A, T,
+        substrate_thickness_cm, doping_profile, N_D); override the defaults.
 
     Returns
     -------
@@ -588,16 +592,19 @@ def transient_cce_vs_dose_rate(
         dose_rates = np.asarray(dose_rates, dtype=float)
 
     cce_values = []
+    dev_kw = dict(
+        epi_thickness_cm=epi_thickness_cm,
+        doping_profile="graded",
+        N_D_junction=2.90e15,
+        N_D_bulk=8.50e13,
+        L_transition=1.0e-4,
+    )
+    dev_kw.update(device_kwargs or {})
 
     for dose_rate in dose_rates:
         dev_id = uuid.uuid4().hex[:8]
         device_info = create_dd_device(
-            device_name=f"transient_sweep_{dev_id}",
-            epi_thickness_cm=epi_thickness_cm,
-            doping_profile="graded",
-            N_D_junction=2.90e15,
-            N_D_bulk=8.50e13,
-            L_transition=1.0e-4,
+            device_name=f"transient_sweep_{dev_id}", **dev_kw
         )
         device = device_info["device_name"]
         region = device_info["region_name"]

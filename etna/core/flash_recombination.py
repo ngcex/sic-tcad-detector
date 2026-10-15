@@ -269,6 +269,7 @@ def cce_vs_dose_rate(
     N_D_junction=2.90e15,
     N_D_bulk=8.50e13,
     L_transition=1.0e-4,
+    device_kwargs=None,
 ):
     """Compute CCE vs dose rate across the FLASH range (exploratory sensitivity bound).
 
@@ -299,6 +300,9 @@ def cce_vs_dose_rate(
         Donor concentration in bulk epi (cm^-3). Default: 8.50e13.
     L_transition : float
         Transition length for graded doping profile (cm). Default: 1.0e-4.
+    device_kwargs : dict or None
+        Additional keyword arguments for create_dd_device (e.g. N_A, T,
+        substrate_thickness_cm, doping_profile, N_D); override the defaults.
 
     Returns
     -------
@@ -322,16 +326,18 @@ def cce_vs_dose_rate(
 
     cce_sorted = np.zeros(len(dose_rates))
 
-    # --- Device with Auger ---
-    dev_id = uuid.uuid4().hex[:8]
-    device_info = create_dd_device(
-        device_name=f"flash_sweep_{dev_id}",
+    dev_kw = dict(
         epi_thickness_cm=epi_thickness_cm,
         doping_profile="graded",
         N_D_junction=N_D_junction,
         N_D_bulk=N_D_bulk,
         L_transition=L_transition,
     )
+    dev_kw.update(device_kwargs or {})
+
+    # --- Device with Auger ---
+    dev_id = uuid.uuid4().hex[:8]
+    device_info = create_dd_device(device_name=f"flash_sweep_{dev_id}", **dev_kw)
     device = device_info["device_name"]
     region = device_info["region_name"]
 
@@ -387,14 +393,7 @@ def cce_vs_dose_rate(
 
     # --- No-Auger reference at lowest dose rate ---
     dev_id2 = uuid.uuid4().hex[:8]
-    device_info2 = create_dd_device(
-        device_name=f"flash_noauger_{dev_id2}",
-        epi_thickness_cm=epi_thickness_cm,
-        doping_profile="graded",
-        N_D_junction=N_D_junction,
-        N_D_bulk=N_D_bulk,
-        L_transition=L_transition,
-    )
+    device_info2 = create_dd_device(device_name=f"flash_noauger_{dev_id2}", **dev_kw)
     device2 = device_info2["device_name"]
     region2 = device_info2["region_name"]
 

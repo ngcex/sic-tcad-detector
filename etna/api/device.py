@@ -61,6 +61,25 @@ class DeviceConfig:
     area_cm2: float = 1e-4  # cm^2, device active area
 
 
+def device_kwargs(config: DeviceConfig) -> dict:
+    """Map a DeviceConfig onto ``create_dd_device`` keyword arguments (cm, K).
+
+    Single source of truth for the config -> core unit conversion, shared by
+    ``build_device`` and every simulation facade so no config field is dropped.
+    """
+    return dict(
+        epi_thickness_cm=config.epi_thickness_um * 1e-4,
+        substrate_thickness_cm=config.substrate_thickness_um * 1e-4,
+        N_A=config.N_A,
+        N_D=config.N_D,
+        T=config.T,
+        doping_profile=config.doping_profile,
+        N_D_junction=config.N_D_junction,
+        N_D_bulk=config.N_D_bulk,
+        L_transition=config.L_transition_um * 1e-4,
+    )
+
+
 @serialized
 def build_device(config: DeviceConfig, device_name: Optional[str] = None) -> dict:
     """Build a DD-initialized devsim device from a DeviceConfig.
@@ -87,26 +106,11 @@ def build_device(config: DeviceConfig, device_name: Optional[str] = None) -> dic
         Raw devsim device info dict, solved at equilibrium and
         DD-initialized (dd_initialized=True) for both 1D and 2D devices.
     """
-    epi_thickness_cm = config.epi_thickness_um * 1e-4
-    substrate_thickness_cm = config.substrate_thickness_um * 1e-4
-    L_transition = config.L_transition_um * 1e-4
-
     if config.half_width_um is None:
         # 1D branch: create_dd_device runs create_sic_device + setup_poisson +
         # solve_equilibrium + setup_sic_drift_diffusion, sets dd_initialized=True.
         name = device_name or f"device1d_{uuid.uuid4().hex[:8]}"
-        device_info = create_dd_device(
-            device_name=name,
-            epi_thickness_cm=epi_thickness_cm,
-            substrate_thickness_cm=substrate_thickness_cm,
-            N_A=config.N_A,
-            N_D=config.N_D,
-            T=config.T,
-            doping_profile=config.doping_profile,
-            N_D_junction=config.N_D_junction,
-            N_D_bulk=config.N_D_bulk,
-            L_transition=L_transition,
-        )
+        device_info = create_dd_device(device_name=name, **device_kwargs(config))
         return device_info
 
     # 2D branch: create_sic_2d_device builds only the mesh + doping — it does
@@ -116,15 +120,7 @@ def build_device(config: DeviceConfig, device_name: Optional[str] = None) -> dic
     device_info = create_sic_2d_device(
         device_name=name,
         half_width_um=config.half_width_um,  # passed in MICROMETERS, not converted
-        epi_thickness_cm=epi_thickness_cm,
-        substrate_thickness_cm=substrate_thickness_cm,
-        N_A=config.N_A,
-        N_D=config.N_D,
-        T=config.T,
-        doping_profile=config.doping_profile,
-        N_D_junction=config.N_D_junction,
-        N_D_bulk=config.N_D_bulk,
-        L_transition=L_transition,
+        **device_kwargs(config),
     )
     setup_poisson(device_info)
     solve_equilibrium(device_info)
