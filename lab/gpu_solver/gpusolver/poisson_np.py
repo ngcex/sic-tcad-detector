@@ -117,7 +117,7 @@ class PoissonBatch:
         return u * self.V_t[:, None] + V_a + (V_c - V_a) * frac
 
     def solve(
-        self, psi0, V_anode=0.0, V_cathode=0.0, tol=1e-8, max_iter=200, clamp=10.0
+        self, psi0, V_anode=0.0, V_cathode=0.0, tol=1e-8, max_iter=200, clamp=20.0
     ):
         """Newton-solve all B devices at biases V_anode/V_cathode ((B,) or scalar, V).
 
