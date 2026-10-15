@@ -97,17 +97,18 @@ class SweepResult:
     voltages: np.ndarray  # (K,) conventional sign (reverse bias negative)
     W: np.ndarray  # (K, B) cm
     C: np.ndarray  # (K, B) F/cm^2 (area = 1)
-    psi: np.ndarray  # (K, B, N) V
+    psi: "np.ndarray | None"  # (K, B, N) V; None unless keep_psi
     converged: np.ndarray  # (K, B) bool, cumulative along the sweep
 
 
 @serialized
-def reverse_sweep(pb, voltages, junction_pos, epi_thickness_cm, tol=1e-8):
+def reverse_sweep(pb, voltages, junction_pos, epi_thickness_cm, tol=1e-8, keep_psi=False):
     """Solve all devices at each of ``voltages`` (<= 0, in the order given).
 
     Jumps of ~100 V (less at low T: the Newton clamp is in V_t units) between
     consecutive points may not converge in one solve; check ``converged``
-    before trusting a result.
+    before trusting a result. ``keep_psi`` stores the (K, B, N) potentials (large
+    for big batches).
     """
     voltages = _check_voltages(voltages)
     ramp = _Ramp(pb, tol)
@@ -116,10 +117,13 @@ def reverse_sweep(pb, voltages, junction_pos, epi_thickness_cm, tol=1e-8):
         res = ramp.to(-V) if abs(V) > 1e-12 or ramp.Vc != 0.0 else None
         n = res.n if res is not None else pb.solve(ramp.psi, tol=tol).n
         W.append(depletion_width(pb.x, n, pb.donors, junction_pos, epi_thickness_cm))
-        psis.append(ramp.psi.copy())
+        if keep_psi:
+            psis.append(ramp.psi.copy())
         conv.append(ramp.converged.copy())
     W = np.array(W)
-    return SweepResult(voltages, W, capacitance(W), np.array(psis), np.array(conv))
+    return SweepResult(
+        voltages, W, capacitance(W), np.array(psis) if keep_psi else None, np.array(conv)
+    )
 
 
 @dataclass

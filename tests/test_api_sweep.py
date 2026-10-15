@@ -71,3 +71,22 @@ def test_unknown_param_raises():
             values=[1],
             sim_fn=fake_sim,
         ).run()
+
+
+def test_sweep_uses_batched_twin_for_run_cv(monkeypatch):
+    """run_cv / run_cce sweeps are solved as one batch; any other sim_fn stays per-config."""
+    from etna.api import simulation
+
+    seen = {}
+    monkeypatch.setattr(
+        simulation,
+        "run_cv_batch",
+        lambda configs, **kw: seen.update(configs=configs, kw=kw) or ["batched"] * len(configs),
+    )
+    sweep = ParametricSweep(
+        base_config=DeviceConfig(), param="N_A", values=[1e18, 5e18],
+        sim_fn=simulation.run_cv, sim_kwargs={"n_points": 3},
+    )
+    assert sweep.run() == ["batched", "batched"]
+    assert [c.N_A for c in seen["configs"]] == [1e18, 5e18]
+    assert seen["kw"] == {"n_points": 3}

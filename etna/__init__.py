@@ -7,7 +7,9 @@ from etna.api.device import DeviceConfig
 from etna.api.results import MeshData, SimResult
 from etna.api.simulation import (
     run_cce,
+    run_cce_batch,
     run_cv,
+    run_cv_batch,
     run_dark_current,
     run_field,
     run_flash_recombination,
@@ -25,6 +27,8 @@ __all__ = [
     "run_cv",
     "run_field",
     "run_cce",
+    "run_cv_batch",
+    "run_cce_batch",
     "run_radiation_damage",
     "run_dark_current",
     "run_temperature_sweep",

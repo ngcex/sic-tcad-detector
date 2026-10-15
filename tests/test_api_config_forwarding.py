@@ -95,14 +95,14 @@ def test_batched_path_forwards_full_config(monkeypatch, facade):
     """Inside the box the engine batch receives exactly device_kwargs(config)."""
     got = {}
 
-    def fake(**kwargs):
-        got.update(kwargs)
+    def fake(kws):
+        got["kws"] = kws
         raise _Stop
 
     monkeypatch.setattr(sim, "_engine_batch", fake)
     with pytest.raises(_Stop):
         getattr(sim, facade)(CFG)
-    assert got == device_kwargs(CFG)
+    assert got["kws"] == [device_kwargs(CFG)]
 
 
 def test_dark_current_forwards_full_config(monkeypatch):
