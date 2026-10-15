@@ -104,8 +104,9 @@ def graded_doping(x, junction_pos, N_A_ion, N_D_junction, N_D_bulk, L_transition
     NJ = np.atleast_1d(np.asarray(N_D_junction, dtype=float))[:, None]
     NB = np.atleast_1d(np.asarray(N_D_bulk, dtype=float))[:, None]
     Lt = np.atleast_1d(np.asarray(L_transition, dtype=float))[:, None]
-    n_side = (x >= junction_pos).astype(float)  # devsim step(x - xj): 1 at xj
-    p_side = (junction_pos - x > 0).astype(float)  # step(xj - x): 0 at xj
+    # devsim's step(0) == 1: the junction node carries BOTH donors and acceptors
+    n_side = (x >= junction_pos).astype(float)
+    p_side = (junction_pos - x >= 0).astype(float)
     donors = (NB + (NJ - NB) * np.exp(-np.maximum(x - junction_pos, 0.0) / Lt)) * n_side
     acceptors = NA * p_side
     B = max(donors.shape[0], acceptors.shape[0])

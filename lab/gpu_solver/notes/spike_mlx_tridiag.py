@@ -630,6 +630,32 @@ def main():
             for m, (r0, r1, r2) in acc_rows[(N, B)].items():
                 print(f"| {N} | {B} | {m} | {r0:.2e} | {r1:.2e} | {r2:.2e} |")
 
+    # --------------------------------------------------------------- accuracy vs conditioning
+    print(
+        "\n## float32 accuracy vs conditioning (N=327, B=100; Metal kernel (B,N); numpy f32 Thomas as cross-check)\n"
+    )
+    print(
+        "| d_i regime | cond_2 (system 0, dense) | mx32 Metal raw | mx32 Metal row-scaled | np32 Thomas raw | np32 Thomas row-scaled |"
+    )
+    print("|---|---|---|---|---|---|")
+    for dmode in ("laplacian", "spec", "dominant"):
+        a, b, c, d, h = make_systems(100, 327, seed=3, dmode=dmode)
+        x64 = reference_solution(a, b, c, d)
+        A = np.diag(b[0]) + np.diag(a[0, 1:], -1) + np.diag(c[0, :-1], 1)
+        cond = float(np.linalg.cond(A))
+        A32 = [mx.array(v.astype(np.float32)) for v in (a, b, c, d)]
+        A32s = list(row_scale(*A32))
+        e_raw = rel_err(np.asarray(thomas_metal_BN(*A32), dtype=np.float64), x64)
+        e_sc = rel_err(np.asarray(thomas_metal_BN(*A32s), dtype=np.float64), x64)
+        N32 = [v.T.copy().astype(np.float32) for v in (a, b, c, d)]
+        N32s = [v.T.copy().astype(np.float32) for v in row_scale(a, b, c, d)]
+        n_raw = rel_err(thomas_np_NB(*N32).T.astype(np.float64), x64)
+        n_sc = rel_err(thomas_np_NB(*N32s).T.astype(np.float64), x64)
+        print(
+            f"| {dmode} | {cond:.1e} | {e_raw:.2e} | {e_sc:.2e} | {n_raw:.2e} | {n_sc:.2e} |"
+        )
+    sys.stdout.flush()
+
     # --------------------------------------------------------------- 5. assembly
     print("\n## Newton assembly (F and J, ~10 elementwise ops), wall time (ms)\n")
     print("| N | B | np64 | mx32 eager | mx32 compiled |")
