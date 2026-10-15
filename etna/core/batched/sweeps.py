@@ -27,12 +27,12 @@ from etna.core.sic_material import (
 )
 
 
-@lru_cache(maxsize=None)
+@lru_cache(maxsize=4096)
 def _n_i(T):
     return intrinsic_concentration(T, PARAMS)[0]
 
 
-@lru_cache(maxsize=None)
+@lru_cache(maxsize=4096)
 def _n_a_ionized(N_A, T):
     return ionized_acceptor_concentration(N_A, T)
 

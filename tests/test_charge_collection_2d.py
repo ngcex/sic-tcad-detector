@@ -32,9 +32,13 @@ from etna.core.drift_diffusion import (
 from etna.core.charge_collection import add_generation_to_dd, compute_cce_from_dd
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def dd_device_2d():
-    """Create a 2D DD device with bias applied, clean up after test."""
+    """2D DD device with bias applied, built once per module (~100 s to build).
+
+    Shared by tests that only read it or leave it restored (cce_lateral_scan
+    zeroes the generation and re-solves afterwards); cleaned up at module end.
+    """
     device_info = create_2d_dd_device(half_width_um=50.0, V_bias=50.0)
     yield device_info
     try:

@@ -78,14 +78,15 @@ class ParametricSweep:
         configs = [
             replace(self.base_config, **{self.param: value}) for value in self.values
         ]
-        # Facades with a batched twin solve all configs in one go (identity lookup,
+        # Facades with a batched twin solve all configs in one go (identity test,
         # imported lazily to avoid an import cycle with etna.api.simulation).
         from etna.api import simulation
 
-        batch_fn = {
-            simulation.run_cv: simulation.run_cv_batch,
-            simulation.run_cce: simulation.run_cce_batch,
-        }.get(self.sim_fn)
+        batch_fn = None
+        if self.sim_fn is simulation.run_cv:
+            batch_fn = simulation.run_cv_batch
+        elif self.sim_fn is simulation.run_cce:
+            batch_fn = simulation.run_cce_batch
         if batch_fn is not None:
             return batch_fn(configs, **self.sim_kwargs)
         return [self.sim_fn(cfg, **self.sim_kwargs) for cfg in configs]
