@@ -441,9 +441,9 @@ def cce_vs_dose_rate(
         "V_bias": V_bias,
         "epi_thickness_cm": epi_thickness_cm,
         "E_MeV": E_MeV,
-        "N_D_junction": N_D_junction,
-        "N_D_bulk": N_D_bulk,
-        "L_transition": L_transition,
+        "N_D_junction": dev_kw["N_D_junction"],
+        "N_D_bulk": dev_kw["N_D_bulk"],
+        "L_transition": dev_kw["L_transition"],
     }
 
 

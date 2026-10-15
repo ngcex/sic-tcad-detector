@@ -31,6 +31,15 @@ from etna.core.transient import transient_cce_vs_dose_rate
 logger = logging.getLogger(__name__)
 
 
+def _require_1d(config: DeviceConfig, facade: str) -> None:
+    """Refuse 2D configs for facades whose core builds 1D devices only."""
+    if config.half_width_um is not None:
+        raise NotImplementedError(
+            f"{facade}: only 1D devices are supported (the core builds a 1D "
+            "device); pass a DeviceConfig with half_width_um=None."
+        )
+
+
 @serialized
 def run_cv(
     config: DeviceConfig,
@@ -493,6 +502,8 @@ def run_radiation_damage(
     predictions — they are a relative sensitivity shape only until real
     NIEL/damage-coefficient data replaces the placeholders.
     """
+    _require_1d(config, "run_radiation_damage")
+
     if fluences is None:
         fluences = np.geomspace(1e13, 1e16, 6)
 
@@ -560,6 +571,8 @@ def run_temperature_sweep(
         sim_type="temperature", x=temperatures (K), y=CCE values
         (dimensionless), metadata contains "voltage_V" and "method".
     """
+    _require_1d(config, "run_temperature_sweep")
+
     if temperatures is None:
         temperatures = np.linspace(250.0, 350.0, 5)
 
@@ -635,6 +648,8 @@ def run_flash_recombination(
     conductivity modulation) is not modeled — do not present these outputs as
     validated FLASH physics.
     """
+    _require_1d(config, "run_flash_recombination")
+
     if dose_rates_Gy_s is None:
         dose_rates_Gy_s = np.array([20.0, 50.0, 100.0, 150.0, 200.0, 230.0])
 
@@ -717,6 +732,8 @@ def run_dark_current(
     unconditionally at entry — devsim state is process-global, not
     etna-scoped.
     """
+    _require_1d(config, "run_dark_current")
+
     bias_array = np.linspace(v_start, v_stop, n_points)
 
     # Bucket-b: full lifecycle owned here (identical to run_cv). Build via
@@ -804,6 +821,8 @@ def run_transient(
         sim_type="transient", x=dose_rates (Gy/s), y=transient CCE values
         (dimensionless), metadata contains "V_bias".
     """
+    _require_1d(config, "run_transient")
+
     if dose_rates is None:
         dose_rates = np.array([20.0, 50.0, 100.0, 150.0, 200.0, 230.0])
 
