@@ -92,29 +92,43 @@ def _engine_unsupported_reason(config: DeviceConfig, bias_array) -> "str | None"
     return None
 
 
-def _engine_batch(
-    *,
-    epi_thickness_cm,
-    substrate_thickness_cm,
-    N_A,
-    N_D,
-    T,
-    doping_profile,
-    N_D_junction,
-    N_D_bulk,
-    L_transition,
-):
-    """Engine batch (and mesh) for one device. Keyword-only so tests can capture
-    exactly what ``device_kwargs(config)`` forwards."""
-    x = node_positions(epi_thickness_cm, substrate_thickness_cm)
-    if doping_profile == "uniform":
-        nd = DEFAULT_N_D if N_D is None else N_D
-        N_D_junction = N_D_bulk = nd
-        L_transition = 1e-4  # irrelevant for a flat profile; must be > 0
+def _engine_batch(kws):
+    """Engine batch for devices sharing one mesh geometry.
+
+    ``kws`` is a list of ``device_kwargs(config)`` dicts. Returns the batch, the
+    mesh nodes and the per-device N_D used for the electron mobility (as in
+    ``cce_vs_bias``: ``DEFAULT_N_D`` when unset, whatever the profile).
+    """
+    col = lambda key: np.array([k[key] for k in kws], dtype=float)
+    sub = kws[0]["substrate_thickness_cm"]
+    x = node_positions(kws[0]["epi_thickness_cm"], sub)
+    nd = np.array([DEFAULT_N_D if k["N_D"] is None else k["N_D"] for k in kws], float)
+    uniform = np.array([k["doping_profile"] == "uniform" for k in kws])
+    # A uniform profile is a flat graded one; L_transition only has to be > 0.
     pb = make_batch(
-        x, substrate_thickness_cm, N_A, N_D_junction, N_D_bulk, L_transition, T
+        x,
+        sub,
+        col("N_A"),
+        np.where(uniform, nd, col("N_D_junction")),
+        np.where(uniform, nd, col("N_D_bulk")),
+        np.where(uniform, 1e-4, col("L_transition")),
+        col("T"),
     )
-    return pb, x
+    return pb, x, nd
+
+
+def _engine_groups(configs, bias_array, facade):
+    """Engine-eligible config indices grouped by mesh geometry, input order kept."""
+    groups = {}
+    for i, config in enumerate(configs):
+        reason = _engine_unsupported_reason(config, bias_array)
+        if reason is not None:
+            logger.info("%s: using devsim (%s)", facade, reason)
+            continue
+        kw = device_kwargs(config)
+        key = (kw["epi_thickness_cm"], kw["substrate_thickness_cm"])
+        groups.setdefault(key, []).append(i)
+    return groups
 
 
 def _require_1d(config: DeviceConfig, facade: str) -> None:
@@ -126,69 +140,119 @@ def _require_1d(config: DeviceConfig, facade: str) -> None:
         )
 
 
-def _run_cv_batched(config: DeviceConfig, bias_array) -> "SimResult | None":
-    """C-V through the batched engine, or None to fall back to devsim."""
-    reason = _engine_unsupported_reason(config, bias_array)
-    if reason is not None:
-        logger.info("run_cv: using devsim (%s)", reason)
-        return None
-    kw = device_kwargs(config)
-    pb, _ = _engine_batch(**kw)
-    res = reverse_sweep(
-        pb, bias_array, kw["substrate_thickness_cm"], kw["epi_thickness_cm"]
-    )
-    if not res.converged.all():
-        logger.warning("run_cv: batched engine did not converge, using devsim")
-        return None
-    W = res.W[:, 0]
-    C = capacitance(W, config.area_cm2)
-    return SimResult(
-        config=config,
-        sim_type="cv",
-        x=bias_array.copy(),
-        y=C,
-        metadata={
-            "depletion_widths": W,
-            "one_over_C_squared": 1.0 / C**2,
-            "area_cm2": config.area_cm2,
-            "truncated": False,
-            "requested_v_stop": float(bias_array.min()),
-            "solver": "batched",
-        },
-        mesh=None,
-    )
+def _reject_2d(configs, why):
+    for config in configs:
+        if config.half_width_um is not None:
+            raise NotImplementedError(why)
 
 
-def _run_cce_batched(config: DeviceConfig, bias_array) -> "SimResult | None":
-    """CCE through the batched engine, or None to fall back to devsim."""
-    reason = _engine_unsupported_reason(config, bias_array)
-    if reason is not None:
-        logger.info("run_cce: using devsim (%s)", reason)
-        return None
-    kw = device_kwargs(config)
-    pb, x = _engine_batch(**kw)
-    sub = kw["substrate_thickness_cm"]
-    # cce_vs_bias defaults: alpha range 15 um, peak generation 1e18 cm^-3 s^-1.
-    G = alpha_generation(x, sub, 15e-4, 1e18)
-    # Mobility inputs mirror cce_vs_bias exactly (electrons from N_D, holes from N_A).
-    res = cce_sweep(pb, bias_array, sub, G, T=kw["T"], N_A=kw["N_A"], N_D=kw["N_D"])
-    if not res.converged.all():
-        logger.warning("run_cce: batched engine did not converge, using devsim")
-        return None
-    return SimResult(
-        config=config,
-        sim_type="cce",
-        x=bias_array.copy(),
-        y=res.cce[:, 0],
-        metadata={
-            "I_collected": res.J_collected[:, 0],
-            "I_generated": res.J_generated,
-            "truncated": False,
-            "requested_v_stop": float(bias_array.min()),
-            "solver": "batched",
-        },
-        mesh=None,
-    )
+@serialized
+def run_cv_batch(
+    configs, v_start: float = 0.0, v_stop: float = -50.0, n_points: int = 40
+) -> "list[SimResult]":
+    """`run_cv` for many configs at once; one result per config, in input order.
+
+    Configs inside the engine's validated domain are solved together (grouped by
+    mesh geometry, one batched Newton solve per group); the others, and any
+    that fail to converge, go through the devsim path individually. Each result
+    equals what `run_cv(config, ...)` returns.
+    """
+    configs = list(configs)
+    _reject_2d(configs, _RUN_CV_2D)
+    bias_array = np.linspace(v_start, v_stop, n_points)
+    results = [None] * len(configs)
+    for idxs in _engine_groups(configs, bias_array, "run_cv").values():
+        kws = [device_kwargs(configs[i]) for i in idxs]
+        pb, _, _ = _engine_batch(kws)
+        res = reverse_sweep(
+            pb, bias_array, kws[0]["substrate_thickness_cm"], kws[0]["epi_thickness_cm"]
+        )
+        for j, i in enumerate(idxs):
+            if not res.converged[:, j].all():
+                logger.warning("run_cv: batched engine did not converge, using devsim")
+                continue
+            W = res.W[:, j]
+            C = capacitance(W, configs[i].area_cm2)
+            results[i] = SimResult(
+                config=configs[i],
+                sim_type="cv",
+                x=bias_array.copy(),
+                y=C,
+                metadata={
+                    "depletion_widths": W,
+                    "one_over_C_squared": 1.0 / C**2,
+                    "area_cm2": configs[i].area_cm2,
+                    "truncated": False,
+                    "requested_v_stop": float(bias_array.min()),
+                    "solver": "batched",
+                },
+                mesh=None,
+            )
+    return [r if r is not None else _run_cv_devsim(c, bias_array) for r, c in zip(results, configs)]
+
+
+@serialized
+def run_cce_batch(
+    configs, v_start: float = -10.0, v_stop: float = -40.0, n_points: int = 30
+) -> "list[SimResult]":
+    """`run_cce` for many configs at once; same grouping and fallback as `run_cv_batch`.
+
+    CCE of a batched device can differ from its single-device value at about the
+    Gummel tolerance (1e-6): the Gummel loop runs until the whole batch converged.
+    """
+    configs = list(configs)
+    _reject_2d(configs, _RUN_CCE_2D)
+    bias_array = np.linspace(v_start, v_stop, n_points)
+    results = [None] * len(configs)
+    for idxs in _engine_groups(configs, bias_array, "run_cce").values():
+        kws = [device_kwargs(configs[i]) for i in idxs]
+        pb, x, nd = _engine_batch(kws)
+        sub = kws[0]["substrate_thickness_cm"]
+        # cce_vs_bias defaults: alpha range 15 um, peak generation 1e18 cm^-3 s^-1.
+        G = alpha_generation(x, sub, 15e-4, 1e18)
+        # Mobility inputs mirror cce_vs_bias exactly (electrons from N_D, holes from N_A).
+        res = cce_sweep(
+            pb,
+            bias_array,
+            sub,
+            G,
+            T=[k["T"] for k in kws],
+            N_A=[k["N_A"] for k in kws],
+            N_D=nd,
+        )
+        for j, i in enumerate(idxs):
+            if not (res.converged[:, j].all()):
+                logger.warning("run_cce: batched engine did not converge, using devsim")
+                continue
+            results[i] = SimResult(
+                config=configs[i],
+                sim_type="cce",
+                x=bias_array.copy(),
+                y=res.cce[:, j],
+                metadata={
+                    "I_collected": res.J_collected[:, j],
+                    "I_generated": res.J_generated,
+                    "truncated": False,
+                    "requested_v_stop": float(bias_array.min()),
+                    "solver": "batched",
+                },
+                mesh=None,
+            )
+    return [r if r is not None else _run_cce_devsim(c, bias_array) for r, c in zip(results, configs)]
+
+
+_RUN_CV_2D = (
+    "run_cv: 2D C-V is out of Phase 36 scope. core.cv_analysis.cv_sweep "
+    "operates on the 1D DD device returned by build_device() when "
+    "config.half_width_um is None; pass a DeviceConfig with "
+    "half_width_um=None for run_cv()."
+)
+_RUN_CCE_2D = (
+    "run_cce: 2D CCE is out of scope for this facade. core "
+    "charge_collection.cce_vs_bias uses create_dd_device (a 1D "
+    "constructor); pass a DeviceConfig with half_width_um=None for "
+    "run_cce()."
+)
 
 
 @serialized
@@ -258,20 +322,11 @@ def run_cv(
     unrelated code sharing the process) across a `run_cv()` call, that
     device will be silently deleted.
     """
-    if config.half_width_um is not None:
-        raise NotImplementedError(
-            "run_cv: 2D C-V is out of Phase 36 scope. core.cv_analysis.cv_sweep "
-            "operates on the 1D DD device returned by build_device() when "
-            "config.half_width_um is None; pass a DeviceConfig with "
-            "half_width_um=None for run_cv()."
-        )
+    return run_cv_batch([config], v_start, v_stop, n_points)[0]
 
-    bias_array = np.linspace(v_start, v_stop, n_points)
 
-    result = _run_cv_batched(config, bias_array)
-    if result is not None:
-        return result
-
+def _run_cv_devsim(config: DeviceConfig, bias_array) -> SimResult:
+    """C-V on a devsim device (the reference path; also the engine's fallback)."""
     # Guarantee a clean devsim session before building (avoids device/state
     # leakage between repeated run_cv calls in the same process).
     reset_devsim_fully()
@@ -589,20 +644,11 @@ def run_cce(
         "requested_v_stop" (the originally requested v_stop, for comparison
         against x.min() when truncated).
     """
-    if config.half_width_um is not None:
-        raise NotImplementedError(
-            "run_cce: 2D CCE is out of scope for this facade. core "
-            "charge_collection.cce_vs_bias uses create_dd_device (a 1D "
-            "constructor); pass a DeviceConfig with half_width_um=None for "
-            "run_cce()."
-        )
+    return run_cce_batch([config], v_start, v_stop, n_points)[0]
 
-    bias_array = np.linspace(v_start, v_stop, n_points)
 
-    result = _run_cce_batched(config, bias_array)
-    if result is not None:
-        return result
-
+def _run_cce_devsim(config: DeviceConfig, bias_array) -> SimResult:
+    """CCE on a devsim device via `cce_vs_bias` (reference path and fallback)."""
     # Bucket-a: cce_vs_bias builds AND deletes its own devsim device. Forward
     # config doping via device_kwargs (D-01) so run_cce(DeviceConfig()) is
     # self-consistent with the user's configuration. Do NOT reset/build/delete

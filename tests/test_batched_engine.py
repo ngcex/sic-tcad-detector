@@ -81,7 +81,7 @@ def test_cv_and_potential_match_devsim(label, kw):
         node_positions(epi, sub), sub, kw.get("N_A", 1e19), nd[0], nd[1],
         kw.get("L_transition", 1e-4), kw.get("T", 300.0),
     )
-    res = reverse_sweep(pb, BIASES, sub, epi)
+    res = reverse_sweep(pb, BIASES, sub, epi, keep_psi=True)
     assert res.converged.all()
     np.testing.assert_allclose(res.W[:, 0], ref["depletion_widths"], rtol=1e-8)
     # potential at the deepest bias (devsim holds the last solved state)

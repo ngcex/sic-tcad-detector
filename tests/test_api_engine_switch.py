@@ -99,3 +99,49 @@ def test_bias_jump_limit_scales_with_temperature():
     grid = np.array([0.0, -90.0])
     assert sim._engine_unsupported_reason(DeviceConfig(T=300.0), grid) is None
     assert "bias jump" in sim._engine_unsupported_reason(DeviceConfig(T=250.0), grid)
+
+
+# --- batched sweeps: run_cv_batch / run_cce_batch ---------------------------
+
+BATCH = [
+    DeviceConfig(),
+    DeviceConfig(N_D_junction=4.0e15, N_D_bulk=2e14),
+    DeviceConfig(doping_profile="uniform", N_D=1e15),
+    DeviceConfig(T=350.0, N_A=5e18),
+    DeviceConfig(epi_thickness_um=8.0, substrate_thickness_um=2.0),  # other geometry
+]
+
+
+def test_run_cv_batch_equals_individual_calls():
+    batch = sim.run_cv_batch(BATCH, v_stop=-30.0, n_points=7)
+    assert len(batch) == len(BATCH)
+    for cfg, res in zip(BATCH, batch):
+        one = sim.run_cv(cfg, v_stop=-30.0, n_points=7)
+        assert res.config is cfg
+        assert res.metadata["solver"] == "batched"
+        np.testing.assert_allclose(res.y, one.y, rtol=1e-10)
+        np.testing.assert_allclose(
+            res.metadata["depletion_widths"], one.metadata["depletion_widths"], rtol=1e-10
+        )
+
+
+def test_run_cce_batch_equals_individual_calls():
+    batch = sim.run_cce_batch(BATCH, n_points=4)
+    for cfg, res in zip(BATCH, batch):
+        one = sim.run_cce(cfg, n_points=4)
+        # the batch runs Gummel until every device converged: ~tolerance-level difference
+        np.testing.assert_allclose(res.y, one.y, atol=1e-6)
+        assert res.metadata["I_generated"] == one.metadata["I_generated"]
+
+
+def test_batch_keeps_input_order_and_mixes_paths():
+    hot = DeviceConfig(T=500.0)  # outside the box -> devsim
+    out = sim.run_cv_batch([DeviceConfig(), hot, DeviceConfig(N_A=5e18)], n_points=3)
+    assert [r.metadata["solver"] for r in out] == ["batched", "devsim", "batched"]
+    assert out[1].config is hot
+
+
+def test_batch_of_nothing_and_2d_rejection():
+    assert sim.run_cv_batch([]) == []
+    with pytest.raises(NotImplementedError, match="2D"):
+        sim.run_cce_batch([DeviceConfig(), DeviceConfig(half_width_um=50.0)])

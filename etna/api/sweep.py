@@ -5,7 +5,8 @@
 `base_config` via `dataclasses.replace(base_config, **{param: value})`,
 calls `sim_fn(cloned_config, **sim_kwargs)`, and collects the results into a
 `list[SimResult]`. It is devsim-agnostic — any devsim work happens inside the
-supplied `sim_fn`, never here.
+supplied `sim_fn`, never here. For `run_cv` / `run_cce` the whole sweep is
+solved as one batch through their `*_batch` twins.
 
 Config cloning uses `dataclasses.replace`, which raises `TypeError` when
 `param` is not a `DeviceConfig` field. This is a deliberate security choice
@@ -74,8 +75,17 @@ class ParametricSweep:
         `dataclasses.replace` raises `TypeError` if `self.param` is not a
         `DeviceConfig` field (no silent attribute injection).
         """
-        results = []
-        for value in self.values:
-            cfg_i = replace(self.base_config, **{self.param: value})
-            results.append(self.sim_fn(cfg_i, **self.sim_kwargs))
-        return results
+        configs = [
+            replace(self.base_config, **{self.param: value}) for value in self.values
+        ]
+        # Facades with a batched twin solve all configs in one go (identity lookup,
+        # imported lazily to avoid an import cycle with etna.api.simulation).
+        from etna.api import simulation
+
+        batch_fn = {
+            simulation.run_cv: simulation.run_cv_batch,
+            simulation.run_cce: simulation.run_cce_batch,
+        }.get(self.sim_fn)
+        if batch_fn is not None:
+            return batch_fn(configs, **self.sim_kwargs)
+        return [self.sim_fn(cfg, **self.sim_kwargs) for cfg in configs]
