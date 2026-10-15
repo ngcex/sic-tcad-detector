@@ -29,7 +29,7 @@ SLOW_SINGLE_S = (
 )
 B_LIST = [1, 100, 1000, 10000]
 N_LIST = [327, 1000]
-DENSE_MAX_BYTES = 4e9  # matrix alone; LU workspace doubles it in practice
+DENSE_MAX_BYTES = 4e9  # strict: skip dense when matrix alone >= 4 GB (B=1000,N=1000 f32 OOMs on MPS)
 
 OUT_JSON = sys.argv[sys.argv.index("--json") + 1] if "--json" in sys.argv else None
 
@@ -362,7 +362,7 @@ def main():
 
             # dense MPS float32 (build + solve)
             dense_bytes = B * N * N * 4
-            if dense_bytes <= DENSE_MAX_BYTES and not (B == 10000):
+            if dense_bytes < DENSE_MAX_BYTES and not (B == 10000):
                 r["mps_f32_dense"] = bench(
                     lambda: dense_torch(ta, tb, tc, td), sync_mps
                 )
@@ -376,7 +376,7 @@ def main():
                 r["mps_f32_dense"] = None
                 r["mps_f32_dense_solve_only"] = None
             # dense CPU float64 (build + solve)
-            if B * N * N * 8 <= DENSE_MAX_BYTES and not (B == 10000):
+            if B * N * N * 8 < DENSE_MAX_BYTES and not (B == 10000):
                 ca, cb, cc, cd = (
                     torch.tensor(v, dtype=torch.float64) for v in (a, b, c, d)
                 )
@@ -517,7 +517,7 @@ def main():
         except Exception as e:  # noqa: BLE001
             r["mps_f32_pcr_compiled"] = None
             r["mps_f32_pcr_compiled_error"] = f"{type(e).__name__}: {str(e)[:300]}"
-        if B * N * N * 4 <= DENSE_MAX_BYTES and B != 10000:
+        if B * N * N * 4 < DENSE_MAX_BYTES and B != 10000:
             r["mps_f32_dense"] = bench(
                 lambda: newton_step_torch(tpsi, thl, thr, tdop, s_val, dense_torch),
                 sync_mps,

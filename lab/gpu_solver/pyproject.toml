@@ -25,3 +25,4 @@ packages = ["gpusolver"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["mlx: needs the MLX/Metal backend"]
