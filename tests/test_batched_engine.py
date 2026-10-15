@@ -120,3 +120,12 @@ def test_cce_matches_devsim():
     np.testing.assert_allclose(res.cce[:, 0], ref["cce_values"], atol=1e-6)
     np.testing.assert_allclose(res.J_collected[:, 0], ref["I_collected"], rtol=1e-3)
     assert res.J_generated == pytest.approx(ref["I_generated"], rel=1e-10)
+
+
+def test_non_finite_voltages_and_bad_grading_are_rejected():
+    x = node_positions(EPI, SUB)
+    pb = make_batch(x, SUB, 1e19, 2.9e15, 8.5e13, 1e-4)
+    with pytest.raises(ValueError):
+        reverse_sweep(pb, np.array([0.0, np.nan]), SUB, EPI)
+    with pytest.raises(ValueError):
+        make_batch(x, SUB, 1e19, 2.9e15, 8.5e13, 0.0)

@@ -1,5 +1,7 @@
 """Every simulation facade must forward the whole DeviceConfig (audit C-01)."""
 
+from dataclasses import replace
+
 import numpy as np
 import pytest
 
@@ -48,7 +50,6 @@ def _capture(monkeypatch, name):
 @pytest.mark.parametrize(
     "name, call, nested",
     [
-        ("cce_vs_bias", lambda: sim.run_cce(CFG), True),
         ("cce_vs_fluence", lambda: sim.run_radiation_damage(CFG), True),
         ("cce_vs_dose_rate", lambda: sim.run_flash_recombination(CFG), True),
         ("transient_cce_vs_dose_rate", lambda: sim.run_transient(CFG), True),
@@ -74,6 +75,34 @@ def test_facades_forward_full_config(monkeypatch, name, call, nested):
         assert kw["T"] == 350.0
     else:
         assert "T" not in kw  # T is the swept axis
+
+
+def test_run_cce_devsim_path_forwards_full_config(monkeypatch):
+    """Outside the engine's validated box run_cce uses cce_vs_bias, with the full config."""
+    cfg = replace(CFG, T=500.0)
+    got = _capture(monkeypatch, "cce_vs_bias")
+    with pytest.raises(_Stop):
+        sim.run_cce(cfg)
+    kw = got["device_kwargs"]
+    for key, val in device_kwargs(cfg).items():
+        if key != "epi_thickness_cm":
+            assert kw[key] == val
+    assert got["epi_thickness_cm"] == device_kwargs(cfg)["epi_thickness_cm"]
+
+
+@pytest.mark.parametrize("facade", ["run_cv", "run_cce"])
+def test_batched_path_forwards_full_config(monkeypatch, facade):
+    """Inside the box the engine batch receives exactly device_kwargs(config)."""
+    got = {}
+
+    def fake(**kwargs):
+        got.update(kwargs)
+        raise _Stop
+
+    monkeypatch.setattr(sim, "_engine_batch", fake)
+    with pytest.raises(_Stop):
+        getattr(sim, facade)(CFG)
+    assert got == device_kwargs(CFG)
 
 
 def test_dark_current_forwards_full_config(monkeypatch):

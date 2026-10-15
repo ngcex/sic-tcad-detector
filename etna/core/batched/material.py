@@ -29,6 +29,8 @@ def graded_doping(x, junction_pos, N_A_ion, N_D_junction, N_D_bulk, L_transition
     ``step(0) == 1``: the junction node carries both donors and acceptors.
     """
     x = np.asarray(x, dtype=float)[None, :]
+    if np.any(np.asarray(L_transition) <= 0):
+        raise ValueError("L_transition must be positive")
     col = lambda a: np.atleast_1d(np.asarray(a, dtype=float))[:, None]
     NA, NJ, NB, Lt = col(N_A_ion), col(N_D_junction), col(N_D_bulk), col(L_transition)
     n_side = (x >= junction_pos).astype(float)
