@@ -14,7 +14,7 @@ import numpy as np
 
 import devsim
 
-from etna.api.device import DeviceConfig, build_device
+from etna.api.device import DeviceConfig, build_device, serialized
 from etna.api.results import MeshData, SimResult
 from etna.core.charge_collection import cce_vs_bias, cce_vs_fluence
 from etna.core.cv_analysis import cv_sweep
@@ -31,6 +31,7 @@ from etna.core.transient import transient_cce_vs_dose_rate
 logger = logging.getLogger(__name__)
 
 
+@serialized
 def run_cv(
     config: DeviceConfig,
     v_start: float = 0.0,
@@ -141,6 +142,7 @@ def run_cv(
             reset_devsim_fully()
 
 
+@serialized
 def run_field(config: DeviceConfig, bias_V: float = -50.0) -> SimResult:
     """Ramp a device to a fixed reverse bias and return a field/potential SimResult.
 
@@ -334,6 +336,7 @@ def run_field(config: DeviceConfig, bias_V: float = -50.0) -> SimResult:
             reset_devsim_fully()
 
 
+@serialized
 def run_cce(
     config: DeviceConfig,
     v_start: float = -10.0,
@@ -444,6 +447,7 @@ def run_cce(
     )
 
 
+@serialized
 def run_radiation_damage(
     config: DeviceConfig,
     fluences: "np.ndarray | None" = None,
@@ -521,6 +525,7 @@ def run_radiation_damage(
     )
 
 
+@serialized
 def run_temperature_sweep(
     config: DeviceConfig,
     temperatures: "np.ndarray | None" = None,
@@ -589,6 +594,7 @@ def run_temperature_sweep(
     )
 
 
+@serialized
 def run_flash_recombination(
     config: DeviceConfig,
     dose_rates_Gy_s: "np.ndarray | None" = None,
@@ -662,6 +668,7 @@ def run_flash_recombination(
     )
 
 
+@serialized
 def run_dark_current(
     config: DeviceConfig,
     v_start: float = 0.0,
@@ -767,6 +774,7 @@ def run_dark_current(
             reset_devsim_fully()
 
 
+@serialized
 def run_transient(
     config: DeviceConfig,
     dose_rates: "np.ndarray | None" = None,
