@@ -1,5 +1,6 @@
-"""gpusolver: batched 1D 4H-SiC p+/n- diode electrostatics for Apple Silicon.
+"""gpusolver: batched 1D 4H-SiC p+/n- diode electrostatics and CCE, three backends.
 
-Lab spike living under lab/gpu_solver/. See README.md for what exists,
-what was measured, and what does not work.
+numba float64 (primary), numpy float64 (reference), MLX/Metal float32
+(validated, slower than numba). Lab spike under lab/gpu_solver/; README.md has
+the measured numbers, caveats and what does not work.
 """
