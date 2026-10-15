@@ -1,8 +1,9 @@
 """Batched solver on P1 and P2 (same mesh and bias points as the devsim baseline).
 
 Run from lab/gpu_solver (after bench_devsim.py has written results/devsim.json):
-    uv run python bench/bench_batched.py --backend numpy
-    uv run python bench/bench_batched.py --backend mlx
+    uv run python bench/bench_batched.py --backend numpy            # tol 1e-8 (devsim-grade)
+    uv run python bench/bench_batched.py --backend numpy --tol 1e-4  # same tol as float32
+    uv run python bench/bench_batched.py --backend mlx              # tol 1e-4
 
 Reports wall time and max relative W error vs devsim's DD results, and writes
 results/batched_<backend>.json.
@@ -48,23 +49,13 @@ def run_p1(backend, devsim_res, tol):
         N_D_bulk=P1["N_D_bulk"],
         L_transition_cm=P1["L_transition_um"] * 1e-4,
     )
-    out = {}
-    for label, step in (("0.5V steps (as devsim)", 0.5), ("direct jumps", None)):
-        pb = make_batch(X, XJ, backend=backend, **kw)
-        t, sw = _time(
-            lambda: reverse_sweep(pb, V, XJ, EPI, V_step=step, tol=tol, keep_psi=False)
-        )
-        err = float(np.abs(sw.W[:, 0] - W_ref).max() / W_ref.min())
-        out[label] = dict(
-            t_s=t,
-            newton_its=sw.newton_iterations,
-            max_rel_W_err=err,
-            converged=bool(sw.converged.all()),
-        )
-        print(
-            f"P1 [{backend}] {label}: {t*1e3:.0f} ms, {sw.newton_iterations} Newton its, max rel W err {err:.2e}, converged={sw.converged.all()}"
-        )
-    return out
+    pb = make_batch(X, XJ, backend=backend, **kw)
+    t, sw = _time(lambda: reverse_sweep(pb, V, XJ, EPI, tol=tol, keep_psi=False))
+    err = float(np.abs(sw.W[:, 0] - W_ref).max() / W_ref.min())
+    print(
+        f"P1 [{backend}] 121 points 0->-60V: {t*1e3:.0f} ms, {sw.newton_iterations} Newton its, max rel W err {err:.2e}, converged={sw.converged.all()}"
+    )
+    return dict(t_s=t, newton_its=sw.newton_iterations, max_rel_W_err=err, converged=bool(sw.converged.all()))
 
 
 def run_p2(backend, devsim_res, tol):
@@ -114,8 +105,9 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--backend", default="numpy", choices=["numpy", "mlx"])
     ap.add_argument("--no-scaling", action="store_true")
+    ap.add_argument("--tol", type=float, default=None, help="Newton tol on max|du| in V_t units (default 1e-8 numpy, 1e-4 mlx)")
     args = ap.parse_args()
-    tol = 1e-8 if args.backend == "numpy" else 1e-4
+    tol = args.tol if args.tol is not None else (1e-8 if args.backend == "numpy" else 1e-4)
     with open(os.path.join(HERE, "results", "devsim.json")) as f:
         devsim_res = json.load(f)
     results = {
@@ -124,7 +116,7 @@ if __name__ == "__main__":
     }
     if not args.no_scaling:
         results["scaling"] = run_scaling(args.backend, tol)
-    path = os.path.join(HERE, "results", f"batched_{args.backend}.json")
+    path = os.path.join(HERE, "results", f"batched_{args.backend}_tol{tol:g}.json")
     with open(path, "w") as f:
         json.dump(results, f, indent=1)
     print("wrote", path)
