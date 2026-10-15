@@ -123,7 +123,15 @@ class PoissonBatchMLX(PoissonBatch):
         return u_lo + delta, upd
 
     def solve(
-        self, psi0, V_anode=0.0, V_cathode=0.0, tol=1e-4, max_iter=200, clamp=20.0
+        self,
+        psi0,
+        V_anode=0.0,
+        V_cathode=0.0,
+        tol=1e-4,
+        max_iter=200,
+        clamp=20.0,
+        phi_n=None,
+        phi_p=None,
     ):
         B, N = self.B, self.N
         V_a = np.broadcast_to(np.asarray(V_anode, dtype=float), (B,))
@@ -135,8 +143,9 @@ class PoissonBatchMLX(PoissonBatch):
         u64[0], u64[-1] = psi_a / self.V_t, psi_c / self.V_t
         u_hi = mx.array(u64.astype(np.float32))
         u_lo = mx.array((u64 - np.asarray(u_hi)).astype(np.float32))
-        u_n = mx.array((V_c / self.V_t).astype(np.float32)[None, :])
-        u_p = mx.array((V_a / self.V_t).astype(np.float32)[None, :])
+        u_n64, u_p64 = self.quasi_fermi(V_a, V_c, phi_n, phi_p)
+        u_n = mx.array(np.ascontiguousarray(u_n64, dtype=np.float32))
+        u_p = mx.array(np.ascontiguousarray(u_p64, dtype=np.float32))
         active = mx.ones((1, B), dtype=mx.float32)
         clamp_a = mx.array(np.float32(clamp))
         converged = np.zeros(B, dtype=bool)
@@ -153,14 +162,8 @@ class PoissonBatchMLX(PoissonBatch):
         # final densities / potential back in float64 numpy
         u = np.asarray(u_hi).astype(np.float64) + np.asarray(u_lo).astype(np.float64)
         lnni = self.log_ni_hat[None, :]
-        n = (
-            self.N0[None, :]
-            * np.exp(np.minimum(u - (V_c / self.V_t)[None, :] + lnni, EXP_CLAMP))
-        ).T
-        p = (
-            self.N0[None, :]
-            * np.exp(np.minimum((V_a / self.V_t)[None, :] - u + lnni, EXP_CLAMP))
-        ).T
+        n = (self.N0[None, :] * np.exp(np.minimum(u - u_n64 + lnni, EXP_CLAMP))).T
+        p = (self.N0[None, :] * np.exp(np.minimum(u_p64 - u + lnni, EXP_CLAMP))).T
         psi = (u * self.V_t[None, :]).T
         return PoissonResult(
             psi=psi, n=n, p=p, iterations=it, converged=converged, max_update=max_upd
