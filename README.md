@@ -88,6 +88,9 @@ uv run pytest tests/test_api_*.py tests/test_app_*.py -q
 uv run jupyter lab notebooks/01_phase1_validation.ipynb
 ```
 
+> **Parallel tests:** `uv run pytest -n auto --dist loadfile -m "not slow" -q` runs the
+> non-slow suite in about 3 minutes (626 s serial); use `-n0` when debugging with pdb.
+>
 > **devsim note:** the full drift-diffusion test suite is slow, and stacking
 > many DD device builds in one interpreter process can exhaust devsim's
 > resources. Run DD-heavy modules one file at a time (e.g.

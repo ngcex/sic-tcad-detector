@@ -104,3 +104,26 @@ drift-diffusion solution equals one quasi-Fermi Poisson equation (dpsi 1.4e-14 V
 3. `run_cce` likewise.
 4. `pytest-xdist` for the remaining devsim-bound test suites.
 5. Everything else (dark current, damage, flash, transient, 2D) stays on devsim.
+
+## Status 2026-10-16 — promotion DONE for run_cv / run_cce (branch fix/audit-v7-top, pushed)
+
+Commits: 98a14b4 engine + parity tests; c6519f0 run_cv/run_cce on the engine (devsim fallback);
+3f0269c run_cv_batch/run_cce_batch + batched ParametricSweep; follow-up fixes from Fable reviews;
+test commit with xdist/testpaths/module-scoped 2D fixture. Each step was reviewed read-only by Fable
+(reports kept in scratchpad/perf/, untracked) and checked per test file against a baseline.
+
+Measured (Apple M4, warm JIT; `scratchpad/perf/bench_sweep.py`):
+
+| Workload | devsim | engine |
+|---|---|---|
+| run_cv single call, 40 pts | ~1.0 s | 5 ms |
+| run_cce single call, 30 pts | ~1.5 s | 33 ms |
+| ParametricSweep x1000, run_cv | ~17 min (extrapolated from 5 configs) | 0.35 s |
+| ParametricSweep x1000, run_cce | ~26 min (extrapolated) | 4.2 s |
+| ParametricSweep x10000, run_cv / run_cce | - | 4.9 s (590 MB) / 60.7 s (1.2 GB), Fable |
+| non-slow test suite | 626 s serial | 173 s with `pytest -n auto --dist loadfile` |
+
+Behaviour changes (documented in docstrings): run_cv/run_cce solve exactly at requested biases
+(A-01 resolved for run_cv; cv_sweep itself unchanged and A-01 stays `partial`); the engine does not
+reproduce devsim's punch-through `truncated` wall (full grid, truncated=False); metadata["solver"] is
+"batched" or "devsim". Remaining work: see PERF-02.
