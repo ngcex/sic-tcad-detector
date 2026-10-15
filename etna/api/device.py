@@ -13,6 +13,8 @@ followed by the same Poisson + drift-diffusion setup sequence used by
 
 from __future__ import annotations
 
+import functools
+import threading
 import uuid
 from dataclasses import dataclass
 from typing import Optional
@@ -20,6 +22,22 @@ from typing import Optional
 from etna.core.device2d import create_sic_2d_device
 from etna.core.drift_diffusion import create_dd_device, setup_sic_drift_diffusion
 from etna.core.poisson import setup_poisson, solve_equilibrium
+
+# devsim state is process-global and not thread-safe: concurrent solves (e.g.
+# two Streamlit sessions) delete each other's devices or segfault the process.
+# Every public entry point that touches devsim runs under this re-entrant lock.
+_DEVSIM_LOCK = threading.RLock()
+
+
+def serialized(fn):
+    """Run ``fn`` while holding the process-wide devsim lock."""
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        with _DEVSIM_LOCK:
+            return fn(*args, **kwargs)
+
+    return wrapper
 
 
 @dataclass
@@ -43,6 +61,7 @@ class DeviceConfig:
     area_cm2: float = 1e-4  # cm^2, device active area
 
 
+@serialized
 def build_device(config: DeviceConfig, device_name: Optional[str] = None) -> dict:
     """Build a DD-initialized devsim device from a DeviceConfig.
 
