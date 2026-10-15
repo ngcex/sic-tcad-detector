@@ -6,6 +6,12 @@ P2  1000-point doping x bias sweep: 20 N_D_bulk x 5 N_D_junction x 10 biases
     0.5 V steps (90 solves/device); a batched solver solves all 100 devices
     per bias step at once.
 
+P3  CCE vs bias for the 100 P2 devices at 5 biases (0, -5, -10, -20, -40 V),
+    alpha generation profile as etna.core.charge_collection.cce_vs_bias
+    (peak 1e18 cm^-3 s^-1, range 15 um): devsim ramps + coupled DD solve with
+    generation per point; the batched path does Poisson (GPU or CPU) +
+    float64 Gummel transport on the CPU.
+
 Fluence enters ETNA's C-V/CCE sweeps only through the damaged doping profile
 and lifetimes, so for electrostatics a fluence sweep IS a doping sweep; P2 is
 defined in doping space to keep the comparison clean.
@@ -34,3 +40,5 @@ def p2_devices():
     for nb in P2_N_D_BULK:
         for nj in P2_N_D_JUNCTION:
             yield float(nb), float(nj)
+
+P3_BIASES = np.array([0.0, -5.0, -10.0, -20.0, -40.0])

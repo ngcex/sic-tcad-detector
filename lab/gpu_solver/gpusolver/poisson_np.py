@@ -116,18 +116,41 @@ class PoissonBatch:
         frac = ((self.x - self.x[0]) / (self.x[-1] - self.x[0]))[None, :]
         return u * self.V_t[:, None] + V_a + (V_c - V_a) * frac
 
+    def quasi_fermi(self, V_a, V_c, phi_n, phi_p):
+        """Scaled quasi-Fermi levels u_n, u_p as (1, B) (flat) or (N, B) (nodal, V)."""
+        u_n = (
+            (V_c / self.V_t)[None, :]
+            if phi_n is None
+            else (np.asarray(phi_n, float) / self.V_t[:, None]).T
+        )
+        u_p = (
+            (V_a / self.V_t)[None, :]
+            if phi_p is None
+            else (np.asarray(phi_p, float) / self.V_t[:, None]).T
+        )
+        return u_n, u_p
+
     def solve(
-        self, psi0, V_anode=0.0, V_cathode=0.0, tol=1e-8, max_iter=200, clamp=20.0
+        self,
+        psi0,
+        V_anode=0.0,
+        V_cathode=0.0,
+        tol=1e-8,
+        max_iter=200,
+        clamp=20.0,
+        phi_n=None,
+        phi_p=None,
     ):
         """Newton-solve all B devices at biases V_anode/V_cathode ((B,) or scalar, V).
 
+        phi_n/phi_p: optional nodal quasi-Fermi levels (B, N) in V (Gummel
+        coupling); default flat at the contact biases.
         tol is on max |delta u| in V_t units. Returns PoissonResult.
         """
         B, N = self.B, self.N
         V_a = np.broadcast_to(np.asarray(V_anode, dtype=float), (B,))
         V_c = np.broadcast_to(np.asarray(V_cathode, dtype=float), (B,))
-        u_p = V_a / self.V_t
-        u_n = V_c / self.V_t
+        u_n, u_p = self.quasi_fermi(V_a, V_c, phi_n, phi_p)
         psi_a, psi_c = contact_values(
             self.netdop[:, 0], self.netdop[:, -1], self.n_i, self.V_t, V_a, V_c
         )
@@ -140,8 +163,8 @@ class PoissonBatch:
         max_upd = np.inf
         it = 0
         for it in range(1, max_iter + 1):
-            n_hat = np.exp(np.minimum(u - u_n[None, :] + lnni, EXP_CLAMP))
-            p_hat = np.exp(np.minimum(u_p[None, :] - u + lnni, EXP_CLAMP))
+            n_hat = np.exp(np.minimum(u - u_n + lnni, EXP_CLAMP))
+            p_hat = np.exp(np.minimum(u_p - u + lnni, EXP_CLAMP))
             flux = (u[1:] - u[:-1]) * self.inv_h  # (N-1, B)
             F = np.zeros_like(u)
             F[1:-1] = lam2 * (flux[1:] - flux[:-1]) + self.v[1:-1] * (
@@ -166,12 +189,8 @@ class PoissonBatch:
             if converged.all():
                 break
         psi = (u * self.V_t[None, :]).T
-        n = (
-            self.N0[None, :] * np.exp(np.minimum(u - u_n[None, :] + lnni, EXP_CLAMP))
-        ).T
-        p = (
-            self.N0[None, :] * np.exp(np.minimum(u_p[None, :] - u + lnni, EXP_CLAMP))
-        ).T
+        n = (self.N0[None, :] * np.exp(np.minimum(u - u_n + lnni, EXP_CLAMP))).T
+        p = (self.N0[None, :] * np.exp(np.minimum(u_p - u + lnni, EXP_CLAMP))).T
         return PoissonResult(
             psi=psi, n=n, p=p, iterations=it, converged=converged, max_update=max_upd
         )

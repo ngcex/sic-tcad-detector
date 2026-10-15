@@ -53,6 +53,23 @@ def ionized_acceptor_fraction(N_A, T=300.0):
     return np.clip((1.0 - w) * f_gibbs + w * f_emp, 0.0, 1.0)
 
 
+def mobility(N_total, T=300.0, carrier="electron"):
+    """Caughey-Thomas mobility with T scaling (etna.core.sic_material.mobility_caughey_thomas_T)."""
+    if carrier == "electron":
+        mu_max, mu_min, N_ref, alpha, gamma = 950.0, 40.0, 1.94e17, 0.61, -2.40
+    else:
+        mu_max, mu_min, N_ref, alpha, gamma = 125.0, 15.9, 1.76e19, 0.34, -2.15
+    T = np.asarray(T, dtype=float)
+    mu_max = mu_max * (T / 300.0) ** gamma
+    return mu_min + (mu_max - mu_min) / (1.0 + (np.asarray(N_total, dtype=float) / N_ref) ** alpha)
+
+
+def srh_lifetime(T=300.0, carrier="electron"):
+    """ETNA Z1/2 lifetimes: tau_n=1e-9 s, tau_p=6e-7 s at 300 K, scaling (T/300)^1.72."""
+    tau = 1.0e-9 if carrier == "electron" else 6.0e-7
+    return tau * (np.asarray(T, dtype=float) / 300.0) ** 1.72
+
+
 def make_mesh(epi_thickness_cm=10e-4, substrate_thickness_cm=1e-4):
     """Non-uniform 1D mesh with the same anchors/spacings as etna.core.device.
 
@@ -114,3 +131,20 @@ def graded_doping(x, junction_pos, N_A_ion, N_D_junction, N_D_bulk, L_transition
         np.broadcast_to(donors, (B, x.shape[1])).copy(),
         np.broadcast_to(acceptors, (B, x.shape[1])).copy(),
     )
+
+
+def alpha_generation(x, junction_pos, alpha_range_cm=15e-4, peak_rate=1e18):
+    """ETNA's cce_vs_bias generation profile G(x) (cm^-3 s^-1), shape (N,).
+
+    Flat from the junction (epi entrance) to 0.8*range, then an erfc roll-off
+    of width 0.1*range (etna.core.generation_profiles.alpha_depth_shape),
+    peak-normalised to ``peak_rate`` and zero in the p+ substrate.
+    """
+    from scipy.special import erfc
+
+    x_epi = np.asarray(x, dtype=float) - junction_pos
+    R = alpha_range_cm
+    shape = 0.5 * erfc((x_epi - 0.8 * R) / (np.sqrt(2) * 0.1 * R))
+    G = shape * (peak_rate / shape.max())
+    G[x_epi < 0] = 0.0
+    return G

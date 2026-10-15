@@ -1,8 +1,8 @@
 """Baseline: time the existing ETNA/devsim path on P1 and P2.
 
 Run from lab/gpu_solver:
-    uv run python bench/bench_devsim.py            # P1 + P2 (~2-3 min)
-    uv run python bench/bench_devsim.py --p1-only
+    uv run python bench/bench_devsim.py            # P1 + P2 + P3 (~4 min)
+    uv run python bench/bench_devsim.py --only P3   # one problem, merged into results/devsim.json
 
 Writes bench/results/devsim.json with wall times and the reference W(V) for
 every device (used to cross-check the batched solvers at the same points).
@@ -19,7 +19,7 @@ import time
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(__file__))
-from problems import P1, P2_BIASES, p2_devices  # noqa: E402
+from problems import P1, P2_BIASES, P3_BIASES, p2_devices  # noqa: E402
 
 from gpusolver.ref_devsim import (
     build_ref_device,
@@ -94,15 +94,42 @@ def run_p2():
     return dict(t_total_s=t_total, n_points_reached=n_points, devices=devices)
 
 
+def run_p3():
+    from etna.core.charge_collection import cce_vs_bias
+
+    from gpusolver.ref_devsim import quiet
+
+    devices = []
+    t_total0 = time.perf_counter()
+    for i, (nb, nj) in enumerate(p2_devices()):
+        t0 = time.perf_counter()
+        with quiet():
+            r = cce_vs_bias(P3_BIASES, device_kwargs=dict(N_D_junction=nj, N_D_bulk=nb, L_transition=0.987e-4))
+        dt = time.perf_counter() - t0
+        devices.append(
+            dict(N_D_bulk=nb, N_D_junction=nj, t_s=dt, truncated=bool(r["truncated"]),
+                 voltages=r["voltages"].tolist(), cce=r["cce_values"].tolist(),
+                 I_collected=r["I_collected"].tolist(), I_generated=float(r["I_generated"]))
+        )
+        if i % 10 == 0:
+            print(f"  P3 device {i:3d}/100  {dt:.2f}s  truncated={r['truncated']}")
+    t_total = time.perf_counter() - t_total0
+    n_points = sum(len(d["voltages"]) for d in devices)
+    print(f"P3: 100 devices x 5 biases CCE = {n_points} points reached in {t_total:.1f}s")
+    return dict(t_total_s=t_total, n_points_reached=n_points, devices=devices)
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--p1-only", action="store_true")
+    ap.add_argument("--only", choices=["P1", "P2", "P3"], default=None)
     args = ap.parse_args()
-    results = {"P1": run_p1()}
-    if not args.p1_only:
-        results["P2"] = run_p2()
     os.makedirs(os.path.join(os.path.dirname(__file__), "results"), exist_ok=True)
     path = os.path.join(os.path.dirname(__file__), "results", "devsim.json")
+    results = json.load(open(path)) if os.path.exists(path) else {}
+    runners = {"P1": run_p1, "P2": run_p2, "P3": run_p3}
+    for name, fn in runners.items():
+        if args.only is None or args.only == name:
+            results[name] = fn()
     with open(path, "w") as f:
         json.dump(results, f)
     print("wrote", path)

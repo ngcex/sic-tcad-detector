@@ -8,6 +8,7 @@ import numpy as np
 
 from . import physics
 from .extract import capacitance, depletion_width
+from .continuity import ContinuityBatch
 from .poisson_np import PoissonBatch
 
 
@@ -42,6 +43,10 @@ def make_batch(
     V_t = np.broadcast_to(physics.thermal_voltage(T), (B,))
     if backend == "numpy":
         return PoissonBatch(x, donors, acceptors, n_i, V_t)
+    if backend == "numba":
+        from .poisson_numba import PoissonBatchNumba
+
+        return PoissonBatchNumba(x, donors, acceptors, n_i, V_t)
     if backend == "mlx":
         from .poisson_mlx import PoissonBatchMLX
 
@@ -92,4 +97,47 @@ def reverse_sweep(
         psi=np.array(psis) if keep_psi else None,
         newton_iterations=n_it,
         converged=np.array(conv),
+    )
+
+
+@dataclass
+class CCEResult:
+    voltages: np.ndarray  # (K,)
+    cce: np.ndarray  # (K, B)
+    J_collected: np.ndarray  # (K, B) A/cm^2 (|Jn + Jp| at the cathode edge)
+    J_generated: float  # A/cm^2
+    gummel_iterations: int
+    converged: np.ndarray  # (K, B)
+
+
+def cce_sweep(pb, voltages, junction_pos, G, mu_n, mu_p, tau_n, tau_p, tol=1e-8, gummel_tol=1e-6):
+    """Charge collection efficiency vs reverse bias, as etna.core.charge_collection.cce_vs_bias.
+
+    For each bias: Poisson (dark, flat quasi-Fermi) -> Gummel with generation
+    G (N,) cm^-3 s^-1 -> CCE = |J_cathode| / (q * trapz(G)). The Poisson stage
+    runs on ``pb``'s backend (numpy or MLX), the transport stage on the CPU in
+    float64. ETNA's reference uses mu_n(N_D=1.07e15) and mu_p(N_A) uniformly.
+    """
+    voltages = np.asarray(voltages, dtype=float)
+    cb = ContinuityBatch(pb, mu_n, mu_p, tau_n, tau_p)
+    J_gen = physics.Q * np.trapezoid(G, pb.x)
+    res = pb.solve(pb.neutral_guess(), tol=tol)
+    psi, psi_prev, Vc, Vc_prev = res.psi, None, 0.0, None
+    cce, J, conv, n_it = [], [], [], 0
+    for V in voltages:
+        target = -V
+        if abs(target - Vc) > 1e-12:
+            guess = psi
+            if psi_prev is not None:
+                guess = psi + (psi - psi_prev) * ((target - Vc) / (Vc - Vc_prev))
+            res = pb.solve(guess, V_cathode=target, tol=tol)
+            psi_prev, psi, Vc_prev, Vc = psi, res.psi, Vc, target
+        tr = cb.solve(psi, V_cathode=target, G=G, tol=gummel_tol, poisson_tol=tol)
+        n_it += tr.gummel_iterations
+        J.append(np.abs(tr.J_cathode))
+        cce.append(np.clip(np.abs(tr.J_cathode) / J_gen, 0.0, 1.0))
+        conv.append(tr.converged.copy())
+    return CCEResult(
+        voltages=voltages, cce=np.array(cce), J_collected=np.array(J), J_generated=float(J_gen),
+        gummel_iterations=n_it, converged=np.array(conv),
     )
