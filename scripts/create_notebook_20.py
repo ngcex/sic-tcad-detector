@@ -197,6 +197,7 @@ sweep_df = microdosimetric_sweep(
     N_D_bulks=N_D_BULKS,
     V_biases=V_BIASES,
     n_lateral_points=10,
+    n_jobs=4,  # independent fresh builds; results identical to n_jobs=1
 )
 
 print(f"\\nSweep complete: {len(sweep_df)} configurations")

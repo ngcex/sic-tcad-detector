@@ -53,6 +53,107 @@ E_PAIR_EV = (
 )  # eV, electron-hole pair creation energy in 4H-SiC
 
 
+def _sweep_one(task):
+    """One configuration of ``microdosimetric_sweep`` (module level so it can be pickled)."""
+    i, total, hw, epi, nd, vb, n_lateral_points = task
+    logger.info(f"Sweep {i + 1}/{total}: hw={hw}, epi={epi}, nd={nd:.1e}, vb={vb}")
+    device_info = None
+    try:
+        device_info = create_2d_dd_device(
+            half_width_um=hw,
+            V_bias=vb,
+            epi_thickness_cm=epi,
+            N_D_bulk=nd,
+        )
+        scan = cce_lateral_scan(device_info, n_points=n_lateral_points)
+        cce_vals = np.array(scan["cce_values"])
+
+        # AUDIT Mj-3: full-depletion gate. A partially-depleted device with
+        # both-low CCE shows a deceptively uniform edge/center ratio and
+        # would rank artificially high. Compute V_fd from the device's
+        # actual graded profile (NOT the uniform N_D_bulk estimate, which is
+        # anti-conservative) and require both full depletion AND an absolute
+        # CCE floor before the uniformity ratio is trustworthy.
+        V_bi = built_in_potential(
+            device_info["N_A_ionized"],
+            device_info["N_D_junction"],
+            device_info["n_i"],
+        )
+        V_fd = full_depletion_voltage_graded(
+            epi_thickness=device_info["epi_thickness_cm"],
+            N_D_bulk=device_info["N_D_bulk"],
+            N_D_junction=device_info["N_D_junction"],
+            L_transition=device_info["L_transition"],
+            V_bi=V_bi,
+        )
+        raw_center_cce = cce_vals[0]
+        raw_edge_cce = cce_vals[-1]
+        is_fully_depleted = abs(vb) >= V_fd
+        if raw_center_cce is None or raw_edge_cce is None:
+            # Defensive: a degenerate/undepleted config can make
+            # cce_lateral_scan() yield a non-numeric (None) CCE entry
+            # instead of a float or NaN. Treat that explicitly as a
+            # floor failure rather than letting float() below raise a
+            # TypeError that gets swallowed by the generic except block.
+            center_cce = np.nan
+            edge_cce = np.nan
+            passes_cce_floor = False
+        else:
+            center_cce = float(raw_center_cce)
+            edge_cce = float(raw_edge_cce)
+            passes_cce_floor = center_cce >= CCE_FLOOR and edge_cce >= CCE_FLOOR
+        record = (
+            {
+                "half_width_um": hw,
+                "epi_thickness_cm": epi,
+                "N_D_bulk": nd,
+                "V_bias": vb,
+                "center_cce": center_cce,
+                "edge_cce": edge_cce,
+                "edge_center_ratio": float(scan["edge_to_center_ratio"]),
+                "cce_std": float(np.std(cce_vals)),
+                "V_fd": float(V_fd),
+                "is_fully_depleted": bool(is_fully_depleted),
+                "passes_cce_floor": bool(passes_cce_floor),
+                "is_valid": bool(is_fully_depleted and passes_cce_floor),
+            }
+        )
+    except Exception as e:
+        logger.warning(
+            f"Sweep {i + 1}/{total} failed (hw={hw}, epi={epi}, "
+            f"nd={nd:.1e}, vb={vb}): {e}"
+        )
+        record = (
+            {
+                "half_width_um": hw,
+                "epi_thickness_cm": epi,
+                "N_D_bulk": nd,
+                "V_bias": vb,
+                "center_cce": np.nan,
+                "edge_cce": np.nan,
+                "edge_center_ratio": np.nan,
+                "cce_std": np.nan,
+                "V_fd": np.nan,
+                "is_fully_depleted": False,
+                "passes_cce_floor": False,
+                "is_valid": False,
+            }
+        )
+        # Reset devsim global state after failure to prevent
+        # contamination of subsequent configurations (a failed
+        # ramp_bias can leave solver state that causes all later
+        # equilibrium solves to diverge). reset_devsim_fully also clears
+        # any cylindrical-axis globals (P03/P30) and preserves the solver.
+        reset_devsim_fully(preserve_solver=True)
+    finally:
+        if device_info is not None:
+            try:
+                devsim.delete_device(device=device_info["device_name"])
+            except Exception:
+                pass
+    return record
+
+
 def microdosimetric_sweep(
     half_widths_um=(25, 50, 100, 150),
     epi_thicknesses_cm=(5e-4, 10e-4, 20e-4),
@@ -60,6 +161,7 @@ def microdosimetric_sweep(
     V_biases=(20, 40, 60),
     n_lateral_points=10,
     max_configs=None,
+    n_jobs=1,
 ):
     """Sweep SV geometry and doping parameters, ranking by CCE uniformity.
 
@@ -82,6 +184,9 @@ def microdosimetric_sweep(
     max_configs : int or None
         If set, truncate the parameter grid to this many configurations
         (with a warning).
+    n_jobs : int
+        Worker processes (default 1 = serial in this process). Configurations are
+        independent fresh builds, so results are identical to the serial run.
 
     Returns
     -------
@@ -111,103 +216,22 @@ def microdosimetric_sweep(
         grid = grid[:max_configs]
         total = len(grid)
 
-    records = []
-    for i, (hw, epi, nd, vb) in enumerate(grid):
-        logger.info(f"Sweep {i + 1}/{total}: hw={hw}, epi={epi}, nd={nd:.1e}, vb={vb}")
-        device_info = None
-        try:
-            device_info = create_2d_dd_device(
-                half_width_um=hw,
-                V_bias=vb,
-                epi_thickness_cm=epi,
-                N_D_bulk=nd,
-            )
-            scan = cce_lateral_scan(device_info, n_points=n_lateral_points)
-            cce_vals = np.array(scan["cce_values"])
+    tasks = [
+        (i, total, hw, epi, nd, vb, n_lateral_points)
+        for i, (hw, epi, nd, vb) in enumerate(grid)
+    ]
+    if n_jobs is not None and n_jobs > 1 and total > 1:
+        # devsim state is per process and every config is a fresh build, so the
+        # results are identical to the serial loop (executor.map keeps the order).
+        import multiprocessing
+        from concurrent.futures import ProcessPoolExecutor
 
-            # AUDIT Mj-3: full-depletion gate. A partially-depleted device with
-            # both-low CCE shows a deceptively uniform edge/center ratio and
-            # would rank artificially high. Compute V_fd from the device's
-            # actual graded profile (NOT the uniform N_D_bulk estimate, which is
-            # anti-conservative) and require both full depletion AND an absolute
-            # CCE floor before the uniformity ratio is trustworthy.
-            V_bi = built_in_potential(
-                device_info["N_A_ionized"],
-                device_info["N_D_junction"],
-                device_info["n_i"],
-            )
-            V_fd = full_depletion_voltage_graded(
-                epi_thickness=device_info["epi_thickness_cm"],
-                N_D_bulk=device_info["N_D_bulk"],
-                N_D_junction=device_info["N_D_junction"],
-                L_transition=device_info["L_transition"],
-                V_bi=V_bi,
-            )
-            raw_center_cce = cce_vals[0]
-            raw_edge_cce = cce_vals[-1]
-            is_fully_depleted = abs(vb) >= V_fd
-            if raw_center_cce is None or raw_edge_cce is None:
-                # Defensive: a degenerate/undepleted config can make
-                # cce_lateral_scan() yield a non-numeric (None) CCE entry
-                # instead of a float or NaN. Treat that explicitly as a
-                # floor failure rather than letting float() below raise a
-                # TypeError that gets swallowed by the generic except block.
-                center_cce = np.nan
-                edge_cce = np.nan
-                passes_cce_floor = False
-            else:
-                center_cce = float(raw_center_cce)
-                edge_cce = float(raw_edge_cce)
-                passes_cce_floor = center_cce >= CCE_FLOOR and edge_cce >= CCE_FLOOR
-            records.append(
-                {
-                    "half_width_um": hw,
-                    "epi_thickness_cm": epi,
-                    "N_D_bulk": nd,
-                    "V_bias": vb,
-                    "center_cce": center_cce,
-                    "edge_cce": edge_cce,
-                    "edge_center_ratio": float(scan["edge_to_center_ratio"]),
-                    "cce_std": float(np.std(cce_vals)),
-                    "V_fd": float(V_fd),
-                    "is_fully_depleted": bool(is_fully_depleted),
-                    "passes_cce_floor": bool(passes_cce_floor),
-                    "is_valid": bool(is_fully_depleted and passes_cce_floor),
-                }
-            )
-        except Exception as e:
-            logger.warning(
-                f"Sweep {i + 1}/{total} failed (hw={hw}, epi={epi}, "
-                f"nd={nd:.1e}, vb={vb}): {e}"
-            )
-            records.append(
-                {
-                    "half_width_um": hw,
-                    "epi_thickness_cm": epi,
-                    "N_D_bulk": nd,
-                    "V_bias": vb,
-                    "center_cce": np.nan,
-                    "edge_cce": np.nan,
-                    "edge_center_ratio": np.nan,
-                    "cce_std": np.nan,
-                    "V_fd": np.nan,
-                    "is_fully_depleted": False,
-                    "passes_cce_floor": False,
-                    "is_valid": False,
-                }
-            )
-            # Reset devsim global state after failure to prevent
-            # contamination of subsequent configurations (a failed
-            # ramp_bias can leave solver state that causes all later
-            # equilibrium solves to diverge). reset_devsim_fully also clears
-            # any cylindrical-axis globals (P03/P30) and preserves the solver.
-            reset_devsim_fully(preserve_solver=True)
-        finally:
-            if device_info is not None:
-                try:
-                    devsim.delete_device(device=device_info["device_name"])
-                except Exception:
-                    pass
+        with ProcessPoolExecutor(
+            max_workers=min(n_jobs, total), mp_context=multiprocessing.get_context("spawn")
+        ) as pool:
+            records = list(pool.map(_sweep_one, tasks))
+    else:
+        records = [_sweep_one(t) for t in tasks]
 
     return _rank_sweep_results(pd.DataFrame(records))
 
