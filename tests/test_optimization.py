@@ -266,3 +266,20 @@ class TestMicrodosimetricSweepEndToEnd:
         assert np.isfinite(row["V_fd"]), "V_fd is NaN: the Mj-3 gate raised and the row was dropped"
         assert np.isfinite(row["center_cce"])
         assert bool(row["is_fully_depleted"])
+
+    @pytest.mark.slow
+    def test_parallel_matches_serial_including_a_failing_config(self):
+        """n_jobs>1 gives the same table as the serial loop (fresh builds, per-process devsim)."""
+        from etna.core.optimization import microdosimetric_sweep
+
+        kw = dict(
+            half_widths_um=(25,),
+            epi_thicknesses_cm=(10e-4,),
+            N_D_bulks=(5e13, 5e14),
+            V_biases=(20, 80),  # (5e13, 80) fails to converge
+            n_lateral_points=3,
+        )
+        serial = microdosimetric_sweep(**kw, n_jobs=1)
+        parallel = microdosimetric_sweep(**kw, n_jobs=4)
+        assert len(serial) == 4 and serial["center_cce"].isna().sum() >= 1
+        pd.testing.assert_frame_equal(serial, parallel, rtol=1e-6, atol=1e-9)
