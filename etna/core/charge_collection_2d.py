@@ -35,6 +35,8 @@ from etna.core.poisson import setup_poisson, solve_equilibrium
 from etna.core.drift_diffusion import (
     setup_sic_drift_diffusion,
     extract_contact_current,
+    _restore_solution,
+    _snapshot_solution,
     ramp_bias,
 )
 from etna.core.charge_collection import add_generation_to_dd
@@ -290,6 +292,7 @@ def cce_lateral_scan(
     # Lateral positions: center (x=0) to edge (x=half_width)
     x_positions = np.linspace(0, half_width_cm, n_points)
     cce_values = []
+    baseline = None
 
     for i, x_pos in enumerate(x_positions):
         # Build generation profile: depth shape * Gaussian lateral stripe
@@ -310,10 +313,20 @@ def cce_lateral_scan(
             f"Lateral scan [{i+1}/{n_points}]: " f"x={x_pos*1e4:.1f} um, CCE={cce:.4f}"
         )
 
-        # Reset generation to zero and re-solve to restore baseline
+        # Reset generation to zero and restore the baseline. The first reset is
+        # solved (that is the baseline); later ones restore its snapshot instead of
+        # re-solving (~9-11 Newton iterations each, ~75% of the scan time).
         zero_gen = np.zeros_like(x_nodes)
         add_generation_to_dd(device_info, zero_gen)
-        _robust_dc_solve()
+        if baseline is None:
+            _robust_dc_solve()
+            baseline = _snapshot_solution(device, region)
+        else:
+            _restore_solution(device, region, baseline)
+
+    # Contact currents are evaluated during assembly: one solve from the exact
+    # baseline (1-2 iterations) leaves the device consistent for later users.
+    _robust_dc_solve()
 
     cce_values = np.array(cce_values)
     edge_to_center = cce_values[-1] / cce_values[0] if cce_values[0] > 0 else 0.0
