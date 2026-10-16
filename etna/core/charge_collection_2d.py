@@ -23,6 +23,7 @@ References:
     - reference experimental microdosimeter geometry
 """
 
+from etna.core.solver_tol import DC_REL_ERROR
 import logging
 import uuid
 
@@ -54,7 +55,7 @@ def _robust_dc_solve():
         devsim.solve(
             type="dc",
             absolute_error=1e10,
-            relative_error=1e-10,
+            relative_error=DC_REL_ERROR,
             maximum_iterations=40,
         )
     except devsim.error:

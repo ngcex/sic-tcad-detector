@@ -20,6 +20,7 @@ References:
     - ICRU Report 36: microdosimetric definitions
 """
 
+from etna.core.solver_tol import DC_REL_ERROR
 import itertools
 import logging
 import uuid
@@ -413,7 +414,7 @@ def get_dark_current_2d(half_width_um=50.0, V_bias=50.0, **device_kwargs):
         devsim.solve(
             type="dc",
             absolute_error=1e10,
-            relative_error=1e-10,
+            relative_error=DC_REL_ERROR,
             maximum_iterations=40,
         )
 

@@ -15,6 +15,7 @@ References:
     - Knoll, "Radiation Detection and Measurement", 4th ed.
 """
 
+from etna.core.solver_tol import DC_REL_ERROR
 import logging
 import uuid
 
@@ -573,7 +574,7 @@ def cce_vs_bias(
             devsim.solve(
                 type="dc",
                 absolute_error=1e10,
-                relative_error=1e-10,
+                relative_error=DC_REL_ERROR,
                 maximum_iterations=40,
             )
 
@@ -599,7 +600,7 @@ def cce_vs_bias(
             devsim.solve(
                 type="dc",
                 absolute_error=1e10,
-                relative_error=1e-10,
+                relative_error=DC_REL_ERROR,
                 maximum_iterations=40,
             )
 
@@ -787,7 +788,7 @@ def cce_vs_fluence(
             devsim.solve(
                 type="dc",
                 absolute_error=1e10,
-                relative_error=1e-10,
+                relative_error=DC_REL_ERROR,
                 maximum_iterations=40,
             )
 
@@ -980,7 +981,7 @@ def cce_vs_bias_at_fluence(
             devsim.solve(
                 type="dc",
                 absolute_error=1e10,
-                relative_error=1e-10,
+                relative_error=DC_REL_ERROR,
                 maximum_iterations=40,
             )
 
@@ -998,7 +999,7 @@ def cce_vs_bias_at_fluence(
             devsim.solve(
                 type="dc",
                 absolute_error=1e10,
-                relative_error=1e-10,
+                relative_error=DC_REL_ERROR,
                 maximum_iterations=40,
             )
 
@@ -1173,7 +1174,7 @@ def cce_post_anneal(
         devsim.solve(
             type="dc",
             absolute_error=1e10,
-            relative_error=1e-10,
+            relative_error=DC_REL_ERROR,
             maximum_iterations=40,
         )
 
@@ -1404,7 +1405,7 @@ def cce_vs_epi_thickness(
             devsim.solve(
                 type="dc",
                 absolute_error=1e10,
-                relative_error=1e-10,
+                relative_error=DC_REL_ERROR,
                 maximum_iterations=40,
             )
 

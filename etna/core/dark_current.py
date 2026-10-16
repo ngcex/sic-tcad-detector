@@ -27,6 +27,7 @@ References:
     - Kimoto & Cooper, "Fundamentals of Silicon Carbide Technology"
 """
 
+from etna.core.solver_tol import DC_REL_ERROR
 import logging
 
 import devsim
@@ -485,7 +486,7 @@ def dark_current_sweep(device_info, V_range, area=0.05, V_step=0.5):
                     devsim.solve(
                         type="dc",
                         absolute_error=1e10,
-                        relative_error=1e-10,
+                        relative_error=DC_REL_ERROR,
                         maximum_iterations=40,
                     )
                 except devsim.error:
@@ -643,7 +644,7 @@ def sensitivity_sweep(
                     devsim.solve(
                         type="dc",
                         absolute_error=1e10,
-                        relative_error=1e-10,
+                        relative_error=DC_REL_ERROR,
                         maximum_iterations=40,
                     )
                 except devsim.error:
@@ -866,7 +867,7 @@ def dark_current_vs_fluence(
                 devsim.solve(
                     type="dc",
                     absolute_error=1e10,
-                    relative_error=1e-10,
+                    relative_error=DC_REL_ERROR,
                     maximum_iterations=40,
                 )
 
@@ -1075,7 +1076,7 @@ def dark_current_post_anneal(
             devsim.solve(
                 type="dc",
                 absolute_error=1e10,
-                relative_error=1e-10,
+                relative_error=DC_REL_ERROR,
                 maximum_iterations=40,
             )
 

@@ -21,6 +21,7 @@ References:
     - Phase 1 clamped exponential approach for SiC n_i stability
 """
 
+from etna.core.solver_tol import DC_REL_ERROR
 import logging
 
 import devsim
@@ -178,7 +179,7 @@ def setup_sic_drift_diffusion(device_info):
     devsim.solve(
         type="dc",
         absolute_error=1e10,
-        relative_error=1e-10,
+        relative_error=DC_REL_ERROR,
         maximum_iterations=40,
     )
     logger.info("DD equilibrium solve converged")
@@ -242,9 +243,9 @@ def create_dd_device(doping_profile="graded", **kwargs):
     return device_info
 
 
-_RAMP_SOLVE = dict(type="dc", absolute_error=1e10, relative_error=1e-10, maximum_iterations=40)
+_RAMP_SOLVE = dict(type="dc", absolute_error=1e10, relative_error=DC_REL_ERROR, maximum_iterations=40)
 _RAMP_SOLVE_COARSE = dict(
-    type="dc", absolute_error=1e10, relative_error=1e-8, maximum_iterations=60
+    type="dc", absolute_error=1e10, relative_error=DC_REL_ERROR, maximum_iterations=60
 )
 _RAMP_SOLVE_RELAXED = dict(
     type="dc", absolute_error=1e12, relative_error=1e-8, maximum_iterations=100
@@ -295,8 +296,7 @@ def _ramp_bias_adaptive(device_info, bias_name, V_from, V_to, h_min, h_max):
             )
         devsim.set_parameter(device=device, name=bias_name, value=V_next)
         try:
-            # Intermediate points only seed the next Newton start; the target
-            # is solved at the strict tolerance.
+            # Same tolerance everywhere; the target gets the tighter iteration cap.
             devsim.solve(**(_RAMP_SOLVE if final else _RAMP_SOLVE_COARSE))
         except devsim.error:
             _restore_solution(device, region, snap)
@@ -336,7 +336,8 @@ def ramp_bias(device_info, V_target, contact="anode", V_step=0.5, V_step_max=Non
         If given, the ramp is adaptive: it starts with steps of ``V_step_max``,
         doubles after each converged step, and on a Newton failure restores the
         last converged solution and halves the step down to ``V_step``, where the
-        relaxed-tolerance retry below applies. The ramp only chooses the path to
+        relaxed-tolerance retry below applies. Intermediate points get a larger
+        iteration cap (they only seed the next start); all points use ``DC_REL_ERROR``. The ramp only chooses the path to
         the target; the converged state at ``V_target`` is the same (to solver
         tolerance). ``None`` keeps fixed steps of ``V_step``.
 
@@ -377,7 +378,7 @@ def ramp_bias(device_info, V_target, contact="anode", V_step=0.5, V_step_max=Non
             devsim.solve(
                 type="dc",
                 absolute_error=1e10,
-                relative_error=1e-10,
+                relative_error=DC_REL_ERROR,
                 maximum_iterations=40,
             )
         except devsim.error:
@@ -468,7 +469,7 @@ def iv_sweep(
                     devsim.solve(
                         type="dc",
                         absolute_error=1e10,
-                        relative_error=1e-10,
+                        relative_error=DC_REL_ERROR,
                         maximum_iterations=40,
                     )
                 except devsim.error:

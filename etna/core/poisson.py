@@ -21,6 +21,7 @@ References:
     - devsim diode example: https://devsim.net/examples_diode.html
 """
 
+from etna.core.solver_tol import DC_REL_ERROR
 import logging
 
 import devsim
@@ -140,7 +141,7 @@ def solve_equilibrium(device_info):
         devsim.solve(
             type="dc",
             absolute_error=1e10,
-            relative_error=1e-10,
+            relative_error=DC_REL_ERROR,
             maximum_iterations=40,
         )
         logger.info("Equilibrium solve converged")
