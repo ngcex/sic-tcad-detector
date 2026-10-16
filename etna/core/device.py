@@ -31,6 +31,38 @@ logger = logging.getLogger(__name__)
 
 # Calibrated donor concentration from Plan 01 (W(0V) = 1.7 um target)
 DEFAULT_N_D = 1.07e15  # cm^-3
+# n+ layer under the epi (when enabled): conductive 4H-SiC substrate doping, fully
+# ionized. 1e18 and 1e19 give the same W/CCE/dark current to <1e-3 (lab spike).
+DEFAULT_N_D_NPLUS = 1e19  # cm^-3
+
+# Calibration record for the n+ stack (p+ 0.3 um / 10 um graded n- epi / n+), NOT the
+# default model. Reproduce: lab/solver2d/bench/nplus_calibrate.py; pinned by
+# tests/test_nplus_calibration.py; notes in lab/solver2d/notes/LOG.md.
+# C-V: the three W targets (1.7 / 9.5 / 9.73 um at 0 / -10 / -30 V, W = eps*A/C, A = 4 mm2)
+# have NO exact solution for (N_D_junction, N_D_bulk, L) in this model (nor in the
+# historical no-n+ model): past full depletion (~10 V) W saturates at the epi end
+# (n+: 9.90 um at -30 V; no n+: 9.98 um), so 9.73 um is unreachable (+1.7 % / +2.6 %).
+# Least squares on all three drives N_D_bulk to its 1e12 bound (unphysical; paper:
+# 0.5-1e14). Hence: L_transition held at the previous value (0.987 um) and
+# (N_D_junction, N_D_bulk) solved EXACTLY on the 0 V and -10 V points (2 equations,
+# 2 unknowns; residuals < 3e-15); -30 V residual +1.74 %. The -30 V gap (effective epi
+# ~9.8 um? ~1.5 % stray/fringe C on the 2x2 mm2 die? measurement?) is for the device
+# owner. N_t: rescaled (leakage linear in N_t) so that I(300 K, -60 V, 4 mm2) = 18 pA,
+# the bound "< 18 pA up to -60 V" used as equality; N_t is the fitted magnitude of the
+# f_depl = min(E/3.5e4, 1) effective-generation PROXY, not a trap density.
+NPLUS_CALIBRATION = {
+    "substrate_thickness_cm": 0.3e-4,  # p+ anode layer (Petringa 2025 Fig. 1)
+    "nplus_thickness_cm": 1e-4,
+    "N_D_nplus": 1e19,
+    "N_D_junction": 2.974271e15,
+    "N_D_bulk": 6.335936e13,
+    "L_transition": 0.987e-4,  # held, not fitted
+    "N_t": 2.805349e12,
+    # Z1/2 level of radiation_damage (Burin et al. Table I). SiC4H_Parameters.E_t is still
+    # 0.65: changing it alone moved the leakage by <= 5e-5 but made the default (no n+)
+    # dark sweep stop at -89.5 V instead of -100 V (fragile no-n+ wall). Apply with the flip.
+    "E_t": 0.67,
+}
 
 # Physical constants (CGS)
 EPS_0 = 8.854e-14  # F/cm, vacuum permittivity
@@ -39,12 +71,18 @@ K_B_EV = 8.617e-5  # eV/K, Boltzmann constant
 K_B_J = 1.3806503e-23  # J/K, Boltzmann constant
 
 
-def build_diode_mesh(device_name, region_name, junction_pos, total_length):
+def build_diode_mesh(
+    device_name, region_name, junction_pos, total_length, nplus_thickness_cm=None
+):
     """Build and finalize the graded 1D mesh of the p+/n- diode (mesh ``<device_name>_mesh``).
 
-    Anode contact at x = 0, cathode at ``total_length``, one region spanning the
-    device. Shared by ``create_sic_device`` and the batched engine's mesh probe
-    so both use the identical discretisation.
+    Anode contact at x = 0, one region spanning the device. Without an n+ layer
+    (``nplus_thickness_cm=None``, the historical model) the cathode is at
+    ``total_length`` (= the epi end). With an n+ layer the epi end ``total_length``
+    is refined (1 nm, abrupt n-/n+ step) and the mesh continues through the n+ to
+    the cathode at ``total_length + nplus_thickness_cm``. Shared by
+    ``create_sic_device`` and the batched engine's mesh probe so both use the
+    identical discretisation.
     """
     mesh_name = f"{device_name}_mesh"
     devsim.create_1d_mesh(mesh=mesh_name)
@@ -70,8 +108,15 @@ def build_diode_mesh(device_name, region_name, junction_pos, total_length):
     if epi_mid2 < total_length - 1e-6:
         devsim.add_1d_mesh_line(mesh=mesh_name, pos=epi_mid2, ps=5e-6)
 
-    # Far end of epi: coarser spacing
-    devsim.add_1d_mesh_line(mesh=mesh_name, pos=total_length, ps=1e-5, tag="bot")
+    if nplus_thickness_cm is None:
+        # Far end of epi: coarser spacing
+        devsim.add_1d_mesh_line(mesh=mesh_name, pos=total_length, ps=1e-5, tag="bot")
+    else:
+        # n-/n+ step at the epi end, then the n+ layer up to the cathode
+        devsim.add_1d_mesh_line(mesh=mesh_name, pos=total_length, ps=1e-7)
+        devsim.add_1d_mesh_line(
+            mesh=mesh_name, pos=total_length + nplus_thickness_cm, ps=1e-5, tag="bot"
+        )
 
     # Contacts
     devsim.add_1d_contact(mesh=mesh_name, name="anode", tag="top", material="metal")
@@ -97,10 +142,13 @@ def create_sic_device(
     N_D_junction=None,
     N_D_bulk=None,
     L_transition=None,
+    nplus_thickness_cm=None,
+    N_D_nplus=DEFAULT_N_D_NPLUS,
+    nplus_generation=False,
 ):
     """Create a 1D p+/n- 4H-SiC diode device in devsim.
 
-    Structure: p+ substrate (left, anode) | n- epitaxial layer (right, cathode)
+    Structure: p+ anode layer (left, anode) | n- epitaxial layer | [n+ layer] (right, cathode)
 
     Parameters
     ----------
@@ -111,7 +159,8 @@ def create_sic_device(
     epi_thickness_cm : float
         Epitaxial layer thickness (cm). Default 10 um = 10e-4 cm.
     substrate_thickness_cm : float
-        p+ substrate thickness (cm). Default 1 um = 1e-4 cm.
+        p+ ANODE layer thickness (cm). Default 1 um = 1e-4 cm. (Historical name: this
+        is not the n+ substrate, see ``nplus_thickness_cm``.)
     N_A : float
         Total acceptor concentration in p+ substrate (cm^-3).
     N_D : float or None
@@ -128,22 +177,41 @@ def create_sic_device(
         For graded profile: donor concentration in bulk epi (cm^-3).
     L_transition : float or None
         For graded profile: characteristic decay length (cm).
+    nplus_thickness_cm : float or None
+        Thickness (cm) of an n+ layer under the n- epi, cathode contact on its far end
+        (the conductive n+ substrate of the real device, truncated). None (default) =
+        the historical model: cathode contact directly on the n- epi, which produces a
+        non-convergence wall at deep reverse bias (a contact artefact).
+    N_D_nplus : float
+        n+ donor concentration (cm^-3), fully ionized. The n+ inherits the device's
+        scalar mobility and SRH lifetimes (like the rest of the model).
+    nplus_generation : bool
+        Source-side option read by the generation-profile builders: False (default)
+        = radiation generation confined to the epi (the deposit beyond the epi end is
+        dropped, as without an n+ layer); True = the profile continues into the n+.
+        Whether the alpha deposit in the n+ counts is an open physics question.
 
     Returns
     -------
     device_info : dict
         Dictionary with device_name, region_name, junction_pos, epi_thickness_cm,
         N_D, N_A_ionized, params (SiC4H_Parameters instance), and other metadata.
+        ``epi_end`` is the x of the n-/n+ boundary (== ``total_length`` without n+).
     """
     if N_D is None:
         N_D = DEFAULT_N_D
 
     params = SiC4H_Parameters()
     junction_pos = substrate_thickness_cm
-    total_length = substrate_thickness_cm + epi_thickness_cm
+    epi_end = substrate_thickness_cm + epi_thickness_cm
+    _check_nplus(nplus_thickness_cm, N_D_nplus)
+    nplus = None if nplus_thickness_cm is None else (epi_end, N_D_nplus)
+    total_length = epi_end + (nplus_thickness_cm or 0.0)
 
     # --- Create 1D mesh with non-uniform spacing ---
-    build_diode_mesh(device_name, region_name, junction_pos, total_length)
+    build_diode_mesh(
+        device_name, region_name, junction_pos, epi_end, nplus_thickness_cm=nplus_thickness_cm
+    )
     mesh_name = f"{device_name}_mesh"
     devsim.create_device(mesh=mesh_name, device=device_name)
 
@@ -249,13 +317,14 @@ def create_sic_device(
             _N_D_junction,
             _N_D_bulk,
             _L_transition,
+            nplus=nplus,
         )
         logger.info(
             f"Graded doping: N_D_junction={_N_D_junction:.2e}, "
             f"N_D_bulk={_N_D_bulk:.2e}, L_transition={_L_transition:.2e} cm"
         )
     else:
-        set_doping_profile(device_name, region_name, junction_pos, N_A_ionized, N_D)
+        set_doping_profile(device_name, region_name, junction_pos, N_A_ionized, N_D, nplus=nplus)
 
     num_nodes = len(
         devsim.get_node_model_values(device=device_name, region=region_name, name="x")
@@ -287,10 +356,31 @@ def create_sic_device(
         "N_D_junction": N_D_junction,
         "N_D_bulk": N_D_bulk,
         "L_transition": L_transition,
+        "epi_end": epi_end,
+        "nplus_thickness_cm": nplus_thickness_cm,
+        "N_D_nplus": N_D_nplus if nplus_thickness_cm is not None else None,
+        "nplus_generation": bool(nplus_generation),
     }
 
 
-def set_doping_profile(device_name, region_name, junction_pos, N_A_ionized, N_D):
+def _check_nplus(nplus_thickness_cm, N_D_nplus):
+    if nplus_thickness_cm is None:
+        return
+    if not (nplus_thickness_cm > 0):
+        raise ValueError(f"nplus_thickness_cm must be > 0 or None (got {nplus_thickness_cm!r})")
+    if not (N_D_nplus > 0):
+        raise ValueError(f"N_D_nplus must be > 0 (got {N_D_nplus!r})")
+
+
+def _nplus_term(nplus, coord="x"):
+    """Donor expression term of the n+ layer (empty string without n+)."""
+    if nplus is None:
+        return ""
+    x_end, N_np = nplus
+    return f" + {N_np} * step({coord} - {x_end})"
+
+
+def set_doping_profile(device_name, region_name, junction_pos, N_A_ionized, N_D, nplus=None):
     """Set step-function doping profile on the device.
 
     p-side (x < junction_pos): Acceptors = N_A_ionized
@@ -309,6 +399,8 @@ def set_doping_profile(device_name, region_name, junction_pos, N_A_ionized, N_D)
         Ionized acceptor concentration (cm^-3).
     N_D : float
         Donor concentration (cm^-3).
+    nplus : tuple or None
+        (x_epi_end, N_D_nplus): adds N_D_nplus * step(x - x_epi_end). None = no n+.
     """
     devsim.node_model(
         device=device_name,
@@ -320,7 +412,7 @@ def set_doping_profile(device_name, region_name, junction_pos, N_A_ionized, N_D)
         device=device_name,
         region=region_name,
         name="Donors",
-        equation=f"{N_D}*step(x-{junction_pos})",
+        equation=f"{N_D}*step(x-{junction_pos})" + _nplus_term(nplus),
     )
     devsim.node_model(
         device=device_name,
@@ -338,6 +430,7 @@ def set_graded_doping_profile(
     N_D_junction,
     N_D_bulk,
     L_transition,
+    nplus=None,
 ):
     """Set exponentially graded N_D(x) doping profile in the epi layer.
 
@@ -361,6 +454,8 @@ def set_graded_doping_profile(
         Donor concentration deep in epi bulk (cm^-3). Lower value (~1e13-1e14).
     L_transition : float
         Characteristic decay length of the doping gradient (cm).
+    nplus : tuple or None
+        (x_epi_end, N_D_nplus): adds N_D_nplus * step(x - x_epi_end). None = no n+.
     """
     # Acceptors: step function in p+ substrate (same as uniform)
     devsim.node_model(
@@ -377,7 +472,7 @@ def set_graded_doping_profile(
         f"({N_D_bulk} + ({N_D_junction} - {N_D_bulk}) * "
         f"exp(-max(x - {junction_pos}, 0) / {L_transition})) "
         f"* step(x - {junction_pos})"
-    )
+    ) + _nplus_term(nplus)
     devsim.node_model(
         device=device_name,
         region=region_name,

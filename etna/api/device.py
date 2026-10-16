@@ -28,7 +28,7 @@ class DeviceConfig:
     """Dimension-agnostic device configuration (geometry, doping, operating conditions)."""
 
     epi_thickness_um: float = 10.0  # um, epitaxial layer thickness
-    substrate_thickness_um: float = 1.0  # um, substrate thickness
+    substrate_thickness_um: float = 1.0  # um, p+ ANODE layer thickness (not the n+ substrate)
     half_width_um: Optional[float] = None  # um, lateral half-width (2D devices only)
     N_A: float = 1e19  # cm^-3, substrate acceptor doping
     doping_profile: str = "graded"  # "graded" or "uniform" epi doping profile
@@ -42,6 +42,11 @@ class DeviceConfig:
     L_transition_um: float = 0.987  # um, graded doping transition length
     T: float = 300.0  # K, device temperature
     area_cm2: float = 1e-4  # cm^2, device active area
+    # n+ layer under the n- epi, cathode contact on its far end (the conductive n+
+    # substrate, truncated). None = historical model, cathode directly on the n- epi
+    # (non-convergence wall at deep reverse bias: a contact artefact).
+    nplus_thickness_um: Optional[float] = None  # um
+    N_D_nplus: float = 1e19  # cm^-3, n+ donor doping (fully ionized)
 
     def __post_init__(self) -> None:
         """Reject physically meaningless values early, with a clear message.
@@ -65,6 +70,9 @@ class DeviceConfig:
             _positive("half_width_um", self.half_width_um)
         if self.N_D is not None:
             _positive("N_D", self.N_D)
+        if self.nplus_thickness_um is not None:
+            _positive("nplus_thickness_um", self.nplus_thickness_um)
+            _positive("N_D_nplus", self.N_D_nplus)
         if not (self.N_A >= 1e17):
             problems.append(f"N_A must be >= 1e17 cm^-3 (p+ anode; got {self.N_A!r})")
         if not problems:
@@ -90,7 +98,7 @@ def device_kwargs(config: DeviceConfig) -> dict:
     Single source of truth for the config -> core unit conversion, shared by
     ``build_device`` and every simulation facade so no config field is dropped.
     """
-    return dict(
+    kw = dict(
         epi_thickness_cm=config.epi_thickness_um * 1e-4,
         substrate_thickness_cm=config.substrate_thickness_um * 1e-4,
         N_A=config.N_A,
@@ -101,6 +109,11 @@ def device_kwargs(config: DeviceConfig) -> dict:
         N_D_bulk=config.N_D_bulk,
         L_transition=config.L_transition_um * 1e-4,
     )
+    # n+ keys only when the layer is on: consumers that do not know them (engine gates,
+    # older core signatures) then see exactly the historical keyword set.
+    if config.nplus_thickness_um is not None:
+        kw.update(nplus_thickness_cm=config.nplus_thickness_um * 1e-4, N_D_nplus=config.N_D_nplus)
+    return kw
 
 
 @serialized

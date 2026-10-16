@@ -60,6 +60,9 @@ _FIXED_KWARGS = {
     "N_D": None,
     "N_D_junction": _N_D_JUNCTION_DEFAULT,
     "L_transition": _L_TRANSITION_DEFAULT,
+    # n+ layer under the epi: not cross-checked against devsim -> devsim (None = no n+)
+    "nplus_thickness_cm": None,
+    "N_D_nplus": None,
 }
 # Model-validity indicator: dark field on the last cell before the cathode (V/cm). The
 # cathode is an ohmic contact on the n- epi (no n+ substrate), so this field grows with bias
@@ -226,7 +229,15 @@ ENGINE2D_DARK_BOX = {
     "L_transition": (0.3e-4, 3e-4),
     "V_cathode": (5.0, 80.0),
 }
-_DARK_FIXED = {"doping_profile": "graded", "N_A": 1e19, "T": 300, "substrate_thickness_cm": 1e-4, "N_D": None}
+_DARK_FIXED = {
+    "doping_profile": "graded",
+    "N_A": 1e19,
+    "T": 300,
+    "substrate_thickness_cm": 1e-4,
+    "N_D": None,
+    "nplus_thickness_cm": None,  # n+ layer: not cross-checked -> devsim
+    "N_D_nplus": None,
+}
 
 
 def engine2d_dark_unsupported_reason(half_width_um, V_cathode, **device_kwargs):

@@ -302,3 +302,23 @@ def proton_generation_profile(x_cm, E_MeV, dose_rate_Gy_s=1.0):
     G = np.full_like(x, G_entrance, dtype=float)
 
     return G
+
+
+def confine_generation_to_epi(device_info, depth, generation):
+    """Zero ``generation`` beyond the epi end when the device has an n+ layer.
+
+    Without an n+ layer (``device_info["nplus_thickness_cm"]`` None or absent) the mesh
+    ends at the epi end and ``generation`` is returned unchanged (same object). With an
+    n+ layer the deposit in the n+ is kept only if ``device_info["nplus_generation"]``
+    is True. Default False keeps the historical normalisation (the part of the track
+    beyond the epi end is not counted), which is a modelling choice, not a physics claim:
+    whether the alpha deposit in the n+ substrate should count is an open question.
+
+    ``depth`` is the node coordinate along the stack (x in 1D, y in 2D), same order as
+    ``generation``. The epi-end node itself is kept.
+    """
+    if device_info.get("nplus_thickness_cm") is None or device_info.get("nplus_generation", False):
+        return generation
+    out = np.array(generation, dtype=float, copy=True)
+    out[np.asarray(depth, dtype=float) > device_info["epi_end"] + 1e-12] = 0.0
+    return out

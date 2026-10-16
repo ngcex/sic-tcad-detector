@@ -51,15 +51,19 @@ def _check_voltages(voltages):
 
 
 @serialized
-def make_batch(x, junction_pos, N_A, N_D_junction, N_D_bulk, L_transition, T=300.0):
+def make_batch(
+    x, junction_pos, N_A, N_D_junction, N_D_bulk, L_transition, T=300.0, nplus=None
+):
     """PoissonBatch for graded p+/n- diodes on mesh ``x`` (uniform: N_D_junction == N_D_bulk).
 
     Parameters are scalars or (B,) arrays; lengths in cm, densities in cm^-3, T in K.
+    ``nplus`` = (x_epi_end, N_D_nplus) for an n+ layer under the epi (the mesh must
+    come from ``node_positions(..., nplus_thickness_cm)``); None = no n+.
     """
     T = np.atleast_1d(np.asarray(T, dtype=float))
     N_A_ion = _per_device(_n_a_ionized, N_A, T)
     donors, acceptors = graded_doping(
-        x, junction_pos, N_A_ion, N_D_junction, N_D_bulk, L_transition
+        x, junction_pos, N_A_ion, N_D_junction, N_D_bulk, L_transition, nplus=nplus
     )
     B = donors.shape[0]
     T = np.broadcast_to(T, (B,))
@@ -135,13 +139,19 @@ class CCEResult:
     converged: np.ndarray  # (K, B) bool
 
 
-def alpha_generation(x, junction_pos, alpha_range_cm, generation_rate):
-    """Generation profile G(x) (cm^-3 s^-1) exactly as ``cce_vs_bias`` builds it."""
+def alpha_generation(x, junction_pos, alpha_range_cm, generation_rate, epi_end=None):
+    """Generation profile G(x) (cm^-3 s^-1) exactly as ``cce_vs_bias`` builds it.
+
+    ``epi_end`` (n+ layer present, generation confined to the epi as
+    ``confine_generation_to_epi`` with nplus_generation=False): G = 0 beyond it.
+    """
     x_epi = np.asarray(x, dtype=float) - junction_pos
     profile = alpha_generation_profile(x_epi, alpha_range_cm=alpha_range_cm)
     peak = np.max(profile)
     G = profile * (generation_rate / peak) if peak > 0 else np.zeros_like(x_epi)
     G[x_epi < 0] = 0.0
+    if epi_end is not None:
+        G[np.asarray(x, dtype=float) > epi_end + 1e-12] = 0.0
     return G
 
 

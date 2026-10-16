@@ -40,7 +40,8 @@ from etna.core.transient import transient_cce_vs_dose_rate
 logger = logging.getLogger(__name__)
 
 # Domain in which the batched engine was validated against the devsim path
-# (parity to ~1e-14 for W/psi, <= 3e-6 for CCE; tests/test_batched_engine.py and
+# (parity to ~1e-14 for W/psi, <= 3e-6 for CCE -- ~1e-15 on the default device since both
+# paths extract the cathode current in the balanced form; tests/test_batched_engine.py and
 # tests/test_api_engine_switch.py pin representative points).
 # Anything outside goes to devsim. Widening a bound only needs a parity run.
 _ENGINE_BOX = {
@@ -51,7 +52,11 @@ _ENGINE_BOX = {
     "L_transition_um": (0.3, 3.0),
     "N_D_uniform": (1e14, 1e16),
     "epi_thickness_um": (5.0, 30.0),
-    "substrate_thickness_um": (1.0, 3.0),
+    # p+ anode layer. 0.3-1 um and the n+ keys below: lab/solver2d/bench/nplus_parity1d.py
+    # (W 6e-15, psi 1.4e-14 V, CCE 3.2e-11 to -100 V), tests/test_nplus_engine.py.
+    "substrate_thickness_um": (0.3, 3.0),
+    "nplus_thickness_um": (1.0, 5.0),
+    "N_D_nplus": (1e18, 1e19),
 }
 # Largest single bias jump that converges in one Newton solve at 300 K (the Newton
 # clamp is in V_t units, so the limit scales with T; measured 85 V at 250 K).
@@ -76,6 +81,8 @@ def validated_domain_reason(config: DeviceConfig) -> "str | None":
         "epi_thickness_um": config.epi_thickness_um,
         "substrate_thickness_um": config.substrate_thickness_um,
     }
+    if config.nplus_thickness_um is not None:
+        checks.update(nplus_thickness_um=config.nplus_thickness_um, N_D_nplus=config.N_D_nplus)
     if config.doping_profile == "graded":
         checks.update(
             N_D_junction=config.N_D_junction,
@@ -111,6 +118,19 @@ def _engine_unsupported_reason(config: DeviceConfig, bias_array) -> "str | None"
 # Deepest |V| at which the batched engine is pinned against devsim by the parity
 # tests (tests/test_batched_engine.py, tests/test_api_engine_switch.py: 0..-40 V).
 ENGINE_CROSS_CHECKED_TO_V = 40.0
+# With an n+ layer devsim has no convergence wall and the parity runs to -100 V
+# (lab/solver2d/bench/nplus_parity1d.py, tests/test_nplus_engine.py).
+ENGINE_CROSS_CHECKED_TO_V_NPLUS = 100.0
+
+
+def _cross_checked_to_V(config: DeviceConfig) -> float:
+    if config.nplus_thickness_um is not None:
+        return ENGINE_CROSS_CHECKED_TO_V_NPLUS
+    return ENGINE_CROSS_CHECKED_TO_V
+
+
+def _nplus_cm(config: DeviceConfig) -> "float | None":
+    return None if config.nplus_thickness_um is None else config.nplus_thickness_um * 1e-4
 
 
 def _reach_through_V(W, bias_array, config: DeviceConfig) -> "float | None":
@@ -120,16 +140,40 @@ def _reach_through_V(W, bias_array, config: DeviceConfig) -> "float | None":
     cathode. W never equals the epi thickness: the ohmic cathode pins n = N_D at
     the last node, so W saturates half an interval short of it (the engine and
     the devsim path share the same mesh).
+
+    With an n+ layer the n/N_D >= 0.5 edge approaches the epi end only
+    asymptotically (electron tail of the n-/n+ high-low junction), so full
+    depletion is taken as the edge within one Debye length L_D of the epi end,
+    L_D = sqrt(eps V_t / (q N_D_epi_end)) (0.40 um on the default device). A
+    definition, not a measurement; on the default device without n+ it would give
+    10.25 V against the mesh rule's 17.0 V.
     """
     epi_cm = config.epi_thickness_um * 1e-4
-    x = node_positions(epi_cm, config.substrate_thickness_um * 1e-4)
-    threshold = epi_cm - (x[-1] - x[-2])
+    if config.nplus_thickness_um is not None:
+        threshold = epi_cm - _debye_length_epi_end(config)
+    else:
+        x = node_positions(epi_cm, config.substrate_thickness_um * 1e-4)
+        threshold = epi_cm - (x[-1] - x[-2])
     W = np.asarray(W, dtype=float)
     bias = np.asarray(bias_array, dtype=float)[: W.size]
     mask = W >= threshold
     if not np.any(mask):
         return None
     return float(np.min(np.abs(bias[mask])))
+
+
+def _debye_length_epi_end(config: DeviceConfig) -> float:
+    """Extrinsic Debye length (cm) of the epi donor density at the epi end."""
+    from etna.core.batched.material import EPS, Q, thermal_voltage
+
+    if config.doping_profile == "uniform":
+        nd = DEFAULT_N_D if config.N_D is None else config.N_D
+    else:
+        L = config.L_transition_um * 1e-4
+        nd = config.N_D_bulk + (config.N_D_junction - config.N_D_bulk) * np.exp(
+            -config.epi_thickness_um * 1e-4 / L
+        )
+    return float(np.sqrt(EPS * thermal_voltage(config.T) / (Q * nd)))
 
 
 _REACH_THROUGH_RESOLUTION_V = 0.05
@@ -148,10 +192,14 @@ def _devsim_reach_through(config: DeviceConfig, cv_result) -> dict:
         method = _RT_ENGINE
     else:
         v, method = v_grid, _RT_GRID
-    return dict(reach_through_V=v, reach_through_known=True, reach_through_method=method)
+    return dict(
+        reach_through_V=v, reach_through_known=True, reach_through_method=method
+    )
 
 
-def _refine_reach_through(config: DeviceConfig, v_grid_rt, bias_array) -> "float | None":
+def _refine_reach_through(
+    config: DeviceConfig, v_grid_rt, bias_array
+) -> "float | None":
     """Full-depletion |V| on a fixed absolute 0.05 V lattice, independent of the
     caller's bias grid (so C-V and CCE report the same number for one device).
 
@@ -208,7 +256,9 @@ def _failed_result(config, sim_type, error, **empty_keys) -> SimResult:
             "reach_through_V": None,
         }
     )
-    return SimResult(config=config, sim_type=sim_type, x=np.array([]), y=np.array([]), metadata=md)
+    return SimResult(
+        config=config, sim_type=sim_type, x=np.array([]), y=np.array([]), metadata=md
+    )
 
 
 def _engine_batch(kws):
@@ -220,7 +270,11 @@ def _engine_batch(kws):
     """
     col = lambda key: np.array([k[key] for k in kws], dtype=float)
     sub = kws[0]["substrate_thickness_cm"]
-    x = node_positions(kws[0]["epi_thickness_cm"], sub)
+    t_np = kws[0].get("nplus_thickness_cm")  # shared by the group (mesh geometry)
+    x = node_positions(kws[0]["epi_thickness_cm"], sub, t_np)
+    nplus = None
+    if t_np is not None:
+        nplus = (sub + kws[0]["epi_thickness_cm"], col("N_D_nplus"))
     nd = np.array([DEFAULT_N_D if k["N_D"] is None else k["N_D"] for k in kws], float)
     uniform = np.array([k["doping_profile"] == "uniform" for k in kws])
     # A uniform profile is a flat graded one; L_transition only has to be > 0.
@@ -232,6 +286,7 @@ def _engine_batch(kws):
         np.where(uniform, nd, col("N_D_bulk")),
         np.where(uniform, 1e-4, col("L_transition")),
         col("T"),
+        nplus=nplus,
     )
     return pb, x, nd
 
@@ -245,7 +300,7 @@ def _engine_groups(configs, bias_array, facade):
             logger.info("%s: using devsim (%s)", facade, reason)
             continue
         kw = device_kwargs(config)
-        key = (kw["epi_thickness_cm"], kw["substrate_thickness_cm"])
+        key = (kw["epi_thickness_cm"], kw["substrate_thickness_cm"], kw.get("nplus_thickness_cm"))
         groups.setdefault(key, []).append(i)
     return groups
 
@@ -324,16 +379,18 @@ def _cv_batch(configs, v_start, v_stop, n_points, capture):
                         ),
                         reach_through_known=True,
                         reach_through_method=_RT_ENGINE,
-                        cross_checked_to_V=ENGINE_CROSS_CHECKED_TO_V,
+                        cross_checked_to_V=_cross_checked_to_V(configs[i]),
                     ),
                 },
                 mesh=None,
             )
     return [
-        r
-        if r is not None
-        else _devsim_or_failed(
-            _run_cv_devsim, c, bias_array, "cv", _CV_EMPTY, capture, i in fell_back
+        (
+            r
+            if r is not None
+            else _devsim_or_failed(
+                _run_cv_devsim, c, bias_array, "cv", _CV_EMPTY, capture, i in fell_back
+            )
         )
         for i, (r, c) in enumerate(zip(results, configs))
     ]
@@ -379,7 +436,8 @@ def _cce_batch(configs, v_start, v_stop, n_points, capture):
                     bias_array,
                 )
         # cce_vs_bias defaults: alpha range 15 um, peak generation 1e18 cm^-3 s^-1.
-        G = alpha_generation(x, sub, 15e-4, 1e18)
+        epi_end = sub + kws[0]["epi_thickness_cm"] if kws[0].get("nplus_thickness_cm") else None
+        G = alpha_generation(x, sub, 15e-4, 1e18, epi_end=epi_end)
         # Mobility inputs mirror cce_vs_bias exactly (electrons from N_D, holes from N_A).
         res = cce_sweep(
             pb,
@@ -408,16 +466,24 @@ def _cce_batch(configs, v_start, v_stop, n_points, capture):
                     **_provenance(
                         configs[i],
                         "batched",
-                        cross_checked_to_V=ENGINE_CROSS_CHECKED_TO_V,
+                        cross_checked_to_V=_cross_checked_to_V(configs[i]),
                     ),
                 },
                 mesh=None,
             )
     out = [
-        r
-        if r is not None
-        else _devsim_or_failed(
-            _run_cce_devsim, c, bias_array, "cce", _CCE_EMPTY, capture, i in fell_back
+        (
+            r
+            if r is not None
+            else _devsim_or_failed(
+                _run_cce_devsim,
+                c,
+                bias_array,
+                "cce",
+                _CCE_EMPTY,
+                capture,
+                i in fell_back,
+            )
         )
         for i, (r, c) in enumerate(zip(results, configs))
     ]
@@ -608,7 +674,9 @@ def _engine2d_cathode_field(config: DeviceConfig, bias_V: float) -> "float | Non
         grid, info = grid_from_devsim(
             half_width_um=config.half_width_um, **device_kwargs(config)
         )
-        return float(Device2D(grid, info).dark(-float(bias_V), stop_field=_field_nan_min()))
+        return float(
+            Device2D(grid, info).dark(-float(bias_V), stop_field=_field_nan_min())
+        )
     except Exception as e:  # not laterally uniform, not converged, ...
         logger.info("run_field: cathode-field probe unavailable (%s)", e)
         return None
@@ -645,7 +713,9 @@ def _node_field_2d(x_coords, y_coords, potential):
     return field_nodes
 
 
-def _field_engine_unsupported_reason(config: DeviceConfig, bias_V: float) -> "str | None":
+def _field_engine_unsupported_reason(
+    config: DeviceConfig, bias_V: float
+) -> "str | None":
     """Why the 2D engine cannot serve ``run_field(config, bias_V)`` (None = it can)."""
     from etna.core.engine2d import engine2d_dark_unsupported_reason
 
@@ -816,7 +886,9 @@ def run_field(config: DeviceConfig, bias_V: float = -50.0) -> SimResult:
         # with the exact cv_sweep sign/contact convention (cv_analysis.py:171,
         # "positive V on cathode = reverse bias for p+/n- diode"):
         # conventional-negative bias_V -> positive cathode voltage -bias_V.
-        ramp_bias(device_info, V_target=-bias_V, contact="cathode", V_step=0.5, V_step_max=2.0)
+        ramp_bias(
+            device_info, V_target=-bias_V, contact="cathode", V_step=0.5, V_step_max=2.0
+        )
 
         is_2d = device_info.get("dimension") == 2 or config.half_width_um is not None
 
@@ -878,7 +950,9 @@ def run_field(config: DeviceConfig, bias_V: float = -50.0) -> SimResult:
             "solver": "devsim",
         }
         if is_2d:
-            note = _field_engine_unsupported_reason(config, bias_V) or "2D engine declined"
+            note = (
+                _field_engine_unsupported_reason(config, bias_V) or "2D engine declined"
+            )
             metadata.update(validated_domain=False, domain_note=note)
             if fallback_reason:
                 metadata["fallback_reason"] = fallback_reason

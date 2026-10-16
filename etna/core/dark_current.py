@@ -44,7 +44,7 @@ from devsim.python_packages.model_create import (
 
 from etna.core.drift_diffusion import (
     create_dd_device,
-    extract_contact_current,
+    extract_steady_state_current,
     ramp_bias,
 )
 
@@ -224,6 +224,13 @@ def setup_tat_model(device_info, E_t=None, m_t=None, N_t=None):
         f"taun * (Holes + p1_tat * Gamma_p)) - "
         f"G0_TAT * Gamma_n * min(E_field_node / E_ref_TAT, 1.0)"
     )
+    if device_info.get("nplus_thickness_cm") is not None:
+        # The effective generation is a fitted proxy for the epi leakage; its f_depl floor
+        # (1e3/3.5e4) would otherwise add N_t*0.029 per cm^3 throughout the n+ layer, making
+        # the leakage grow with the (arbitrary, truncated) n+ thickness. Confine it to the
+        # p+ and epi (x or y <= epi end); the SRH term stays everywhere.
+        coord = "y" if device_info.get("dimension") == 2 else "x"
+        U_TAT += f" * step({device_info['epi_end']} - {coord})"
     CreateNodeModel(device, region, "U_TAT", U_TAT)
     for var in ("Electrons", "Holes"):
         CreateNodeModelDerivative(device, region, "U_TAT", U_TAT, var)
@@ -439,7 +446,9 @@ def extract_dark_current_components(device_info, area=0.05):
     device = device_info["device_name"]
     region = device_info["region_name"]
 
-    J_total = extract_contact_current(device_info, contact="cathode")
+    # Balanced form (steady state): the direct cathode current has a ~3e-13 A/cm^2
+    # round-off floor (2e-3 of the -10 V leakage) and is unusable with an n+ layer.
+    J_total = extract_steady_state_current(device_info, contact="cathode")
 
     x = np.array(devsim.get_node_model_values(device=device, region=region, name="x"))
 
