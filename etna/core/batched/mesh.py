@@ -20,12 +20,19 @@ from etna.core.devsim_lock import serialized
 
 @lru_cache(maxsize=32)
 @serialized
-def node_positions(epi_thickness_cm, substrate_thickness_cm):
-    """Node coordinates x (cm) of the diode mesh, read-only (N,)."""
+def node_positions(epi_thickness_cm, substrate_thickness_cm, nplus_thickness_cm=None):
+    """Node coordinates x (cm) of the diode mesh, read-only (N,).
+
+    ``nplus_thickness_cm`` (None = no n+ layer) is part of the cache key.
+    """
     name = f"mesh_probe_{uuid.uuid4().hex[:8]}"
     region = "sic"
     build_diode_mesh(
-        name, region, substrate_thickness_cm, substrate_thickness_cm + epi_thickness_cm
+        name,
+        region,
+        substrate_thickness_cm,
+        substrate_thickness_cm + epi_thickness_cm,
+        nplus_thickness_cm=nplus_thickness_cm,
     )
     devsim.create_device(mesh=f"{name}_mesh", device=name)
     try:

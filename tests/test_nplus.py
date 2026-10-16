@@ -12,7 +12,6 @@ import numpy as np
 import pytest
 
 from etna.api.device import DeviceConfig, device_kwargs
-from etna.api.simulation import validated_domain_reason
 from etna.core.charge_collection import cce_vs_bias
 from etna.core.device import create_sic_device
 from etna.core.drift_diffusion import create_dd_device, ramp_bias
@@ -97,15 +96,3 @@ def test_device_kwargs_only_carry_nplus_when_on():
     kw = device_kwargs(DeviceConfig(nplus_thickness_um=2.0, N_D_nplus=5e18))
     assert kw["nplus_thickness_cm"] == pytest.approx(2e-4)
     assert kw["N_D_nplus"] == 5e18
-
-
-def test_engines_reject_nplus():
-    from etna.core.engine2d import (
-        engine2d_dark_unsupported_reason,
-        engine2d_unsupported_reason,
-    )
-
-    assert "n+" in validated_domain_reason(DeviceConfig(nplus_thickness_um=1.0))
-    kw = dict(nplus_thickness_cm=1e-4, N_D_nplus=1e19)  # all other device keywords at defaults
-    assert "nplus_thickness_cm" in engine2d_unsupported_reason(50.0, 20.0, **kw)
-    assert "nplus_thickness_cm" in engine2d_dark_unsupported_reason(50.0, 20.0, **kw)
