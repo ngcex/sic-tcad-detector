@@ -269,3 +269,75 @@ Tests: tests/test_api_field_engine.py (10 fast + 4 slow), tests/test_api_field.p
 tests/test_engine2d.py fast: all pass (slow field files 11.6 s).
 Note: tests/test_api_field.py's 2D test (hw=50, -10 V) now runs the engine path; the devsim 2D path is covered
 by the forced-devsim parity and fallback tests in test_api_field_engine.py.
+
+## n+ substrate spike (2026-10-16 ~20:00): is the devsim wall a contact artefact?
+
+Scripts: lab/solver2d/bench/nplus.py (1D; monkeypatches etna.core.device.build_diode_mesh and
+set_graded_doping_profile in-process), nplus2d.py (2D; patched copy of create_sic_2d_device installed into
+etna.core.charge_collection_2d). Variants: base = production; mesh = epi end refined (ps 1 nm at the epi end,
++1 um region) but NO n+ doping; np19 / np18 = 1 um n+ at 1e19 / 1e18 under the epi, cathode on the n+ end.
+1D device = create_dd_device graded defaults (N_D_junction 2.9e15, L 1 um), N_D_bulk 8.5e13 (= default) and 5e13.
+
+### Walls (last converged reverse bias)
+1D, devsim adaptive ramp (ramp_bias V_step_max=5, to 150 V): base, np19, np18 all reach 150 V (both N_D) --
+the adaptive secant ramp steps over the wall even without n+.
+1D, fixed 0.5 V steps from 0 V: base 67.5 V (8.5e13) / 54.5 V (5e13); mesh-only 77.0 / 60.0 V;
+np19 and np18: 150 V reached (both N_D).
+2D hw=25, fixed 0.5 V steps from 0 V:
+| epi | N_D_bulk | base | mesh-only | n+ 1e19 |
+|---|---|---|---|---|
+| 5 um | 5e13 | 26.5 V (LOG table) | - | 150 V reached (112 s) |
+| 5 um | 5e14 | 37.0 V (LOG table) | - | 150 V reached (112 s) |
+| 10 um | 5e13 | 54.5 V (LOG table) | 60.0 V | 150 V reached (160 s) |
+| 10 um | 5e14 | 94.0 V (fails 94.5) | - | 150 V reached (163 s) |
+=> the wall is a contact/mesh artefact: refining the mesh alone moves it (54.5 -> 60 V 2D, 54.5 -> 60 V 1D),
+an n+ layer removes it (>= 150 V everywhere tested).
+
+### Calibrated quantities, n+ vs base (1D)
+W: etna rule (first n-side node with n/Donors >= 0.5, clipped to the epi thickness); C = eps*0.05/W.
+| N_D_bulk | V | W base (um) | W np19 | W np18 | dC/C np19 |
+|---|---|---|---|---|---|
+| 8.5e13 | 0 | 1.69708 | 1.69708 | 1.69708 | 0 |
+| 8.5e13 | -5 | 5.775706 | 5.775733 | 5.775735 | -5e-6 |
+| 8.5e13 | -10 | 9.592595 | 9.213316 | 9.216782 | +4.1e-2 |
+| 8.5e13 | -30 | 9.984307 | 9.895584 | 9.901486 | +9.0e-3 |
+| 8.5e13 | -50 | 9.986025 | 9.940143 | 9.946114 | +4.6e-3 |
+| 5e13 | -5 | 7.291363 | 7.269091 | 7.269334 | +3.1e-3 |
+| 5e13 | -10 | 9.926384 | 9.588434 | 9.59383 | +3.5e-2 |
+| 5e13 | -50 | 9.986084 | 9.940636 | 9.946658 | +4.6e-3 |
+(With n+ the electron tail of the n+/n- high-low junction (Debye length in n- ~0.4 um) keeps n/N_D >= 0.5 a
+few hundred nm before the epi end, so W saturates at ~9.94 um instead of ~9.99.)
+
+CCE (cce_vs_bias replica, G = alpha profile 15 um range, 1e18 peak): devsim's cathode contact current is
+unusable with n+ (a small difference of huge SG terms in the 1e19 region: CCE_direct jumps by 1-2 %, >1).
+Evaluated with the balanced form Ie = sum_interior V*ElectronGeneration - Jn(anode edge), Ih direct
+(base: balanced == direct to 5e-8):
+| N_D | G domain | V=-10 | -20 | -30 | -40 | -50 |
+|---|---|---|---|---|---|---|
+| 8.5e13 base | (epi = device) | 0.966579 | 0.996169 | 0.997735 | 0.998272 | 0.998475 |
+| 8.5e13 np19 | epi only | 0.998867 | 0.999562 | 0.999708 | 0.999778 | 0.999820 |
+| 8.5e13 np18 | epi only | 0.998857 | 0.999560 | 0.999706 | 0.999777 | 0.999820 |
+| 8.5e13 np19 | epi + n+ (alpha reaches it) | 0.961164 | 0.961942 | 0.962095 | 0.962170 | 0.962216 |
+| 5e13 base | | 0.990597 | 0.996812 | 0.997936 | 0.998340 | 0.998498 |
+| 5e13 np19 | epi only | 0.999065 | 0.999563 | 0.999705 | 0.999776 | 0.999819 |
+n+ acts as a back-surface field (holes generated near the cathode are no longer lost into the ohmic contact):
++3.3 % at -10 V, +1.3e-3 at -50 V (8.5e13). If the alpha deposits in the n+ too, CCE drops by ~3.7 %.
+
+Dark current (dark_current_sweep, N_t 2.8e12, area 0.04 cm^2; direct extraction also broken with n+:
+4.7e-9 A flat for np19, so balanced form shown; base balanced vs direct differ by 2e-3 at -10 V, 3e-4 at
+-30 V, 2e-6 at -60 V -- the SRV contact term):
+| N_D | -10 V | -30 V | -60 V |
+|---|---|---|---|
+| 8.5e13 base (direct, official) | 5.948897e-12 | 1.457471e-11 | 1.795679e-11 |
+| 8.5e13 base (balanced) | 5.960995e-12 | 1.457048e-11 | 1.795675e-11 |
+| 8.5e13 np19 (balanced) | 6.110770e-12 (+2.5 %) | 1.471496e-11 (+1.0 %) | 1.801384e-11 (+0.32 %) |
+| 8.5e13 np18 (balanced) | 6.104578e-12 | 1.471070e-11 | 1.802023e-11 (+0.35 %) |
+| 5e13 base (balanced) | 6.056268e-12 | 1.485636e-11 | 1.795674e-11 |
+| 5e13 np19 (balanced) | 6.222897e-12 (+2.8 %) | 1.500854e-11 (+1.0 %) | 1.801366e-11 (+0.32 %) |
+
+### Decision rule
+Wall moves beyond 100 V: YES (>= 150 V, 1D and 2D). Calibrated range changes < 1e-3: NO (C at -10 V +4.1 %,
+-30 V +0.9 %; CCE -10 V +3.3 %, -50 V +1.3e-3; dark current -60 V +0.32 %, -10 V +2.5 %).
+=> NOT a pure validity extension. Redo: graded-doping C-V calibration (calibrate_graded_doping, its 2D twin;
+W targets at -10/-30 V move 4 % / 0.9 %), N_t fit of the dark current (-60 V +0.3 %, more at low bias),
+and decide whether the alpha deposits in the n+ (CCE -3.7 %).
