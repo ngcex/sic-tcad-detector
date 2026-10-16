@@ -242,7 +242,61 @@ def create_dd_device(doping_profile="graded", **kwargs):
     return device_info
 
 
-def ramp_bias(device_info, V_target, contact="anode", V_step=0.5):
+_RAMP_SOLVE = dict(type="dc", absolute_error=1e10, relative_error=1e-10, maximum_iterations=40)
+_RAMP_SOLVE_COARSE = dict(
+    type="dc", absolute_error=1e10, relative_error=1e-8, maximum_iterations=60
+)
+_RAMP_SOLVE_RELAXED = dict(
+    type="dc", absolute_error=1e12, relative_error=1e-8, maximum_iterations=100
+)
+_RAMP_MODELS = ("Potential", "Electrons", "Holes")
+
+
+def _snapshot_solution(device, region):
+    return {
+        m: devsim.get_node_model_values(device=device, region=region, name=m)
+        for m in _RAMP_MODELS
+    }
+
+
+def _restore_solution(device, region, snap):
+    for m, values in snap.items():
+        devsim.set_node_values(device=device, region=region, name=m, values=values)
+
+
+def _ramp_bias_adaptive(device_info, bias_name, V_from, V_to, h_min, h_max):
+    """Adaptive-step bias ramp (see ``ramp_bias``, ``V_step_max``)."""
+    device = device_info["device_name"]
+    region = device_info["region_name"]
+    sign = 1.0 if V_to >= V_from else -1.0
+    V, h = V_from, h_max
+    while abs(V_to - V) > 1e-12:
+        step = min(h, abs(V_to - V))
+        V_next = V_to if step >= abs(V_to - V) - 1e-12 else V + sign * step
+        final = V_next == V_to
+        snap = _snapshot_solution(device, region)
+        devsim.set_parameter(device=device, name=bias_name, value=V_next)
+        try:
+            # Intermediate points only seed the next Newton start; the target
+            # is solved at the strict tolerance.
+            devsim.solve(**(_RAMP_SOLVE if final else _RAMP_SOLVE_COARSE))
+        except devsim.error:
+            _restore_solution(device, region, snap)
+            if step > h_min * (1 + 1e-9):
+                h = max(h_min, step / 2)
+                continue
+            devsim.set_parameter(device=device, name=bias_name, value=V_next)
+            try:
+                devsim.solve(**_RAMP_SOLVE_RELAXED)
+            except devsim.error as e:
+                raise RuntimeError(
+                    f"ramp_bias: failed to converge at V={V_next:.3f}V: {e}"
+                )
+        V = V_next
+        h = min(h * 2, h_max)
+
+
+def ramp_bias(device_info, V_target, contact="anode", V_step=0.5, V_step_max=None):
     """Ramp contact bias to target voltage incrementally.
 
     Similar to what iv_sweep does internally but without collecting I-V data.
@@ -259,6 +313,13 @@ def ramp_bias(device_info, V_target, contact="anode", V_step=0.5):
         Contact at which to apply bias ("anode" or "cathode").
     V_step : float
         Maximum voltage step for ramping (V).
+    V_step_max : float, optional
+        If given, the ramp is adaptive: it starts with steps of ``V_step_max``,
+        doubles after each converged step, and on a Newton failure restores the
+        last converged solution and halves the step down to ``V_step``, where the
+        relaxed-tolerance retry below applies. The ramp only chooses the path to
+        the target; the converged state at ``V_target`` is the same (to solver
+        tolerance). ``None`` keeps fixed steps of ``V_step``.
 
     Returns
     -------
@@ -281,6 +342,11 @@ def ramp_bias(device_info, V_target, contact="anode", V_step=0.5):
 
     delta = V_target - current_V
     if abs(delta) < 1e-12:
+        return True
+
+    if V_step_max is not None and V_step_max > V_step:
+        _ramp_bias_adaptive(device_info, bias_name, current_V, V_target, V_step, V_step_max)
+        logger.debug(f"ramp_bias: ramped {contact} to {V_target:.3f}V (adaptive)")
         return True
 
     n_steps = max(1, int(np.ceil(abs(delta) / V_step)))
