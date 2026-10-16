@@ -96,6 +96,14 @@ Specifically NOT provided and to be supplied/measured by the fab:
   no claim about lineal-energy spectra.
 - **SV widths other than 50 µm half-width** are not quoted — we only validated CCE
   uniformity at that width. Re-run uniformity sweeps before quoting other widths.
+- **"CCE uniformity" is not a modelled result (corrected 2026-10-17).** The 2D model
+  is laterally uniform by construction (doping depends on depth only, both contacts span
+  the full width, both lateral sides are mirror boundaries), so edge CCE equals centre
+  CCE and the "uniformity" gate (edge & centre ≥ 0.95) is satisfied trivially. The
+  edge/centre differences reported before this date (~1e-4) were a numerical artefact of
+  the I_generated quadrature (it scaled with mesh spacing), not edge physics. Real edge
+  behaviour (field crowding, termination, guard rings, surface charge, lateral doping) is
+  **not modelled**, so no sweep ranking by uniformity says anything about the layout.
 
 ---
 
