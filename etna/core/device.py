@@ -35,6 +35,35 @@ DEFAULT_N_D = 1.07e15  # cm^-3
 # ionized. 1e18 and 1e19 give the same W/CCE/dark current to <1e-3 (lab spike).
 DEFAULT_N_D_NPLUS = 1e19  # cm^-3
 
+# Calibration record for the n+ stack (p+ 0.3 um / 10 um graded n- epi / n+), NOT the
+# default model. Reproduce: lab/solver2d/bench/nplus_calibrate.py; pinned by
+# tests/test_nplus_calibration.py; notes in lab/solver2d/notes/LOG.md.
+# C-V: the three W targets (1.7 / 9.5 / 9.73 um at 0 / -10 / -30 V, W = eps*A/C, A = 4 mm2)
+# have NO exact solution for (N_D_junction, N_D_bulk, L) in this model (nor in the
+# historical no-n+ model): past full depletion (~10 V) W saturates at the epi end
+# (n+: 9.90 um at -30 V; no n+: 9.98 um), so 9.73 um is unreachable (+1.7 % / +2.6 %).
+# Least squares on all three drives N_D_bulk to its 1e12 bound (unphysical; paper:
+# 0.5-1e14). Hence: L_transition held at the previous value (0.987 um) and
+# (N_D_junction, N_D_bulk) solved EXACTLY on the 0 V and -10 V points (2 equations,
+# 2 unknowns; residuals < 3e-15); -30 V residual +1.74 %. The -30 V gap (effective epi
+# ~9.8 um? ~1.5 % stray/fringe C on the 2x2 mm2 die? measurement?) is for the device
+# owner. N_t: rescaled (leakage linear in N_t) so that I(300 K, -60 V, 4 mm2) = 18 pA,
+# the bound "< 18 pA up to -60 V" used as equality; N_t is the fitted magnitude of the
+# f_depl = min(E/3.5e4, 1) effective-generation PROXY, not a trap density.
+NPLUS_CALIBRATION = {
+    "substrate_thickness_cm": 0.3e-4,  # p+ anode layer (Petringa 2025 Fig. 1)
+    "nplus_thickness_cm": 1e-4,
+    "N_D_nplus": 1e19,
+    "N_D_junction": 2.974271e15,
+    "N_D_bulk": 6.335936e13,
+    "L_transition": 0.987e-4,  # held, not fitted
+    "N_t": 2.805349e12,
+    # Z1/2 level of radiation_damage (Burin et al. Table I). SiC4H_Parameters.E_t is still
+    # 0.65: changing it alone moved the leakage by <= 5e-5 but made the default (no n+)
+    # dark sweep stop at -89.5 V instead of -100 V (fragile no-n+ wall). Apply with the flip.
+    "E_t": 0.67,
+}
+
 # Physical constants (CGS)
 EPS_0 = 8.854e-14  # F/cm, vacuum permittivity
 Q = 1.602e-19  # C, elementary charge
