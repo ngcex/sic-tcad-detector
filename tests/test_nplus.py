@@ -96,3 +96,44 @@ def test_device_kwargs_only_carry_nplus_when_on():
     kw = device_kwargs(DeviceConfig(nplus_thickness_um=2.0, N_D_nplus=5e18))
     assert kw["nplus_thickness_cm"] == pytest.approx(2e-4)
     assert kw["N_D_nplus"] == 5e18
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("gen_in_nplus, expected", [(False, 0.9995626), (True, 0.9619415)])
+def test_2d_cce_with_nplus(gen_in_nplus, expected):
+    """2D devsim (hw 25, -20 V, n+ 1 um): balanced raw CCE <= 1, equal to the 1D value
+    (0.999562, epi-only G), laterally flat; the direct contact current gives 1.0136 here."""
+    from etna.core.charge_collection import add_generation_to_dd
+    from etna.core.charge_collection_2d import (
+        Q,
+        cce_lateral_scan,
+        create_2d_dd_device,
+        integrate_nodes_box_2d,
+    )
+    from etna.core.drift_diffusion import extract_steady_state_current
+    from etna.core.generation_profiles import alpha_depth_shape, confine_generation_to_epi
+    from etna.core.solver_tol import DC_REL_ERROR
+
+    info = create_2d_dd_device(
+        half_width_um=25.0, V_bias=20.0, device_name=_name("np2d"), nplus_generation=gen_in_nplus, **NPLUS
+    )
+    try:
+        y = np.array(devsim.get_node_model_values(device=info["device_name"], region="sic", name="y"))
+        ye = y - info["junction_pos"]
+        G = alpha_depth_shape(np.clip(ye, 0.0, None), alpha_range_cm=15e-4)
+        G = 1e18 * G / G.max()
+        G[ye < 0] = 0.0
+        G = confine_generation_to_epi(info, y, G)
+        add_generation_to_dd(info, G)
+        devsim.solve(type="dc", absolute_error=1e10, relative_error=DC_REL_ERROR, maximum_iterations=40)
+        raw = abs(extract_steady_state_current(info, "cathode")) / (Q * integrate_nodes_box_2d(info, G))
+        add_generation_to_dd(info, np.zeros_like(G))
+        devsim.solve(type="dc", absolute_error=1e10, relative_error=DC_REL_ERROR, maximum_iterations=40)
+        scan = cce_lateral_scan(info, n_points=3)
+    finally:
+        devsim.delete_device(device=info["device_name"])
+    assert raw < 1.0
+    assert raw == pytest.approx(expected, abs=2e-6)
+    np.testing.assert_allclose(scan["cce_values"], raw, atol=2e-6)
+    assert scan["in_mesh_generation_fraction"] == pytest.approx(0.8978 if gen_in_nplus else 0.8280, abs=1e-4)
+
