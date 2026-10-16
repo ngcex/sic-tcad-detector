@@ -50,6 +50,30 @@ def assemble_config(values: dict) -> DeviceConfig:
     )
 
 
+# Sidebar labels for DeviceConfig fields, used to phrase validation errors.
+FIELD_LABELS = {
+    "epi_thickness_um": "Epi thickness (µm)",
+    "substrate_thickness_um": "Substrate thickness (µm)",
+    "half_width_um": "Half-width (µm)",
+    "N_A": "N_A substrate (cm⁻³)",
+    "N_D_junction": "N_D junction (cm⁻³)",
+    "N_D_bulk": "N_D bulk (cm⁻³)",
+    "N_D": "N_D uniform (cm⁻³)",
+    "L_transition_um": "Transition length (µm)",
+    "T": "Temperature (K)",
+    "area_cm2": "Area (cm²)",
+}
+
+
+def humanize_config_error(msg: str) -> str:
+    """Replace DeviceConfig field names in a validation message by sidebar labels."""
+    import re
+
+    names = sorted(FIELD_LABELS, key=len, reverse=True)
+    pattern = re.compile(r"(?<![\w])(" + "|".join(map(re.escape, names)) + r")(?![\w])")
+    return pattern.sub(lambda m: f"'{FIELD_LABELS[m.group(1)]}'", msg)
+
+
 def render_device_sidebar() -> None:
     """Render the reactive device-config sidebar and store the assembled
     DeviceConfig under st.session_state["device_config"].
@@ -74,18 +98,31 @@ def render_device_sidebar() -> None:
 
     # --- Group 2: geometry ---
     st.sidebar.header("Geometry")
+    # No widget min/max bounds: an out-of-range entry would be silently clamped
+    # by the browser while the field still shows it. DeviceConfig validation
+    # names the rejected value instead (st.sidebar.error below) and the pages
+    # refuse to run until it is fixed.
     epi_thickness_um = st.sidebar.number_input(
-        "Epi thickness (µm)", value=10.0, min_value=0.1, key="cfg_epi_thickness_um"
+        "Epi thickness (µm)",
+        value=10.0,
+        step=0.5,
+        format="%.2f",
+        key="cfg_epi_thickness_um",
     )
     substrate_thickness_um = st.sidebar.number_input(
         "Substrate thickness (µm)",
         value=1.0,
-        min_value=0.1,
+        step=0.5,
+        format="%.2f",
         key="cfg_substrate_thickness_um",
     )
     if dim == "2D":
         half_width_um = st.sidebar.number_input(
-            "Half-width (µm)", value=50.0, min_value=0.1, key="cfg_half_width_um"
+            "Half-width (µm)",
+            value=50.0,
+            step=5.0,
+            format="%.1f",
+            key="cfg_half_width_um",
         )
     else:
         half_width_um = None
@@ -97,7 +134,7 @@ def render_device_sidebar() -> None:
     N_A = st.sidebar.number_input(
         "N_A substrate (cm⁻³)",
         value=1e19,
-        min_value=1e17,
+        step=1e18,
         format="%.3e",
         key="cfg_N_A",
     )
@@ -105,7 +142,7 @@ def render_device_sidebar() -> None:
         N_D = st.sidebar.number_input(
             "N_D uniform (cm⁻³)",
             value=1e15,
-            min_value=1e10,
+            step=1e14,
             format="%.3e",
             key="cfg_N_D",
         )
@@ -117,21 +154,22 @@ def render_device_sidebar() -> None:
         N_D_junction = st.sidebar.number_input(
             "N_D junction (cm⁻³)",
             value=2.93e15,
-            min_value=1e10,
+            step=1e13,
             format="%.3e",
             key="cfg_N_D_junction",
         )
         N_D_bulk = st.sidebar.number_input(
             "N_D bulk (cm⁻³)",
             value=8.82e13,
-            min_value=1e10,
+            step=1e11,
             format="%.3e",
             key="cfg_N_D_bulk",
         )
         L_transition_um = st.sidebar.number_input(
             "Transition length (µm)",
             value=0.987,
-            min_value=0.01,
+            step=0.001,
+            format="%.3f",
             key="cfg_L_transition_um",
         )
         # N_D hidden this mode — programmatically set to default; assemble_config
@@ -145,16 +183,17 @@ def render_device_sidebar() -> None:
     T = st.sidebar.number_input(
         "Temperature (K)",
         value=300.0,
-        min_value=100.0,
-        max_value=600.0,
+        step=5.0,
+        format="%.1f",
         key="cfg_T",
     )
     area_cm2 = st.sidebar.number_input(
         "Area (cm²)",
         value=1e-4,
-        min_value=1e-8,
+        step=1e-5,
         format="%.3e",
         key="cfg_area_cm2",
+        help="4 mm² = 4.000e-02 cm²",
     )
 
     values = {
@@ -173,23 +212,29 @@ def render_device_sidebar() -> None:
 
     try:
         st.session_state["device_config"] = assemble_config(values)
+        st.session_state.pop("device_config_error", None)
     except ValueError as e:
-        # Invalid combination despite the widget bounds: no config -> every
-        # page shows its "Configure a device" empty state instead of running.
+        # Never keep a stale valid config: drop it, record why, and every page
+        # refuses to run (page_utils.require_config) until the value is fixed.
         st.session_state.pop("device_config", None)
-        st.sidebar.error(str(e))
+        msg = humanize_config_error(str(e).removeprefix("Invalid DeviceConfig: "))
+        st.session_state["device_config_error"] = msg
+        st.sidebar.error(f"Invalid device configuration: {msg}")
         return
 
-    # Validated domain hint (where the fast engine was cross-checked vs devsim).
+    # Cross-check domain hint (where the fast engine was checked against devsim).
     from etna.api.simulation import validated_domain_reason
 
     cfg = st.session_state["device_config"]
     if cfg.half_width_um is None:
         reason = validated_domain_reason(cfg)
         if reason is None:
-            st.sidebar.caption("Inside the validated 1D domain.")
+            st.sidebar.caption(
+                "Inside the 1D engine/devsim cross-check domain (the two solvers "
+                "agree there; not a validation against measurement)."
+            )
         else:
             st.sidebar.caption(
-                f"Outside the validated 1D domain ({reason}): C-V/CCE use devsim "
-                "only, with no cross-check."
+                f"Outside the 1D engine/devsim cross-check domain ({reason}): "
+                "C-V/CCE use devsim only, with no cross-check."
             )

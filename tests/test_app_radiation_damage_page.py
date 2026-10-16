@@ -114,7 +114,7 @@ def test_nan_in_result_does_not_crash(monkeypatch):
     assert at.exception == [], f"page crashed on NaN result: {at.exception}"
     warning_texts = [el.value or "" for el in at.warning]
     assert any(
-        "1 of 6 fluence points are not shown" in w and "not converged" in w
+        "1 of 6 fluence point is not shown" in w and "not converged" in w
         for w in warning_texts
     ), f"excluded-point warning not found: {warning_texts}"
 

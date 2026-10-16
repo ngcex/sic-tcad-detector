@@ -86,7 +86,9 @@ def test_home_via_main_script():
     at.run()
     assert at.exception == [], at.exception
     assert isinstance(at.session_state["device_config"], DeviceConfig)
-    assert "validated 1D domain" in " ".join(c.value for c in at.sidebar.caption)
+    assert "engine/devsim cross-check domain" in " ".join(
+        c.value for c in at.sidebar.caption
+    )
 
 
 def test_cv_page_default_run():
@@ -97,7 +99,7 @@ def test_cv_page_default_run():
     assert len(res.x) == 40
     caps = _captions(at)
     assert "Solver: batched 1D engine" in caps
-    assert "inside the validated domain" in caps
+    assert "inside the engine/devsim cross-check domain" in caps
     assert "fully depleted" in caps
 
 

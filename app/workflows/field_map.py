@@ -31,6 +31,7 @@ import streamlit as st
 import etna
 from app.components.geometry_viewer import build_geometry_figure, QUANTITIES
 from app.components.page_utils import (
+    require_config,
     show_error,
     show_result_notes,
     show_stale_warning,
@@ -41,10 +42,7 @@ from app.components.results import build_field_figures, to_csv_bytes
 def render() -> None:
     st.title("Field Map")
 
-    cfg = st.session_state.get("device_config")
-    if cfg is None:
-        st.info("Configure a device in the sidebar to begin.")
-        st.stop()
+    cfg = require_config()
 
     bias_V = st.number_input(
         "Reverse bias (V)",
@@ -60,12 +58,14 @@ def render() -> None:
         ),
     )
 
+    inputs = {"reverse bias": float(bias_V)}
     if st.button("Run simulation"):
         try:
             with st.spinner("Solving the field..."):
                 st.session_state["field_result"] = etna.run_field(
                     cfg, bias_V=float(bias_V)
                 )
+            st.session_state["field_inputs"] = inputs
         except Exception as e:  # incl. devsim.error (not a RuntimeError)
             show_error(
                 e,
@@ -75,7 +75,9 @@ def render() -> None:
 
     result = st.session_state.get("field_result")
     if result is not None and result.mesh is not None:
-        show_stale_warning(result.config, cfg)
+        show_stale_warning(
+            result.config, cfg, st.session_state.get("field_inputs"), inputs
+        )
         st.caption(f"Bias: {result.metadata.get('bias_V', float('nan')):.1f} V")
         show_result_notes(result)
         if result.mesh.y_coords is None:
@@ -114,3 +116,12 @@ def render() -> None:
             "Quantity", list(QUANTITIES.keys()), index=0, key="geo_quantity"
         )
         st.plotly_chart(build_geometry_figure(result.mesh, quantity))
+
+        if result.mesh.y_coords is not None:
+            # 2D: export the mesh node table (x lateral, y depth, fields).
+            st.download_button(
+                "Download CSV (2D mesh nodes)",
+                data=to_csv_bytes(result),
+                file_name="field_2d_result.csv",
+                mime="text/csv",
+            )

@@ -132,6 +132,57 @@ def _reach_through_V(W, bias_array, config: DeviceConfig) -> "float | None":
     return float(np.min(np.abs(bias[mask])))
 
 
+_REACH_THROUGH_RESOLUTION_V = 0.05
+_RT_ENGINE = "engine dark sweep, 0.05 V resolution"
+_RT_GRID = "devsim sweep grid (resolution = bias step)"
+
+
+def _devsim_reach_through(config: DeviceConfig, cv_result) -> dict:
+    """Reach-through for a devsim C-V: refined like the engine path inside the
+    cross-check domain (same number as run_cce), grid value outside it."""
+    v_grid = _reach_through_V(
+        cv_result["depletion_widths"], cv_result["voltages"], config
+    )
+    if validated_domain_reason(config) is None:
+        v = _refine_reach_through(config, v_grid, cv_result["voltages"])
+        method = _RT_ENGINE
+    else:
+        v, method = v_grid, _RT_GRID
+    return dict(reach_through_V=v, reach_through_known=True, reach_through_method=method)
+
+
+def _refine_reach_through(config: DeviceConfig, v_grid_rt, bias_array) -> "float | None":
+    """Full-depletion |V| on a fixed absolute 0.05 V lattice, independent of the
+    caller's bias grid (so C-V and CCE report the same number for one device).
+
+    ``v_grid_rt`` is the first grid |V| at full depletion; the bracket below it is
+    re-swept with the batched engine. Falls back to the grid value if the engine
+    does not converge.
+    """
+    if v_grid_rt is None:
+        return None
+    mags = np.sort(np.abs(np.asarray(bias_array, dtype=float)))
+    below = mags[mags < v_grid_rt - 1e-12]
+    lo = float(below[-1]) if below.size else 0.0
+    step = _REACH_THROUGH_RESOLUTION_V
+    k0 = int(np.floor(lo / step + 1e-9))
+    k1 = int(np.ceil(v_grid_rt / step - 1e-9))
+    lattice = np.arange(k0, k1 + 1) * step
+    try:
+        kws = [device_kwargs(config)]
+        pb, _, _ = _engine_batch(kws)
+        res = reverse_sweep(
+            pb, -lattice, kws[0]["substrate_thickness_cm"], kws[0]["epi_thickness_cm"]
+        )
+    except Exception as e:  # pragma: no cover - defensive
+        logger.info("reach-through refinement failed (%s); using the grid value", e)
+        return float(v_grid_rt)
+    if not res.converged[:, 0].all():
+        return float(v_grid_rt)
+    v = _reach_through_V(res.W[:, 0], -lattice, config)
+    return float(round(v, 2)) if v is not None else float(v_grid_rt)
+
+
 def _provenance(config: DeviceConfig, solver: str, **extra) -> dict:
     """Solver / validated-domain metadata shared by the 1D facades."""
     reason = validated_domain_reason(config)
@@ -266,8 +317,13 @@ def _cv_batch(configs, v_start, v_stop, n_points, capture):
                     **_provenance(
                         configs[i],
                         "batched",
-                        reach_through_V=_reach_through_V(W, bias_array, configs[i]),
+                        reach_through_V=_refine_reach_through(
+                            configs[i],
+                            _reach_through_V(W, bias_array, configs[i]),
+                            bias_array,
+                        ),
                         reach_through_known=True,
+                        reach_through_method=_RT_ENGINE,
                         cross_checked_to_V=ENGINE_CROSS_CHECKED_TO_V,
                     ),
                 },
@@ -317,7 +373,11 @@ def _cce_batch(configs, v_start, v_stop, n_points, capture):
         dark = reverse_sweep(pb, bias_array, sub, kws[0]["epi_thickness_cm"])
         for j, i in enumerate(idxs):
             if dark.converged[:, j].all():
-                reach[i] = _reach_through_V(dark.W[:, j], bias_array, configs[i])
+                reach[i] = _refine_reach_through(
+                    configs[i],
+                    _reach_through_V(dark.W[:, j], bias_array, configs[i]),
+                    bias_array,
+                )
         # cce_vs_bias defaults: alpha range 15 um, peak generation 1e18 cm^-3 s^-1.
         G = alpha_generation(x, sub, 15e-4, 1e18)
         # Mobility inputs mirror cce_vs_bias exactly (electrons from N_D, holes from N_A).
@@ -365,6 +425,8 @@ def _cce_batch(configs, v_start, v_stop, n_points, capture):
         if r.metadata.get("solver") != "failed":
             r.metadata["reach_through_V"] = reach.get(i)
             r.metadata["reach_through_known"] = i in reach
+            if i in reach:
+                r.metadata["reach_through_method"] = _RT_ENGINE
     return out
 
 
@@ -429,7 +491,7 @@ def run_cv(
     interval), or None if not reached. Beyond it C saturates and the result
     depends on the cathode model (ohmic contact directly on the n- epi, no n+
     substrate). devsim's non-convergence at deep bias (about -64 V for the
-    default device, well past its full depletion at about -16 V) is an artefact
+    default device, well past its full depletion at about -17 V) is an artefact
     of that model and of solver robustness (beyond full depletion, outside the
     validated domain), not a physical device limit.
     Batched results carry ``metadata["cross_checked_to_V"]``, the deepest |V|
@@ -498,16 +560,7 @@ def _run_cv_devsim(config: DeviceConfig, bias_array) -> SimResult:
             "area_cm2": area,
             "truncated": cv_result["truncated"],
             "requested_v_stop": cv_result["requested_v_stop"],
-            **_provenance(
-                config,
-                "devsim",
-                reach_through_V=_reach_through_V(
-                    cv_result["depletion_widths"],
-                    cv_result["voltages"],
-                    config,
-                ),
-                reach_through_known=True,
-            ),
+            **_provenance(config, "devsim", **_devsim_reach_through(config, cv_result)),
         }
 
         return SimResult(
@@ -529,6 +582,36 @@ def _run_cv_devsim(config: DeviceConfig, bias_array) -> SimResult:
                 exc_info=True,
             )
             reset_devsim_fully()
+
+
+class OutsideModelValidity(RuntimeError):
+    """The requested operating point is outside the validity of the device model.
+
+    Raised without running devsim where devsim is known (measured) not to
+    converge; the message is meant to be shown to the user as is.
+    """
+
+
+def _field_nan_min() -> float:
+    from etna.core.engine2d import FIELD_NAN_MIN
+
+    return FIELD_NAN_MIN
+
+
+def _engine2d_cathode_field(config: DeviceConfig, bias_V: float) -> "float | None":
+    """Dark cathode-cell field (V/cm) of the 2D engine at ``bias_V``, ramping only
+    until it exceeds FIELD_NAN_MIN (cheap: one 1D column). None if unavailable."""
+    try:
+        from etna.core.engine2d.device import Device2D
+        from etna.core.engine2d.grid import grid_from_devsim
+
+        grid, info = grid_from_devsim(
+            half_width_um=config.half_width_um, **device_kwargs(config)
+        )
+        return float(Device2D(grid, info).dark(-float(bias_V), stop_field=_field_nan_min()))
+    except Exception as e:  # not laterally uniform, not converged, ...
+        logger.info("run_field: cathode-field probe unavailable (%s)", e)
+        return None
 
 
 def _node_field_2d(x_coords, y_coords, potential):
@@ -695,18 +778,32 @@ def run_field(config: DeviceConfig, bias_V: float = -50.0) -> SimResult:
     unrelated code sharing the process) across a `run_field()` call, that
     device will be silently deleted.
     """
+    fallback_reason = None
     if config.half_width_um is not None:
-        # PERF-03: laterally uniform default-family 2D devices in the validated box get
-        # the numba engine (no devsim device with equations, no reset); anything else, or
-        # any engine decline/error, falls through to the devsim path below.
+        # Laterally uniform default-family 2D devices in the validated box get the
+        # numba engine (no devsim device with equations, no reset); anything else, or
+        # any engine decline/error, falls through to the devsim path below -- except
+        # the clear model-validity failure, which devsim is known not to survive.
         reason = _field_engine_unsupported_reason(config, bias_V)
         if reason is None:
             try:
                 return _run_field_2d_engine(config, bias_V)
-            except Exception as e:  # Engine2DFallback or an engine error -> devsim decides
-                logger.info(f"run_field: engine2d declined ({e}); using devsim")
+            except Exception as e:  # Engine2DFallback or an engine error
+                fallback_reason = f"2D engine declined: {e}"
+                field = _engine2d_cathode_field(config, bias_V)
+                if field is not None and field > _field_nan_min():
+                    raise OutsideModelValidity(
+                        f"{-bias_V:g} V reverse bias is outside the validity of the "
+                        "device model for this device: the cathode contact sits "
+                        "directly on the n- epi (no n+ substrate) and the field in "
+                        f"its last mesh cell would reach at least {field:.3g} V/cm, above "
+                        f"{_field_nan_min():.3g} V/cm where devsim does not converge "
+                        "(measured). Use a smaller reverse bias or a thicker epi."
+                    ) from e
+                logger.info("run_field: %s; using devsim", fallback_reason)
         else:
-            logger.debug(f"run_field: engine2d unsupported ({reason}); using devsim")
+            fallback_reason = f"2D engine not applicable: {reason}"
+            logger.info("run_field: %s; using devsim", fallback_reason)
 
     reset_devsim_fully()
     device_info = build_device(config)
@@ -783,6 +880,8 @@ def run_field(config: DeviceConfig, bias_V: float = -50.0) -> SimResult:
         if is_2d:
             note = _field_engine_unsupported_reason(config, bias_V) or "2D engine declined"
             metadata.update(validated_domain=False, domain_note=note)
+            if fallback_reason:
+                metadata["fallback_reason"] = fallback_reason
         else:
             note = validated_domain_reason(config)
             metadata.update(validated_domain=note is None, domain_note=note)
@@ -1016,7 +1115,7 @@ def run_radiation_damage(
         metadata={
             "V_bias": result["V_bias"],
             "energy_MeV": result["energy_MeV"],
-            "solver": "devsim",
+            **_provenance(config, "devsim"),
             # Per-point validity (False = not solved: full donor compensation or
             # a solver failure; reason says which). Older cores lack the keys.
             "valid": (
@@ -1119,7 +1218,10 @@ def run_temperature_sweep(
         metadata={
             "voltage_V": voltage,
             "method": method,
-            "solver": "hecht (analytical; W from devsim)" if method == "hecht" else "devsim",
+            **_provenance(
+                config,
+                "hecht (analytical; W from devsim)" if method == "hecht" else "devsim",
+            ),
         },
         mesh=None,
     )
@@ -1283,7 +1385,7 @@ def run_dark_current(
                 "I_TAT": result["I_TAT"],
                 "I_SRV": result["I_SRV"],
                 "area_cm2": config.area_cm2,
-                "solver": "devsim",
+                **_provenance(config, "devsim"),
             },
             mesh=None,
         )

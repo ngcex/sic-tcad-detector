@@ -24,7 +24,12 @@ import numpy as np
 import streamlit as st
 
 import etna
-from app.components.page_utils import show_error, show_stale_warning
+from app.components.page_utils import (
+    require_config,
+    show_error,
+    show_stale_warning,
+    solver_badge_text,
+)
 from app.components.results import build_dark_current_figure, to_csv_bytes
 
 CALIBRATION_BANNER = (
@@ -40,10 +45,7 @@ def render() -> None:
 
     st.warning(CALIBRATION_BANNER)
 
-    cfg = st.session_state.get("device_config")
-    if cfg is None:
-        st.info("Configure a device in the sidebar to begin.")
-        st.stop()
+    cfg = require_config()
 
     if cfg.half_width_um is not None:
         st.warning(
@@ -83,7 +85,7 @@ def render() -> None:
 
     with st.expander("Advanced (calibration)"):
         N_t = st.number_input(
-            "N_t override (cm⁻³ s⁻¹, blank = calibrated default)",
+            "Effective generation rate N_t (cm⁻³ s⁻¹, blank = calibrated default)",
             value=None,
             min_value=0.0,
             format="%.3e",
@@ -91,6 +93,13 @@ def render() -> None:
             help="Leakage scales linearly with N_t.",
         )
 
+    inputs = {
+        "T min": float(T_min),
+        "T max": float(T_max),
+        "number of temperatures": int(n_temperatures),
+        "V_bias": float(V_bias),
+        "N_t": N_t,
+    }
     if st.button("Run simulation"):
         temperatures = np.linspace(T_min, T_max, int(n_temperatures))
         sim_kwargs = {
@@ -112,6 +121,7 @@ def render() -> None:
             T_ok: list[float] = []
             I_total: list[float] = []
             errors: list[str] = []
+            notes: list[str] = []
             for T_value, result in zip(temperatures, sweep_results):
                 if len(result.x) < 1:
                     if result.metadata.get("error"):
@@ -119,6 +129,8 @@ def render() -> None:
                     continue
                 T_ok.append(float(T_value))
                 I_total.append(float(result.y[0]))
+                if result.metadata.get("validated_domain") is False:
+                    notes.append(result.metadata.get("domain_note") or f"T={T_value:g} K")
 
             if not T_ok:
                 st.error(
@@ -134,17 +146,25 @@ def render() -> None:
                     sim_type="dark_current",
                     x=np.array(T_ok),
                     y=np.array(I_total),
-                    metadata={"V_bias": V_bias, "solver": "devsim"},
+                    metadata={
+                        "V_bias": V_bias,
+                        "solver": "devsim",
+                        "validated_domain": not notes,
+                        "domain_note": "; ".join(dict.fromkeys(notes)) or None,
+                    },
                 )
                 st.session_state["dark_current_n_ok"] = len(T_ok)
                 st.session_state["dark_current_n_requested"] = int(n_temperatures)
                 st.session_state["dark_current_errors"] = errors
+                st.session_state["dark_current_inputs"] = inputs
         except Exception as e:  # incl. devsim.error (not a RuntimeError)
             show_error(e, "Try a smaller reverse bias or a narrower temperature range.")
 
     result = st.session_state.get("dark_current_result")
     if result is not None:
-        show_stale_warning(result.config, cfg)
+        show_stale_warning(
+            result.config, cfg, st.session_state.get("dark_current_inputs"), inputs
+        )
         n_ok = st.session_state.get("dark_current_n_ok", 0)
         n_requested = st.session_state.get("dark_current_n_requested", 0)
         if n_ok < n_requested:
@@ -158,7 +178,8 @@ def render() -> None:
                 with st.expander("Error details"):
                     st.code("\n".join(errors))
         st.caption(
-            f"Solver: devsim · bias {result.metadata.get('V_bias', float('nan')):.1f} V"
+            f"Bias {result.metadata.get('V_bias', float('nan')):.1f} V · "
+            + solver_badge_text(result.metadata)
         )
         st.plotly_chart(build_dark_current_figure(result))
         st.download_button(
