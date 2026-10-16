@@ -21,12 +21,16 @@ def thermal_voltage(T):
     return K_B_J * T / Q
 
 
-def graded_doping(x, junction_pos, N_A_ion, N_D_junction, N_D_bulk, L_transition):
+def graded_doping(
+    x, junction_pos, N_A_ion, N_D_junction, N_D_bulk, L_transition, nplus=None
+):
     """Donors and Acceptors, each (B, N), for ETNA's exponentially graded epi profile.
 
     Scalar or (B,) parameters broadcast over the batch; ``x`` is shared (N,).
     Uniform doping is the special case N_D_junction == N_D_bulk. As in devsim,
     ``step(0) == 1``: the junction node carries both donors and acceptors.
+    ``nplus`` = (x_epi_end, N_D_nplus) adds the n+ layer N_D_nplus*step(x - x_epi_end)
+    (N_D_nplus scalar or (B,)), as ``etna.core.device._nplus_term``; None = no n+.
     """
     x = np.asarray(x, dtype=float)[None, :]
     if np.any(np.asarray(L_transition) <= 0):
@@ -36,6 +40,9 @@ def graded_doping(x, junction_pos, N_A_ion, N_D_junction, N_D_bulk, L_transition
     n_side = (x >= junction_pos).astype(float)
     p_side = (junction_pos - x >= 0).astype(float)
     donors = (NB + (NJ - NB) * np.exp(-np.maximum(x - junction_pos, 0.0) / Lt)) * n_side
+    if nplus is not None:
+        x_end, N_np = nplus
+        donors = donors + col(N_np) * (x - x_end >= 0).astype(float)
     acceptors = NA * p_side
     B = max(donors.shape[0], acceptors.shape[0])
     shape = (B, x.shape[1])
