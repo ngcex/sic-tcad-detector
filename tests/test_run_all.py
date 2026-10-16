@@ -11,7 +11,7 @@ from etna.api import run_all as ra
 
 def test_default_config_runs_every_section():
     rep = etna.run_all(etna.DeviceConfig())
-    assert [s.name for s in rep.sections] == list(ra.SECTION_NAMES)
+    assert [s.name for s in rep.sections] == list(ra.DEFAULT_SECTIONS)
     assert rep.ok, rep.rows()
     assert all(s.solver or s.name == "flash" for s in rep.sections)
     json.loads(rep.to_json())  # serialisable
@@ -64,3 +64,19 @@ def test_config_key_distinguishes_configs():
     a, b = etna.DeviceConfig(), etna.DeviceConfig(epi_thickness_um=12.0)
     assert ra.config_key(a) == ra.config_key(etna.DeviceConfig())
     assert ra.config_key(a) != ra.config_key(b)
+
+
+def test_sweep_is_opt_in_and_reports_rows():
+    assert "sweep" in ra.SECTION_NAMES and "sweep" not in ra.DEFAULT_SECTIONS
+    rep = etna.run_all(etna.DeviceConfig(), ("sweep",))
+    sec = rep.get("sweep")
+    assert sec.status == "ok" and sec.solver == "engine2d", sec.reason
+    assert "valid" in sec.summary and "no n+" in sec.title
+    assert len(sec.result.metadata["table"]) == 6
+    json.loads(rep.to_json())
+
+
+def test_sweep_outside_engine_box_is_skipped_not_run():
+    rep = etna.run_all(etna.DeviceConfig(epi_thickness_um=40.0), ("sweep",))
+    assert rep.get("sweep").status == "skipped"
+    assert "engine box" in rep.get("sweep").reason

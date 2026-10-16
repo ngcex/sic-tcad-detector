@@ -43,10 +43,62 @@ def _sections() -> "dict[str, tuple[str, Callable, bool]]":
             True,
         ),
         "flash": ("Flash recombination", lambda c: s.run_flash_recombination(c), True),
+        "sweep": (SWEEP_TITLE, _run_sweep, False),
     }
 
 
+_SWEEP_HALF_WIDTHS = (25.0, 50.0)
+_SWEEP_BIASES = (20.0, 40.0, 60.0)
+SWEEP_TITLE = "Microdosimetry sweep (current model, no n+ substrate)"
+
+
+def _run_sweep(config: DeviceConfig) -> SimResult:
+    """Small operating-point grid around the sidebar epi/doping, engine only.
+
+    Never falls back to the 2D devsim path (tens of seconds per config): if any
+    grid point is outside the 2D engine box the section raises, and is reported
+    as skipped by ``run_all``.
+    """
+    from etna.core.engine2d import engine2d_unsupported_reason
+    from etna.core.optimization import microdosimetric_sweep
+
+    epi_cm = config.epi_thickness_um * 1e-4
+    for hw in _SWEEP_HALF_WIDTHS:
+        for vb in _SWEEP_BIASES:
+            why = engine2d_unsupported_reason(hw, vb, epi_cm, config.N_D_bulk, 10)
+            if why:
+                raise _SweepUnsupported(why)
+    df = microdosimetric_sweep(
+        half_widths_um=_SWEEP_HALF_WIDTHS,
+        epi_thicknesses_cm=(epi_cm,),
+        N_D_bulks=(config.N_D_bulk,),
+        V_biases=_SWEEP_BIASES,
+        solver="auto",
+    )
+    n_valid = int(df["is_valid"].sum())
+    best = df.iloc[0]
+    summary = f"{n_valid}/{len(df)} valid"
+    if best["is_valid"]:
+        summary += (
+            f"; best: half-width {best['half_width_um']:g} um at "
+            f"{best['V_bias']:g} V, CCE {best['center_cce']:.4f}"
+        )
+    per_v = df.groupby("V_bias")["center_cce"].max()
+    return SimResult(
+        config=config,
+        sim_type="sweep",
+        x=per_v.index.to_numpy(dtype=float),
+        y=per_v.to_numpy(dtype=float),
+        metadata={"solver": "engine2d", "summary": summary, "table": df},
+    )
+
+
+class _SweepUnsupported(Exception):
+    pass
+
+
 SECTION_NAMES = tuple(_sections())
+DEFAULT_SECTIONS = tuple(n for n in SECTION_NAMES if n != "sweep")
 
 
 @dataclass
@@ -130,6 +182,8 @@ def config_key(config: DeviceConfig) -> str:
 
 
 def _summarize(res: SimResult) -> str:
+    if res.metadata.get("summary"):
+        return res.metadata["summary"]
     x, y = np.asarray(res.x, dtype=float), np.asarray(res.y, dtype=float)
     if not x.size or not y.size:
         return "no data"
@@ -153,12 +207,12 @@ def _devices_alive() -> "list[str]":
 
 
 def run_all(config: DeviceConfig, sections: "tuple[str, ...] | None" = None) -> Report:
-    """Run the selected sections (default: all) for ``config``.
+    """Run the selected sections (default: all except the opt-in ``sweep``) for ``config``.
 
     Never raises for a section failure; see ``Report.rows()``.
     """
     table = _sections()
-    names = tuple(sections) if sections is not None else tuple(table)
+    names = tuple(sections) if sections is not None else DEFAULT_SECTIONS
     unknown = [n for n in names if n not in table]
     if unknown:
         raise ValueError(f"unknown section(s) {unknown}; choose from {list(table)}")
@@ -173,6 +227,10 @@ def run_all(config: DeviceConfig, sections: "tuple[str, ...] | None" = None) -> 
         t0 = time.perf_counter()
         try:
             res = runner(config)
+        except _SweepUnsupported as exc:
+            done.append(
+                SectionResult(name, title, "skipped", reason=f"outside the 2D engine box: {exc}")
+            )
         except Exception as exc:  # a section never aborts the run
             done.append(
                 SectionResult(
