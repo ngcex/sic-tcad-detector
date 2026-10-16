@@ -6,8 +6,8 @@
 **Status:** GEOMETRY-ONLY physics specification (NOT a mask set; junction type NOT modeled)
 
 > **Scope and honesty boundary.** This document specifies the **sensitive-volume
-> geometry and electrode layout** of a 4H-SiC microdosimeter, TCAD-optimized for
-> charge-collection uniformity. It does **NOT** specify the junction type or its
+> geometry and electrode layout** of a 4H-SiC microdosimeter, sized from TCAD
+> depletion and CCE-vs-bias (laterally uniform model). It does **NOT** specify the junction type or its
 > electrical behavior. Our simulator has **no Schottky and no JBS model** — so the
 > barrier height, built-in potential, leakage, and C-V of a metal/JBS front
 > contact are explicitly left to the foundry (FBK Schottky, ST JBS). The
@@ -21,22 +21,22 @@
 
 Array of small sensitive volumes (SVs) in a 4H-SiC epitaxial layer, each read out
 through a front electrode. The microdosimetric _geometry_ (SV dimensions, depth,
-electrode layout, CCE uniformity across the SV) is what we specify. The junction
+electrode layout) is what we specify. The junction
 that forms the collecting contact — Schottky (FBK) or junction-barrier-Schottky
 (ST) — is the foundry's choice and is dropped into this geometry.
 
 ---
 
-## 2. Sensitive-volume geometry spec (TCAD-optimized, p-n electrostatics assumed)
+## 2. Sensitive-volume geometry spec (baseline, p-n electrostatics assumed)
 
-| Parameter                           | Recommended value                                 | Basis / note                                            |
-| ----------------------------------- | ------------------------------------------------- | ------------------------------------------------------- |
-| SV depth (epi thickness)            | **10 µm** (baseline)                              | calibrated/validated config                             |
-| SV half-width                       | **50 µm** (→ 100 µm SV)                           | the width we actually validated for uniformity          |
-| Graded epi donor profile N_D(y)     | N_D_junction 2.93e15, N_D_bulk 8.82e13, L 0.99 µm | calibrated (Phase 26)                                   |
-| Operating reverse bias              | **−15 to −20 V**                                  | margin above V_fd, well below the −50 V solver envelope |
-| Full-depletion voltage V_fd (10 µm) | **≈ 10.5 V**                                      | calibrated profile (assumes p-n electrostatics)         |
-| CCE-uniformity acceptance           | edge & center CCE ≥ 0.95, fully depleted          | Mj-3 validity gate                                      |
+| Parameter                           | Recommended value                                 | Basis / note                                                            |
+| ----------------------------------- | ------------------------------------------------- | ----------------------------------------------------------------------- |
+| SV depth (epi thickness)            | **10 µm** (baseline)                              | calibrated/validated config                                             |
+| SV half-width                       | **50 µm** (→ 100 µm SV)                           | baseline choice; width not discriminated by the model (no edge physics) |
+| Graded epi donor profile N_D(y)     | N_D_junction 2.93e15, N_D_bulk 8.82e13, L 0.99 µm | calibrated (Phase 26)                                                   |
+| Operating reverse bias              | **−15 to −20 V**                                  | margin above V_fd, well below the −50 V solver envelope                 |
+| Full-depletion voltage V_fd (10 µm) | **≈ 10.5 V**                                      | calibrated profile (assumes p-n electrostatics)                         |
+| Validity gate                       | fully depleted and CCE ≥ 0.95                     | Mj-3 validity gate                                                      |
 
 **Alternative SV depths (verified V_fd, p-n electrostatics):**
 
@@ -48,18 +48,16 @@ that forms the collecting contact — Schottky (FBK) or junction-barrier-Schottk
 
 > **Validity gate (audit Mj-3):** only configurations that are _fully depleted_
 > (|V_bias| ≥ V_fd) **and** above the CCE floor (0.95 at both center and edge) are
-> quoted. A partially-depleted SV can show a deceptively uniform edge/center ratio
-> at low (both-poor) CCE — those are excluded.
+> quoted. Partially depleted points are excluded because their CCE is < 0.95.
 
 ---
 
 ## 3. What the geometry deliverable gives the fab
 
-- SV depth, half-width, and the laterally-uniform graded doping target for which
-  CCE is uniform across the SV at the operating bias.
+- SV depth, half-width, and the laterally-uniform graded doping target at which
+  the SV is fully depleted at the operating bias.
 - Full-depletion voltage and recommended operating bias **for a p-n-type junction**.
-- Confirmation that CCE → 1 (> 0.96) across the SV when fully depleted (DD model,
-  validated vs 1D twin).
+- CCE → 1 (> 0.96) when fully depleted (DD model; consistent with the 1D twin).
 
 ---
 
@@ -86,17 +84,19 @@ Specifically NOT provided and to be supplied/measured by the fab:
 
 - **No Schottky/JBS electrical parameters** — barrier height, leakage, C-V,
   turn-on are not modeled; do not expect them here.
-- **Dark current / leakage: not specified.** Our p-n leakage estimate is a
-  single-point calibration and is irrelevant to a Schottky/JBS junction. The fab
+- **Dark current / leakage: not specified.** Our p-n leakage is a calibration
+  input (N_t fitted to the experimental bound < 18 pA up to −60 V, 4 mm²) and
+  does not apply to a Schottky/JBS junction. The fab
   must measure leakage for its junction type.
 - **No rated breakdown / max voltage.** −50 V is solver convergence, not breakdown.
 - **Tissue-equivalence (κ) and microdosimetric spectra are NOT in this spec.**
   The tissue-equivalence correction depends on stopping-power data we have flagged
   as not foundry-ready (Phase 27 work). This document is geometry only; it makes
   no claim about lineal-energy spectra.
-- **SV widths other than 50 µm half-width** are not quoted — we only validated CCE
-  uniformity at that width. Re-run uniformity sweeps before quoting other widths.
-- **"CCE uniformity" is not a modelled result (corrected 2026-10-17).** The 2D model
+- **SV widths other than 50 µm half-width** are not quoted — the model cannot rank
+  width; choosing one needs edge physics (field crowding, termination) or
+  measurement.
+- **"CCE uniformity" is not a modelled result (corrected 2026-10-16).** The 2D model
   is laterally uniform by construction (doping depends on depth only, both contacts span
   the full width, both lateral sides are mirror boundaries), so edge CCE equals centre
   CCE and the "uniformity" gate (edge & centre ≥ 0.95) is satisfied trivially. The
@@ -110,6 +110,6 @@ Specifically NOT provided and to be supplied/measured by the fab:
 ## 6. What is solid (geometry hand-off-ready)
 
 The SV depth, the full-depletion voltage and operating-bias window (for p-n
-electrostatics), the CCE-uniformity-optimized geometry, and CCE → 1 when fully
+electrostatics), the baseline SV depth and half-width, and CCE → 1 when fully
 depleted. These are defensible TCAD geometry targets. The junction electrical
 behavior is the foundry's to define and measure.

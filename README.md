@@ -23,14 +23,15 @@ Petringa group's 4H-SiC detector work at INFN-LNS Catania.
 - **Charge collection (CCE)** — drift-diffusion transport, Hecht analysis,
   CCE vs bias, single-particle and transient response.
 - **Dark current** — trap-assisted generation (SRH/TAT/SRV decomposition),
-  temperature dependence (calibrated, single-point).
+  temperature dependence (calibration input: one trap density N_t fitted to the
+  experimental bound < 18 pA up to −60 V, 4 mm²; not a prediction).
 - **Radiation damage** — defect introduction (Z1/2, EH4, EH6/7), carrier-lifetime
   degradation, CCE vs fluence, annealing kinetics (Burin et al. 2024 model).
 - **Microdosimetry** — lineal-energy spectra, y_F / y_D, tissue-equivalence
   scaling, Monte-Carlo (Geant4) coupling.
 - **2D devices & alternative structures** — graded-doping 2D solver, mesa,
-  3D-electrode, ΔE-E telescope, guard-ring; parametric optimisation and batch
-  sweeps.
+  3D-electrode, ΔE-E telescope (guard-ring hand-scored only; edge physics not
+  modelled); operating-point and batch sweeps.
 
 22 Jupyter notebooks under `notebooks/` reproduce the underlying figures and
 results; the Streamlit UI (`app/`) exposes the same workflows interactively
@@ -155,9 +156,11 @@ simulated C–V against an independently published, open-access 4H-SiC device
 reported value. In the interest of honesty, the current limitations are:
 
 - ✅ **Solid / publishable:** electrostatics, C–V, CCE-vs-bias, the calibrated
-  graded-doping 2D model (converges to −50 V, matches C–V R² ≥ 0.99 over 0…−50 V).
-- ⚠️ **Calibration, not prediction:** dark current is a single-point fit; quote it
-  as a budget estimate only.
+  graded-doping 2D model (converges to −50 V; 2D C–V matches the 1D twin,
+  R² ≥ 0.99 over 0…−50 V).
+- ⚠️ **Calibration, not prediction:** dark current is a calibration input: one
+  trap density N_t fitted to the experimental bound < 18 pA up to −60 V (4 mm²);
+  quote it as a budget estimate only.
 - ⚠️ **FLASH dose-rate:** the high-injection _plasma-recombination_ physics is
   **not implemented** — FLASH dose-rate outputs are exploratory sensitivity
   bounds, not a validated mechanistic prediction.
@@ -186,6 +189,6 @@ MIT — see [LICENSE](LICENSE).
 ## Acknowledgements
 
 Built on [`devsim`](https://devsim.org/) (J. E. Sanchez). Radiation-damage model
-follows Burin et al., arXiv:2407.16710 (2024). Developed for and validated
+follows Burin et al., arXiv:2407.16710 (2024). Developed for and calibrated
 against experimental data from the Petringa group's 4H-SiC detector program at
 INFN-LNS Catania.

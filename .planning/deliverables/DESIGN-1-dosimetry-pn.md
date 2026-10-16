@@ -59,7 +59,7 @@ junction field.
 **~10.5 V (10 µm epi)**, ~35 V (20 µm epi). Operate at a bias comfortably above
 V_fd for the chosen epi.
 
-**Charge collection (reverse bias, TCAD-model, validated vs 1D twin):**
+**Charge collection (reverse bias, TCAD-model, consistent with the 1D twin):**
 CCE → 1 (> 0.96) once the device is fully depleted. This is a drift-diffusion
 model result for the simulated p-n junction; not an absolute device guarantee.
 
@@ -106,7 +106,7 @@ target and quote its verified W(0 V).
   up to −60 V, 4 mm²) is the **calibration input**, not a result: the one fitted
   trap term (N_t) is set so the model equals the experimental upper bound
   "< 18 pA up to −60 V" — it does not predict or validate leakage. (Before
-  2026-10-17 a stale-field bug made the model look consistent with 18 pA at −30 V;
+  2026-10-16 a stale-field bug made the model look consistent with 18 pA at −30 V;
   on the corrected path the unscaled default gave ~141 pA, i.e. 7.8× over the bound.) Use only as a budget estimate; the fab must
   measure. Do **not** treat it as a leakage limit/guarantee.
 - **No rated breakdown voltage.** −50 V is the TCAD solver-convergence envelope;
