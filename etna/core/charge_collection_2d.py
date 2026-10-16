@@ -155,7 +155,9 @@ def create_2d_dd_device(
 
     # Ramp cathode to reverse bias (positive V on cathode = reverse bias
     # for p+/n- diode, same convention as Phase 19 validation)
-    ramp_bias(device_info, V_target=V_bias, contact="cathode", V_step=0.5)
+    ramp_bias(
+        device_info, V_target=V_bias, contact="cathode", V_step=0.5, V_step_max=2.0
+    )
     logger.info(
         f"Created 2D DD device '{device_name}': "
         f"half_width={half_width_um:.0f} um, V_bias={V_bias:.1f} V"

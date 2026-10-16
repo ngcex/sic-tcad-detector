@@ -81,18 +81,6 @@ class TestIntegrateOverMesh2D:
             devsim.delete_device(device=dev_name)
 
 
-class TestCreate2DDDDevice:
-    """Tests for create_2d_dd_device."""
-
-    def test_device_has_dd_initialized(self, dd_device_2d):
-        """Device should have dd_initialized=True."""
-        assert dd_device_2d["dd_initialized"] is True
-
-    def test_device_is_2d(self, dd_device_2d):
-        """Device should have dimension=2."""
-        assert dd_device_2d["dimension"] == 2
-
-
 class TestComputeCCE2D:
     """Tests for 2D CCE computation."""
 
@@ -128,6 +116,11 @@ class TestComputeCCE2D:
             add_generation_to_dd(device_info_2d, gen_2d)
             _robust_dc_solve()
             cce_2d = compute_cce_2d(device_info_2d, gen_2d)
+
+            # devsim.solve is global: a live 2D device would be re-factored on
+            # every Newton step of the 1D ramp below. Drop it first.
+            devsim.delete_device(device=device_info_2d["device_name"])
+            device_info_2d = None
 
             # 1D reference
             from etna.core.drift_diffusion import create_dd_device
@@ -210,24 +203,6 @@ class TestCCELateralScan:
                 except Exception:
                     pass
 
-    def test_returns_correct_keys(self, dd_device_2d):
-        """Lateral scan result should have all expected keys."""
-        # Use a minimal scan (2 points) just to check dict structure
-        result = cce_lateral_scan(dd_device_2d, n_points=2, gen_rate=1e18)
-
-        expected_keys = {
-            "x_positions_cm",
-            "x_positions_um",
-            "cce_values",
-            "edge_to_center_ratio",
-        }
-        assert (
-            set(result.keys()) == expected_keys
-        ), f"Missing keys: {expected_keys - set(result.keys())}"
-        assert len(result["cce_values"]) == 2
-        assert len(result["x_positions_cm"]) == 2
-
-
 class TestCompareCCE2Dvs1D:
     """Tests for compare_cce_2d_vs_1d."""
 
@@ -244,6 +219,47 @@ class TestCompareCCE2Dvs1D:
             f"Active/geometric ratio ({result['active_to_geometric_ratio']:.4f}) "
             f"should be < 1.0 (edge effects reduce effective volume)"
         )
+
+
+# ---------------------------------------------------------------------------
+# Tests on the shared module-scoped 2D device. They stay LAST on purpose:
+# devsim.solve is global, so a live converged 2D device is re-solved inside every
+# later device build and its ~1e-9 noise floor can make those builds fail to
+# converge. Tests that build their own devices must run before the fixture exists.
+# ---------------------------------------------------------------------------
+
+
+class TestCreate2DDDDevice:
+    """Tests for create_2d_dd_device."""
+
+    def test_device_has_dd_initialized(self, dd_device_2d):
+        """Device should have dd_initialized=True."""
+        assert dd_device_2d["dd_initialized"] is True
+
+    def test_device_is_2d(self, dd_device_2d):
+        """Device should have dimension=2."""
+        assert dd_device_2d["dimension"] == 2
+
+
+class TestCCELateralScanSharedDevice:
+    """cce_lateral_scan on the shared device."""
+
+    def test_returns_correct_keys(self, dd_device_2d):
+        """Lateral scan result should have all expected keys."""
+        # Use a minimal scan (2 points) just to check dict structure
+        result = cce_lateral_scan(dd_device_2d, n_points=2, gen_rate=1e18)
+
+        expected_keys = {
+            "x_positions_cm",
+            "x_positions_um",
+            "cce_values",
+            "edge_to_center_ratio",
+        }
+        assert (
+            set(result.keys()) == expected_keys
+        ), f"Missing keys: {expected_keys - set(result.keys())}"
+        assert len(result["cce_values"]) == 2
+        assert len(result["x_positions_cm"]) == 2
 
 
 class TestCCEHeatmap2D:
