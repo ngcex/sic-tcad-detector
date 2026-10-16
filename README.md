@@ -212,3 +212,9 @@ Built on [`devsim`](https://devsim.org/) (J. E. Sanchez). Radiation-damage model
 follows Burin et al., arXiv:2407.16710 (2024). Developed for and calibrated
 against experimental data from the Petringa group's 4H-SiC detector program at
 INFN-LNS Catania.
+
+## Development note: notebook outputs
+
+Notebook outputs are stripped on commit (`.gitattributes` + `nbstripout`). After cloning run
+`uv run nbstripout --install --attributes .gitattributes` once so your local git applies the filter.
+Re-run a notebook (`jupyter nbconvert --execute`) to regenerate its outputs locally.

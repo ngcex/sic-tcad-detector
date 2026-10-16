@@ -16,7 +16,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 import etna
-from etna.api.run_all import SECTION_NAMES, _sections
+from etna.api.run_all import DEFAULT_SECTIONS, SECTION_NAMES, _sections
 from app.components.page_utils import require_config, show_error, show_stale_warning
 
 
@@ -39,7 +39,7 @@ def render() -> None:
     chosen = st.multiselect(
         "Sections",
         options=list(SECTION_NAMES),
-        default=list(SECTION_NAMES),
+        default=list(DEFAULT_SECTIONS),
         format_func=lambda n: _sections()[n][0],
         key="ra_sections",
     )

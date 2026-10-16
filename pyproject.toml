@@ -30,3 +30,8 @@ packages = ["etna"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+
+[dependency-groups]
+dev = [
+    "nbstripout>=0.9.1",
+]
