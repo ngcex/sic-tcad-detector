@@ -107,6 +107,7 @@ def build_damage_figure(result: SimResult) -> go.Figure:
         title="CCE vs Proton Fluence",
         xaxis_title="Proton Fluence (p/cm²)",
         xaxis_type="log",
+        xaxis_exponentformat="power",
         yaxis_title="Charge Collection Efficiency",
         yaxis_range=[0, 1.1],
     )
@@ -135,6 +136,7 @@ def build_dark_current_figure(result: SimResult) -> go.Figure:
         xaxis_title="Temperature (K)",
         yaxis_title="|Dark current| (A)",
         yaxis_type="log",
+        yaxis_exponentformat="power",
     )
     return fig
 
@@ -162,14 +164,27 @@ def build_microdosimetry_figure(result: SimResult) -> go.Figure:
     return fig
 
 
+# Human labels for the sweepable DeviceConfig fields (Batch Sweep).
+PARAM_LABELS = {
+    "epi_thickness_um": "Epi thickness (µm)",
+    "substrate_thickness_um": "Substrate thickness (µm)",
+    "N_A": "N_A substrate (cm⁻³)",
+    "N_D_junction": "N_D junction (cm⁻³)",
+    "N_D_bulk": "N_D bulk (cm⁻³)",
+    "L_transition_um": "Transition length (µm)",
+    "T": "Temperature (K)",
+    "area_cm2": "Area (cm²)",
+}
+
+
 # Value-keyed qualitative palette: cycled by TRACE ORDER (i % len), NOT a
 # fixed-quantity mapping — one color per swept value.
 _SWEEP_PALETTE = ["#1F6FEB", "#D32F2F", "#2E7D32", "#1A1A1A", "#9AA0A6"]
 
 # Per-facade axis titles keyed by the SIM_FACADES selectbox LABEL.
 _SWEEP_AXIS_TITLES = {
-    "CCE vs bias (run_cce)": ("Bias V (V)", "Charge Collection Efficiency"),
-    "C-V (run_cv)": ("Bias V (V)", "Capacitance (F)"),
+    "CCE vs reverse bias": ("Bias V (V)", "Charge Collection Efficiency"),
+    "C-V (capacitance vs bias)": ("Bias V (V)", "Capacitance (F)"),
     "CCE vs temperature (Hecht, analytical)": (
         "Temperature (K)",
         "Charge Collection Efficiency",
@@ -195,13 +210,13 @@ def build_sweep_overlay_figure(results, param, values, sim_label) -> go.Figure:
                 x=res.x,
                 y=res.y,
                 mode="lines+markers",
-                name=f"{param}={val}",
+                name=f"{PARAM_LABELS.get(param, param)} = {val:g}",
                 line=dict(color=_SWEEP_PALETTE[i % len(_SWEEP_PALETTE)]),
             )
         )
     x_title, y_title = _SWEEP_AXIS_TITLES.get(sim_label, ("(facade x-axis)", "Value"))
     fig.update_layout(
-        title=f"Parametric Sweep: {param}",
+        title=f"Parametric Sweep: {PARAM_LABELS.get(param, param)}",
         xaxis_title=x_title,
         yaxis_title=y_title,
     )
@@ -233,6 +248,45 @@ def build_field_figures(result: SimResult) -> tuple[go.Figure, go.Figure]:
     return efield_fig, potential_fig
 
 
+CROSS_CHECK_SCOPE = (
+    "the batched engine and devsim agree (relative difference <= 3e-6) at the "
+    "checked biases down to -40 V; not validated against measurement"
+)
+DEVSIM_ONLY_TEXT = (
+    "devsim result; not cross-checked against the batched engine and not "
+    "validated against measurement"
+)
+ENGINE2D_TEXT = (
+    "engine2d dark state; matches devsim to ~1e-14 V in the parity runs "
+    "(half-width 25-50 um); not validated against measurement"
+)
+
+
+def provenance_text(metadata: dict) -> str:
+    """Solver-specific statement of what a result was (and was not) checked against."""
+    solver = metadata.get("solver")
+    note = metadata.get("domain_note")
+    if solver == "batched":
+        if metadata.get("validated_domain", True):
+            return f"inside the engine/devsim cross-check domain ({CROSS_CHECK_SCOPE})"
+        return (
+            "OUTSIDE the engine/devsim cross-check domain"
+            + (f" ({note})" if note else "")
+            + "; not validated against measurement"
+        )
+    if solver == "engine2d":
+        return ENGINE2D_TEXT
+    if solver is None or solver == "failed":
+        return ""
+    text = DEVSIM_ONLY_TEXT if solver == "devsim" else (
+        f"{solver}; not cross-checked against the batched engine and not "
+        "validated against measurement"
+    )
+    if metadata.get("validated_domain") is False and note:
+        text += f" (outside the engine parameter box: {note})"
+    return text
+
+
 def _provenance_header_lines(metadata: dict) -> list[str]:
     """'# solver:' / '# validated_domain:' lines (only for keys present)."""
     lines = []
@@ -245,7 +299,11 @@ def _provenance_header_lines(metadata: dict) -> list[str]:
         lines.append(
             f"# validated_domain: {bool(metadata['validated_domain'])}"
             + (f" ({note})" if note else "")
+            + " -- True = device inside the batched engine's parameter box"
         )
+    text = provenance_text(metadata)
+    if text:
+        lines.append(f"# provenance: {text}")
     return lines
 
 
@@ -309,6 +367,24 @@ def to_csv_bytes(result: SimResult) -> bytes:
         extra_header_lines = [
             f"# I_generated_A_per_cm2: {result.metadata['I_generated']}",
             *_sweep_header_lines(result),
+        ]
+    elif result.sim_type == "field" and (
+        result.mesh is not None and result.mesh.y_coords is not None
+    ):
+        nv = result.mesh.node_values
+        df = pd.DataFrame(
+            {
+                "x_lateral_um": np.asarray(result.mesh.x_coords) * 1e4,
+                "y_depth_um": np.asarray(result.mesh.y_coords) * 1e4,
+                "Potential_V": nv["Potential"],
+                "NetDoping_cm-3": nv["NetDoping"],
+                "ElectricField_V_per_cm": nv["ElectricField"],
+            }
+        )
+        extra_header_lines = [
+            f"# bias_V: {result.metadata.get('bias_V')}",
+            "# 2D mesh node table (one row per node); ElectricField is |E| "
+            "interpolated onto the nodes",
         ]
     elif result.sim_type == "field":
         df = pd.DataFrame(

@@ -31,7 +31,12 @@ import streamlit as st
 
 import etna
 from etna.api.simulation import compensation_fluence
-from app.components.page_utils import show_error, show_stale_warning
+from app.components.page_utils import (
+    require_config,
+    show_error,
+    show_stale_warning,
+    solver_badge_text,
+)
 from app.components.results import build_damage_figure, to_csv_bytes
 
 
@@ -48,10 +53,7 @@ def render() -> None:
         "not an absolute prediction."
     )
 
-    cfg = st.session_state.get("device_config")
-    if cfg is None:
-        st.info("Configure a device in the sidebar to begin.")
-        st.stop()
+    cfg = require_config()
 
     if cfg.half_width_um is not None:
         st.warning(
@@ -109,6 +111,13 @@ def render() -> None:
         key="rad_v_bias",
     )
 
+    inputs = {
+        "min fluence": float(fluence_min),
+        "max fluence": float(fluence_max),
+        "number of points": int(n_points),
+        "proton energy": proton_energy_MeV,
+        "V_bias": float(V_bias),
+    }
     if st.button("Run simulation"):
         if not (0 < fluence_min <= fluence_max):
             st.error("Fluences must be positive, with min ≤ max.")
@@ -124,6 +133,7 @@ def render() -> None:
                         V_bias=V_bias,
                         proton_energy_MeV=proton_energy_MeV,
                     )
+                st.session_state["damage_inputs"] = inputs
             except Exception as e:  # incl. devsim.error (not a RuntimeError)
                 show_error(
                     e,
@@ -133,9 +143,12 @@ def render() -> None:
 
     result = st.session_state.get("damage_result")
     if result is not None:
-        show_stale_warning(result.config, cfg)
-        if result.metadata.get("solver"):
-            st.caption(f"Solver: {result.metadata['solver']}")
+        show_stale_warning(
+            result.config, cfg, st.session_state.get("damage_inputs"), inputs
+        )
+        badge = solver_badge_text(result.metadata)
+        if badge:
+            st.caption(badge)
         valid = np.asarray(
             result.metadata.get("valid", np.isfinite(result.y)), dtype=bool
         )
@@ -146,8 +159,11 @@ def render() -> None:
             if not ok
         ]
         if excluded:
+            n_ex = len(excluded)
             st.warning(
-                f"{len(excluded)} of {len(result.x)} fluence points are not shown: "
+                f"{n_ex} of {len(result.x)} fluence "
+                + ("point is" if n_ex == 1 else "points are")
+                + " not shown: "
                 + "; ".join(
                     f"{fl:.2e} p/cm² ("
                     + (

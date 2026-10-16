@@ -14,6 +14,7 @@ import streamlit as st
 
 import etna
 from app.components.page_utils import (
+    require_config,
     show_error,
     show_result_notes,
     show_stale_warning,
@@ -28,10 +29,7 @@ from app.components.results import (
 def render() -> None:
     st.title("C-V Analysis")
 
-    cfg = st.session_state.get("device_config")
-    if cfg is None:
-        st.info("Configure a device in the sidebar to begin.")
-        st.stop()
+    cfg = require_config()
 
     if cfg.half_width_um is not None:
         st.warning(
@@ -61,12 +59,14 @@ def render() -> None:
             key="cv_n_points",
         )
 
+    inputs = {"V_stop": float(v_stop), "number of points": int(n_points)}
     if st.button("Run simulation"):
         try:
             with st.spinner("Running C-V sweep..."):
                 st.session_state["cv_result"] = etna.run_cv(
                     cfg, v_start=0.0, v_stop=float(v_stop), n_points=int(n_points)
                 )
+            st.session_state["cv_inputs"] = inputs
         except Exception as e:  # incl. devsim.error (not a RuntimeError)
             show_error(
                 e,
@@ -76,7 +76,9 @@ def render() -> None:
 
     result = st.session_state.get("cv_result")
     if result is not None:
-        show_stale_warning(result.config, cfg)
+        show_stale_warning(
+            result.config, cfg, st.session_state.get("cv_inputs"), inputs
+        )
         show_result_notes(result)
         st.plotly_chart(build_cv_figure(result))
         st.plotly_chart(build_mott_schottky_figure(result))

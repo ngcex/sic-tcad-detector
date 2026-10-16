@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import streamlit as st
 
+from app.components.page_utils import require_config
+
 
 def render() -> None:
     st.title("ETNA — SiC TCAD Simulator")
@@ -23,9 +25,6 @@ def render() -> None:
         "page shows the solver used."
     )
 
-    cfg = st.session_state.get("device_config")
-    if cfg is None:
-        st.info("Configure a device in the sidebar to begin.")
-        st.stop()
+    cfg = require_config()
 
     st.json({k: getattr(cfg, k) for k in cfg.__dataclass_fields__})

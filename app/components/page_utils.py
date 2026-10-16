@@ -13,6 +13,8 @@ import traceback
 import numpy as np
 import streamlit as st
 
+from app.components.results import provenance_text
+
 SOLVER_LABELS = {
     "batched": "batched 1D engine (numba)",
     "engine2d": "2D engine (numba)",
@@ -23,12 +25,45 @@ STALE_RESULT_TEXT = (
     "These results are for a previous configuration. The sidebar settings have "
     "changed since this run; press **Run simulation** to update."
 )
+STALE_INPUTS_TEXT = (
+    "These results were computed with different page inputs ({changed}); press "
+    "**Run simulation** to update."
+)
+EMPTY_CONFIG_TEXT = "Configure a device in the sidebar to begin."
+INVALID_CONFIG_TEXT = (
+    "The device configuration in the sidebar is invalid, so nothing can be run: "
+    "{error}. Fix the value in the sidebar."
+)
+CROSS_CHECK_SCOPE = (
+    "cross-check = the batched engine and devsim agree (relative difference "
+    "≤ 3e-6) at the checked biases down to −40 V; neither is validated against "
+    "measurement there"
+)
+
+
+def require_config():
+    """The current DeviceConfig, or stop the page with a clear message.
+
+    Never falls back to a stale valid config: when the sidebar holds an invalid
+    value, ``device_config`` is absent and ``device_config_error`` explains why.
+    """
+    cfg = st.session_state.get("device_config")
+    if cfg is not None:
+        return cfg
+    err = st.session_state.get("device_config_error")
+    if err:
+        st.error(INVALID_CONFIG_TEXT.format(error=err))
+    else:
+        st.info(EMPTY_CONFIG_TEXT)
+    st.stop()
 
 
 def show_error(exc: BaseException, hint: str = "") -> None:
     """Friendly st.error plus an expander with the technical details."""
     name = type(exc).__name__
-    if isinstance(exc, ValueError):
+    if name == "OutsideModelValidity":  # message written for the user
+        head = str(exc)
+    elif isinstance(exc, ValueError):
         head = f"Invalid input: {exc}"
     elif isinstance(exc, NotImplementedError):
         head = f"Not supported: {exc}"
@@ -48,14 +83,21 @@ def show_error(exc: BaseException, hint: str = "") -> None:
         )
 
 
-def show_stale_warning(result_config, cfg) -> None:
-    """Warn when the cached result was computed for a different sidebar config."""
+def show_stale_warning(result_config, cfg, used_inputs=None, current_inputs=None) -> None:
+    """Warn when the cached result was computed for a different sidebar config,
+    or (when given) with different page inputs than the ones now on the page."""
     if result_config is not None and cfg is not None and result_config != cfg:
         st.warning(STALE_RESULT_TEXT)
+    if used_inputs is not None and current_inputs is not None:
+        changed = [
+            k for k in current_inputs if used_inputs.get(k) != current_inputs[k]
+        ]
+        if changed:
+            st.warning(STALE_INPUTS_TEXT.format(changed=", ".join(changed)))
 
 
 def solver_badge_text(metadata: dict) -> str:
-    """'Solver: ... · inside/outside the validated domain' (missing keys tolerated)."""
+    """'Solver: ... · inside/outside the engine/devsim cross-check domain'."""
     solver = metadata.get("solver")
     if solver is None:
         return ""
@@ -63,17 +105,16 @@ def solver_badge_text(metadata: dict) -> str:
     parts = [f"Solver: {label}"]
     if metadata.get("fallback_reason"):
         parts[0] += f" (fallback: {metadata['fallback_reason']})"
-    if "validated_domain" in metadata:
-        if metadata["validated_domain"]:
-            parts.append("device inside the validated domain")
-        else:
-            note = metadata.get("domain_note")
-            parts.append(
-                "device OUTSIDE the validated domain"
-                + (f" ({note})" if note else "")
-                + "; no engine/devsim cross-check"
-            )
+    text = provenance_text(metadata)
+    if text:
+        parts.append(text)
     return " · ".join(parts)
+
+
+_SATURATES = {
+    "cv": "the capacitance saturates",
+    "cce": "the collected charge saturates",
+}
 
 
 def reach_through_text(result) -> str:
@@ -86,12 +127,15 @@ def reach_through_text(result) -> str:
         if md.get("reach_through_known", True):
             return "The epi layer is not fully depleted within this bias range."
         return (
-            "Full-depletion voltage not computed (device outside the validated "
-            "domain)."
+            "Full-depletion voltage not computed (device outside the "
+            "engine/devsim cross-check domain)."
         )
+    what = _SATURATES.get(result.sim_type, "the result saturates")
+    method = md.get("reach_through_method")
     return (
-        f"Epi fully depleted from |V| ≈ {v_rt:.1f} V (dotted line). Beyond it the "
-        "capacitance saturates and the result depends on the cathode model "
+        f"Epi fully depleted from |V| ≈ {v_rt:.2f} V (dotted line"
+        + (f"; {method}" if method else "")
+        + f"). Beyond it {what} and the result depends on the cathode model "
         "(ohmic contact directly on the n⁻ epi, no n⁺ substrate)."
     )
 
@@ -106,7 +150,8 @@ def cross_check_text(result) -> str:
     if not beyond:
         return ""
     return (
-        f"{beyond} of {x.size} points lie beyond |V| = {v_cc:.0f} V, the deepest "
+        f"{beyond} of {x.size} {'point lies' if beyond == 1 else 'points lie'} "
+        f"beyond |V| = {v_cc:.0f} V, the deepest "
         "bias at which the batched engine is cross-checked against devsim. devsim "
         "itself may not converge there (default device: about −64 V), so these "
         "values are not validated."
@@ -122,7 +167,7 @@ def truncation_text(result) -> str:
         f"{md.get('requested_v_stop', float('nan')):.1f} V): devsim did not "
         "converge beyond this point. This is an artefact of the device model "
         "(ohmic cathode directly on the n⁻ epi, no n⁺ substrate) and of solver "
-        "robustness beyond full depletion (outside the validated domain), not a "
+        "robustness beyond full depletion (outside the cross-check domain), not a "
         "physical device limit. Results below cover only "
         "the converged portion."
     )

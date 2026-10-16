@@ -34,11 +34,18 @@ last Run click). No module-level side effects -- all work happens in render().
 
 from __future__ import annotations
 
+import numpy as np
 import streamlit as st
 
 import etna
-from app.components.page_utils import show_error, show_stale_warning
+from app.components.page_utils import (
+    SOLVER_LABELS,
+    require_config,
+    show_error,
+    show_stale_warning,
+)
 from app.components.results import (
+    PARAM_LABELS,
     build_sweep_overlay_figure,
     sweep_results_to_csv_bytes,
 )
@@ -78,8 +85,8 @@ DEFAULT_VALUES = {
 # CSV path, not a config sweep).
 TEMPERATURE_LABEL = "CCE vs temperature (Hecht, analytical)"
 SIM_FACADES = {
-    "CCE vs bias (run_cce)": "run_cce",
-    "C-V (run_cv)": "run_cv",
+    "CCE vs reverse bias": "run_cce",
+    "C-V (capacitance vs bias)": "run_cv",
     TEMPERATURE_LABEL: "run_temperature_sweep",
 }
 
@@ -92,10 +99,7 @@ def _reset_default_values() -> None:
 def render() -> None:
     st.title("Batch Sweep")
 
-    cfg = st.session_state.get("device_config")
-    if cfg is None:
-        st.info("Configure a device in the sidebar to begin.")
-        st.stop()
+    cfg = require_config()
 
     if cfg.half_width_um is not None:
         st.warning(
@@ -106,6 +110,7 @@ def render() -> None:
     param = st.selectbox(
         "Sweep parameter",
         SWEEPABLE_FIELDS,
+        format_func=lambda f: PARAM_LABELS.get(f, f),
         key="sweep_param",
         on_change=_reset_default_values,
     )
@@ -158,7 +163,10 @@ def render() -> None:
             for val, res in zip(values, results):
                 if len(res.x) < 1:
                     if res.metadata.get("error"):
-                        errors.append(f"{param}={val:g}: {res.metadata['error']}")
+                        errors.append(
+                            f"{PARAM_LABELS.get(param, param)} = {val:g}: "
+                            f"{res.metadata['error']}"
+                        )
                     continue
                 ok_values.append(val)
                 ok_results.append(res)
@@ -208,15 +216,30 @@ def render() -> None:
         sim_label = st.session_state["sweep_sim_label"]
         solvers = sorted({r.metadata.get("solver", "") for r in results} - {""})
         if solvers:
-            st.caption("Solver(s) used: " + ", ".join(solvers))
+            st.caption(
+                "Solver(s) used: "
+                + ", ".join(SOLVER_LABELS.get(x, x) for x in solvers)
+            )
+        label = PARAM_LABELS.get(param, param)
+        cc = [r.metadata.get("cross_checked_to_V") for r in results]
+        cc = [v for v in cc if v is not None]
+        if cc:
+            v_cc = min(cc)
+            deepest = max(float(np.max(np.abs(r.x))) for r in results if len(r.x))
+            if deepest > v_cc + 1e-9:
+                st.warning(
+                    f"Points beyond |V| = {v_cc:.0f} V lie past the deepest bias at "
+                    "which the batched engine is cross-checked against devsim; devsim "
+                    "itself may not converge there, so they are not validated."
+                )
         outside = [
-            f"{param}={v:g}"
+            f"{label} = {v:g}"
             for v, r in zip(values, results)
             if r.metadata.get("validated_domain") is False
         ]
         if outside:
             st.caption(
-                "Outside the validated domain (devsim only, no cross-check): "
+                "Outside the engine/devsim cross-check domain (devsim only): "
                 + ", ".join(outside)
             )
         st.plotly_chart(build_sweep_overlay_figure(results, param, values, sim_label))

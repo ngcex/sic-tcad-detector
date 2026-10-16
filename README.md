@@ -60,8 +60,8 @@ once in the sidebar (persists across pages) and explore:
 | **Batch Sweep**             | Parametric sweep over any device field, overlaid curves, bulk CSV |
 
 Every result page shows which solver produced it (batched engine, 2D engine
-or devsim) and whether the device lies inside the validated domain; the CSV
-download carries the same provenance (solver, validated domain, device config,
+or devsim) and whether the device lies inside the engine/devsim cross-check domain; the CSV
+download carries the same provenance (solver, cross-check domain, device config,
 software version) in its `#` header.
 
 ---
@@ -115,7 +115,7 @@ result.metadata["solver"]     # "batched" | "engine2d" | "devsim"
 
 **Solvers.** `run_cv` / `run_cce` (and their `run_*_batch` twins used by
 `ParametricSweep`) run on a batched numba 1D engine (`etna.core.batched`) when
-the device lies in the validated parameter box, where it was cross-checked
+the device lies in the cross-check parameter box, where it was cross-checked
 against devsim, and fall back to devsim otherwise or on non-convergence. 2D
 `run_field` uses a numba 2D engine (`etna.core.engine2d`) where eligible.
 `metadata["solver"]`, `metadata["validated_domain"]` / `"domain_note"` record
@@ -181,7 +181,7 @@ reported value. In the interest of honesty, the current limitations are:
   bounds, not a validated mechanistic prediction.
 - ⚠️ **Deep reverse bias:** the 1D model puts the ohmic cathode directly on the
   n⁻ epi (no n⁺ substrate). The default device is fully depleted from
-  |V| ≈ 16 V (`metadata["reach_through_V"]`; C saturates there, as measured).
+  |V| ≈ 17 V (`metadata["reach_through_V"]`, 0.05 V resolution; C saturates there).
   The devsim path stops converging at deeper bias (≈ −64 V for the default
   device) — an artefact of the missing n⁺ substrate and of solver robustness,
   **not** a physical device limit. The batched engine keeps converging, but it

@@ -67,6 +67,17 @@ class DeviceConfig:
             _positive("N_D", self.N_D)
         if not (self.N_A >= 1e17):
             problems.append(f"N_A must be >= 1e17 cm^-3 (p+ anode; got {self.N_A!r})")
+        if not problems:
+            if self.doping_profile == "uniform" and self.N_D is not None:
+                donors = {"N_D": self.N_D}
+            else:
+                donors = {"N_D_junction": self.N_D_junction, "N_D_bulk": self.N_D_bulk}
+            for name, value in donors.items():
+                if not (value < self.N_A):
+                    problems.append(
+                        f"{name}={value:.3g} cm^-3 must be below N_A={self.N_A:.3g} "
+                        "cm^-3 (p+ anode on an n- epi)"
+                    )
         if not (100.0 <= self.T <= 600.0):
             problems.append(f"T must be between 100 and 600 K (got {self.T!r})")
         if problems:

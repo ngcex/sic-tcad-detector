@@ -35,17 +35,14 @@ import tempfile
 import streamlit as st
 
 import etna
-from app.components.page_utils import show_error
+from app.components.page_utils import require_config, show_error
 from app.components.results import build_microdosimetry_figure, to_csv_bytes
 
 
 def render() -> None:
     st.title("Microdosimetry")
 
-    cfg = st.session_state.get("device_config")
-    if cfg is None:
-        st.info("Configure a device in the sidebar to begin.")
-        st.stop()
+    cfg = require_config()
 
     uploaded = st.file_uploader("Upload MC events CSV", type=["csv"], key="micro_csv")
     st.caption(

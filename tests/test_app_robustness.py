@@ -235,7 +235,7 @@ def test_cv_and_cce_report_reach_through_and_domain():
     cv = sim.run_cv(DeviceConfig(), v_stop=-50.0, n_points=51)
     assert cv.metadata["solver"] == "batched"
     assert cv.metadata["validated_domain"] is True
-    # Default graded device fully depletes near -16 V (measured), well before
+    # Default graded device fully depletes near -17 V (measured), well before
     # devsim's deep-bias non-convergence (~-64 V).
     assert 10.0 <= cv.metadata["reach_through_V"] <= 20.0
     cce = sim.run_cce(DeviceConfig(), n_points=7)
@@ -254,7 +254,20 @@ def test_badge_and_reach_through_texts():
     badge = solver_badge_text(
         {"solver": "devsim", "validated_domain": False, "domain_note": "T=500 outside"}
     )
-    assert "devsim" in badge and "OUTSIDE the validated domain" in badge
+    # devsim-only results never claim an engine cross-check.
+    assert "devsim result; not cross-checked against the batched engine" in badge
+    assert "cross-check domain" not in badge
+    assert "not validated against measurement" in badge
+    e2d = solver_badge_text({"solver": "engine2d", "validated_domain": True})
+    assert "engine2d dark state; matches devsim to ~1e-14 V" in e2d
+    assert "cross-check domain" not in e2d
+    out = solver_badge_text(
+        {"solver": "batched", "validated_domain": False, "domain_note": "x"}
+    )
+    assert "OUTSIDE the engine/devsim cross-check domain" in out
+    inside = solver_badge_text({"solver": "batched", "validated_domain": True})
+    assert "inside the engine/devsim cross-check domain" in inside
+    assert "-40 V" in inside.replace("−", "-") and "measurement" in inside
     res = SimResult(
         DeviceConfig(),
         "cv",
@@ -264,10 +277,13 @@ def test_badge_and_reach_through_texts():
     )
     # Full depletion is informational, not a "not validated" flag ...
     text = reach_through_text(res)
-    assert "fully depleted from |V| ≈ 20.0 V" in text
+    assert "fully depleted from |V| ≈ 20.00 V" in text
+    assert "capacitance saturates" in text
+    res.sim_type = "cce"
+    assert "collected charge saturates" in reach_through_text(res)
     assert "not validated" not in text
     # ... which is reserved for engine points deeper than the parity checks.
-    assert "1 of 4 points lie beyond |V| = 40 V" in cross_check_text(res)
+    assert "1 of 4 point lies beyond |V| = 40 V" in cross_check_text(res)
     assert "not validated" in cross_check_text(res)
     res.metadata.pop("cross_checked_to_V")  # devsim result: truncation covers it
     assert cross_check_text(res) == ""
@@ -313,3 +329,132 @@ def test_run_radiation_damage_forwards_valid_and_reason():
     text = to_csv_bytes(res).decode()
     assert "# compensation_fluence_p_per_cm2:" in text
     assert "fluence_p_per_cm2,CCE,valid,reason" in text
+
+
+# --- E2E follow-ups: 2D CSV, invalid sidebar config, model-validity short-cut ------
+
+
+def test_2d_field_csv_has_mesh_table_and_provenance():
+    res = sim.run_field(DeviceConfig(half_width_um=50.0), bias_V=-50.0)
+    assert res.metadata["solver"] == "engine2d"
+    text = to_csv_bytes(res).decode()
+    assert "# solver: engine2d" in text
+    assert "# provenance: engine2d dark state; matches devsim to ~1e-14 V" in text
+    assert "cross-check domain" not in text
+    header = [ln for ln in text.splitlines() if not ln.startswith("#")][0]
+    assert header == (
+        "x_lateral_um,y_depth_um,Potential_V,NetDoping_cm-3,ElectricField_V_per_cm"
+    )
+    n_rows = len([ln for ln in text.splitlines() if ln and not ln.startswith("#")]) - 1
+    assert n_rows == res.mesh.x_coords.size
+
+
+def _field_page():
+    from app.workflows.field_map import render
+
+    render()
+
+
+def test_field_page_2d_run_and_outside_validity_message():
+    at = AppTest.from_function(_field_page, default_timeout=120)
+    at.session_state["device_config"] = DeviceConfig(half_width_um=50.0)
+    at.run()
+    at.button[0].click()
+    at.run()
+    assert at.exception == [] and len(at.error) == 0
+    assert "Solver: 2D engine" in " ".join(c.value for c in at.caption)
+
+    at.session_state["device_config"] = DeviceConfig(
+        half_width_um=50.0, epi_thickness_um=5.0
+    )
+    at.run()
+    at.button[0].click()
+    at.run()
+    assert at.exception == []
+    assert any("outside the validity of the device model" in e.value for e in at.error)
+
+
+def test_run_field_outside_validity_raises_without_devsim(monkeypatch):
+    def _no_devsim(*a, **k):
+        raise AssertionError("devsim must not run here")
+
+    monkeypatch.setattr(sim, "build_device", _no_devsim)
+    with pytest.raises(sim.OutsideModelValidity, match="no n\\+ substrate"):
+        sim.run_field(DeviceConfig(half_width_um=50.0, epi_thickness_um=5.0), -50.0)
+    assert issubclass(sim.OutsideModelValidity, RuntimeError)
+
+
+def test_run_field_devsim_fallback_records_reason():
+    res = sim.run_field(DeviceConfig(half_width_um=25.0, T=310.0), bias_V=-10.0)
+    assert res.metadata["solver"] == "devsim"
+    assert "not applicable" in res.metadata["fallback_reason"]
+    assert "fallback" in solver_badge_text(res.metadata)
+
+
+def test_invalid_sidebar_value_blocks_pages():
+    at = AppTest.from_file("app/main.py", default_timeout=120)
+    at.run()
+    assert "device_config" in at.session_state
+    at.sidebar.number_input(key="cfg_substrate_thickness_um").set_value(0.0)
+    at.run()
+    assert at.exception == []
+    assert any("'Substrate thickness (µm)' must be > 0" in e.value for e in at.sidebar.error)
+    assert not any("substrate_thickness_um" in e.value for e in at.sidebar.error)
+    assert "device_config" not in at.session_state  # no stale valid config
+    assert any(
+        "configuration in the sidebar is invalid" in e.value
+        and "Fix the value in the sidebar" in e.value
+        for e in at.error
+    )
+
+    # Any page refuses to run while the config is invalid.
+    page = AppTest.from_function(_cv_page)
+    page.session_state["device_config_error"] = "area_cm2 must be > 0 (got 0.0)"
+    page.run()
+    assert page.exception == []
+    assert len(page.button) == 0
+    assert any("area_cm2" in e.value for e in page.error)
+
+
+def test_device_config_rejects_donors_above_acceptors():
+    with pytest.raises(ValueError, match="must be below N_A"):
+        DeviceConfig(N_A=1e17, N_D_junction=2e17)
+    with pytest.raises(ValueError, match="must be below N_A"):
+        DeviceConfig(N_A=1e17, doping_profile="uniform", N_D=5e17)
+
+
+def test_stale_warning_when_page_inputs_change(monkeypatch):
+    monkeypatch.setattr(etna, "run_cv", _fake_cv)
+    at = AppTest.from_function(_cv_page)
+    at.session_state["device_config"] = DeviceConfig()
+    at.run()
+    at.button[0].click()
+    at.run()
+    assert not any("different page inputs" in (w.value or "") for w in at.warning)
+
+    at.number_input(key="cv_v_stop").set_value(-30.0)
+    at.run()
+    assert any(
+        "different page inputs" in (w.value or "") and "V_stop" in w.value
+        for w in at.warning
+    )
+
+
+def test_devsim_only_pages_do_not_claim_cross_check():
+    res = sim.run_radiation_damage(
+        DeviceConfig(), fluences=np.array([1e12]), V_bias=-20.0, proton_energy_MeV=62
+    )
+    badge = solver_badge_text(res.metadata)
+    assert "devsim result; not cross-checked" in badge
+    assert "cross-check domain" not in badge
+    text = to_csv_bytes(res).decode()
+    assert "# provenance: devsim result; not cross-checked" in text
+
+
+def test_sidebar_defaults_lie_on_their_step_grid():
+    """Browser +/- and HTML validation need each default to be a multiple of its step."""
+    at = AppTest.from_file("app/main.py", default_timeout=120)
+    at.run()
+    for ni in at.sidebar.number_input:
+        ratio = ni.value / ni.step
+        assert abs(ratio - round(ratio)) < 1e-6, (ni.label, ni.value, ni.step)
