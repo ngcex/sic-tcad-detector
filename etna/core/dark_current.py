@@ -1,23 +1,28 @@
-"""Hurkx trap-assisted tunneling and surface recombination dark current models.
+"""Effective (fitted) dark-current generation for 4H-SiC detectors ("TAT" model).
 
-Implements effective dark current generation for 4H-SiC detectors, combining:
+Implements, in the DD equations:
 1. Modified SRH recombination with Z1/2 deep-level n1/p1 (not midgap)
-2. Effective depletion-region generation calibrated via N_t parameter
-3. Hurkx field-enhancement factor Gamma for voltage dependence
+2. An effective, field-weighted generation G_eff = N_t * Gamma * f_depl, with
+   f_depl = min(E / 3.5e4 V/cm, 1). This is what is called "TAT" here.
+3. A Hurkx/Schenk field-enhancement factor Gamma -- INACTIVE at detector fields:
+   Gamma = 1 unless Kt < 4, i.e. E > ~4.5 MV/cm, far above any field in these
+   devices. Gamma does not shape the bias dependence.
 4. Surface recombination velocity at contacts (post-solve diagnostic
    decomposition only, not a solver boundary condition — see
    setup_surface_recombination() docstring)
 
-Physical context:
-    Standard midgap SRH in 4H-SiC produces ~1e-49 A dark current because
-    n_i ~ 5e-9 cm^-3. Real dark current (~18 pA at -30V) arises from multiple
-    mechanisms including perimeter leakage (2D), surface states, and
-    trap-assisted tunneling that cannot be fully captured in 1D.
-
-    This module uses an effective generation rate G_eff = N_t (cm^-3 s^-1)
-    applied in the depletion region, where N_t is calibrated to match
-    experimental dark current. The E-field-dependent Gamma factor provides
-    voltage-dependent scaling. Default N_t = 2.8e12 cm^-3 s^-1 is fitted to the experimental <18 pA bound (-60 V, 4 mm2).
+What the numbers mean (read before quoting any leakage value):
+    Standard midgap SRH in 4H-SiC gives ~1e-49 A because n_i ~ 5e-9 cm^-3, so
+    the real leakage (perimeter, surface states, defects) is not predicted here.
+    N_t = 2.8e12 cm^-3 s^-1 is FITTED so that the model equals the experimental
+    UPPER BOUND "< 18 pA up to -60 V" at -60 V, 4 mm2, 300 K (17.96 pA): a
+    calibration input, not a prediction or a validation. The bias shape comes
+    from the f_depl = min(E/3.5e4, 1) heuristic (current rises until E > E_ref
+    everywhere in the generating region, not "saturation at full depletion").
+    The SRH / TAT / SRV split is a bookkeeping of model terms and is not
+    physically meaningful. The temperature dependence N_t(T) = N_t * n_i(T) /
+    n_i(300) is an ASSUMPTION (E_a = E_g/2), not fitted to data; it gives ~x15
+    per +13 K near room temperature.
 
 All units CGS (cm, cm^-3, A/cm^2, V) per devsim convention.
 
@@ -65,9 +70,12 @@ def nt_temperature_scale(T, params=None):
 
         N_t_eff(T) = N_t * n_i(T) / n_i(300)
 
-    This is anchored so the factor is EXACTLY 1.0 at 300 K, preserving the
-    existing ~18 pA calibration at 300 K / -30 V by construction, while giving
-    the physically correct activation energy for T-dependent leakage. The n_i(T)
+    This is anchored so the factor is EXACTLY 1.0 at 300 K, so the 300 K fit of
+    N_t (model = the "< 18 pA up to -60 V" upper bound at -60 V, 4 mm2) is kept.
+    The E_a = E_g/2 activation is an ASSUMPTION (classical depletion generation
+    through a midgap-like level), not fitted to temperature data: it gives ~x15
+    leakage per +13 K near 300 K, so any T-dependent leakage is assumption-driven.
+    The n_i(T)
     used is the project's calibrated intrinsic_concentration (anchored to
     params.n_i_300), keeping it consistent with the n_i the rest of the device
     model uses.
@@ -97,12 +105,15 @@ def setup_tat_model(device_info, E_t=None, m_t=None, N_t=None):
 
     Replaces the existing SRH-only ElectronGeneration/HoleGeneration with
     a combined model:
-    1. SRH recombination with Z1/2 trap-level n1/p1 (physical)
-    2. Effective generation rate G_eff = N_t * Gamma in depletion region
+    1. SRH recombination with Z1/2 trap-level n1/p1
+    2. Effective generation G_eff = N_t * Gamma * min(E/E_ref, 1), E_ref = 3.5e4 V/cm
 
-    The N_t parameter (cm^-3 s^-1) is the primary calibration knob. It
-    represents the effective volumetric generation rate from all dark
-    current mechanisms (TAT, perimeter leakage, surface states).
+    The N_t parameter (cm^-3 s^-1) is the calibration knob: an effective
+    volumetric generation rate lumping all real leakage mechanisms (perimeter,
+    surface states, defects). "TAT" here means this field-weighted effective
+    generation; the Hurkx Gamma is 1 below ~4.5 MV/cm, i.e. inactive at the
+    fields of these devices, so the bias dependence is the min(E/E_ref, 1)
+    heuristic.
 
     Parameters
     ----------
@@ -180,15 +191,16 @@ def setup_tat_model(device_info, E_t=None, m_t=None, N_t=None):
     #
     # The contact current from devsim captures the net effect of both.
 
-    # Reference field for depletion identification
-    # Built-in field at junction is ~70 kV/cm; use half as reference
+    # Reference field for depletion identification (heuristic, not physics):
+    # built-in field at junction is ~70 kV/cm; use half as reference. f_depl sets the
+    # whole bias dependence of the leakage (Gamma = 1 at these fields).
     E_ref = 3.5e4  # V/cm
 
-    # AUDIT C8 fix: make the effective generation rate temperature-dependent.
-    # Classical depletion-region generation scales as G ∝ n_i(T) ∝ exp(-E_g/2kT),
-    # so N_t_eff(T) = N_t * n_i(T)/n_i(300). The factor is 1.0 at 300 K, so the
-    # existing 18 pA calibration at 300 K is preserved by construction; at other
-    # temperatures the leakage now carries the correct E_a = E_g/2 activation.
+    # AUDIT C8: temperature-dependent effective generation, ASSUMED to follow
+    # classical depletion generation G ∝ n_i(T) ∝ exp(-E_g/2kT):
+    # N_t_eff(T) = N_t * n_i(T)/n_i(300). The factor is 1.0 at 300 K, so the 300 K
+    # fit is kept; at other temperatures the leakage follows this assumed
+    # E_a = E_g/2 (~x15 per +13 K), which is not fitted to data.
     T_scale = nt_temperature_scale(T, params)
     N_t_eff = N_t * T_scale
     # Store G0_TAT = N_t_eff as generation rate parameter
@@ -321,6 +333,34 @@ def _compute_gamma_factors(device, region):
     )
 
 
+def _refresh_and_resolve(device, region):
+    """Refresh the field-dependent TAT inputs at the converged bias, then re-solve.
+
+    E_field_node and Gamma are frozen node values, not functions of Potential, so each
+    solve in a ramp uses the field of the previous step (one-step lag). Before currents
+    are extracted, refresh them from the converged state and solve once more; do NOT
+    refresh again afterwards, so the contact current and the U_TAT integral are
+    evaluated on the same f_depl (J_total = J_SRH + J_TAT to solver accuracy).
+    Raises devsim.error if the strict and the relaxed solve both fail.
+    """
+    _compute_node_efield(device, region)
+    _compute_gamma_factors(device, region)
+    try:
+        devsim.solve(
+            type="dc",
+            absolute_error=1e10,
+            relative_error=DC_REL_ERROR,
+            maximum_iterations=40,
+        )
+    except devsim.error:
+        devsim.solve(
+            type="dc",
+            absolute_error=1e12,
+            relative_error=1e-8,
+            maximum_iterations=100,
+        )
+
+
 def setup_surface_recombination(device_info, S_n=None, S_p=None, contact="cathode"):
     """Add surface recombination current at a contact.
 
@@ -376,7 +416,12 @@ def setup_surface_recombination(device_info, S_n=None, S_p=None, contact="cathod
 def extract_dark_current_components(device_info, area=0.05):
     """Extract dark current with component decomposition.
 
-    Returns total current and its SRH, TAT, and SRV contributions.
+    Returns total current and its SRH, TAT, and SRV contributions. The split is a
+    bookkeeping of model terms (SRH with the Z1/2 level, the fitted field-weighted
+    effective generation, a post-hoc SRV estimate) and is NOT physically meaningful;
+    only J_total is used for the fit. I_SRH + I_TAT are volume integrals and
+    differ from the terminal J_total by the carriers leaving through the "wrong"
+    ohmic contact (~0.3 % at -60 V, ~0.9 % at -10 V on the default device).
 
     Parameters
     ----------
@@ -529,8 +574,15 @@ def dark_current_sweep(device_info, V_range, area=0.05, V_step=0.5):
 
             current_V = V_target
 
-        _compute_node_efield(device, region)
-        _compute_gamma_factors(device, region)
+        # Refresh the TAT field at the converged bias and re-solve (removes the
+        # one-step f_depl lag; see _refresh_and_resolve).
+        try:
+            _refresh_and_resolve(device, region)
+        except devsim.error as e:
+            logger.warning(f"dark_current_sweep: final re-solve failed at V={V_target:.3f}V: {e}")
+            for key in results:
+                results[key] = np.array(results[key])
+            return results
 
         components = extract_dark_current_components(device_info, area=area)
         results["voltages"].append(V_target)
@@ -686,8 +738,12 @@ def sensitivity_sweep(
                         break
 
             if ramp_ok:
-                _compute_node_efield(device, region)
-                _compute_gamma_factors(device, region)
+                try:
+                    _refresh_and_resolve(device, region)
+                except devsim.error as e:
+                    logger.warning(f"sensitivity_sweep: final re-solve failed for {param_name}={val}: {e}")
+                    ramp_ok = False
+            if ramp_ok:
                 components = extract_dark_current_components(device_info, area=area)
                 records.append(
                     {
@@ -776,7 +832,11 @@ def dark_current_vs_fluence(
         Dictionary with:
 
         - ``fluences``: numpy array of fluences (protons/cm^2)
-        - ``I_total``, ``I_SRH``, ``I_TAT``, ``I_SRV``: numpy arrays (A)
+        - ``I_total``, ``I_SRH``, ``I_TAT``, ``I_SRV``: numpy arrays (A); NaN
+          where not valid
+        - ``valid`` (bool array), ``reason`` (list of str, "" when valid): points
+          at full donor compensation (eta_removal * Phi_neq >= min N_D of the epi,
+          see charge_collection.full_compensation_reason) are not solved
         - ``I_baseline``: float, I_total at first fluence if it is 0.0
         - ``delta_I``: numpy array (I_total - I_baseline), only if first
           fluence is 0.0
@@ -789,6 +849,7 @@ def dark_current_vs_fluence(
     from etna.core.device import apply_damaged_params, create_sic_device
     from etna.core.drift_diffusion import setup_sic_drift_diffusion
     from etna.core.poisson import setup_poisson, solve_equilibrium
+    from etna.core.charge_collection import full_compensation_reason
     from etna.core.radiation_damage import compute_damaged_params
     from etna.core.sic_material import srh_lifetime
 
@@ -833,6 +894,8 @@ def dark_current_vs_fluence(
     I_SRH = np.full(n_pts, np.nan)
     I_TAT = np.full(n_pts, np.nan)
     I_SRV = np.full(n_pts, np.nan)
+    valid = np.zeros(n_pts, dtype=bool)
+    reasons = [""] * n_pts
 
     for i, fluence in enumerate(fluence_range):
         dev_id = uuid.uuid4().hex[:8]
@@ -849,6 +912,11 @@ def dark_current_vs_fluence(
                 damage_params=damage_params,
                 lifetime_model=lifetime_model,
             )
+            reason = full_compensation_reason(damaged)
+            if reason:
+                logger.warning(f"dark_current_vs_fluence: fluence={fluence:.2e}: {reason}")
+                reasons[i] = reason
+                continue
 
             # Staged device creation
             device_info = create_sic_device(
@@ -893,9 +961,8 @@ def dark_current_vs_fluence(
                     maximum_iterations=40,
                 )
 
-            # Recompute E-field and Gamma after final bias
-            _compute_node_efield(device, region)
-            _compute_gamma_factors(device, region)
+            # Refresh E-field and Gamma at the final bias and re-solve (no lag)
+            _refresh_and_resolve(device, region)
 
             # Extract dark current components
             components = extract_dark_current_components(device_info, area=area)
@@ -903,6 +970,7 @@ def dark_current_vs_fluence(
             I_SRH[i] = components["I_SRH"]
             I_TAT[i] = components["I_TAT"]
             I_SRV[i] = components["I_SRV"]
+            valid[i] = True
 
             logger.info(
                 f"dark_current_vs_fluence: fluence={fluence:.2e}, "
@@ -914,6 +982,7 @@ def dark_current_vs_fluence(
                 f"dark_current_vs_fluence: failed at fluence={fluence:.2e}: {e}"
             )
             # I_total[i] etc. remain NaN
+            reasons[i] = f"solver failure: {type(e).__name__}: {e}"
         finally:
             try:
                 devsim.delete_device(device=dev_name)
@@ -927,6 +996,8 @@ def dark_current_vs_fluence(
         "I_SRH": I_SRH,
         "I_TAT": I_TAT,
         "I_SRV": I_SRV,
+        "valid": valid,
+        "reason": reasons,
         "V_bias": V_bias,
         "energy_MeV": energy_MeV,
         "lifetime_model": lifetime_model,
@@ -994,7 +1065,8 @@ def dark_current_post_anneal(
     -------
     result : dict
         Dictionary with: I_total, fluence, T_anneal, t_anneal, V_bias,
-        f_Z12, f_EH67, f_EH4, I_SRH, I_TAT, I_SRV.
+        f_Z12, f_EH67, f_EH4, I_SRH, I_TAT, I_SRV, valid (bool), reason (str,
+        "" when valid; NaN currents at full donor compensation or solver failure).
     """
     import uuid
 
@@ -1003,6 +1075,7 @@ def dark_current_post_anneal(
     from etna.core.device import apply_damaged_params, create_sic_device
     from etna.core.drift_diffusion import setup_sic_drift_diffusion
     from etna.core.poisson import setup_poisson, solve_equilibrium
+    from etna.core.charge_collection import full_compensation_reason
     from etna.core.radiation_damage import compute_annealed_params
     from etna.core.sic_material import srh_lifetime
 
@@ -1055,6 +1128,28 @@ def dark_current_post_anneal(
         lifetime_model=lifetime_model,
     )
 
+    def _invalid(why):
+        return {
+            "I_total": np.nan,
+            "fluence": fluence,
+            "T_anneal": T_anneal,
+            "t_anneal": t_anneal,
+            "V_bias": V_bias,
+            "f_Z12": annealed.get("f_Z12", 0.0),
+            "f_EH67": annealed.get("f_EH67", 0.0),
+            "f_EH4": annealed.get("f_EH4", 0.0),
+            "I_SRH": np.nan,
+            "I_TAT": np.nan,
+            "I_SRV": np.nan,
+            "valid": False,
+            "reason": why,
+        }
+
+    reason = full_compensation_reason(annealed)
+    if reason:
+        logger.warning(f"dark_current_post_anneal: fluence={fluence:.2e}: {reason}")
+        return _invalid(reason)
+
     dev_id = uuid.uuid4().hex[:8]
     dev_name = f"dc_anneal_{dev_id}"
 
@@ -1102,9 +1197,8 @@ def dark_current_post_anneal(
                 maximum_iterations=40,
             )
 
-        # Recompute after final bias
-        _compute_node_efield(device, region)
-        _compute_gamma_factors(device, region)
+        # Refresh at the final bias and re-solve (no lag)
+        _refresh_and_resolve(device, region)
 
         # Extract dark current components
         components = extract_dark_current_components(device_info, area=area)
@@ -1127,23 +1221,13 @@ def dark_current_post_anneal(
             "I_SRH": components["I_SRH"],
             "I_TAT": components["I_TAT"],
             "I_SRV": components["I_SRV"],
+            "valid": True,
+            "reason": "",
         }
 
     except Exception as e:
         logger.warning(f"dark_current_post_anneal: failed: {e}")
-        return {
-            "I_total": np.nan,
-            "fluence": fluence,
-            "T_anneal": T_anneal,
-            "t_anneal": t_anneal,
-            "V_bias": V_bias,
-            "f_Z12": annealed.get("f_Z12", 0.0),
-            "f_EH67": annealed.get("f_EH67", 0.0),
-            "f_EH4": annealed.get("f_EH4", 0.0),
-            "I_SRH": np.nan,
-            "I_TAT": np.nan,
-            "I_SRV": np.nan,
-        }
+        return _invalid(f"solver failure: {type(e).__name__}: {e}")
     finally:
         try:
             devsim.delete_device(device=dev_name)

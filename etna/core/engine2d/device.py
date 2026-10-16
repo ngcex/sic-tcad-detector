@@ -126,11 +126,13 @@ class Device2D:
     def cathode_field(self, u):
         """Electric field (V/cm) on the last mesh cell before the cathode, 1-column state u.
 
-        Past punch-through the depletion reaches the ohmic cathode and the field
-        there grows with bias. devsim's coupled 2D ramp stopped converging when this
+        Past reach-through (V_fd) the depletion reaches the ohmic cathode, which sits
+        directly on the n- epi (no n+ substrate in the model), and the field there grows
+        with bias. devsim's coupled 2D ramp stopped converging when this
         field reached 4.6-4.8e4 V/cm for N_D_bulk 5e13 and 8.5e13 (hw=25, 10 um epi;
         lab/solver2d/notes/LOG.md). The value depends on the cathode mesh cell (devsim
-        ps = 0.1 um there for every epi thickness).
+        ps = 0.1 um there for every epi thickness). That wall is a model-validity limit
+        of the contact-on-epi cathode, not physical punch-through.
         """
         return float(self.Vt * (u[-1] - u[-2]) / self.grid.hy[-1])
 

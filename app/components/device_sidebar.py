@@ -80,7 +80,7 @@ def render_device_sidebar() -> None:
     substrate_thickness_um = st.sidebar.number_input(
         "Substrate thickness (µm)",
         value=1.0,
-        min_value=0.0,
+        min_value=0.1,
         key="cfg_substrate_thickness_um",
     )
     if dim == "2D":
@@ -95,11 +95,19 @@ def render_device_sidebar() -> None:
     # --- Group 3: doping ---
     st.sidebar.header("Doping")
     N_A = st.sidebar.number_input(
-        "N_A substrate (cm⁻³)", value=1e19, format="%.3e", key="cfg_N_A"
+        "N_A substrate (cm⁻³)",
+        value=1e19,
+        min_value=1e17,
+        format="%.3e",
+        key="cfg_N_A",
     )
     if profile == "uniform":
         N_D = st.sidebar.number_input(
-            "N_D uniform (cm⁻³)", value=1e15, format="%.3e", key="cfg_N_D"
+            "N_D uniform (cm⁻³)",
+            value=1e15,
+            min_value=1e10,
+            format="%.3e",
+            key="cfg_N_D",
         )
         # Graded triplet hidden this mode — fall back to DeviceConfig defaults.
         N_D_junction = DeviceConfig.N_D_junction
@@ -107,15 +115,23 @@ def render_device_sidebar() -> None:
         L_transition_um = DeviceConfig.L_transition_um
     else:  # graded
         N_D_junction = st.sidebar.number_input(
-            "N_D junction (cm⁻³)", value=2.93e15, format="%.3e", key="cfg_N_D_junction"
+            "N_D junction (cm⁻³)",
+            value=2.93e15,
+            min_value=1e10,
+            format="%.3e",
+            key="cfg_N_D_junction",
         )
         N_D_bulk = st.sidebar.number_input(
-            "N_D bulk (cm⁻³)", value=8.82e13, format="%.3e", key="cfg_N_D_bulk"
+            "N_D bulk (cm⁻³)",
+            value=8.82e13,
+            min_value=1e10,
+            format="%.3e",
+            key="cfg_N_D_bulk",
         )
         L_transition_um = st.sidebar.number_input(
             "Transition length (µm)",
             value=0.987,
-            min_value=0.0,
+            min_value=0.01,
             key="cfg_L_transition_um",
         )
         # N_D hidden this mode — programmatically set to default; assemble_config
@@ -127,10 +143,18 @@ def render_device_sidebar() -> None:
     # --- Group 4: operating conditions ---
     st.sidebar.header("Operating conditions")
     T = st.sidebar.number_input(
-        "Temperature (K)", value=300.0, min_value=1.0, key="cfg_T"
+        "Temperature (K)",
+        value=300.0,
+        min_value=100.0,
+        max_value=600.0,
+        key="cfg_T",
     )
     area_cm2 = st.sidebar.number_input(
-        "Area (cm²)", value=1e-4, format="%.3e", key="cfg_area_cm2"
+        "Area (cm²)",
+        value=1e-4,
+        min_value=1e-8,
+        format="%.3e",
+        key="cfg_area_cm2",
     )
 
     values = {
@@ -147,4 +171,25 @@ def render_device_sidebar() -> None:
         "area_cm2": area_cm2,
     }
 
-    st.session_state["device_config"] = assemble_config(values)
+    try:
+        st.session_state["device_config"] = assemble_config(values)
+    except ValueError as e:
+        # Invalid combination despite the widget bounds: no config -> every
+        # page shows its "Configure a device" empty state instead of running.
+        st.session_state.pop("device_config", None)
+        st.sidebar.error(str(e))
+        return
+
+    # Validated domain hint (where the fast engine was cross-checked vs devsim).
+    from etna.api.simulation import validated_domain_reason
+
+    cfg = st.session_state["device_config"]
+    if cfg.half_width_um is None:
+        reason = validated_domain_reason(cfg)
+        if reason is None:
+            st.sidebar.caption("Inside the validated 1D domain.")
+        else:
+            st.sidebar.caption(
+                f"Outside the validated 1D domain ({reason}): C-V/CCE use devsim "
+                "only, with no cross-check."
+            )

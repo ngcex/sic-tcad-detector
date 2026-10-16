@@ -8,16 +8,28 @@ Outcomes:
 * a result dict (engine solved the config);
 * ``Engine2DFallback``: the engine declines (outside the validated envelope, or a
   loop did not converge) -- the caller should run devsim;
-* ``Engine2DPunchThrough``: deep punch-through, where devsim's coupled Newton is
-  known not to converge (cathode-cell field above FIELD_NAN_MIN; e.g. its ramp stops at
-  54.5-56.5 V for N_D_bulk 5e13-8.5e13 on the 10 um epi, 26.5-27 V on the 5 um epi). The caller should record the same failure devsim would.
+* ``Engine2DOutsideValidity``: outside model validity, where devsim's coupled Newton
+  is known not to converge (cathode-cell field above FIELD_NAN_MIN; e.g. its ramp stops
+  at 54.5-56.5 V for N_D_bulk 5e13-8.5e13 on the 10 um epi, 26.5-27 V on the 5 um epi).
+  The caller should record the same failure (NaN row) devsim would.
+
+What the wall is (and is not): it is NOT physical punch-through. Real reach-through of
+the depletion to the end of the epi happens at V_fd (~4.1 / 10.5 / 35 V for 5 / 10 /
+20 um epi) and devsim keeps converging 15-45 V beyond it. The modelled cathode is an
+ohmic Dirichlet contact placed directly on the n- epi (no n+ substrate, see
+etna/core/device.py and device2d.py), so once the depletion reaches it the field on the
+last mesh cell grows with bias, and devsim stops converging when that contact-cell field
+reaches ~4.7e4 V/cm. Results there are outside the validity of the model (a real device
+has an n+ substrate that absorbs the field), not a property of the detector.
 """
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 
-from etna.core.charge_collection_2d import _ALPHA_RANGE_CM
+from etna.core.charge_collection_2d import _ALPHA_RANGE_CM, in_mesh_generation_fraction
 from etna.core.device2d import (
     _L_TRANSITION_DEFAULT,
     _N_D_BULK_DEFAULT,
@@ -49,7 +61,9 @@ _FIXED_KWARGS = {
     "N_D_junction": _N_D_JUNCTION_DEFAULT,
     "L_transition": _L_TRANSITION_DEFAULT,
 }
-# Punch-through indicator: dark field on the last cell before the cathode (V/cm).
+# Model-validity indicator: dark field on the last cell before the cathode (V/cm). The
+# cathode is an ohmic contact on the n- epi (no n+ substrate), so this field grows with bias
+# after reach-through; devsim stops converging at a fixed value of it (not a physical limit).
 # devsim's 2D ramp (0.5 V steps from a converged bias, hw=25; lab/solver2d/notes/LOG.md)
 # last converged / first failed at, per (epi um, N_D_bulk):
 #   (5, 5e13) 4.632e4 / 4.732e4    (5, 8.5e13) 4.585e4 / 4.685e4    (5, 5e14) 4.821e4 / 4.921e4
@@ -68,8 +82,13 @@ class Engine2DFallback(RuntimeError):
     """The engine declines this config; run devsim."""
 
 
-class Engine2DPunchThrough(RuntimeError):
-    """Deep punch-through: devsim does not converge here; report a failed config."""
+class Engine2DOutsideValidity(RuntimeError):
+    """Outside model validity: cathode contact on the n- epi (no n+ substrate), devsim
+    does not converge here; report a failed (NaN) config. Not a physical limit."""
+
+
+# Backward-compatible alias (the old name; the wall is not physical punch-through).
+Engine2DPunchThrough = Engine2DOutsideValidity
 
 
 def engine2d_unsupported_reason(
@@ -133,10 +152,11 @@ def lateral_cce_scan_2d(
 ):
     """Engine equivalent of create_2d_dd_device(...) + cce_lateral_scan(..., n_points).
 
-    Returns dict: x_positions_cm, x_positions_um, cce_values, edge_to_center_ratio,
-    device_info (resolved exactly as create_sic_2d_device: N_A_ionized, N_D_junction,
+    Returns dict: x_positions_cm, x_positions_um, cce_values (relative to in-epi
+    generation), edge_to_center_ratio, in_mesh_generation_fraction,
+    q_collected_over_deposited (as cce_lateral_scan), device_info (resolved exactly as create_sic_2d_device: N_A_ionized, N_D_junction,
     N_D_bulk, L_transition, n_i, epi_thickness_cm, ...), cathode_field,
-    gummel_iterations. Raises Engine2DFallback / Engine2DPunchThrough (module doc).
+    gummel_iterations. Raises Engine2DFallback / Engine2DOutsideValidity (module doc).
     """
     reason = engine2d_unsupported_reason(
         half_width_um,
@@ -161,13 +181,14 @@ def lateral_cce_scan_2d(
     try:
         field = dev.dark(float(V_bias), stop_field=FIELD_NAN_MIN)
         if field > FIELD_NAN_MIN:
-            raise Engine2DPunchThrough(
-                f"punch-through: cathode-cell field {field:.3g} V/cm "
-                f"(devsim stops converging at ~4.7e4)"
+            raise Engine2DOutsideValidity(
+                f"outside model validity: cathode contact on the n- epi (no n+ substrate), "
+                f"cathode-cell field {field:.3g} V/cm; devsim does not converge here (~4.7e4)"
             )
         if field > FIELD_ENGINE_MAX:
             raise Engine2DFallback(
-                f"near devsim's punch-through wall (cathode-cell field {field:.3g} V/cm)"
+                f"near devsim's non-convergence wall (cathode contact on the n- epi, "
+                f"cathode-cell field {field:.3g} V/cm)"
             )
         dev.factor_continuity()
         x_positions = np.linspace(0, info["half_width_cm"], n_lateral_points)
@@ -180,11 +201,14 @@ def lateral_cce_scan_2d(
             cce[m] = float(np.clip(abs(I) / I_gen, 0.0, 1.0)) if I_gen > 0 else 0.0
     except EngineNotConverged as e:
         raise Engine2DFallback(str(e)) from e
+    f_in = in_mesh_generation_fraction(info["epi_thickness_cm"], alpha_range_cm=_ALPHA_RANGE_CM)
     return {
         "x_positions_cm": x_positions,
         "x_positions_um": x_positions * 1e4,
         "cce_values": cce,
         "edge_to_center_ratio": float(cce[-1] / cce[0]) if cce[0] > 0 else 0.0,
+        "in_mesh_generation_fraction": f_in,
+        "q_collected_over_deposited": cce * f_in,
         "device_info": info,
         "cathode_field": field,
         "gummel_iterations": list(dev.gummel_iterations),
@@ -211,7 +235,14 @@ def engine2d_dark_unsupported_reason(half_width_um, V_cathode, **device_kwargs):
     for key, value in device_kwargs.items():
         if key in _DARK_FIXED:
             ref = _DARK_FIXED[key]
-            if not (value == ref or (value is None and ref is None)):
+            same = (
+                value is None and ref is None
+                if value is None or ref is None
+                else value == ref
+                if isinstance(ref, str) or isinstance(value, str)
+                else math.isclose(value, ref, rel_tol=1e-9)
+            )
+            if not same:
                 return f"{key}={value!r} (engine validated only for {ref!r})"
         elif key in ENGINE2D_DARK_BOX:
             vals[key] = value
@@ -234,7 +265,8 @@ def dark_state_2d(half_width_um, V_cathode, **device_kwargs):
     the devsim path one to one): x, y (cm), NetDoping (cm^-3), Potential (V), plus
     ``device_info`` (mesh-only create_sic_2d_device dict) and ``cathode_field`` (V/cm).
     Raises Engine2DFallback when ineligible, not laterally uniform, not converged, or
-    beyond FIELD_ENGINE_MAX (devsim's ramp decides near punch-through).
+    beyond FIELD_ENGINE_MAX (devsim's ramp decides near its non-convergence wall, which
+    is a model-validity limit of the contact-on-epi cathode, not physical punch-through).
     """
     reason = engine2d_dark_unsupported_reason(half_width_um, V_cathode, **device_kwargs)
     if reason is not None:
@@ -249,7 +281,10 @@ def dark_state_2d(half_width_um, V_cathode, **device_kwargs):
     except EngineNotConverged as e:
         raise Engine2DFallback(str(e)) from e
     if field > FIELD_ENGINE_MAX:
-        raise Engine2DFallback(f"near devsim's punch-through wall (cathode-cell field {field:.3g} V/cm)")
+        raise Engine2DFallback(
+            f"near devsim's non-convergence wall (cathode contact on the n- epi, "
+            f"cathode-cell field {field:.3g} V/cm)"
+        )
     X = np.tile(grid.xs, grid.ny)
     Y = np.repeat(grid.ys, grid.nx)
     return {

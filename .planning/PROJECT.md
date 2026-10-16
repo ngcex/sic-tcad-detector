@@ -44,10 +44,10 @@ Explore how charge collection efficiency (CCE) in the SiC detector behaves under
 - ✓ Temperature-dependent material parameters (E_g, n_i, μ, τ) for 280-350K — v1.1
 - ✓ Temperature-dependent device simulation with zero regression at T=300K — v1.1
 - ✓ Clinical temperature coefficient extraction (303-313K) — v1.1
-- ✓ Hurkx TAT dark current model with Z1/2 trap parameters — v1.1
+- ✓ Hurkx TAT dark current model with Z1/2 trap parameters — v1.1 [corrected 2026-10-16: the Hurkx Γ is inactive below ~4.5 MV/cm, i.e. at all detector fields; the 'TAT' term is an effective field-weighted generation]
 - ✓ Surface recombination velocity boundary conditions — v1.1
-- ✓ Dark current calibrated to ~18 pA experimental target (within 10x) — v1.1
-- ✓ Dark current decomposition (J_SRH + J_TAT + J_SRV) — v1.1
+- ✓ Dark current calibrated to ~18 pA experimental target (within 10x) — v1.1 [corrected 2026-10-16: N_t=2.8e12 is FITTED so the model equals the upper bound '<18 pA up to -60 V' at -60 V, 4 mm2, 300 K (17.96 pA) -- a fit, not a prediction; bias shape is the min(E/3.5e4,1) heuristic; 'TAT' = effective field-weighted generation, Hurkx enhancement inactive below ~4.5 MV/cm; the SRH/TAT/SRV split is not physically meaningful; N_t(T) ∝ n_i(T) is an assumption]
+- ✓ Dark current decomposition (J_SRH + J_TAT + J_SRV) — v1.1 [corrected 2026-10-16: bookkeeping of model terms only, the split is not physically meaningful]
 - ✓ Adaptive transient solver spanning μs-to-ms timescales — v1.1
 - ✓ Single-pulse and multi-pulse FLASH simulation — v1.1
 - ✓ Transient CCE validation against steady-state (deviation < 0.2) — v1.1
@@ -63,9 +63,9 @@ Explore how charge collection efficiency (CCE) in the SiC detector behaves under
 - ✓ Validation against published 4H-SiC irradiation data (trend comparison) — v2.0
 - ✓ 14 publication-quality Jupyter notebooks — v2.0
 - ✓ 2D devsim mesh generation for micro-scale SV geometries (100x100x10 um, 300x300x10 um) — v3.0
-- ✓ 2D electrostatics validated against 1D for Petringa device — v3.0
-- ✓ 2D carrier transport with edge field effects — v3.0
-- ✓ 2D CCE comparison to 1D (quantify edge effects) — v3.0
+- ✓ 2D electrostatics validated against 1D for Petringa device — v3.0 [corrected 2026-10-16: the 2D mesh is laterally uniform, so 2D = 1D by construction; this is a mesh/implementation consistency check, not a validation]
+- ✓ 2D carrier transport with edge field effects — v3.0 [corrected 2026-10-16: the modelled device is laterally uniform; no edge physics is modelled]
+- ✓ 2D CCE comparison to 1D (quantify edge effects) — v3.0 [corrected 2026-10-16: the modelled device is laterally uniform; no edge physics is modelled]
 - ✓ Single-particle transient charge generation along ion track — v3.0
 - ✓ Induced current pulse and charge collection time — v3.0
 - ✓ MC coupling: import Geant4 phase-space files and pre-binned LET spectra (CSV mock) — v3.0
@@ -235,11 +235,11 @@ The FLASH paper (Petringa 2025, Physica Medica 138) characterizes the dosimetric
 | Clamped exponential Boltzmann      | SiC n_i~5e-9 causes overflow in standard exponential                               | ✓ Good — stable solver without accuracy loss                                                                                        |
 | Flat CCE as null result            | Auger recombination negligible at FLASH dose rates (delta_n << threshold)          | ✓ Good — valid scientific finding                                                                                                   |
 | Calibrated n_i(T) anchor           | Physical n_i formula gives 3.93e-9 vs validated 5e-9; use ratio-scaling            | ✓ Good — exact 5e-9 at 300K, correct T-dependence                                                                                   |
-| Effective N_t for dark current     | n_i^2 bottleneck prevents pA-level dark current with standard SRH/TAT in 1D        | ✓ Good — calibrated to 18.5 pA, physically motivated                                                                                |
+| Effective N_t for dark current     | n_i^2 bottleneck prevents pA-level dark current with standard SRH/TAT in 1D        | ✓ Good — calibrated to 18.5 pA, physically motivated [corrected 2026-10-16: N_t=2.8e12 is FITTED so the model equals the upper bound '<18 pA up to -60 V' at -60 V, 4 mm2, 300 K (17.96 pA) -- a fit, not a prediction; bias shape is the min(E/3.5e4,1) heuristic; 'TAT' = effective field-weighted generation, Hurkx enhancement inactive below ~4.5 MV/cm; the SRH/TAT/SRV split is not physically meaningful; N_t(T) ∝ n_i(T) is an assumption]                                                                                |
 | BDF1 over BDF2 for transient       | Unconditional stability at sharp pulse edges outweighs accuracy                    | ✓ Good — stable across 6 orders of magnitude in dt                                                                                  |
 | DC approximation validated         | Transient CCE matches steady-state within 0.1%                                     | ✓ Good — confirms v1.0 approach was correct for SiC                                                                                 |
 | Fluence-as-temperature pattern     | Fresh devsim device per fluence point; no in-place parameter mutation              | ✓ Good — clean sweep isolation, no state leakage                                                                                    |
-| Additive delta-J dark current      | J_dark(Phi) = J_dark(0) + delta_J(Phi) preserves v1.1 calibrated baseline          | ✓ Good — 18.5 pA preserved exactly at fluence=0                                                                                     |
+| Additive delta-J dark current      | J_dark(Phi) = J_dark(0) + delta_J(Phi) preserves v1.1 calibrated baseline          | ✓ Good — 18.5 pA preserved exactly at fluence=0 [corrected 2026-10-16: the 300 K fit point is 17.96 pA at -60 V, 4 mm2 (bound used as equality); beyond full donor removal (Phi ≳ 4.86e13 p/cm2 at 62 MeV) fluence results are NaN, outside model validity]                                                                                     |
 | Near-zero eta for disabled defects | Single-defect model uses eta=1e-10 instead of 0 (validation requires eta>0)        | ✓ Good — avoids division issues while being physically negligible                                                                   |
 | Trend comparison validation        | No digitized tabulated data available from literature                              | ✓ Good — honest about circular validation with Burin 2024 params                                                                    |
 | Z1/2 E_a=4.5 eV calibration        | Gives practical stability below 1000°C (f~0.05 at 1000°C/1h)                       | ✓ Good — matches experimental observation of Z1/2 thermal stability                                                                 |

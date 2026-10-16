@@ -30,6 +30,8 @@ import numpy as np
 import streamlit as st
 
 import etna
+from etna.api.simulation import compensation_fluence
+from app.components.page_utils import show_error, show_stale_warning
 from app.components.results import build_damage_figure, to_csv_bytes
 
 
@@ -53,40 +55,54 @@ def render() -> None:
 
     if cfg.half_width_um is not None:
         st.warning(
-            "These workflows are 1D-only. Set Dimensionality to 1D in the " "sidebar."
+            "This workflow is 1D-only. Set Dimensionality to 1D in the sidebar."
         )
         st.stop()
 
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        fluence_min = st.number_input(
-            "Min fluence (p/cm²)",
-            format="%.3e",
-            value=1e13,
-            key="rad_fluence_min",
-        )
-    with col2:
-        fluence_max = st.number_input(
-            "Max fluence (p/cm²)",
-            format="%.3e",
-            value=1e16,
-            key="rad_fluence_max",
-        )
-    with col3:
-        n_points = st.number_input(
-            "Number of points",
-            min_value=2,
-            step=1,
-            value=6,
-            key="rad_n_points",
-        )
-
+    # Energy first: the compensation fluence (and thus the default range)
+    # depends on it and on the sidebar doping.
     proton_energy_MeV = st.selectbox(
         "Proton energy (MeV)",
         [30, 62, 70, 150],
         index=1,
         key="rad_proton_energy",
     )
+    phi_c = compensation_fluence(cfg, proton_energy_MeV)
+    st.info(
+        f"Full donor compensation at about **{phi_c:.2e} p/cm²** for this device "
+        f"at {proton_energy_MeV} MeV (carrier removal × κ(E) × Φ reaches the "
+        "lowest epi N_D). Beyond it the epi is fully compensated and the model "
+        "is ill-posed, so those points are not solved. The default range spans "
+        "three decades up to 0.7× that fluence."
+    )
+    # Defaults are keyed on (energy, compensation fluence) so they refresh when
+    # either changes; user edits persist while both stay the same.
+    ctx = f"{proton_energy_MeV}_{phi_c:.4g}"
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        fluence_min = st.number_input(
+            "Min fluence (p/cm²)",
+            format="%.3e",
+            value=float(f"{0.7e-3 * phi_c:.3g}"),
+            key=f"rad_fluence_min_{ctx}",
+        )
+    with col2:
+        fluence_max = st.number_input(
+            "Max fluence (p/cm²)",
+            format="%.3e",
+            value=float(f"{0.7 * phi_c:.3g}"),
+            key=f"rad_fluence_max_{ctx}",
+        )
+    with col3:
+        n_points = st.number_input(
+            "Number of points",
+            min_value=2,
+            max_value=50,
+            step=1,
+            value=6,
+            key="rad_n_points",
+        )
+
     V_bias = st.number_input(
         "Reverse bias V_bias (V)",
         value=-20.0,
@@ -94,28 +110,60 @@ def render() -> None:
     )
 
     if st.button("Run simulation"):
-        try:
-            fluences = np.geomspace(fluence_min, fluence_max, int(n_points))
-            st.session_state["damage_result"] = etna.run_radiation_damage(
-                cfg,
-                fluences=fluences,
-                V_bias=V_bias,
-                proton_energy_MeV=proton_energy_MeV,
-            )
-        except RuntimeError as e:
-            st.error(
-                f"Simulation failed to converge: {e}\n\n"
-                "Try adjusting device parameters (e.g. epi thickness, "
-                "doping) in the sidebar and running again."
-            )
+        if not (0 < fluence_min <= fluence_max):
+            st.error("Fluences must be positive, with min ≤ max.")
+        elif V_bias > 0:
+            st.error("V_bias must be ≤ 0 V (negative = reverse bias).")
+        else:
+            try:
+                with st.spinner("Running fluence sweep..."):
+                    fluences = np.geomspace(fluence_min, fluence_max, int(n_points))
+                    st.session_state["damage_result"] = etna.run_radiation_damage(
+                        cfg,
+                        fluences=fluences,
+                        V_bias=V_bias,
+                        proton_energy_MeV=proton_energy_MeV,
+                    )
+            except Exception as e:  # incl. devsim.error (not a RuntimeError)
+                show_error(
+                    e,
+                    "Try a smaller reverse bias or adjust epi thickness / doping "
+                    "in the sidebar.",
+                )
 
     result = st.session_state.get("damage_result")
     if result is not None:
-        if np.any(np.isnan(result.y)):
-            st.info(
-                "One or more fluence points did not converge and are "
-                "shown as gaps in the curve below. This does not affect "
-                "the other points."
+        show_stale_warning(result.config, cfg)
+        if result.metadata.get("solver"):
+            st.caption(f"Solver: {result.metadata['solver']}")
+        valid = np.asarray(
+            result.metadata.get("valid", np.isfinite(result.y)), dtype=bool
+        )
+        reasons = result.metadata.get("reason") or [""] * len(result.x)
+        excluded = [
+            (fl, reason or "not converged")
+            for fl, ok, reason in zip(result.x, valid, reasons)
+            if not ok
+        ]
+        if excluded:
+            st.warning(
+                f"{len(excluded)} of {len(result.x)} fluence points are not shown: "
+                + "; ".join(
+                    f"{fl:.2e} p/cm² ("
+                    + (
+                        "epi fully compensated: the model solves an ill-posed "
+                        "problem there"
+                        if "compensation" in reason
+                        else reason
+                    )
+                    + ")"
+                    for fl, reason in excluded
+                )
+            )
+        if not valid.any():
+            st.error(
+                "No valid fluence point: lower the fluence range below the "
+                "compensation fluence shown above."
             )
         st.plotly_chart(build_damage_figure(result))
         st.download_button(

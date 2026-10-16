@@ -16,6 +16,12 @@ def render() -> None:
         "Configure a device in the sidebar, then choose a simulation workflow "
         "from the navigation to explore its results."
     )
+    st.caption(
+        "C-V and CCE run on a fast batched engine inside the validated parameter "
+        "domain (where it was cross-checked against devsim) and on devsim "
+        "otherwise; 2D field maps use a 2D engine where eligible. Every result "
+        "page shows the solver used."
+    )
 
     cfg = st.session_state.get("device_config")
     if cfg is None:

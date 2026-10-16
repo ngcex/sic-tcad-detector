@@ -7,6 +7,7 @@ import pytest
 
 from etna.core.engine2d import (
     Engine2DFallback,
+    Engine2DOutsideValidity,
     Engine2DPunchThrough,
     engine2d_unsupported_reason,
     lateral_cce_scan_2d,
@@ -72,14 +73,21 @@ class TestEligibility:
             )
 
 
-class TestPunchThrough:
-    def test_deep_punch_through_signals_failure(self):
-        with pytest.raises(Engine2DPunchThrough):
+class TestOutsideValidity:
+    """devsim's non-convergence wall: cathode contact on the n- epi (no n+ substrate).
+
+    Not physical punch-through (reach-through is at V_fd, far below the wall)."""
+
+    def test_deep_wall_signals_failure(self):
+        with pytest.raises(Engine2DOutsideValidity, match="outside model validity"):
             lateral_cce_scan_2d(25.0, 80.0, N_D_bulk=5e13)
+
+    def test_old_name_is_an_alias(self):
+        assert Engine2DPunchThrough is Engine2DOutsideValidity
 
     def test_near_wall_defers_to_devsim(self):
         # devsim's ramp stops at 54.5 V here; 55 V is inside the undecided band.
-        with pytest.raises(Engine2DFallback, match="punch-through wall"):
+        with pytest.raises(Engine2DFallback, match="non-convergence wall"):
             lateral_cce_scan_2d(25.0, 55.0, N_D_bulk=5e13)
 
     def test_engine_answers_below_wall(self):
@@ -113,10 +121,12 @@ def test_sweep_row_failing_config_hw25():
     assert math.isnan(ref["center_cce"]) and math.isnan(eng["center_cce"])
     for key in ("is_valid", "is_fully_depleted", "passes_cce_floor"):
         assert eng[key] == ref[key] is False
+    for row in (eng, ref):
+        assert row["failure_reason"].startswith(("outside model validity", "[engine2d"))
 
 
 def test_unexpected_engine_error_falls_back_to_devsim(monkeypatch):
-    """Only Engine2DPunchThrough may produce a NaN row on the engine path."""
+    """Only Engine2DOutsideValidity may produce a NaN row on the engine path."""
     import etna.core.engine2d as e2d
     import etna.core.optimization as opt
 
@@ -133,3 +143,58 @@ def test_unexpected_engine_error_falls_back_to_devsim(monkeypatch):
     monkeypatch.setattr(opt, "create_2d_dd_device", fake_devsim)
     row = opt._sweep_one((0, 1, 25.0, 10e-4, 8.5e13, 20.0, 10, "auto"))
     assert calls and row["solver"] == "devsim"
+    # the blanket except records the exception type and message
+    assert row["failure_reason"] == "error: RuntimeError: devsim stub"
+
+
+def test_outside_validity_row_has_failure_reason():
+    row = _sweep_one((0, 1, 25.0, 10e-4, 8.5e13, 80.0, 3, "auto"))
+    assert row["solver"] == "engine2d" and math.isnan(row["center_cce"])
+    assert not row["is_valid"]
+    assert "outside model validity" in row["failure_reason"]
+    assert "n+ substrate" in row["failure_reason"]
+
+
+def test_devsim_ramp_failure_has_failure_reason(monkeypatch):
+    import etna.core.optimization as opt
+
+    def ramp_fails(**kw):
+        raise RuntimeError("ramp_bias: failed to converge at V=56.000V: stub")
+
+    monkeypatch.setattr(opt, "create_2d_dd_device", ramp_fails)
+    row = opt._sweep_one((0, 1, 25.0, 10e-4, 8.5e13, 60.0, 3, "devsim"))
+    assert row["solver"] == "devsim" and math.isnan(row["center_cce"])
+    assert row["failure_reason"].startswith("outside model validity")
+    assert "devsim" in row["failure_reason"]
+
+
+class TestDepletionMargin:
+    """is_fully_depleted needs V_bias >= 1.2 V_fd (+/-20 % doping tolerance, DESIGN-1)."""
+
+    def test_margin_constant(self):
+        from etna.core.optimization import V_FD_MARGIN
+
+        assert V_FD_MARGIN == 1.2
+
+    def test_just_above_vfd_is_not_enough(self):
+        # 20 um epi, N_D_bulk 8.5e13: V_fd ~ 33.9 V; 40 V < 1.2 V_fd ~ 40.7 V
+        row = _sweep_one((0, 1, 25.0, 20e-4, 8.5e13, 40.0, 3, "auto"))
+        assert row["solver"] == "engine2d" and row["failure_reason"] == ""
+        assert row["V_fd"] < 40.0 < 1.2 * row["V_fd"]
+        assert not row["is_fully_depleted"] and not row["is_valid"]
+
+    def test_above_margin_is_valid(self):
+        row = _sweep_one((0, 1, 25.0, 20e-4, 8.5e13, 45.0, 3, "auto"))
+        assert 45.0 >= 1.2 * row["V_fd"]
+        assert row["is_fully_depleted"] and row["is_valid"]
+
+
+def test_in_mesh_generation_fraction():
+    """CCE is relative to in-epi generation; the fraction of the alpha deposit in the epi."""
+    from etna.core.charge_collection_2d import in_mesh_generation_fraction
+
+    f5, f10, f20 = (in_mesh_generation_fraction(t) for t in (5e-4, 10e-4, 20e-4))
+    assert 0.40 < f5 < 0.43 and 0.81 < f10 < 0.85 and f20 > 0.999
+    r = lateral_cce_scan_2d(25.0, 20.0, n_lateral_points=3)
+    assert r["in_mesh_generation_fraction"] == pytest.approx(f10)
+    np.testing.assert_allclose(r["q_collected_over_deposited"], r["cce_values"] * f10)

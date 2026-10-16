@@ -22,6 +22,7 @@ from etna.core.device2d import create_sic_2d_device
 from etna.core.drift_diffusion import create_dd_device, setup_sic_drift_diffusion
 from etna.core.poisson import setup_poisson, solve_equilibrium
 
+
 @dataclass
 class DeviceConfig:
     """Dimension-agnostic device configuration (geometry, doping, operating conditions)."""
@@ -41,6 +42,35 @@ class DeviceConfig:
     L_transition_um: float = 0.987  # um, graded doping transition length
     T: float = 300.0  # K, device temperature
     area_cm2: float = 1e-4  # cm^2, device active area
+
+    def __post_init__(self) -> None:
+        """Reject physically meaningless values early, with a clear message.
+
+        Written as ``not (x > lo)`` so NaN is rejected too. ``doping_profile``
+        is deliberately not validated here (downstream code decides).
+        """
+        problems = []
+
+        def _positive(name, value):
+            if value is None or not (value > 0):
+                problems.append(f"{name} must be > 0 (got {value!r})")
+
+        _positive("epi_thickness_um", self.epi_thickness_um)
+        _positive("substrate_thickness_um", self.substrate_thickness_um)
+        _positive("area_cm2", self.area_cm2)
+        _positive("L_transition_um", self.L_transition_um)
+        _positive("N_D_junction", self.N_D_junction)
+        _positive("N_D_bulk", self.N_D_bulk)
+        if self.half_width_um is not None:
+            _positive("half_width_um", self.half_width_um)
+        if self.N_D is not None:
+            _positive("N_D", self.N_D)
+        if not (self.N_A >= 1e17):
+            problems.append(f"N_A must be >= 1e17 cm^-3 (p+ anode; got {self.N_A!r})")
+        if not (100.0 <= self.T <= 600.0):
+            problems.append(f"T must be between 100 and 600 K (got {self.T!r})")
+        if problems:
+            raise ValueError("Invalid DeviceConfig: " + "; ".join(problems))
 
 
 def device_kwargs(config: DeviceConfig) -> dict:

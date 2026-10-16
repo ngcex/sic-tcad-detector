@@ -22,9 +22,10 @@ Petringa group's 4H-SiC detector work at INFN-LNS Catania.
   see `.planning/VALIDATION_LITERATURE.md`.
 - **Charge collection (CCE)** — drift-diffusion transport, Hecht analysis,
   CCE vs bias, single-particle and transient response.
-- **Dark current** — trap-assisted generation (SRH/TAT/SRV decomposition),
-  temperature dependence (calibration input: one trap density N_t fitted to the
-  experimental bound < 18 pA up to −60 V, 4 mm²; not a prediction).
+- **Dark current** — total leakage vs temperature from an effective
+  trap-assisted generation model (calibration input: one trap density N_t fitted
+  to the experimental bound < 18 pA up to −60 V, 4 mm²; bias/temperature
+  dependence heuristic; a budget estimate, not a prediction).
 - **Radiation damage** — defect introduction (Z1/2, EH4, EH6/7), carrier-lifetime
   degradation, CCE vs fluence, annealing kinetics (Burin et al. 2024 model).
 - **Microdosimetry** — lineal-energy spectra, y_F / y_D, tissue-equivalence
@@ -50,16 +51,18 @@ once in the sidebar (persists across pages) and explore:
 
 | Page                        | Workflow                                                          |
 | --------------------------- | ----------------------------------------------------------------- |
-| **C-V Analysis**            | C–V curve, Mott-Schottky plot, depletion width, CSV download      |
+| **C-V Analysis**            | C–V curve, Mott-Schottky, depletion width, full-depletion marker  |
 | **Charge Collection (CCE)** | CCE vs reverse bias, configurable min/max bias sweep range        |
-| **Field Map**               | 1D/2D electric field & doping, quantity-selector heatmap          |
+| **Field Map**               | 1D/2D field & doping at a chosen reverse bias, heatmap viewer     |
 | **Radiation Damage**        | CCE vs proton fluence, energy/bias sweep, κ(E) disclosure banner  |
-| **Dark Current**            | J_SRH / J_TAT / J_SRV decomposition vs temperature                |
+| **Dark Current**            | Total leakage vs temperature (calibrated budget estimate)         |
 | **Microdosimetry**          | MC-events CSV upload → y·d(y) spectrum, y_F / y_D readouts        |
 | **Batch Sweep**             | Parametric sweep over any device field, overlaid curves, bulk CSV |
 
-Every page's results are downloadable as CSV with device-config and
-software-version metadata embedded in the header.
+Every result page shows which solver produced it (batched engine, 2D engine
+or devsim) and whether the device lies inside the validated domain; the CSV
+download carries the same provenance (solver, validated domain, device config,
+software version) in its `#` header.
 
 ---
 
@@ -73,7 +76,7 @@ Requires Python 3.13+ and the `devsim` solver. Dependency management uses
 git clone https://github.com/ngcex/sic-tcad-detector.git
 cd sic-tcad-detector
 
-# install the package (devsim, numpy, scipy, matplotlib, plotly, streamlit, pandas + dev extras)
+# install the package (devsim, numpy, scipy, numba, matplotlib, plotly, streamlit, pandas + dev extras)
 uv sync --extra dev
 
 # use the library directly
@@ -89,8 +92,8 @@ uv run pytest tests/test_api_*.py tests/test_app_*.py -q
 uv run jupyter lab notebooks/01_phase1_validation.ipynb
 ```
 
-> **Parallel tests:** `uv run pytest -n auto --dist loadfile -m "not slow" -q` runs the
-> non-slow suite in about 3 minutes (626 s serial); use `-n0` when debugging with pdb.
+> **Parallel tests:** `uv run pytest -n auto --dist loadfile -q` runs the full suite
+> (~700 tests) in about 4 minutes; use `-n0` when debugging with pdb.
 >
 > **devsim note:** the full drift-diffusion test suite is slow, and stacking
 > many DD device builds in one interpreter process can exhaust devsim's
@@ -107,7 +110,19 @@ cfg = DeviceConfig(epi_thickness_um=10.0, N_A=1e19)
 result = run_cv(cfg)          # SimResult: bias (x), capacitance (y), metadata
 result = run_cce(cfg, v_start=-1.0, v_stop=-40.0)
 result = run_field(cfg)       # includes result.mesh (MeshData) for 2D devices
+result.metadata["solver"]     # "batched" | "engine2d" | "devsim"
 ```
+
+**Solvers.** `run_cv` / `run_cce` (and their `run_*_batch` twins used by
+`ParametricSweep`) run on a batched numba 1D engine (`etna.core.batched`) when
+the device lies in the validated parameter box, where it was cross-checked
+against devsim, and fall back to devsim otherwise or on non-convergence. 2D
+`run_field` uses a numba 2D engine (`etna.core.engine2d`) where eligible.
+`metadata["solver"]`, `metadata["validated_domain"]` / `"domain_note"` record
+what ran; C-V/CCE results also carry `metadata["reach_through_V"]`, the
+full-depletion voltage. `DeviceConfig` rejects out-of-range values
+(`ValueError`), and batch sweeps keep the completed points when one value fails
+(its slot is an empty result with `metadata["error"]`).
 
 See `etna/__init__.py` for the full public API surface (`DeviceConfig`,
 `SimResult`, `MeshData`, `run_cv`, `run_field`, `run_cce`,
@@ -124,7 +139,7 @@ See `etna/__init__.py` for the full public API surface (`DeviceConfig`,
 | `etna/`         | Installable Python package: `etna/api/` (public facades — `DeviceConfig`, `run_cv`, `run_cce`, …) and `etna/core/` (internal solver modules — material params, Poisson, drift-diffusion, CCE, dark current, radiation damage, microdosimetry, 2D devices, …) |
 | `app/`          | Streamlit UI: `app/main.py` (navigation shell), `app/workflows/` (one page per simulation type), `app/components/` (sidebar, plotting, CSV export)                                                                                                           |
 | `notebooks/`    | 22 analysis notebooks (validation, characterisation, FLASH, radiation damage, microdosimetry, feasibility)                                                                                                                                                   |
-| `tests/`        | 46 pytest modules — `test_api_*.py` (library facades), `test_app_*.py` (Streamlit AppTest), plus the original core-physics test modules                                                                                                                      |
+| `tests/`        | 57 pytest modules (~700 tests) — `test_api_*.py` (library facades), `test_app_*.py` (Streamlit AppTest, incl. un-mocked per-page smoke tests), plus the core-physics modules                                                                                |
 | `data/`         | Material/stopping-power tables (`data/srim/` holds **placeholders** for κ — see below)                                                                                                                                                                       |
 | `deliverables/` | Foundry-facing detector design specs (PDF + Markdown)                                                                                                                                                                                                        |
 | `figures/`      | Generated publication figures                                                                                                                                                                                                                                |
@@ -164,10 +179,15 @@ reported value. In the interest of honesty, the current limitations are:
 - ⚠️ **FLASH dose-rate:** the high-injection _plasma-recombination_ physics is
   **not implemented** — FLASH dose-rate outputs are exploratory sensitivity
   bounds, not a validated mechanistic prediction.
-- ⚠️ **Deep reverse-bias non-convergence:** the 1D drift-diffusion solver's
-  `ramp_bias` does not converge past ≈ −60 to −66 V for the default device —
-  a solver-robustness issue distinct from the (fixed) 2D doping calibration.
-  CCE and Field Map pages surface this as a graceful error, not a crash.
+- ⚠️ **Deep reverse bias:** the 1D model puts the ohmic cathode directly on the
+  n⁻ epi (no n⁺ substrate). The default device is fully depleted from
+  |V| ≈ 16 V (`metadata["reach_through_V"]`; C saturates there, as measured).
+  The devsim path stops converging at deeper bias (≈ −64 V for the default
+  device) — an artefact of the missing n⁺ substrate and of solver robustness,
+  **not** a physical device limit. The batched engine keeps converging, but it
+  is cross-checked against devsim only down to −40 V
+  (`metadata["cross_checked_to_V"]`); the UI flags deeper engine points as not
+  validated, and every result shows which solver ran.
 - 🔧 **Data-blocked (machinery ready, real data needed):**
   - Tissue-equivalence κ(E): the Bragg-additivity machinery is in place
     (`compute_kappa_table(source="bragg")`) but `data/srim/*.csv` are placeholders

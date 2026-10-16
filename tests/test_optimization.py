@@ -69,6 +69,20 @@ class TestSweepValidityGate:
         order = list(zip(ranked["V_bias"], ranked["V_fd"], ranked["half_width_um"]))
         assert order == [(20, 10.5, 25), (20, 10.5, 50), (20, 12.0, 50), (50, 10.5, 50), (5, 10.5, 50)]
 
+    def test_failure_reason_column_is_tolerated(self):
+        """A string failure_reason column (with NaN rows) ranks and is carried through."""
+        df = pd.DataFrame(
+            [
+                {"half_width_um": 25, "V_bias": 80, "V_fd": np.nan, "is_valid": False,
+                 "center_cce": np.nan, "failure_reason": "outside model validity: ..."},
+                {"half_width_um": 25, "V_bias": 20, "V_fd": 10.5, "is_valid": True,
+                 "center_cce": 0.99, "failure_reason": ""},
+            ]
+        )
+        ranked = _rank_sweep_results(df)
+        assert list(ranked["failure_reason"]) == ["", "outside model validity: ..."]
+        assert ranked.iloc[0]["is_valid"]
+
     def test_ranking_ignores_ratio_noise(self):
         """Shuffling the 1e-6 noise of the ratio must not change the order."""
         rows = [

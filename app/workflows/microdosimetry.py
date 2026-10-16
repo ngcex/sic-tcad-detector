@@ -24,7 +24,7 @@ Unlike radiation_damage.py, this page has NO 1D-only dimensionality guard
 devsim), NO NaN-tolerance handling (no partial-convergence failure mode),
 and NO kappa data-blocked banner (that is radiation-damage-specific). The
 y_F/y_D readout uses a plain st.caption line rather than metric tiles
-(UI-SPEC Typography Discretion).
+(plain caption, no metric tiles).
 """
 
 from __future__ import annotations
@@ -35,6 +35,7 @@ import tempfile
 import streamlit as st
 
 import etna
+from app.components.page_utils import show_error
 from app.components.results import build_microdosimetry_figure, to_csv_bytes
 
 
@@ -52,10 +53,17 @@ def render() -> None:
         "deposit in keV. One row per MC step; steps are summed per event_id."
     )
     sv_thickness = st.number_input(
-        "Sensitive-volume thickness (µm)", value=10.0, key="micro_sv_t"
+        "Sensitive-volume thickness (µm)",
+        value=10.0,
+        min_value=0.1,
+        key="micro_sv_t",
     )
     sv_width = st.number_input(
-        "Sensitive-volume width (µm)", value=150.0, key="micro_sv_w"
+        "Sensitive-volume width (µm)", value=150.0, min_value=0.1, key="micro_sv_w"
+    )
+    st.caption(
+        "The spectrum depends only on the uploaded events and the sensitive-"
+        "volume geometry above, not on the sidebar device settings."
     )
 
     if st.button("Run simulation"):
@@ -68,15 +76,18 @@ def render() -> None:
                 # UploadedFile bytes; server-generated path (no traversal).
                 tmp.write(uploaded.getvalue())
                 tmp_path = tmp.name
-            st.session_state["microdosimetry_result"] = etna.run_microdosimetry(
-                cfg,
-                mc_csv_path=tmp_path,
-                sv_thickness_um=sv_thickness,
-                sv_width_um=sv_width,
-            )
+            with st.spinner("Computing the lineal-energy spectrum..."):
+                st.session_state["microdosimetry_result"] = etna.run_microdosimetry(
+                    cfg,
+                    mc_csv_path=tmp_path,
+                    sv_thickness_um=sv_thickness,
+                    sv_width_um=sv_width,
+                )
         except (ValueError, KeyError) as e:
             # malformed CSV -> load_mc_events_csv raises ValueError/KeyError
             st.error(f"Could not parse the uploaded CSV: {e}")
+        except Exception as e:
+            show_error(e)
         finally:
             if tmp_path is not None and os.path.exists(tmp_path):
                 # single-request temp lifetime; no disk accumulation

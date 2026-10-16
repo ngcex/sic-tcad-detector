@@ -16,8 +16,8 @@ on `result.mesh.y_coords is None`:
   has no 2D branch, so the line charts and CSV download are skipped; only the
   geometry-viewer heatmap renders.
 
-The `try/except RuntimeError` around `run_field` is kept because a 2D
-`ramp_bias` may not converge (documented upstream blocker); the geometry viewer
+The `try/except Exception` around `run_field` catches solver non-convergence
+(RuntimeError or devsim.error) and shows a friendly error; the geometry viewer
 renders only when `result.mesh is not None`. A quantity `st.selectbox` (fixed
 `QUANTITIES` options, persistent key) feeds `build_geometry_figure`; changing it
 reruns the page, reads the cached `session_state["field_result"]`, and re-runs
@@ -30,6 +30,11 @@ import streamlit as st
 
 import etna
 from app.components.geometry_viewer import build_geometry_figure, QUANTITIES
+from app.components.page_utils import (
+    show_error,
+    show_result_notes,
+    show_stale_warning,
+)
 from app.components.results import build_field_figures, to_csv_bytes
 
 
@@ -41,18 +46,38 @@ def render() -> None:
         st.info("Configure a device in the sidebar to begin.")
         st.stop()
 
+    bias_V = st.number_input(
+        "Reverse bias (V)",
+        value=-50.0,
+        min_value=-200.0,
+        max_value=0.0,
+        step=5.0,
+        key="field_bias_V",
+        help=(
+            "Negative = reverse bias. 2D devices use the fast 2D engine for "
+            "|V| between 5 and 80 V; other cases use devsim, which may not "
+            "converge at deep reverse bias."
+        ),
+    )
+
     if st.button("Run simulation"):
         try:
-            st.session_state["field_result"] = etna.run_field(cfg)
-        except RuntimeError as e:
-            st.error(
-                f"Simulation failed to converge: {e}\n\n"
-                "Try adjusting device parameters (e.g. epi thickness, doping) "
-                "in the sidebar and running again."
+            with st.spinner("Solving the field..."):
+                st.session_state["field_result"] = etna.run_field(
+                    cfg, bias_V=float(bias_V)
+                )
+        except Exception as e:  # incl. devsim.error (not a RuntimeError)
+            show_error(
+                e,
+                "Try a smaller reverse bias or adjust epi thickness / doping in "
+                "the sidebar.",
             )
 
     result = st.session_state.get("field_result")
     if result is not None and result.mesh is not None:
+        show_stale_warning(result.config, cfg)
+        st.caption(f"Bias: {result.metadata.get('bias_V', float('nan')):.1f} V")
+        show_result_notes(result)
         if result.mesh.y_coords is None:
             # 1D branch: existing line charts + CSV + expander (read result.x/y),
             # THEN the supplemental geometry-viewer bar below them.

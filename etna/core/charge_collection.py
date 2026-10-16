@@ -35,6 +35,27 @@ from etna.core.sic_material import (
 
 logger = logging.getLogger(__name__)
 
+
+def full_compensation_reason(damaged):
+    """Reason string if carrier removal fully compensates the epi donors, else "".
+
+    ``damaged`` is the dict of ``compute_damaged_params`` / ``compute_annealed_params``.
+    Carrier removal there is N_D(x) - eta_removal * Phi_neq floored at 0 (annealed:
+    eta_removal * (1 - f_Z12)), so a zero minimum means eta * Phi_neq >= min N_D over
+    the epi: the n- epi has no net donors left somewhere. The doping-based device model
+    (ionised N_D, ohmic contact on the n- epi) is ill-posed there -- devsim either fails or
+    converges to non-physical values -- so callers return NaN with this reason instead
+    of solving. Uses the damage model's own constants (kappa(E), eta_removal, anneal).
+    """
+    nd = np.asarray(damaged.get("N_D_profile", []), dtype=float)
+    if nd.size == 0 or float(np.min(nd)) > 0.0:
+        return ""
+    return (
+        "full donor compensation: eta_removal * Phi_neq >= min N_D over the epi "
+        f"(Phi_neq = {damaged.get('fluence_neq', float('nan')):.3g} cm^-2); "
+        "outside model validity, not solved"
+    )
+
 # Sentinel for detecting when caller did not pass explicit values
 _UNSET = object()
 
@@ -462,9 +483,11 @@ def cce_vs_bias(
     result : dict
         Dictionary with:
         - "voltages": numpy array of applied voltages actually reached (V) —
-          shorter than the requested V_range if the DD solver hit a
-          convergence wall (typically full depletion / punch-through) partway
-          through the sweep; see "truncated".
+          shorter than the requested V_range if the DD solver hit its
+          convergence wall partway through the sweep; see "truncated". The wall
+          is a model-validity limit (ohmic cathode directly on the n- epi, no n+
+          substrate; devsim stops converging well past reach-through at V_fd),
+          not physical punch-through.
         - "cce_values": numpy array of CCE values, same length as "voltages"
         - "I_collected": numpy array of collected currents (A/cm^2), same
           length as "voltages"
@@ -556,11 +579,12 @@ def cce_vs_bias(
             try:
                 ramp_bias(device_info, cathode_V, contact="cathode", V_step=0.5)
             except RuntimeError as e:
-                # Typically full depletion / punch-through: the DD solver's
-                # Newton iteration stops converging once the depletion edge
-                # reaches the back contact. This is a physical sweep
-                # endpoint, not a bug — stop here and return the converged
-                # portion rather than raising (mirrors cv_sweep's behavior).
+                # Outside model validity: the cathode is an ohmic contact on the
+                # n- epi (no n+ substrate); after reach-through (V_fd) the field
+                # at that contact grows with bias and devsim's Newton stops
+                # converging. This is a solver/model limit, NOT a physical
+                # endpoint (not punch-through) -- stop here and return the
+                # converged portion rather than raising (mirrors cv_sweep).
                 logger.warning(
                     f"cce_vs_bias: stopped sweep at V={V_target:.1f}V "
                     f"(requested down to {V_range.min():.1f}V): {e}"
@@ -682,10 +706,17 @@ def cce_vs_fluence(
     result : dict
         Dictionary with:
         - "fluences": numpy array of fluences (protons/cm^2)
-        - "cce_values": numpy array of CCE values
+        - "cce_values": numpy array of CCE values (NaN where not valid)
+        - "valid": bool array, False where the point was not solved or failed
+        - "reason": list of str, "" when valid; otherwise why (full donor
+          compensation -- see full_compensation_reason -- or the solver error)
         - "V_bias": float, the bias voltage used
         - "energy_MeV": float
         - "lifetime_model": str
+
+    Points at or beyond full donor removal (eta_removal * Phi_neq >= min N_D of
+    the epi; ~4.86e13 p/cm^2 at 62 MeV for N_D_bulk 8.5e13 with the default
+    placeholder kappa 0.35 and eta 5) are NOT solved: CCE is NaN with a reason.
     """
     from etna.core.device import apply_damaged_params, create_sic_device
     from etna.core.drift_diffusion import ramp_bias, setup_sic_drift_diffusion
@@ -731,6 +762,8 @@ def cce_vs_fluence(
 
     # --- Sweep fluence ---
     cce_values = np.zeros(len(fluence_range))
+    valid = np.zeros(len(fluence_range), dtype=bool)
+    reasons = [""] * len(fluence_range)
 
     for i, fluence in enumerate(fluence_range):
         dev_id = uuid.uuid4().hex[:8]
@@ -748,6 +781,12 @@ def cce_vs_fluence(
                 lifetime_model=lifetime_model,
                 T=T_dev,
             )
+            reason = full_compensation_reason(damaged)
+            if reason:
+                logger.warning(f"cce_vs_fluence: fluence={fluence:.2e}: {reason}")
+                cce_values[i] = np.nan
+                reasons[i] = reason
+                continue
 
             # Staged device creation
             device_info = create_sic_device(device_name=dev_name, **dev_kw)
@@ -795,12 +834,14 @@ def cce_vs_fluence(
             # Extract CCE
             cce = compute_cce_from_dd(device_info, gen_values, contact="cathode")
             cce_values[i] = cce
+            valid[i] = True
 
             logger.info(f"cce_vs_fluence: fluence={fluence:.2e} p/cm^2, CCE={cce:.4f}")
 
         except Exception as e:
             logger.warning(f"cce_vs_fluence: failed at fluence={fluence:.2e}: {e}")
             cce_values[i] = np.nan
+            reasons[i] = f"solver failure: {type(e).__name__}: {e}"
         finally:
             try:
                 devsim.delete_device(device=dev_name)
@@ -810,6 +851,8 @@ def cce_vs_fluence(
     return {
         "fluences": fluence_range,
         "cce_values": cce_values,
+        "valid": valid,
+        "reason": reasons,
         "V_bias": V_bias,
         "energy_MeV": energy_MeV,
         "lifetime_model": lifetime_model,
@@ -865,7 +908,9 @@ def cce_vs_bias_at_fluence(
     result : dict
         Dictionary with:
         - "voltages": numpy array of applied voltages (V)
-        - "cce_values": numpy array of CCE values
+        - "cce_values": numpy array of CCE values (all NaN when not valid)
+        - "valid": bool array (all False at full donor compensation)
+        - "reason": list of str, "" when valid (see full_compensation_reason)
         - "fluence": float
         - "energy_MeV": float
         - "lifetime_model": str
@@ -921,6 +966,18 @@ def cce_vs_bias_at_fluence(
         damage_params=damage_params,
         lifetime_model=lifetime_model,
     )
+    reason = full_compensation_reason(damaged)
+    if reason:
+        logger.warning(f"cce_vs_bias_at_fluence: fluence={fluence:.2e}: {reason}")
+        return {
+            "voltages": V_range,
+            "cce_values": np.full(len(V_range), np.nan),
+            "valid": np.zeros(len(V_range), dtype=bool),
+            "reason": [reason] * len(V_range),
+            "fluence": fluence,
+            "energy_MeV": energy_MeV,
+            "lifetime_model": lifetime_model,
+        }
 
     # --- Staged device creation ---
     dev_id = uuid.uuid4().hex[:8]
@@ -1012,6 +1069,8 @@ def cce_vs_bias_at_fluence(
     return {
         "voltages": V_range,
         "cce_values": cce_sorted,
+        "valid": np.ones(len(V_range), dtype=bool),
+        "reason": [""] * len(V_range),
         "fluence": fluence,
         "energy_MeV": energy_MeV,
         "lifetime_model": lifetime_model,
@@ -1067,7 +1126,10 @@ def cce_post_anneal(
     -------
     result : dict
         Dictionary with: cce, fluence, T_anneal, t_anneal, V_bias,
-        energy_MeV, f_Z12, f_EH67, f_EH4, tau_n, tau_p.
+        energy_MeV, f_Z12, f_EH67, f_EH4, tau_n, tau_p, valid (bool) and
+        reason (str, "" when valid). cce is NaN (valid False) at full donor
+        compensation after annealing (see full_compensation_reason) or when
+        the solve fails.
     """
     from etna.core.device import apply_damaged_params, create_sic_device
     from etna.core.drift_diffusion import ramp_bias, setup_sic_drift_diffusion
@@ -1123,6 +1185,28 @@ def cce_post_anneal(
         anneal_params=anneal_params,
         lifetime_model=lifetime_model,
     )
+
+    def _invalid(why):
+        return {
+            "cce": np.nan,
+            "fluence": fluence,
+            "T_anneal": T_anneal,
+            "t_anneal": t_anneal,
+            "V_bias": V_bias,
+            "energy_MeV": energy_MeV,
+            "f_Z12": annealed.get("f_Z12", 0.0),
+            "f_EH67": annealed.get("f_EH67", 0.0),
+            "f_EH4": annealed.get("f_EH4", 0.0),
+            "tau_n": annealed.get("tau_n", np.nan),
+            "tau_p": annealed.get("tau_p", np.nan),
+            "valid": False,
+            "reason": why,
+        }
+
+    reason = full_compensation_reason(annealed)
+    if reason:
+        logger.warning(f"cce_post_anneal: fluence={fluence:.2e}: {reason}")
+        return _invalid(reason)
 
     # Create fresh device with staged creation
     dev_id = uuid.uuid4().hex[:8]
@@ -1198,23 +1282,13 @@ def cce_post_anneal(
             "f_EH4": annealed.get("f_EH4", 0.0),
             "tau_n": annealed["tau_n"],
             "tau_p": annealed["tau_p"],
+            "valid": True,
+            "reason": "",
         }
 
     except Exception as e:
         logger.warning(f"cce_post_anneal: failed: {e}")
-        return {
-            "cce": np.nan,
-            "fluence": fluence,
-            "T_anneal": T_anneal,
-            "t_anneal": t_anneal,
-            "V_bias": V_bias,
-            "energy_MeV": energy_MeV,
-            "f_Z12": annealed.get("f_Z12", 0.0),
-            "f_EH67": annealed.get("f_EH67", 0.0),
-            "f_EH4": annealed.get("f_EH4", 0.0),
-            "tau_n": annealed.get("tau_n", np.nan),
-            "tau_p": annealed.get("tau_p", np.nan),
-        }
+        return _invalid(f"solver failure: {type(e).__name__}: {e}")
     finally:
         try:
             devsim.delete_device(device=dev_name)
@@ -1271,12 +1345,15 @@ def cce_anneal_vs_temperature(
         Dictionary with:
         - "T_anneal_range": numpy array of temperatures (K)
         - "cce_values": numpy array of CCE at each temperature
+        - "valid", "reason": per temperature, as in cce_post_anneal
         - "fluence": float
         - "t_anneal": float
         - "V_bias": float
     """
     T_anneal_range = np.asarray(T_anneal_range, dtype=float)
     cce_values = np.zeros(len(T_anneal_range))
+    valid = np.zeros(len(T_anneal_range), dtype=bool)
+    reasons = [""] * len(T_anneal_range)
 
     for i, T_ann in enumerate(T_anneal_range):
         result = cce_post_anneal(
@@ -1293,6 +1370,8 @@ def cce_anneal_vs_temperature(
             anneal_params=anneal_params,
         )
         cce_values[i] = result["cce"]
+        valid[i] = result["valid"]
+        reasons[i] = result["reason"]
 
         logger.info(
             f"cce_anneal_vs_temperature: T={T_ann:.0f}K, CCE={result['cce']:.4f}"
@@ -1301,6 +1380,8 @@ def cce_anneal_vs_temperature(
     return {
         "T_anneal_range": T_anneal_range,
         "cce_values": cce_values,
+        "valid": valid,
+        "reason": reasons,
         "fluence": fluence,
         "t_anneal": t_anneal,
         "V_bias": V_bias,

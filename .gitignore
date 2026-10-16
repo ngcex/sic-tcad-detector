@@ -12,3 +12,8 @@ __pycache__/
 papers/
 .DS_Store
 **/.DS_Store
+
+# Local tooling / scratch
+.venv/
+.playwright-mcp/
+scratchpad/
