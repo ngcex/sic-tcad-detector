@@ -80,3 +80,17 @@ D-02/B-06 (DESIGN-1 "18 pA" not produced by the model: measured 141 pA), A-02..A
   recalibrating N_t before touching it.
 - Next candidates: run_field and temperature sweep onto the batched engine; SuperLU timing for one
   factorization; remaining slow tests: test_2d_vs_1d_cv_centerline (153 s), test_center_matches_1d (132 s).
+
+## 7. Tolerance, B-01, N_t (2026-10-17, commits adf4d3b, a7eea2b, d7f4b24)
+- DC rel tolerance 1e-10 -> 1e-8 via `etna/core/solver_tol.DC_REL_ERROR` at the measured steady-state sites
+  (transient, flash_recombination, single_particle, device.py still 1e-10). 2D build 50 um 7.7 s, 150 um 28.9 s
+  (from 102/390 s); zero strict failures at 150 um; a live converged 2D device no longer breaks later builds.
+  Full suite 606 passed in 225 s.
+- B-01 fixed: sweep_iv_vs_temperature -> dark_current_sweep (test vs dark_current_sweep, was 0.13). Notebook 06 now shows
+  I(350K)/I(280K) = 1.39e6 ~ n_i ratio 1.37e6 (was 1.5x with the stale field).
+- N_t recalibrated 2.2e13 -> 2.8e12 (calibration input: bound "<18 pA up to -60 V", 4 mm2; linear in N_t). Closes D-02/B-06.
+  run_dark_current / fluence / sensitivity leakage drops ~7.9x. Notebooks 06/07 re-executed; notebook 20 (feasibility)
+  and scripts/create_notebook_20.py NOT regenerated: stale, check before quoting its leakage.
+- Open: B-02 (TAT E-field node indexing is 1D-only; add a dimension guard in setup_tat_model after grepping 2D users),
+  cce_vs_fluence NaN at 5e13, remaining slow tests (test_2d_vs_1d_cv_centerline 157 s: check device2d._ramp_to),
+  ParametricSweep/batch page coverage on the engine, SuperLU timing (lower priority now).
