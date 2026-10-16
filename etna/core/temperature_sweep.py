@@ -65,7 +65,7 @@ def sweep_iv_vs_temperature(
     import devsim
 
     from etna.core.drift_diffusion import create_dd_device, extract_contact_current, ramp_bias
-    from etna.core.dark_current import create_dark_current_device
+    from etna.core.dark_current import create_dark_current_device, dark_current_sweep
 
     temperatures = np.asarray(temperatures, dtype=float)
     params = SiC4H_Parameters()
@@ -95,11 +95,20 @@ def sweep_iv_vs_temperature(
             else:
                 device_info = create_dd_device(**kwargs)
 
-            # Ramp to reverse bias: cathode voltage = -V_reverse
-            cathode_V = -V_reverse
-            ramp_bias(device_info, cathode_V, contact="cathode", V_step=0.5)
-
-            I_total = extract_contact_current(device_info, contact="cathode")
+            if use_tat:
+                # dark_current_sweep refreshes the TAT field/gamma factors at every
+                # bias step; ramp_bias leaves them at their 0 V values, which
+                # under-reported the leakage ~7.6x (audit B-01). Fixed 0.5 V steps:
+                # the per-step refresh cannot use the adaptive ramp.
+                sweep = dark_current_sweep(device_info, [V_reverse], area=1.0, V_step=0.5)
+                if len(sweep["J_total"]) == 0:
+                    raise RuntimeError(f"dark_current_sweep did not converge at {V_reverse} V")
+                I_total = sweep["J_total"][-1]
+            else:
+                # Ramp to reverse bias: cathode voltage = -V_reverse
+                cathode_V = -V_reverse
+                ramp_bias(device_info, cathode_V, contact="cathode", V_step=0.5)
+                I_total = extract_contact_current(device_info, contact="cathode")
 
             n_i_T, _, _, E_g_T = intrinsic_concentration(T, params)
             mu_n = mobility_caughey_thomas_T(

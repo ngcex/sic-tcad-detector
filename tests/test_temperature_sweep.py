@@ -97,7 +97,6 @@ class TestSweepIV:
         assert set(df.columns) == expected_cols
 
     @pytest.mark.slow
-    @pytest.mark.slow
     def test_iv_current_increases_with_temperature(self):
         """Reverse leakage current should increase with temperature.
 
@@ -114,3 +113,32 @@ class TestSweepIV:
         assert (
             I_values[-1] > I_values[0]
         ), f"I(310K)={I_values[-1]:.4e} should exceed I(290K)={I_values[0]:.4e}"
+
+
+class TestSweepIVUsesRefreshedTATField:
+    """B-01: the TAT field/gamma must follow the bias, not stay at their 0 V values."""
+
+    @pytest.mark.slow
+    def test_sweep_matches_dark_current_sweep(self):
+        import uuid
+
+        import devsim
+
+        from etna.core.dark_current import create_dark_current_device, dark_current_sweep
+
+        df = sweep_iv_vs_temperature([300.0], V_reverse=-30)
+        name = f"b01_ref_{uuid.uuid4().hex[:8]}"
+        dev = create_dark_current_device(
+            device_name=name,
+            T=300.0,
+            doping_profile="graded",
+            N_D_junction=2.90e15,
+            N_D_bulk=8.50e13,
+            L_transition=1.0e-4,
+        )
+        try:
+            J_ref = abs(dark_current_sweep(dev, [-30.0], area=1.0, V_step=0.5)["J_total"][-1])
+        finally:
+            devsim.delete_device(device=name)
+        assert df["I_reverse"].iloc[0] == pytest.approx(J_ref, rel=0.05)
+
