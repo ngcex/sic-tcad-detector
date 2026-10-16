@@ -17,7 +17,7 @@ Physical context:
     This module uses an effective generation rate G_eff = N_t (cm^-3 s^-1)
     applied in the depletion region, where N_t is calibrated to match
     experimental dark current. The E-field-dependent Gamma factor provides
-    voltage-dependent scaling. Default N_t = 1e12 cm^-3 s^-1 targets ~18 pA.
+    voltage-dependent scaling. Default N_t = 2.8e12 cm^-3 s^-1 is fitted to the experimental <18 pA bound (-60 V, 4 mm2).
 
 All units CGS (cm, cm^-3, A/cm^2, V) per devsim convention.
 
@@ -115,7 +115,9 @@ def setup_tat_model(device_info, E_t=None, m_t=None, N_t=None):
         Tunneling effective mass in units of m0. Default from params.m_t.
     N_t : float, optional
         Effective generation rate (cm^-3 s^-1). Default from params.N_t.
-        Primary calibration parameter. Default 1e12 targets ~8 pA at -30V.
+        Primary calibration parameter; leakage is linear in N_t (6.4 pA per 1e12 at
+        300 K, -30 V, 0.05 cm2). Default 2.8e12 is fitted to the experimental
+        <18 pA bound (-60 V, 4 mm2), see sic_material.py.
     """
     device = device_info["device_name"]
     region = device_info["region_name"]

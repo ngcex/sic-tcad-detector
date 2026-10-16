@@ -65,7 +65,12 @@ class SiC4H_Parameters:
     # --- Z1/2 center trap parameters (for Hurkx TAT dark current) ---
     E_t: float = 0.65  # eV, trap level below Ec (Z1/2 center)
     m_t: float = 0.25  # m0, tunneling effective mass
-    N_t: float = 2.2e13  # cm^-3/s, eff. generation rate (calibrated ~18 pA at -30V)
+    # cm^-3/s, eff. generation rate. CALIBRATION INPUT, not a prediction: fitted so that
+    # the leakage at 300 K, -60 V (saturated past full depletion), 4 mm2 equals the
+    # experimental upper bound "< 18 pA up to -60 V" (conservative: bound used as equality).
+    # (The earlier 2.2e13 was fitted on a path with a stale TAT field, B-01; leakage is
+    # linear in N_t, 2.2e13 gave 141 pA on the corrected path.)
+    N_t: float = 2.8e12
     S_n: float = 1e3  # cm/s, electron surface recombination velocity
     S_p: float = 1e3  # cm/s, hole surface recombination velocity
 

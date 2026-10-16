@@ -100,9 +100,12 @@ target and quote its verified W(0 V).
 
 ## 5. Caveats — do NOT read these as committed specs
 
-- **Dark current / leakage: ESTIMATE ONLY.** Our model leakage (~18 pA at −30 V,
-  300 K) is a **single-point calibration** (one fitted trap term), not a
-  first-principles prediction. Use only as a budget estimate; the fab must
+- **Dark current / leakage: ESTIMATE ONLY.** The model leakage (~18 pA at 300 K,
+  up to −60 V, 4 mm²) is the **calibration input**, not a result: the one fitted
+  trap term (N_t) is set so the model equals the experimental upper bound
+  "< 18 pA up to −60 V" — it does not predict or validate leakage. (Before
+  2026-10-17 a stale-field bug made the model look consistent with 18 pA at −30 V;
+  on the corrected path the unscaled default gave ~141 pA, i.e. 7.8× over the bound.) Use only as a budget estimate; the fab must
   measure. Do **not** treat it as a leakage limit/guarantee.
 - **No rated breakdown voltage.** −50 V is the TCAD solver-convergence envelope;
   there is no impact-ionization/breakdown model behind it.
