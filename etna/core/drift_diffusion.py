@@ -243,6 +243,9 @@ def create_dd_device(doping_profile="graded", **kwargs):
     return device_info
 
 
+# _RAMP_SOLVE_COARSE (intermediate ramp points) is currently IDENTICAL to _RAMP_SOLVE
+# (target point): same tolerance and the same 40-iteration cap. Kept as a separate name
+# so the two can be tuned independently.
 _RAMP_SOLVE = dict(type="dc", absolute_error=1e10, relative_error=DC_REL_ERROR, maximum_iterations=40)
 _RAMP_SOLVE_COARSE = dict(
     type="dc", absolute_error=1e10, relative_error=DC_REL_ERROR, maximum_iterations=40
@@ -265,6 +268,16 @@ def _restore_solution(device, region, snap):
         devsim.set_node_values(device=device, region=region, name=m, values=values)
 
 
+def _note_relaxed_retry(device_info, V):
+    """Log and count a ramp point that only converged with relaxed tolerances."""
+    device_info["ramp_relaxed_retries"] = device_info.get("ramp_relaxed_retries", 0) + 1
+    logger.warning(
+        f"ramp_bias: V={V:.3f}V converged only with relaxed tolerances "
+        f"(abs 1e12, rel 1e-8); device {device_info.get('device_name')!r} "
+        f"ramp_relaxed_retries={device_info['ramp_relaxed_retries']}"
+    )
+
+
 def _ramp_bias_adaptive(device_info, bias_name, V_from, V_to, h_min, h_max):
     """Adaptive-step bias ramp (see ``ramp_bias``, ``V_step_max``).
 
@@ -273,6 +286,11 @@ def _ramp_bias_adaptive(device_info, bias_name, V_from, V_to, h_min, h_max):
     Newton iteration (``log_damp``), so a start that is already shifted by the
     bias step saves most of the iterations (2D 50 um / -50 V: 28 -> ~8 per 2 V).
     Carriers keep the previous solution: extrapolating them too gained nothing.
+
+    When a step at the minimum size ``h_min`` still fails, the point is retried once
+    with relaxed tolerances (_RAMP_SOLVE_RELAXED: absolute 1e12, relative 1e-8). Such a
+    point is less tightly converged; each use is logged (warning) and counted in
+    ``device_info["ramp_relaxed_retries"]``.
     """
     device = device_info["device_name"]
     region = device_info["region_name"]
@@ -296,7 +314,8 @@ def _ramp_bias_adaptive(device_info, bias_name, V_from, V_to, h_min, h_max):
             )
         devsim.set_parameter(device=device, name=bias_name, value=V_next)
         try:
-            # Same tolerance everywhere; the target gets the tighter iteration cap.
+            # _RAMP_SOLVE and _RAMP_SOLVE_COARSE are currently identical (same tolerance
+            # and iteration cap at the target and at intermediate points).
             devsim.solve(**(_RAMP_SOLVE if final else _RAMP_SOLVE_COARSE))
         except devsim.error:
             _restore_solution(device, region, snap)
@@ -310,6 +329,7 @@ def _ramp_bias_adaptive(device_info, bias_name, V_from, V_to, h_min, h_max):
                 raise RuntimeError(
                     f"ramp_bias: failed to converge at V={V_next:.3f}V: {e}"
                 )
+            _note_relaxed_retry(device_info, V_next)
         V = V_next
         hist = [hist[-1], (V, _snapshot_solution(device, region))]
         h = min(h * 2, h_max)
@@ -336,10 +356,13 @@ def ramp_bias(device_info, V_target, contact="anode", V_step=0.5, V_step_max=Non
         If given, the ramp is adaptive: it starts with steps of ``V_step_max``,
         doubles after each converged step, and on a Newton failure restores the
         last converged solution and halves the step down to ``V_step``, where the
-        relaxed-tolerance retry below applies. Intermediate points get a larger
-        iteration cap (they only seed the next start); all points use ``DC_REL_ERROR``. The ramp only chooses the path to
+        relaxed-tolerance retry below applies. Intermediate and target points use
+        the same tolerance (``DC_REL_ERROR``) and iteration cap. The ramp only chooses the path to
         the target; the converged state at ``V_target`` is the same (to solver
         tolerance). ``None`` keeps fixed steps of ``V_step``.
+
+    Every point that converges only on the relaxed-tolerance retry is logged as a
+    warning and counted in ``device_info["ramp_relaxed_retries"]`` (absent = none).
 
     Returns
     -------
@@ -389,9 +412,7 @@ def ramp_bias(device_info, V_target, contact="anode", V_step=0.5, V_step_max=Non
                     relative_error=1e-8,
                     maximum_iterations=100,
                 )
-                logger.info(
-                    f"ramp_bias: converged at V={V_int:.3f}V with relaxed tolerances"
-                )
+                _note_relaxed_retry(device_info, V_int)
             except devsim.error as e:
                 raise RuntimeError(
                     f"ramp_bias: failed to converge at V={V_int:.3f}V: {e}"

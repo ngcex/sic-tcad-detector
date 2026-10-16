@@ -9,6 +9,7 @@ from .scan import (
     FIELD_NAN_MIN,
     ENGINE2D_BOX,
     Engine2DFallback,
+    Engine2DOutsideValidity,
     Engine2DPunchThrough,
     dark_state_2d,
     engine2d_dark_unsupported_reason,
@@ -21,7 +22,8 @@ __all__ = [
     "FIELD_NAN_MIN",
     "ENGINE2D_BOX",
     "Engine2DFallback",
-    "Engine2DPunchThrough",
+    "Engine2DOutsideValidity",
+    "Engine2DPunchThrough",  # backward-compatible alias of Engine2DOutsideValidity
     "dark_state_2d",
     "engine2d_dark_unsupported_reason",
     "engine2d_unsupported_reason",

@@ -31,24 +31,32 @@ that forms the collecting contact — Schottky (FBK) or junction-barrier-Schottk
 
 | Parameter                           | Recommended value                                 | Basis / note                                                            |
 | ----------------------------------- | ------------------------------------------------- | ----------------------------------------------------------------------- |
-| SV depth (epi thickness)            | **10 µm** (baseline)                              | calibrated/validated config                                             |
-| SV half-width                       | **50 µm** (→ 100 µm SV)                           | baseline choice; width not discriminated by the model (no edge physics) |
+| SV depth (epi thickness)            | **10 µm** (baseline)                              | calibrated config (profile fitted to measured W)                        |
+| SV half-width                       | **50 µm** (→ 100 µm SV)                           | baseline choice only; NOT discriminated by the model (no edge physics)  |
 | Graded epi donor profile N_D(y)     | N_D_junction 2.93e15, N_D_bulk 8.82e13, L 0.99 µm | calibrated (Phase 26)                                                   |
-| Operating reverse bias              | **−15 to −20 V**                                  | margin above V_fd, well below the −50 V solver envelope                 |
+| Operating reverse bias              | **−15 to −20 V**                                  | ≥ 1.2 × V_fd (≈ 13 V); see note on the ~−50 V model limit below        |
 | Full-depletion voltage V_fd (10 µm) | **≈ 10.5 V**                                      | calibrated profile (assumes p-n electrostatics)                         |
-| Validity gate                       | fully depleted and CCE ≥ 0.95                     | Mj-3 validity gate                                                      |
+| Validity gate                       | \|V_bias\| ≥ 1.2 × V_fd and CCE ≥ 0.95             | Mj-3 validity gate; 20 % margin = ±20 % doping tolerance (DESIGN-1)     |
 
-**Alternative SV depths (verified V_fd, p-n electrostatics):**
+**Alternative SV depths (model V_fd, p-n electrostatics):**
 
 | Epi thickness | V_fd        | Recommended operating bias | Note                                         |
 | ------------- | ----------- | -------------------------- | -------------------------------------------- |
-| 5 µm          | ~4.1 V      | ≥ −10 V                    | lowest-bias option                           |
-| **10 µm**     | **~10.5 V** | **−15 to −20 V**           | **baseline (most validated)**                |
-| 20 µm         | ~35 V       | ≥ −40 V                    | convergent but less margin to −50 V envelope |
+| 5 µm          | ~4.1 V      | ≥ −10 V                    | lowest-bias option; epi holds ~42 % of the alpha's pairs |
+| **10 µm**     | **~10.5 V** | **−15 to −20 V**           | **baseline (calibrated profile)**            |
+| 20 µm         | ~35 V       | ≥ −42 V (1.2 × V_fd)       | converges; closer to the model's ~−50 V solver wall |
 
-> **Validity gate (audit Mj-3):** only configurations that are _fully depleted_
-> (|V_bias| ≥ V_fd) **and** above the CCE floor (0.95 at both center and edge) are
-> quoted. Partially depleted points are excluded because their CCE is < 0.95.
+> **The ~−50 V limit is a model/solver artefact, not a rated or physical limit.**
+> The modelled ohmic cathode sits directly on the n⁻ epi (no n⁺ substrate); past
+> reach-through (at V_fd) the field at that contact grows until devsim stops
+> converging (at a fixed contact-cell field ≈ 4.7 × 10⁴ V/cm). Configurations
+> beyond it are reported as NaN with `failure_reason` "outside model validity". It
+> is not punch-through (reach-through is at V_fd) and not breakdown.
+
+> **Validity gate (audit Mj-3):** only configurations that are _fully depleted with
+> margin_ (|V_bias| ≥ 1.2 × V_fd, covering the ±20 % doping tolerance) **and** above
+> the CCE floor (0.95 at both center and edge) are quoted. Partially depleted points
+> are excluded because their CCE is < 0.95.
 
 ---
 
@@ -58,6 +66,11 @@ that forms the collecting contact — Schottky (FBK) or junction-barrier-Schottk
   the SV is fully depleted at the operating bias.
 - Full-depletion voltage and recommended operating bias **for a p-n-type junction**.
 - CCE → 1 (> 0.96) when fully depleted (DD model; consistent with the 1D twin).
+  **CCE is relative to the e-h pairs generated inside the simulated epi**, not to
+  the full alpha deposit: the model alpha (~15 µm range) leaves ~83 % of its pairs
+  in a 10 µm epi (5 µm: ~42 %, 20 µm: ~100 %); collected/deposited ≈ that fraction
+  × CCE. The lateral scans report both (`in_mesh_generation_fraction`,
+  `q_collected_over_deposited`).
 
 ---
 
@@ -85,10 +98,13 @@ Specifically NOT provided and to be supplied/measured by the fab:
 - **No Schottky/JBS electrical parameters** — barrier height, leakage, C-V,
   turn-on are not modeled; do not expect them here.
 - **Dark current / leakage: not specified.** Our p-n leakage is a calibration
-  input (N_t fitted to the experimental bound < 18 pA up to −60 V, 4 mm²) and
-  does not apply to a Schottky/JBS junction. The fab
-  must measure leakage for its junction type.
-- **No rated breakdown / max voltage.** −50 V is solver convergence, not breakdown.
+  input (N_t fitted so the model equals the upper bound "< 18 pA up to −60 V" at
+  −60 V, 4 mm², 300 K; heuristic bias shape; effective "TAT" generation with the
+  Hurkx enhancement inactive below ~4.5 MV/cm; assumed n_i(T) temperature scaling)
+  and does not apply to a Schottky/JBS junction. The fab must measure leakage for
+  its junction type.
+- **No rated breakdown / max voltage.** The ~−50 V limit is a model/solver artefact
+  (cathode contact on the n⁻ epi, no n⁺ substrate), not breakdown and not a rating.
 - **Tissue-equivalence (κ) and microdosimetric spectra are NOT in this spec.**
   The tissue-equivalence correction depends on stopping-power data we have flagged
   as not foundry-ready (Phase 27 work). This document is geometry only; it makes
@@ -107,9 +123,10 @@ Specifically NOT provided and to be supplied/measured by the fab:
 
 ---
 
-## 6. What is solid (geometry hand-off-ready)
+## 6. What is solid (model geometry targets, within the limits above)
 
 The SV depth, the full-depletion voltage and operating-bias window (for p-n
-electrostatics), the baseline SV depth and half-width, and CCE → 1 when fully
-depleted. These are defensible TCAD geometry targets. The junction electrical
-behavior is the foundry's to define and measure.
+electrostatics, with the 1.2 × V_fd margin), and CCE → 1 when fully depleted
+(relative to in-epi generation). The 50 µm half-width is a baseline choice that the
+model does **not** discriminate (no edge physics). The junction electrical behavior
+is the foundry's to define and measure.

@@ -4,7 +4,7 @@ Run with: streamlit run app/main.py
 
 Wires the device-config sidebar (renders on every page, before pg.run(),
 so device_config persists across navigation per UI-07) and registers
-Home + all 7 workflow placeholder pages via callable-based st.Page.
+Home + the 7 workflow pages via callable-based st.Page.
 """
 
 import sys
@@ -35,7 +35,7 @@ st.set_page_config(
 # so the config survives navigation (UI-02 "on any page", UI-07 persistence).
 render_device_sidebar()
 
-# Keep this list easy to append to — Phases 39-42 add behavior to these same pages.
+# Keep this list easy to append to.
 # Explicit url_path= is required: every page module exposes a function named
 # `render`, so Streamlit's filename/callable-name URL-pathname inference would
 # otherwise collide across all 8 pages.

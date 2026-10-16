@@ -195,10 +195,13 @@ def test_dark_current_csv_columns_and_header():
     text = _decode(result)
 
     non_comment_lines = [ln for ln in text.splitlines() if not ln.startswith("#")]
-    assert non_comment_lines[0] == "T_K,I_total_A,I_SRH_A,I_TAT_A,I_SRV_A"
+    # Only the total: the SRH/TAT split is a modelling partition and I_SRV is
+    # identically zero at the ohmic cathode, so neither is exported.
+    assert non_comment_lines[0] == "T_K,I_total_A"
+    assert "calibration input" in text
 
     df = pd.read_csv(StringIO(text), comment="#")
-    assert list(df.columns) == ["T_K", "I_total_A", "I_SRH_A", "I_TAT_A", "I_SRV_A"]
+    assert list(df.columns) == ["T_K", "I_total_A"]
     assert len(df) == 3
 
 
@@ -276,7 +279,7 @@ def test_sweep_results_to_csv_bytes_shape():
     assert version_lines, "missing '# software_version:' header line"
 
     non_comment_lines = [ln for ln in text.splitlines() if not ln.startswith("#")]
-    assert non_comment_lines[0] == "epi_thickness_um,x,y"
+    assert non_comment_lines[0] == "epi_thickness_um,x,y,solver"
 
     df = pd.read_csv(StringIO(text), comment="#")
     assert "epi_thickness_um" in df.columns
@@ -314,8 +317,7 @@ def test_build_dark_current_figure_guards_zero_and_negative():
 
     fig = build_dark_current_figure(result)
 
-    assert len(fig.data) == 3
-    assert not any(t.name == "SRV (surface)" for t in fig.data)
-
-    tat_trace = next(t for t in fig.data if t.name == "TAT (effective)")
-    assert all(v >= 0 for v in tat_trace.y)
+    # Total only (no SRH/TAT/SRV component traces), plotted as |I| on log-y.
+    assert len(fig.data) == 1
+    assert fig.data[0].name == "Total"
+    assert all(v > 0 for v in fig.data[0].y)

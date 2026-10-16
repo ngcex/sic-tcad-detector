@@ -256,12 +256,17 @@ class TestCCELateralScanSharedDevice:
             "x_positions_um",
             "cce_values",
             "edge_to_center_ratio",
+            "in_mesh_generation_fraction",
+            "q_collected_over_deposited",
         }
         assert (
             set(result.keys()) == expected_keys
         ), f"Missing keys: {expected_keys - set(result.keys())}"
         assert len(result["cce_values"]) == 2
         assert len(result["x_positions_cm"]) == 2
+        f_in = result["in_mesh_generation_fraction"]
+        assert 0.0 < f_in <= 1.0
+        np.testing.assert_allclose(result["q_collected_over_deposited"], result["cce_values"] * f_in)
 
 
 class TestCCEHeatmap2D:

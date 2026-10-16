@@ -2,7 +2,9 @@
 
 Provides:
 - Parametric sweep of SV geometry (half-width, epi thickness, doping, bias)
-  with CCE uniformity ranking
+  with a validity gate (full depletion with a 20 % margin + CCE floor) and an
+  operating-point ranking (lowest bias first). It does NOT rank by CCE uniformity:
+  the modelled device is laterally uniform, so edge/centre CCE is 1 by construction
 - Noise floor estimation from dark current (shot noise limit)
 - Multi-criteria structure comparison scoring (planar, mesa, 3D, etc.)
 - Dark current extraction helper for 2D devices
@@ -41,6 +43,10 @@ from etna.core.sic_material import SiC4H_Parameters
 # AUDIT Mj-3 (v5): minimum CCE for a config to be a trustworthy microdosimeter.
 # Below this, edge/center uniformity is meaningless (both-low CCE looks uniform).
 CCE_FLOOR = 0.95
+# Depletion margin of the validity gate: a row counts as fully depleted only when
+# |V_bias| >= V_FD_MARGIN * V_fd. 1.2 covers the +/-20 % epi doping tolerance of
+# DESIGN-1 (V_fd scales linearly with N_D at fixed thickness).
+V_FD_MARGIN = 1.2
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +59,27 @@ E_PAIR_EV = (
 )  # eV, electron-hole pair creation energy in 4H-SiC
 
 
+class _DevsimNonConvergence(RuntimeError):
+    """devsim's bias ramp did not converge for this sweep config."""
+
+
+_OUTSIDE_VALIDITY = (
+    "outside model validity: cathode contact on the n- epi (no n+ substrate), "
+    "devsim does not converge here"
+)
+
+
+def _failure_reason(exc):
+    """String for the ``failure_reason`` column of a failed sweep row."""
+    from etna.core.engine2d import Engine2DOutsideValidity
+
+    if isinstance(exc, Engine2DOutsideValidity):
+        return f"[engine2d field threshold] {exc}"
+    if isinstance(exc, _DevsimNonConvergence):
+        return f"{_OUTSIDE_VALIDITY} [devsim: {exc}]"
+    return f"error: {type(exc).__name__}: {exc}"
+
+
 def _sweep_one(task):
     """One configuration of ``microdosimetric_sweep`` (module level so it can be pickled)."""
     i, total, hw, epi, nd, vb, n_lateral_points, *rest = task
@@ -62,6 +89,7 @@ def _sweep_one(task):
     logger.info(f"Sweep {i + 1}/{total}: hw={hw}, epi={epi}, nd={nd:.1e}, vb={vb}")
     device_info = None
     used = "devsim"
+    failure_reason = ""
     try:
         scan = None
         if solver == "auto":
@@ -69,7 +97,7 @@ def _sweep_one(task):
             # anything else (or an engine decline) falls back to devsim below.
             from etna.core.engine2d import (
                 Engine2DFallback,
-                Engine2DPunchThrough,
+                Engine2DOutsideValidity,
                 engine2d_unsupported_reason,
                 lateral_cce_scan_2d,
             )
@@ -82,8 +110,9 @@ def _sweep_one(task):
                         hw, vb, epi_thickness_cm=epi, N_D_bulk=nd, n_lateral_points=n_lateral_points
                     )
                     params = scan["device_info"]
-                except Engine2DPunchThrough:
-                    # The same failed (NaN) row devsim produces there (its ramp does not converge).
+                except Engine2DOutsideValidity:
+                    # The same failed (NaN) row devsim produces there (its ramp does not
+                    # converge): outside model validity (cathode on the n- epi), not physics.
                     raise
                 except Engine2DFallback as e:
                     used = "devsim"
@@ -95,12 +124,17 @@ def _sweep_one(task):
             else:
                 logger.info(f"Sweep {i + 1}/{total}: engine2d unsupported ({reason}); using devsim")
         if scan is None:
-            device_info = create_2d_dd_device(
-                half_width_um=hw,
-                V_bias=vb,
-                epi_thickness_cm=epi,
-                N_D_bulk=nd,
-            )
+            try:
+                device_info = create_2d_dd_device(
+                    half_width_um=hw,
+                    V_bias=vb,
+                    epi_thickness_cm=epi,
+                    N_D_bulk=nd,
+                )
+            except RuntimeError as e:
+                if "ramp_bias: failed to converge" in str(e):
+                    raise _DevsimNonConvergence(str(e)) from e
+                raise
             scan = cce_lateral_scan(device_info, n_points=n_lateral_points)
             params = device_info
         cce_vals = np.array(scan["cce_values"])
@@ -125,7 +159,8 @@ def _sweep_one(task):
         )
         raw_center_cce = cce_vals[0]
         raw_edge_cce = cce_vals[-1]
-        is_fully_depleted = abs(vb) >= V_fd
+        # Depletion margin (V_FD_MARGIN = 1.2): covers the +/-20 % doping tolerance.
+        is_fully_depleted = abs(vb) >= V_FD_MARGIN * V_fd
         if raw_center_cce is None or raw_edge_cce is None:
             # Defensive: a degenerate/undepleted config can make
             # cce_lateral_scan() yield a non-numeric (None) CCE entry
@@ -154,12 +189,14 @@ def _sweep_one(task):
                 "passes_cce_floor": bool(passes_cce_floor),
                 "is_valid": bool(is_fully_depleted and passes_cce_floor),
                 "solver": used,
+                "failure_reason": "",
             }
         )
     except Exception as e:
+        failure_reason = _failure_reason(e)
         logger.warning(
             f"Sweep {i + 1}/{total} failed (hw={hw}, epi={epi}, "
-            f"nd={nd:.1e}, vb={vb}): {e}"
+            f"nd={nd:.1e}, vb={vb}): {failure_reason}"
         )
         record = (
             {
@@ -176,6 +213,7 @@ def _sweep_one(task):
                 "passes_cce_floor": False,
                 "is_valid": False,
                 "solver": used,
+                "failure_reason": failure_reason,
             }
         )
         # Reset devsim global state after failure to prevent
@@ -203,11 +241,14 @@ def microdosimetric_sweep(
     n_jobs=1,
     solver="auto",
 ):
-    """Sweep SV geometry and doping parameters, ranking by CCE uniformity.
+    """Sweep SV geometry and doping parameters with a validity gate and operating-point ranking.
 
     Creates a full combinatorial grid of (half_width, epi_thickness, N_D_bulk,
-    V_bias) and for each configuration runs a lateral CCE scan to quantify
-    edge-to-center uniformity.
+    V_bias) and for each configuration runs a lateral CCE scan. The modelled
+    device is laterally uniform, so edge_center_ratio is 1 up to solver noise and
+    is NOT a uniformity result or a ranking key (see _rank_sweep_results). CCE is
+    relative to the generation inside the simulated epi (in-epi generation), not
+    to the full alpha deposit.
 
     Parameters
     ----------
@@ -231,8 +272,11 @@ def microdosimetric_sweep(
         "auto" (default) uses the numba
         2D engine (etna.core.engine2d, PERF-03) for configs it supports -- laterally
         uniform default devices inside its validated box -- and devsim for the rest
-        or whenever the engine declines. "devsim" builds every config with devsim. Deep punch-through configs where devsim's
-        ramp does not converge are reported as the same failed (NaN) row.
+        or whenever the engine declines. "devsim" builds every config with devsim.
+        Configs outside model validity (the cathode is an ohmic contact on the n- epi
+        with no n+ substrate; past reach-through devsim's ramp stops converging at a
+        fixed contact-cell field, which is not physical punch-through) are reported as
+        the same failed (NaN) row, with ``failure_reason`` set.
 
     Returns
     -------
@@ -241,12 +285,15 @@ def microdosimetric_sweep(
         V_bias, center_cce, edge_cce, edge_center_ratio, cce_std, solver
         ("devsim" or "engine2d": which solver produced the row), plus the
         Mj-3 validity gate: V_fd (full-depletion voltage from the graded
-        profile), is_fully_depleted (|V_bias| >= V_fd), passes_cce_floor
-        (both center & edge CCE >= CCE_FLOOR=0.95), and is_valid (both).
-        Sorted so all valid configs rank above all invalid ones, then by
-        edge_center_ratio descending within each group. Invalid (partially
-        depleted or low-CCE) configs are RETAINED and flagged, not dropped --
-        do not trust the uniformity ratio of a row with is_valid=False.
+        profile), is_fully_depleted (|V_bias| >= 1.2 * V_fd: 20 % margin for the
+        +/-20 % doping tolerance of DESIGN-1), passes_cce_floor (both center &
+        edge CCE >= CCE_FLOOR=0.95), and is_valid (both); and failure_reason
+        (str: empty for a solved row; otherwise outside model validity -- engine
+        field threshold or devsim non-convergence -- or the exception type and
+        message). Ranked by _rank_sweep_results: valid rows first, then lowest
+        V_bias, then largest V_bias - V_fd; NOT by edge_center_ratio. Invalid
+        (partially depleted, low-CCE or failed) configs are RETAINED and
+        flagged, not dropped.
     """
     grid = list(
         itertools.product(half_widths_um, epi_thicknesses_cm, N_D_bulks, V_biases)
@@ -290,15 +337,17 @@ def _rank_sweep_results(df):
 
     Valid configs (fully-depleted AND above the CCE floor) rank above all invalid
     ones, which are retained (flagged is_valid=False), not dropped. Within the valid
-    group the operating point is ranked: lowest V_bias first (most margin from
-    punch-through; there is no breakdown model, so a lower field is the safe side),
+    group the operating point is ranked: lowest V_bias first (most margin from the
+    model's validity wall -- devsim non-convergence with the cathode on the n- epi, not a
+    physical limit -- and there is no breakdown model, so a lower field is the safe side),
     then the largest full-depletion margin V_bias - V_fd, then half_width_um ascending
     as a deterministic tie-break only (it is NOT physics).
 
     edge_center_ratio is deliberately NOT a ranking key any more: the modelled device
     is laterally uniform (depth-only doping, full-width contacts, mirror sides), so the
     ratio is 1 up to solver noise (~1e-6) and used to order that noise (PERF-03). The
-    column is kept as a sanity check: it should stay within ~1e-5 of 1. Pure function.
+    column is kept as a sanity check: it should stay within ~1e-5 of 1. Extra columns
+    (e.g. failure_reason, a string) are carried through untouched. Pure function.
     """
     df = df.copy()
     keys, ascending = ["is_valid"], [False]

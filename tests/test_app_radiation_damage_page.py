@@ -14,6 +14,7 @@ accessor, per 39/40-RESEARCH).
 from __future__ import annotations
 
 import numpy as np
+import pytest
 from streamlit.testing.v1 import AppTest
 
 import etna
@@ -111,10 +112,50 @@ def test_nan_in_result_does_not_crash(monkeypatch):
     at.run()
 
     assert at.exception == [], f"page crashed on NaN result: {at.exception}"
-    info_texts = [el.value for el in at.info]
+    warning_texts = [el.value or "" for el in at.warning]
     assert any(
-        "did not converge" in (i or "") for i in info_texts
-    ), f"partial-failure NaN info message not found: {info_texts}"
+        "1 of 6 fluence points are not shown" in w and "not converged" in w
+        for w in warning_texts
+    ), f"excluded-point warning not found: {warning_texts}"
+
+
+def test_compensated_points_listed_and_defaults_below_compensation(monkeypatch):
+    from etna.api.simulation import compensation_fluence
+
+    seen = {}
+
+    def _fake(cfg, fluences, **kwargs):
+        seen["fluences"] = fluences
+        valid = np.array([True, True, False])
+        reason = ["", "", "full donor compensation: ...; not solved"]
+        return SimResult(
+            config=cfg,
+            sim_type="damage",
+            x=np.array([1e13, 3e13, 1e14]),
+            y=np.array([0.99, 0.98, np.nan]),
+            metadata={"V_bias": -20.0, "energy_MeV": 62, "valid": valid,
+                      "reason": reason},
+        )
+
+    monkeypatch.setattr(etna, "run_radiation_damage", _fake)
+    at = AppTest.from_function(_run_radiation_damage_page)
+    at.session_state["device_config"] = DeviceConfig()
+    at.run()
+    phi_c = compensation_fluence(DeviceConfig(), 62)
+    assert any(f"{phi_c:.2e}" in (i.value or "") for i in at.info)
+
+    at.button[0].click()
+    at.run()
+    assert at.exception == []
+    # Default range: 3 decades ending at 0.7x the compensation fluence.
+    assert seen["fluences"].max() < phi_c
+    assert seen["fluences"].max() == pytest.approx(0.7 * phi_c, rel=1e-2)
+    assert seen["fluences"].min() == pytest.approx(0.7e-3 * phi_c, rel=1e-2)
+    assert any(
+        "epi fully compensated: the model solves an ill-posed problem there"
+        in (w.value or "")
+        for w in at.warning
+    )
 
 
 def test_solver_convergence_failure_shows_error_not_crash(monkeypatch):

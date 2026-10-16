@@ -51,6 +51,27 @@ Q = 1.602e-19  # C, elementary charge
 _ALPHA_RANGE_CM = 15e-4  # 15 um
 
 
+def in_mesh_generation_fraction(epi_thickness_cm, alpha_range_cm=_ALPHA_RANGE_CM, n=20001):
+    """Fraction of the alpha's e-h pairs (depth profile) generated inside the simulated epi.
+
+    The lateral scans generate pairs only between the junction and the cathode, i.e.
+    inside the epi; the alpha_depth_shape profile extends to ~alpha_range (15 um) and
+    beyond, so for a thinner epi part of the deposit is outside the mesh and is not
+    counted in I_generated. CCE is therefore relative to in-epi generation. This
+    returns int_0^epi shape / int_0^inf shape (1D quadrature on a dense grid, depth
+    only: the lateral Gaussian stripe, which is also cut at x = half_width, is ignored).
+    ~0.42 / 0.83 / 1.00 for 5 / 10 / 20 um epi at the default 15 um range.
+    """
+    y_end = max(3.0 * alpha_range_cm, epi_thickness_cm)
+    y = np.linspace(0.0, y_end, n)
+    total = np.trapezoid(alpha_depth_shape(y, alpha_range_cm=alpha_range_cm), y)
+    if total <= 0:
+        return 1.0
+    y_in = np.linspace(0.0, min(epi_thickness_cm, y_end), n)
+    inside = np.trapezoid(alpha_depth_shape(y_in, alpha_range_cm=alpha_range_cm), y_in)
+    return float(min(1.0, inside / total))
+
+
 def _robust_dc_solve():
     """Solve DC with fallback to relaxed tolerances on convergence failure."""
     try:
@@ -267,8 +288,14 @@ def cce_lateral_scan(
         Dictionary with keys:
         - "x_positions_cm": lateral positions scanned (cm)
         - "x_positions_um": lateral positions in micrometers
-        - "cce_values": CCE at each position
+        - "cce_values": CCE at each position, relative to the pairs generated
+          inside the simulated epi (I_collected / I_generated in the mesh)
         - "edge_to_center_ratio": CCE(edge) / CCE(center)
+        - "in_mesh_generation_fraction": fraction of the alpha's depth profile
+          inside the epi (in_mesh_generation_fraction)
+        - "q_collected_over_deposited": cce_values * that fraction, i.e. the
+          collected charge over the total pairs the alpha would deposit if its
+          range were not cut by the epi/cathode
     """
     device = device_info["device_name"]
     region = device_info["region_name"]
@@ -346,12 +373,17 @@ def cce_lateral_scan(
 
     cce_values = np.array(cce_values)
     edge_to_center = cce_values[-1] / cce_values[0] if cce_values[0] > 0 else 0.0
+    f_in = in_mesh_generation_fraction(
+        device_info["epi_thickness_cm"], alpha_range_cm=alpha_range_cm
+    )
 
     return {
         "x_positions_cm": x_positions,
         "x_positions_um": x_positions * 1e4,
         "cce_values": cce_values,
         "edge_to_center_ratio": float(edge_to_center),
+        "in_mesh_generation_fraction": f_in,
+        "q_collected_over_deposited": cce_values * f_in,
     }
 
 

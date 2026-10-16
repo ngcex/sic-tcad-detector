@@ -694,3 +694,49 @@ class TestParametricFunctions:
         # Sorted by CCE_retention descending
         retentions = df["CCE_retention"].values
         assert retentions[0] >= retentions[1] or np.isnan(retentions[1])
+
+
+class TestFullCompensationGuard:
+    """Beyond full donor removal (eta_removal * Phi_neq >= min N_D of the epi) the
+    doping-based model is ill-posed: CCE / dark current are NaN with a reason, not solved.
+
+    62 MeV: kappa 0.35, eta_removal 5, N_D_bulk 8.5e13 -> Phi_p,crit ~ 4.86e13 cm^-2.
+    """
+
+    def test_reason_helper(self):
+        from etna.core.charge_collection import full_compensation_reason
+
+        assert full_compensation_reason({"N_D_profile": np.array([2.9e15, 1e13])}) == ""
+        r = full_compensation_reason({"N_D_profile": np.array([2.9e15, 0.0]), "fluence_neq": 2e13})
+        assert "full donor compensation" in r
+
+    def test_cce_vs_fluence_nan_beyond_threshold(self):
+        result = cce_vs_fluence(np.array([5e13, 7e13, 1e14]), V_bias=-40.0)
+        assert np.all(np.isnan(result["cce_values"]))
+        assert not np.any(result["valid"])
+        assert all("full donor compensation" in r for r in result["reason"])
+
+    def test_cce_vs_bias_at_fluence_nan_beyond_threshold(self):
+        result = cce_vs_bias_at_fluence(np.array([-10.0, -40.0]), fluence=7e13)
+        assert np.all(np.isnan(result["cce_values"])) and not np.any(result["valid"])
+        assert "full donor compensation" in result["reason"][0]
+
+    def test_cce_post_anneal_nan_beyond_threshold(self):
+        # 600 C anneal leaves Z1/2 (and carrier removal) almost untouched
+        result = cce_post_anneal(fluence=1e14, T_anneal=873.15, t_anneal=3600.0)
+        assert np.isnan(result["cce"]) and result["valid"] is False
+        assert "full donor compensation" in result["reason"]
+
+    def test_dark_current_vs_fluence_nan_beyond_threshold(self):
+        from etna.core.dark_current import dark_current_vs_fluence
+
+        result = dark_current_vs_fluence(np.array([7e13]), V_bias=-30.0)
+        assert np.isnan(result["I_total"][0]) and not result["valid"][0]
+        assert "full donor compensation" in result["reason"][0]
+
+    def test_dark_current_post_anneal_nan_beyond_threshold(self):
+        from etna.core.dark_current import dark_current_post_anneal
+
+        result = dark_current_post_anneal(fluence=1e14, T_anneal=873.15, t_anneal=3600.0)
+        assert np.isnan(result["I_total"]) and result["valid"] is False
+        assert "full donor compensation" in result["reason"]
