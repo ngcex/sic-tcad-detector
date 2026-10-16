@@ -50,19 +50,37 @@ class TestSweepValidityGate:
         assert ranked.iloc[0]["center_cce"] == 0.99
         assert not ranked.iloc[1]["is_valid"]
 
-    def test_valid_configs_ordered_by_uniformity(self):
-        """Within the valid group, higher edge_center_ratio ranks first."""
+    def test_valid_configs_ranked_by_operating_point_not_ratio(self):
+        """Valid rows are ordered by lowest V_bias, then largest margin V_bias - V_fd.
+
+        edge_center_ratio is no longer a key: for the laterally uniform model it is 1 up to
+        solver noise, and ordering by it ordered noise (devsim and the 2D engine disagreed).
+        """
         df = pd.DataFrame(
             [
-                {"edge_center_ratio": 0.93, "is_valid": True},
-                {"edge_center_ratio": 0.98, "is_valid": True},
-                {"edge_center_ratio": 0.50, "is_valid": False},
+                {"half_width_um": 50, "V_bias": 50, "V_fd": 10.5, "edge_center_ratio": 1.0000002, "is_valid": True},
+                {"half_width_um": 50, "V_bias": 20, "V_fd": 10.5, "edge_center_ratio": 0.9999990, "is_valid": True},
+                {"half_width_um": 25, "V_bias": 20, "V_fd": 10.5, "edge_center_ratio": 1.0000010, "is_valid": True},
+                {"half_width_um": 50, "V_bias": 20, "V_fd": 12.0, "edge_center_ratio": 1.0000005, "is_valid": True},
+                {"half_width_um": 50, "V_bias": 5, "V_fd": 10.5, "edge_center_ratio": 1.0, "is_valid": False},
             ]
         )
         ranked = _rank_sweep_results(df)
-        assert ranked.iloc[0]["edge_center_ratio"] == 0.98
-        assert ranked.iloc[1]["edge_center_ratio"] == 0.93
-        assert not ranked.iloc[2]["is_valid"]
+        order = list(zip(ranked["V_bias"], ranked["V_fd"], ranked["half_width_um"]))
+        assert order == [(20, 10.5, 25), (20, 10.5, 50), (20, 12.0, 50), (50, 10.5, 50), (5, 10.5, 50)]
+
+    def test_ranking_ignores_ratio_noise(self):
+        """Shuffling the 1e-6 noise of the ratio must not change the order."""
+        rows = [
+            {"half_width_um": hw, "V_bias": vb, "V_fd": 10.5, "is_valid": True}
+            for hw in (25, 50, 100)
+            for vb in (20, 50)
+        ]
+        base = pd.DataFrame(rows)
+        a = base.assign(edge_center_ratio=np.linspace(0.999999, 1.000002, len(base)))
+        b = base.assign(edge_center_ratio=np.linspace(1.000002, 0.999999, len(base)))
+        key = ["half_width_um", "V_bias"]
+        assert _rank_sweep_results(a)[key].values.tolist() == _rank_sweep_results(b)[key].values.tolist()
 
 
 # ---------------------------------------------------------------------------

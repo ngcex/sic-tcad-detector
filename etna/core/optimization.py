@@ -288,18 +288,32 @@ def microdosimetric_sweep(
 def _rank_sweep_results(df):
     """Rank microdosimetric-sweep results with the Mj-3 validity gate.
 
-    Valid configs (fully-depleted AND above the CCE floor) rank above all
-    invalid ones, then by uniformity (edge_center_ratio) within each group.
-    This guarantees a deceptive partially-depleted config can never outrank a
-    genuinely uniform fully-depleted one. Invalid rows are retained (flagged
-    via is_valid=False), not dropped. Pure function for testability.
+    Valid configs (fully-depleted AND above the CCE floor) rank above all invalid
+    ones, which are retained (flagged is_valid=False), not dropped. Within the valid
+    group the operating point is ranked: lowest V_bias first (most margin from
+    punch-through; there is no breakdown model, so a lower field is the safe side),
+    then the largest full-depletion margin V_bias - V_fd, then half_width_um ascending
+    as a deterministic tie-break only (it is NOT physics).
+
+    edge_center_ratio is deliberately NOT a ranking key any more: the modelled device
+    is laterally uniform (depth-only doping, full-width contacts, mirror sides), so the
+    ratio is 1 up to solver noise (~1e-6) and used to order that noise (PERF-03). The
+    column is kept as a sanity check: it should stay within ~1e-5 of 1. Pure function.
     """
-    df = df.sort_values(
-        ["is_valid", "edge_center_ratio"],
-        ascending=[False, False],
-        na_position="last",
-    )
-    return df.reset_index(drop=True)
+    df = df.copy()
+    keys, ascending = ["is_valid"], [False]
+    if "V_bias" in df.columns:
+        keys.append("V_bias")
+        ascending.append(True)
+        if "V_fd" in df.columns:
+            df["_margin"] = df["V_bias"] - df["V_fd"]
+            keys.append("_margin")
+            ascending.append(False)
+    if "half_width_um" in df.columns:
+        keys.append("half_width_um")
+        ascending.append(True)
+    df = df.sort_values(keys, ascending=ascending, na_position="last", kind="stable")
+    return df.drop(columns=["_margin"], errors="ignore").reset_index(drop=True)
 
 
 def estimate_noise_floor(
