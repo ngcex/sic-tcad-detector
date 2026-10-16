@@ -374,9 +374,12 @@ def cce_lateral_scan(
 
     cce_values = np.array(cce_values)
     edge_to_center = cce_values[-1] / cce_values[0] if cce_values[0] > 0 else 0.0
-    f_in = in_mesh_generation_fraction(
-        device_info["epi_thickness_cm"], alpha_range_cm=alpha_range_cm
-    )
+    # depth over which pairs are generated: the epi, plus the n+ layer only if the device
+    # was built with nplus_generation=True (confine_generation_to_epi)
+    gen_depth = device_info["epi_thickness_cm"]
+    if device_info.get("nplus_thickness_cm") is not None and device_info.get("nplus_generation"):
+        gen_depth += device_info["nplus_thickness_cm"]
+    f_in = in_mesh_generation_fraction(gen_depth, alpha_range_cm=alpha_range_cm)
 
     return {
         "x_positions_cm": x_positions,

@@ -394,3 +394,14 @@ Phase 4 (recalibration, record only: etna.core.device.NPLUS_CALIBRATION; lab/sol
 - Old default (no n+, p+ 1 um, 2.93e15/8.82e13/0.987, N_t 2.8e12) -> record: CCE -10/-30/-50 V
   0.963266/0.997719/0.998474 -> 0.999021/0.999706/0.999819; dark -10/-30/-60 V
   5.962/14.564/17.957 pA -> 6.132/14.873/18.000 pA; W 0/-10/-30 V 1.697/9.515/9.984 -> 1.700/9.500/9.899 um.
+
+Post-phase-4 checks:
+- 2D devsim with n+ (hw 25, n+ 1 um): balanced raw CCE 0.9995626 (-20 V) / 0.9998488 (-60 V),
+  = 1D, laterally flat; the direct contact current gives 1.0136 / 0.9891 (unusable). Alpha in the
+  n+ (1 um): 0.9619 / 0.9622. Fixed: cce_lateral_scan's in_mesh_generation_fraction now counts the
+  n+ depth when nplus_generation=True (0.8978 vs 0.8280 epi-only).
+- Alpha-in-n+ bracket on the record (p+ 0.3 um, record doping), raw CCE at -10 / -30 / -50 V:
+  epi-only (any n+ thickness) 0.999022 / 0.999706 / 0.999819;
+  in n+, 5 um 0.946929 / 0.947792 / 0.947922; 20 um 0.976105 / 0.977040 / 0.977178;
+  50 um 0.977322 / 0.978260 / 0.978398 (n+ inherits epi tau_p 0.6 us -> L_p ~11 um);
+  no collection from the n+: 0.999819 * 1.591911/1.922426 = 0.8279 (-50 V).

@@ -99,6 +99,9 @@ def test_nt_reproduces_the_18pA_bound():
         **kw,
     )
     try:
+        from etna.core.dark_current import setup_tat_model
+
+        setup_tat_model(info, E_t=CAL["E_t"], N_t=CAL["N_t"])  # the record's trap level
         r = dark_current_sweep(info, np.array([-60.0]), area=0.04)
     finally:
         devsim.delete_device(device=info["device_name"])
