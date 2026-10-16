@@ -55,17 +55,54 @@ E_PAIR_EV = (
 
 def _sweep_one(task):
     """One configuration of ``microdosimetric_sweep`` (module level so it can be pickled)."""
-    i, total, hw, epi, nd, vb, n_lateral_points = task
+    i, total, hw, epi, nd, vb, n_lateral_points, *rest = task
+    solver = rest[0] if rest else "devsim"
+    if solver not in ("devsim", "auto"):
+        raise ValueError(f"solver must be 'devsim' or 'auto', got {solver!r}")
     logger.info(f"Sweep {i + 1}/{total}: hw={hw}, epi={epi}, nd={nd:.1e}, vb={vb}")
     device_info = None
+    used = "devsim"
     try:
-        device_info = create_2d_dd_device(
-            half_width_um=hw,
-            V_bias=vb,
-            epi_thickness_cm=epi,
-            N_D_bulk=nd,
-        )
-        scan = cce_lateral_scan(device_info, n_points=n_lateral_points)
+        scan = None
+        if solver == "auto":
+            # PERF-03 engine: laterally uniform devices inside its validated box only;
+            # anything else (or an engine decline) falls back to devsim below.
+            from etna.core.engine2d import (
+                Engine2DFallback,
+                Engine2DPunchThrough,
+                engine2d_unsupported_reason,
+                lateral_cce_scan_2d,
+            )
+
+            reason = engine2d_unsupported_reason(hw, vb, epi, nd, n_lateral_points)
+            if reason is None:
+                try:
+                    used = "engine2d"
+                    scan = lateral_cce_scan_2d(
+                        hw, vb, epi_thickness_cm=epi, N_D_bulk=nd, n_lateral_points=n_lateral_points
+                    )
+                    params = scan["device_info"]
+                except Engine2DPunchThrough:
+                    # The same failed (NaN) row devsim produces there (its ramp does not converge).
+                    raise
+                except Engine2DFallback as e:
+                    used = "devsim"
+                    logger.info(f"Sweep {i + 1}/{total}: engine2d declined ({e}); using devsim")
+                except Exception as e:  # any other engine error must not become a quiet NaN row
+                    used = "devsim"
+                    scan = None
+                    logger.warning(f"Sweep {i + 1}/{total}: engine2d error ({e!r}); using devsim")
+            else:
+                logger.info(f"Sweep {i + 1}/{total}: engine2d unsupported ({reason}); using devsim")
+        if scan is None:
+            device_info = create_2d_dd_device(
+                half_width_um=hw,
+                V_bias=vb,
+                epi_thickness_cm=epi,
+                N_D_bulk=nd,
+            )
+            scan = cce_lateral_scan(device_info, n_points=n_lateral_points)
+            params = device_info
         cce_vals = np.array(scan["cce_values"])
 
         # AUDIT Mj-3: full-depletion gate. A partially-depleted device with
@@ -75,15 +112,15 @@ def _sweep_one(task):
         # anti-conservative) and require both full depletion AND an absolute
         # CCE floor before the uniformity ratio is trustworthy.
         V_bi = built_in_potential(
-            device_info["N_A_ionized"],
-            device_info["N_D_junction"],
-            device_info["n_i"],
+            params["N_A_ionized"],
+            params["N_D_junction"],
+            params["n_i"],
         )
         V_fd = full_depletion_voltage_graded(
-            epi_thickness=device_info["epi_thickness_cm"],
-            N_D_bulk=device_info["N_D_bulk"],
-            N_D_junction=device_info["N_D_junction"],
-            L_transition=device_info["L_transition"],
+            epi_thickness=params["epi_thickness_cm"],
+            N_D_bulk=params["N_D_bulk"],
+            N_D_junction=params["N_D_junction"],
+            L_transition=params["L_transition"],
             V_bi=V_bi,
         )
         raw_center_cce = cce_vals[0]
@@ -116,6 +153,7 @@ def _sweep_one(task):
                 "is_fully_depleted": bool(is_fully_depleted),
                 "passes_cce_floor": bool(passes_cce_floor),
                 "is_valid": bool(is_fully_depleted and passes_cce_floor),
+                "solver": used,
             }
         )
     except Exception as e:
@@ -137,6 +175,7 @@ def _sweep_one(task):
                 "is_fully_depleted": False,
                 "passes_cce_floor": False,
                 "is_valid": False,
+                "solver": used,
             }
         )
         # Reset devsim global state after failure to prevent
@@ -162,6 +201,7 @@ def microdosimetric_sweep(
     n_lateral_points=10,
     max_configs=None,
     n_jobs=1,
+    solver="devsim",
 ):
     """Sweep SV geometry and doping parameters, ranking by CCE uniformity.
 
@@ -187,12 +227,19 @@ def microdosimetric_sweep(
     n_jobs : int
         Worker processes (default 1 = serial in this process). Configurations are
         independent fresh builds, so results are identical to the serial run.
+    solver : {"devsim", "auto"}
+        "devsim" (default) builds every config with devsim. "auto" uses the numba
+        2D engine (etna.core.engine2d, PERF-03) for configs it supports -- laterally
+        uniform default devices inside its validated box -- and devsim for the rest
+        or whenever the engine declines. Deep punch-through configs where devsim's
+        ramp does not converge are reported as the same failed (NaN) row.
 
     Returns
     -------
     pd.DataFrame
         DataFrame with columns: half_width_um, epi_thickness_cm, N_D_bulk,
-        V_bias, center_cce, edge_cce, edge_center_ratio, cce_std, plus the
+        V_bias, center_cce, edge_cce, edge_center_ratio, cce_std, solver
+        ("devsim" or "engine2d": which solver produced the row), plus the
         Mj-3 validity gate: V_fd (full-depletion voltage from the graded
         profile), is_fully_depleted (|V_bias| >= V_fd), passes_cce_floor
         (both center & edge CCE >= CCE_FLOOR=0.95), and is_valid (both).
@@ -217,9 +264,11 @@ def microdosimetric_sweep(
         total = len(grid)
 
     tasks = [
-        (i, total, hw, epi, nd, vb, n_lateral_points)
+        (i, total, hw, epi, nd, vb, n_lateral_points, solver)
         for i, (hw, epi, nd, vb) in enumerate(grid)
     ]
+    if solver not in ("devsim", "auto"):
+        raise ValueError(f"solver must be 'devsim' or 'auto', got {solver!r}")
     if n_jobs is not None and n_jobs > 1 and total > 1:
         # devsim state is per process and every config is a fresh build, so the
         # results are identical to the serial loop (executor.map keeps the order).
