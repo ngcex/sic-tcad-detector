@@ -36,7 +36,7 @@ from etna.core.analytical import built_in_potential, full_depletion_voltage_grad
 from etna.core.charge_collection_2d import create_2d_dd_device, cce_lateral_scan
 from etna.core.dark_current import setup_tat_model
 from etna.core.devsim_reset import reset_devsim_fully
-from etna.core.drift_diffusion import extract_contact_current
+from etna.core.drift_diffusion import extract_steady_state_current
 from etna.core.microdosimetry import mean_chord_length
 from etna.core.sic_material import SiC4H_Parameters
 
@@ -555,7 +555,7 @@ def get_dark_current_2d(half_width_um=50.0, V_bias=50.0, **device_kwargs):
         )
 
         # Extract 2D current (A/cm)
-        I_2d = extract_contact_current(device_info, contact="cathode")
+        I_2d = extract_steady_state_current(device_info, contact="cathode")
 
         # Convert to total current. The 2D domain is the HALF device (x from 0 to
         # half_width, mirror boundaries), so the full SV has twice that current per cm

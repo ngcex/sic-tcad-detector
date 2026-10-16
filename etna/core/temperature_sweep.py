@@ -64,7 +64,7 @@ def sweep_iv_vs_temperature(
     """
     import devsim
 
-    from etna.core.drift_diffusion import create_dd_device, extract_contact_current, ramp_bias
+    from etna.core.drift_diffusion import create_dd_device, extract_steady_state_current, ramp_bias
     from etna.core.dark_current import create_dark_current_device, dark_current_sweep
 
     temperatures = np.asarray(temperatures, dtype=float)
@@ -108,7 +108,7 @@ def sweep_iv_vs_temperature(
                 # Ramp to reverse bias: cathode voltage = -V_reverse
                 cathode_V = -V_reverse
                 ramp_bias(device_info, cathode_V, contact="cathode", V_step=0.5)
-                I_total = extract_contact_current(device_info, contact="cathode")
+                I_total = extract_steady_state_current(device_info, contact="cathode")
 
             n_i_T, _, _, E_g_T = intrinsic_concentration(T, params)
             mu_n = mobility_caughey_thomas_T(

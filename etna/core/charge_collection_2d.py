@@ -34,7 +34,7 @@ from etna.core.device2d import create_sic_2d_device
 from etna.core.poisson import setup_poisson, solve_equilibrium
 from etna.core.drift_diffusion import (
     setup_sic_drift_diffusion,
-    extract_contact_current,
+    extract_steady_state_current,
     _restore_solution,
     _snapshot_solution,
     ramp_bias,
@@ -233,7 +233,7 @@ def compute_cce_2d(device_info, generation_values, contact="cathode"):
     I_generated = Q * integrate_nodes_box_2d(device_info, generation_values)
 
     # I_collected at contact [A/cm for 2D]
-    I_collected = abs(extract_contact_current(device_info, contact))
+    I_collected = abs(extract_steady_state_current(device_info, contact))
 
     if I_generated <= 0:
         return 0.0

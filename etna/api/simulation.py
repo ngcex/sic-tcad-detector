@@ -40,7 +40,8 @@ from etna.core.transient import transient_cce_vs_dose_rate
 logger = logging.getLogger(__name__)
 
 # Domain in which the batched engine was validated against the devsim path
-# (parity to ~1e-14 for W/psi, <= 3e-6 for CCE; tests/test_batched_engine.py and
+# (parity to ~1e-14 for W/psi, <= 3e-6 for CCE -- ~1e-15 on the default device since both
+# paths extract the cathode current in the balanced form; tests/test_batched_engine.py and
 # tests/test_api_engine_switch.py pin representative points).
 # Anything outside goes to devsim. Widening a bound only needs a parity run.
 _ENGINE_BOX = {
@@ -148,10 +149,14 @@ def _devsim_reach_through(config: DeviceConfig, cv_result) -> dict:
         method = _RT_ENGINE
     else:
         v, method = v_grid, _RT_GRID
-    return dict(reach_through_V=v, reach_through_known=True, reach_through_method=method)
+    return dict(
+        reach_through_V=v, reach_through_known=True, reach_through_method=method
+    )
 
 
-def _refine_reach_through(config: DeviceConfig, v_grid_rt, bias_array) -> "float | None":
+def _refine_reach_through(
+    config: DeviceConfig, v_grid_rt, bias_array
+) -> "float | None":
     """Full-depletion |V| on a fixed absolute 0.05 V lattice, independent of the
     caller's bias grid (so C-V and CCE report the same number for one device).
 
@@ -208,7 +213,9 @@ def _failed_result(config, sim_type, error, **empty_keys) -> SimResult:
             "reach_through_V": None,
         }
     )
-    return SimResult(config=config, sim_type=sim_type, x=np.array([]), y=np.array([]), metadata=md)
+    return SimResult(
+        config=config, sim_type=sim_type, x=np.array([]), y=np.array([]), metadata=md
+    )
 
 
 def _engine_batch(kws):
@@ -330,10 +337,12 @@ def _cv_batch(configs, v_start, v_stop, n_points, capture):
                 mesh=None,
             )
     return [
-        r
-        if r is not None
-        else _devsim_or_failed(
-            _run_cv_devsim, c, bias_array, "cv", _CV_EMPTY, capture, i in fell_back
+        (
+            r
+            if r is not None
+            else _devsim_or_failed(
+                _run_cv_devsim, c, bias_array, "cv", _CV_EMPTY, capture, i in fell_back
+            )
         )
         for i, (r, c) in enumerate(zip(results, configs))
     ]
@@ -414,10 +423,18 @@ def _cce_batch(configs, v_start, v_stop, n_points, capture):
                 mesh=None,
             )
     out = [
-        r
-        if r is not None
-        else _devsim_or_failed(
-            _run_cce_devsim, c, bias_array, "cce", _CCE_EMPTY, capture, i in fell_back
+        (
+            r
+            if r is not None
+            else _devsim_or_failed(
+                _run_cce_devsim,
+                c,
+                bias_array,
+                "cce",
+                _CCE_EMPTY,
+                capture,
+                i in fell_back,
+            )
         )
         for i, (r, c) in enumerate(zip(results, configs))
     ]
@@ -608,7 +625,9 @@ def _engine2d_cathode_field(config: DeviceConfig, bias_V: float) -> "float | Non
         grid, info = grid_from_devsim(
             half_width_um=config.half_width_um, **device_kwargs(config)
         )
-        return float(Device2D(grid, info).dark(-float(bias_V), stop_field=_field_nan_min()))
+        return float(
+            Device2D(grid, info).dark(-float(bias_V), stop_field=_field_nan_min())
+        )
     except Exception as e:  # not laterally uniform, not converged, ...
         logger.info("run_field: cathode-field probe unavailable (%s)", e)
         return None
@@ -645,7 +664,9 @@ def _node_field_2d(x_coords, y_coords, potential):
     return field_nodes
 
 
-def _field_engine_unsupported_reason(config: DeviceConfig, bias_V: float) -> "str | None":
+def _field_engine_unsupported_reason(
+    config: DeviceConfig, bias_V: float
+) -> "str | None":
     """Why the 2D engine cannot serve ``run_field(config, bias_V)`` (None = it can)."""
     from etna.core.engine2d import engine2d_dark_unsupported_reason
 
@@ -816,7 +837,9 @@ def run_field(config: DeviceConfig, bias_V: float = -50.0) -> SimResult:
         # with the exact cv_sweep sign/contact convention (cv_analysis.py:171,
         # "positive V on cathode = reverse bias for p+/n- diode"):
         # conventional-negative bias_V -> positive cathode voltage -bias_V.
-        ramp_bias(device_info, V_target=-bias_V, contact="cathode", V_step=0.5, V_step_max=2.0)
+        ramp_bias(
+            device_info, V_target=-bias_V, contact="cathode", V_step=0.5, V_step_max=2.0
+        )
 
         is_2d = device_info.get("dimension") == 2 or config.half_width_um is not None
 
@@ -878,7 +901,9 @@ def run_field(config: DeviceConfig, bias_V: float = -50.0) -> SimResult:
             "solver": "devsim",
         }
         if is_2d:
-            note = _field_engine_unsupported_reason(config, bias_V) or "2D engine declined"
+            note = (
+                _field_engine_unsupported_reason(config, bias_V) or "2D engine declined"
+            )
             metadata.update(validated_domain=False, domain_note=note)
             if fallback_reason:
                 metadata["fallback_reason"] = fallback_reason
