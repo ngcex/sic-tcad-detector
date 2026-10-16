@@ -425,7 +425,7 @@ def compute_cce_from_dd(device_info, generation_values, contact="cathode"):
     cce : float
         Charge collection efficiency, clipped to [0, 1].
     """
-    from etna.core.drift_diffusion import extract_contact_current
+    from etna.core.drift_diffusion import extract_steady_state_current
 
     Q = 1.602e-19  # C
 
@@ -442,7 +442,9 @@ def compute_cce_from_dd(device_info, generation_values, contact="cathode"):
     I_generated = Q * np.trapezoid(gen_vals, x_nodes)
 
     # Collected current at contact
-    I_collected = abs(extract_contact_current(device_info, contact))
+    # Balanced form: the direct majority-carrier contact current has a round-off floor
+    # and is unusable with an n+ cathode layer (see extract_steady_state_current).
+    I_collected = abs(extract_steady_state_current(device_info, contact))
 
     if I_generated <= 0:
         return 0.0
@@ -604,9 +606,9 @@ def cce_vs_bias(
 
             # Extract CCE
             cce = compute_cce_from_dd(device_info, gen_values, contact="cathode")
-            from etna.core.drift_diffusion import extract_contact_current
+            from etna.core.drift_diffusion import extract_steady_state_current
 
-            I_coll = abs(extract_contact_current(device_info, "cathode"))
+            I_coll = abs(extract_steady_state_current(device_info, "cathode"))
 
             cce_sorted[idx] = cce
             I_sorted[idx] = I_coll
@@ -1431,7 +1433,6 @@ def cce_vs_epi_thickness(
     from etna.core.drift_diffusion import (
         create_dd_device,
         ramp_bias,
-        extract_contact_current,
     )
 
     epi_range_cm = np.asarray(epi_range_cm, dtype=float)

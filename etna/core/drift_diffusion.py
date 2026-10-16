@@ -213,6 +213,87 @@ def extract_contact_current(device_info, contact="cathode"):
     return I_e + I_h
 
 
+# Carrier that is the majority at each contact: its direct contact current is a small
+# difference of two huge Scharfetter-Gummel terms (n ~ N_D at the cathode, p ~ N_A at the
+# anode), so it is the one evaluated in the balanced form.
+_MAJORITY_EQUATION = {
+    "cathode": ("ElectronContinuityEquation", "ElectronGeneration"),
+    "anode": ("HoleContinuityEquation", "HoleGeneration"),
+}
+_MINORITY_EQUATION = {
+    "cathode": "HoleContinuityEquation",
+    "anode": "ElectronContinuityEquation",
+}
+
+
+def _contact_node_indices(device, region, contact):
+    nodes = set()
+    for element in devsim.get_element_node_list(
+        device=device, region=region, contact=contact
+    ):
+        nodes.update(int(k) for k in element)
+    return nodes
+
+
+def extract_steady_state_current(device_info, contact="cathode"):
+    """Steady-state terminal current at ``contact`` in the balanced (well-conditioned) form.
+
+    Same quantity as :func:`extract_contact_current` (A/cm^2 in 1D, A/cm in 2D, same
+    sign convention) at a converged DC state, evaluated without its round-off floor.
+
+    devsim's contact current of the contact's MAJORITY carrier (electrons at the cathode,
+    holes at the anode) is the edge flux into the contact node, a small difference of two
+    huge SG drift/diffusion terms when the carrier density there is high (n ~ N_D at the
+    cathode; with an n+ layer under the epi, n ~ 1e19). Its absolute noise floor is
+    ~3e-13 A/cm^2 on the default 1D device (measured: independent of N_t, random sign),
+    i.e. 2e-3 of the -10 V dark current, and it makes the n+ cathode current unusable.
+    Summing the continuity equation over every non-contact node (internal edge fluxes
+    cancel) gives the exact discrete identity
+
+        I_maj(contact) = sum_{non-contact nodes} NodeVolume * Generation_maj
+                         - sum_{other contacts} I_maj(other contact)
+
+    in which both terms are well conditioned: a volume integral, and the contact current
+    of a carrier that is the MINORITY at the other contact (electrons at the p+ anode,
+    holes at the n cathode). The minority carrier at ``contact`` is taken directly.
+
+    Valid for steady state only (no dn/dt term): transient extraction keeps using
+    :func:`extract_contact_current`.
+    """
+    device = device_info["device_name"]
+    region = device_info["region_name"]
+    if contact not in _MAJORITY_EQUATION:
+        raise ValueError(f"contact must be 'anode' or 'cathode' (got {contact!r})")
+    contacts = list(devsim.get_contact_list(device=device))
+    if sorted(contacts) != ["anode", "cathode"]:
+        raise ValueError(
+            f"balanced extraction needs exactly anode+cathode contacts, got {contacts}"
+        )
+    eq_maj, gen_maj = _MAJORITY_EQUATION[contact]
+    other = "anode" if contact == "cathode" else "cathode"
+
+    excluded = _contact_node_indices(device, region, contact) | _contact_node_indices(
+        device, region, other
+    )
+    vol = np.array(
+        devsim.get_node_model_values(device=device, region=region, name="NodeVolume")
+    )
+    gen = np.array(
+        devsim.get_node_model_values(device=device, region=region, name=gen_maj)
+    )
+    mask = np.ones(vol.size, dtype=bool)
+    mask[list(excluded)] = False
+    volume_term = float(np.sum((vol * gen)[mask]))
+    I_maj_other = devsim.get_contact_current(
+        device=device, contact=other, equation=eq_maj
+    )
+    I_maj = volume_term - I_maj_other
+    I_min = devsim.get_contact_current(
+        device=device, contact=contact, equation=_MINORITY_EQUATION[contact]
+    )
+    return I_maj + I_min
+
+
 def create_dd_device(doping_profile="graded", **kwargs):
     """Convenience function to create a device with full DD setup.
 
@@ -246,7 +327,9 @@ def create_dd_device(doping_profile="graded", **kwargs):
 # _RAMP_SOLVE_COARSE (intermediate ramp points) is currently IDENTICAL to _RAMP_SOLVE
 # (target point): same tolerance and the same 40-iteration cap. Kept as a separate name
 # so the two can be tuned independently.
-_RAMP_SOLVE = dict(type="dc", absolute_error=1e10, relative_error=DC_REL_ERROR, maximum_iterations=40)
+_RAMP_SOLVE = dict(
+    type="dc", absolute_error=1e10, relative_error=DC_REL_ERROR, maximum_iterations=40
+)
 _RAMP_SOLVE_COARSE = dict(
     type="dc", absolute_error=1e10, relative_error=DC_REL_ERROR, maximum_iterations=40
 )
@@ -388,7 +471,9 @@ def ramp_bias(device_info, V_target, contact="anode", V_step=0.5, V_step_max=Non
         return True
 
     if V_step_max is not None and V_step_max > V_step:
-        _ramp_bias_adaptive(device_info, bias_name, current_V, V_target, V_step, V_step_max)
+        _ramp_bias_adaptive(
+            device_info, bias_name, current_V, V_target, V_step, V_step_max
+        )
         logger.debug(f"ramp_bias: ramped {contact} to {V_target:.3f}V (adaptive)")
         return True
 

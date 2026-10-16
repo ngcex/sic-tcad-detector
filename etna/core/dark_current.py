@@ -44,7 +44,7 @@ from devsim.python_packages.model_create import (
 
 from etna.core.drift_diffusion import (
     create_dd_device,
-    extract_contact_current,
+    extract_steady_state_current,
     ramp_bias,
 )
 
@@ -439,7 +439,9 @@ def extract_dark_current_components(device_info, area=0.05):
     device = device_info["device_name"]
     region = device_info["region_name"]
 
-    J_total = extract_contact_current(device_info, contact="cathode")
+    # Balanced form (steady state): the direct cathode current has a ~3e-13 A/cm^2
+    # round-off floor (2e-3 of the -10 V leakage) and is unusable with an n+ layer.
+    J_total = extract_steady_state_current(device_info, contact="cathode")
 
     x = np.array(devsim.get_node_model_values(device=device, region=region, name="x"))
 
