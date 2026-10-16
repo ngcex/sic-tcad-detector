@@ -53,7 +53,7 @@ from devsim.python_packages.model_create import (
 import numpy as np
 
 from etna.core.charge_collection import add_generation_to_dd, compute_cce_from_dd
-from etna.core.generation_profiles import proton_generation_profile
+from etna.core.generation_profiles import confine_generation_to_epi, proton_generation_profile
 
 logger = logging.getLogger(__name__)
 
@@ -361,6 +361,7 @@ def cce_vs_dose_rate(
 
             # Zero generation in p+ substrate (x < junction_pos)
             gen_values[x_nodes < junction_pos] = 0.0
+            gen_values = confine_generation_to_epi(device_info, x_nodes, gen_values)
 
             converged = solve_with_continuation(
                 device_info, gen_values, n_steps=n_continuation_steps
@@ -410,6 +411,7 @@ def cce_vs_dose_rate(
         lowest_rate = dose_rates_sorted[0]
         gen_ref = proton_generation_profile(x_nodes2, E_MeV, lowest_rate)
         gen_ref[x_nodes2 < junction_pos2] = 0.0
+        gen_ref = confine_generation_to_epi(device_info2, x_nodes2, gen_ref)
 
         add_generation_to_dd(device_info2, gen_ref)
         devsim.solve(

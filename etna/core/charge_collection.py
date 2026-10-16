@@ -26,7 +26,7 @@ from devsim.python_packages.model_create import (
 )
 import numpy as np
 
-from etna.core.generation_profiles import alpha_generation_profile
+from etna.core.generation_profiles import alpha_generation_profile, confine_generation_to_epi
 from etna.core.sic_material import (
     SiC4H_Parameters,
     mobility_caughey_thomas_T,
@@ -552,6 +552,7 @@ def cce_vs_bias(
 
     # Zero out generation in p+ substrate (x < junction_pos)
     gen_values[x_epi < 0] = 0.0
+    gen_values = confine_generation_to_epi(device_info, x_nodes, gen_values)
 
     Q = 1.602e-19
     I_generated = Q * np.trapezoid(gen_values, x_nodes)
@@ -823,6 +824,7 @@ def cce_vs_fluence(
             else:
                 gen_values = np.zeros_like(x_nodes)
             gen_values[x_epi < 0] = 0.0
+            gen_values = confine_generation_to_epi(device_info, x_nodes, gen_values)
 
             # Add generation and solve
             add_generation_to_dd(device_info, gen_values)
@@ -1018,6 +1020,7 @@ def cce_vs_bias_at_fluence(
     else:
         gen_values = np.zeros_like(x_nodes)
     gen_values[x_epi < 0] = 0.0
+    gen_values = confine_generation_to_epi(device_info, x_nodes, gen_values)
 
     Q = 1.602e-19
     I_generated = Q * np.trapezoid(gen_values, x_nodes)
@@ -1254,6 +1257,7 @@ def cce_post_anneal(
         else:
             gen_values = np.zeros_like(x_nodes)
         gen_values[x_epi < 0] = 0.0
+        gen_values = confine_generation_to_epi(device_info, x_nodes, gen_values)
 
         # Add generation and solve
         add_generation_to_dd(device_info, gen_values)
@@ -1475,6 +1479,7 @@ def cce_vs_epi_thickness(
 
             # Zero generation in p+ substrate
             gen_values[x_epi < 0] = 0.0
+            gen_values = confine_generation_to_epi(device_info, x_nodes, gen_values)
 
             I_generated = Q * np.trapezoid(gen_values, x_nodes)
 

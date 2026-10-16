@@ -47,6 +47,9 @@ def assemble_config(values: dict) -> DeviceConfig:
         L_transition_um=values["L_transition_um"],
         T=values["T"],
         area_cm2=values["area_cm2"],
+        # n+ layer keys are optional (older callers/tests pass the original 11 fields)
+        nplus_thickness_um=values.get("nplus_thickness_um", DeviceConfig.nplus_thickness_um),
+        N_D_nplus=values.get("N_D_nplus", DeviceConfig.N_D_nplus),
     )
 
 
@@ -62,6 +65,8 @@ FIELD_LABELS = {
     "L_transition_um": "Transition length (µm)",
     "T": "Temperature (K)",
     "area_cm2": "Area (cm²)",
+    "nplus_thickness_um": "n+ layer thickness (µm)",
+    "N_D_nplus": "N_D n+ (cm⁻³)",
 }
 
 
@@ -115,7 +120,32 @@ def render_device_sidebar() -> None:
         step=0.5,
         format="%.2f",
         key="cfg_substrate_thickness_um",
+        help="p+ anode layer (not the n+ substrate, see 'n+ layer under the epi').",
     )
+    nplus_on = st.sidebar.checkbox(
+        "n+ layer under the epi",
+        value=DeviceConfig.nplus_thickness_um is not None,
+        key="cfg_nplus_on",
+        help="Conductive n+ substrate (truncated) between the n- epi and the cathode "
+        "contact. Off = historical model: cathode directly on the n- epi.",
+    )
+    if nplus_on:
+        nplus_thickness_um = st.sidebar.number_input(
+            "n+ layer thickness (µm)",
+            value=DeviceConfig.nplus_thickness_um or 1.0,
+            step=0.5,
+            format="%.2f",
+            key="cfg_nplus_thickness_um",
+        )
+        N_D_nplus = st.sidebar.number_input(
+            "N_D n+ (cm⁻³)",
+            value=DeviceConfig.N_D_nplus,
+            step=1e18,
+            format="%.3e",
+            key="cfg_N_D_nplus",
+        )
+    else:
+        nplus_thickness_um, N_D_nplus = None, DeviceConfig.N_D_nplus
     if dim == "2D":
         half_width_um = st.sidebar.number_input(
             "Half-width (µm)",
@@ -208,6 +238,8 @@ def render_device_sidebar() -> None:
         "L_transition_um": L_transition_um,
         "T": T,
         "area_cm2": area_cm2,
+        "nplus_thickness_um": nplus_thickness_um,
+        "N_D_nplus": N_D_nplus,
     }
 
     try:

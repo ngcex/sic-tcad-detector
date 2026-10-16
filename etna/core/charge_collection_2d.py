@@ -40,7 +40,7 @@ from etna.core.drift_diffusion import (
     ramp_bias,
 )
 from etna.core.charge_collection import add_generation_to_dd
-from etna.core.generation_profiles import alpha_depth_shape
+from etna.core.generation_profiles import alpha_depth_shape, confine_generation_to_epi
 
 logger = logging.getLogger(__name__)
 
@@ -345,6 +345,7 @@ def cce_lateral_scan(
 
         # Zero out generation in substrate (y < junction_pos)
         generation[y_from_junction < 0] = 0.0
+        generation = confine_generation_to_epi(device_info, y_nodes, generation)
 
         # Inject generation, solve, extract CCE
         add_generation_to_dd(device_info, generation)
@@ -507,6 +508,7 @@ def compare_cce_2d_vs_1d(half_width_um=50.0, V_bias=50.0, gen_rate=1e18):
 
         # Uniform epi generation: G = gen_rate for y > junction, 0 otherwise
         gen_2d = np.where(y_nodes_2d >= junction_pos, gen_rate, 0.0)
+        gen_2d = confine_generation_to_epi(device_info_2d, y_nodes_2d, gen_2d)
 
         # Compute 2D CCE (full area, uniform generation)
         add_generation_to_dd(device_info_2d, gen_2d)
