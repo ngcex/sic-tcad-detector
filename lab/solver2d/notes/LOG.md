@@ -97,3 +97,29 @@ Dark cathode current at V=50, hw=50: devsim 1.33e-15 A/cm, engine 6.29e-15 A/cm 
 flat quasi-Fermi, not DD-consistent; irrelevant to CCE, which does no dark subtraction and whose
 illuminated state is solved with full Gummel). Systematic CCE offset -0.5..-1.5e-7 vs devsim: unexplained
 (guess: devsim's rel 1e-8 stopping on a current that is a small difference of large SG terms).
+
+## Follow-up: is edge-vs-centre CCE a mesh artefact? (17:24, load ~4.7)
+
+`uv run python lab/solver2d/bench/mesh_artefact.py` -> notes/mesh_artefact.out. Engine only, V=50, sigma 2 um,
+same y lines/doping/BCs. Uniform-x grids built directly as Grid2D (same diagonal orientation); rebuilding the
+production grid this way reproduces its scan to 2.2e-16.
+
+| mesh (hw=50) | centre CCE | mid (x=hw/2) | edge CCE | edge/centre-1 |
+|---|---|---|---|---|
+| production graded | 0.99849483 | -- | 0.99836869 | -1.26e-4 |
+| uniform 0.5 um | 0.99848689 | 0.99847356 | 0.99846023 | -2.67e-5 |
+| uniform 0.25 um | 0.99848023 | 0.99847356 | 0.99846690 | -1.34e-5 |
+| uniform 0.125 um | 0.99847689 | 0.99847357 | 0.99847023 | -6.68e-6 |
+(hw=25: production -1.62e-4; uniform 0.5/0.25/0.125 um: -2.67e-5/-1.34e-5/-6.68e-6, same values.)
+
+On uniform meshes the remainder is O(h) and antisymmetric (centre +h, edge -h around the mid-stripe value
+0.99847356). That points at I_gen's triangle quadrature (integrate_over_mesh_2d): with one diagonal orientation,
+area/6*(v00+2v10+2v01+v11) differs from the box rule by A/12*(v10+v01-v00-v11) ~ -h_x h_y dG/dx dG/dy. The sign of
+dG/dx flips between a stripe at x=0 and one at x=hw, and the term cancels at mid-domain.
+Check, I_gen = sum(NodeVolume*G) (the box rule the solver uses for the source):
+  production mesh: centre 0.998473564, mid 0.998473560, edge 0.998473548 -> edge/centre-1 = -1.6e-8
+  uniform 0.5 um: -2e-10; uniform 0.25 um: +2e-10; centre/mid-1 about 3-5e-9 everywhere.
+Conclusion: PROVEN numerical. Using the box rule for I_gen collapses edge/centre to 1 within 2e-8 even on the production
+mesh. The whole 1.3e-4 edge/centre difference comes from the I_gen triangle quadrature (mesh-dependent, O(h)). It is not
+the solver's lateral resolution, not the Neumann mirror (a half-Gaussian at x=0 or x=hw = mid stripe to 5e-9), and
+not the cathode-row loss (laterally uniform; it gives the common ~1.5e-3 deficit, 0.998474 everywhere).
