@@ -35,6 +35,7 @@ from etna.core.sic_material import (
     srh_lifetime,
 )
 from etna.core.incomplete_ionization import ionized_acceptor_concentration
+from etna.core.device import DEFAULT_N_D_NPLUS, _check_nplus, _nplus_term
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +54,7 @@ K_B_J = 1.3806503e-23  # J/K, Boltzmann constant
 DEFAULT_N_D = 1.07e15  # cm^-3
 
 
-def set_doping_profile_2d(device_name, region_name, junction_pos, N_A_ionized, N_D):
+def set_doping_profile_2d(device_name, region_name, junction_pos, N_A_ionized, N_D, nplus=None):
     """Set step-function (uniform) doping profile on a 2D device.
 
     Acceptors in p+ substrate (y < junction_pos), donors in n- epi (y >= junction_pos).
@@ -82,7 +83,7 @@ def set_doping_profile_2d(device_name, region_name, junction_pos, N_A_ionized, N
         device=device_name,
         region=region_name,
         name="Donors",
-        equation=f"{N_D}*step(y-{junction_pos})",
+        equation=f"{N_D}*step(y-{junction_pos})" + _nplus_term(nplus, coord="y"),
     )
     devsim.node_model(
         device=device_name,
@@ -100,6 +101,7 @@ def set_graded_doping_2d(
     N_D_junction,
     N_D_bulk,
     L_transition,
+    nplus=None,
 ):
     """Set exponentially graded N_D(y) doping profile on a 2D device.
 
@@ -135,7 +137,7 @@ def set_graded_doping_2d(
         f"({N_D_bulk} + ({N_D_junction} - {N_D_bulk}) * "
         f"exp(-max(y - {junction_pos}, 0) / {L_transition})) "
         f"* step(y - {junction_pos})"
-    )
+    ) + _nplus_term(nplus, coord="y")
     devsim.node_model(
         device=device_name,
         region=region_name,
@@ -164,6 +166,9 @@ def create_sic_2d_device(
     N_D_junction=None,
     N_D_bulk=None,
     L_transition=None,
+    nplus_thickness_cm=None,
+    N_D_nplus=DEFAULT_N_D_NPLUS,
+    nplus_generation=False,
 ):
     """Create a 2D p+/n- 4H-SiC diode device in devsim.
 
@@ -200,6 +205,9 @@ def create_sic_2d_device(
         For graded profile: donor concentration in bulk epi (cm^-3).
     L_transition : float or None
         For graded profile: characteristic decay length (cm).
+    nplus_thickness_cm, N_D_nplus, nplus_generation :
+        Optional n+ layer under the epi (cathode on its far end); see
+        ``etna.core.device.create_sic_device``. None = historical model.
 
     Returns
     -------
@@ -213,7 +221,10 @@ def create_sic_2d_device(
     params = SiC4H_Parameters()
     half_width_cm = half_width_um * 1e-4  # um -> cm
     junction_pos = substrate_thickness_cm
-    total_depth = substrate_thickness_cm + epi_thickness_cm
+    epi_end = substrate_thickness_cm + epi_thickness_cm
+    _check_nplus(nplus_thickness_cm, N_D_nplus)
+    nplus = None if nplus_thickness_cm is None else (epi_end, N_D_nplus)
+    total_depth = epi_end + (nplus_thickness_cm or 0.0)  # cathode position
     air_buffer = 1e-8  # cm, thin buffer for contact detection
 
     # --- Create 2D mesh ---
@@ -253,11 +264,14 @@ def create_sic_2d_device(
     # Epi intermediate points (same as 1D)
     epi_mid1 = junction_pos + 2e-4
     epi_mid2 = junction_pos + 5e-4
-    if epi_mid1 < total_depth - 1e-6:
+    if epi_mid1 < epi_end - 1e-6:
         devsim.add_2d_mesh_line(mesh=mesh_name, dir="y", pos=epi_mid1, ps=5e-6)
-    if epi_mid2 < total_depth - 1e-6:
+    if epi_mid2 < epi_end - 1e-6:
         devsim.add_2d_mesh_line(mesh=mesh_name, dir="y", pos=epi_mid2, ps=5e-6)
 
+    if nplus is not None:
+        # n-/n+ step at the epi end (1 nm), then the n+ layer down to the cathode
+        devsim.add_2d_mesh_line(mesh=mesh_name, dir="y", pos=epi_end, ps=1e-7)
     # Cathode surface
     devsim.add_2d_mesh_line(mesh=mesh_name, dir="y", pos=total_depth, ps=1e-5)
 
@@ -418,6 +432,7 @@ def create_sic_2d_device(
             _N_D_junction,
             _N_D_bulk,
             _L_transition,
+            nplus=nplus,
         )
         logger.info(
             f"Graded 2D doping: N_D_junction={_N_D_junction:.2e}, "
@@ -430,6 +445,7 @@ def create_sic_2d_device(
             junction_pos,
             N_A_ionized,
             N_D,
+            nplus=nplus,
         )
 
     num_nodes = len(
@@ -465,6 +481,10 @@ def create_sic_2d_device(
         "L_transition": _L_transition,
         "half_width_cm": half_width_cm,
         "dimension": 2,
+        "epi_end": epi_end,
+        "nplus_thickness_cm": nplus_thickness_cm,
+        "N_D_nplus": N_D_nplus if nplus_thickness_cm is not None else None,
+        "nplus_generation": bool(nplus_generation),
     }
 
 

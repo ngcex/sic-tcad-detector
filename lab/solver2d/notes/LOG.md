@@ -341,3 +341,26 @@ Wall moves beyond 100 V: YES (>= 150 V, 1D and 2D). Calibrated range changes < 1
 => NOT a pure validity extension. Redo: graded-doping C-V calibration (calibrate_graded_doping, its 2D twin;
 W targets at -10/-30 V move 4 % / 0.9 %), N_t fit of the dark current (-60 V +0.3 %, more at low bias),
 and decide whether the alpha deposits in the n+ (CCE -3.7 %).
+
+## n+ substrate in production (feat/nplus-substrate, 2026-10-16)
+
+Phase 1 (balanced extraction, no n+): see commit message; lab/solver2d/bench/balanced_check.py.
+Direct-vs-balanced dark-current gap is an N_t-independent ~3e-13 A/cm^2 round-off floor of the
+direct form (balanced current exactly linear in N_t), not the SRV term as the spike note said.
+
+Phase 2 (option `nplus_thickness_cm` / `N_D_nplus` / `nplus_generation` in create_sic_device,
+create_sic_2d_device; DeviceConfig.nplus_thickness_um / N_D_nplus). lab/solver2d/bench/nplus_check.py:
+- default (None) bit-for-bit vs phase 1 (bitforbit.py: mesh, W, C, CCE, dark, run_cv/run_cce/run_dark_current).
+- reproduces the spike exactly: W(-10/-30/-50 V) 9.213316/9.895584/9.940143 um; CCE (epi-only G)
+  0.998867 0.999562 0.999708 0.999778 0.999820 (raw collected/generated, < 1).
+- wall: 1D fixed 0.5 V steps 67.5 V -> 150 V; 2D hw 25, epi 10 um, N_D_bulk 5e13: 150 V (161 s).
+- dark current depended on the n+ thickness (f_depl floor of the effective-generation proxy
+  generates throughout the n+: -60 V 1.8014e-11 A at 1 um, 1.8114e-11 at 5 um). The proxy is now
+  confined to x <= epi end when an n+ layer exists: 1/5/20 um -> 1.7982941/1.7982946/1.7982946e-11 A
+  (-60 V, 0.04 cm2, N_t 2.8e12; no n+: 1.7956753e-11, +0.15 %).
+- alpha deposit in the n+ (nplus_generation=True; 15 um range, 10 um epi, I_gen 1.9224e-4 vs
+  1.5919e-4 epi-only), CCE at -10 / -50 V by n+ thickness (n+ inherits epi tau_p 0.6 us, mu_p 75.7,
+  L_p ~11 um): 1 um 0.9612/0.9622 (track truncated, I_gen 1.7259e-4), 5 um 0.9466/0.9479,
+  10 um 0.9680/0.9694, 20 um 0.9758/0.9772, 50 um 0.9770/0.9784. Not converged in thickness below
+  ~50 um and set by the assumed n+ hole lifetime; a realistic short n+ lifetime drives it to the
+  no-collection bound CCE_epi * 1.5919/1.9224 = 0.828. Epi-only: 0.998868/0.999820 (any thickness).

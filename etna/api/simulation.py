@@ -69,6 +69,8 @@ def validated_domain_reason(config: DeviceConfig) -> "str | None":
     """
     if config.half_width_um is not None:
         return "2D device"
+    if config.nplus_thickness_um is not None:
+        return "n+ layer (batched engine not cross-checked with n+)"
     if config.doping_profile not in ("graded", "uniform"):
         return f"doping_profile={config.doping_profile!r}"
     checks = {

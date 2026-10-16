@@ -31,7 +31,7 @@ import pandas as pd
 from etna.core.charge_collection import add_generation_to_dd
 from etna.core.drift_diffusion import create_dd_device, extract_contact_current, ramp_bias
 from etna.core.flash_recombination import add_auger_recombination
-from etna.core.generation_profiles import proton_generation_profile
+from etna.core.generation_profiles import confine_generation_to_epi, proton_generation_profile
 
 logger = logging.getLogger(__name__)
 
@@ -626,6 +626,7 @@ def transient_cce_vs_dose_rate(
             # Zero generation in p+ region
             junction_pos = device_info["junction_pos"]
             G_spatial[x_nodes < junction_pos] = 0.0
+            G_spatial = confine_generation_to_epi(device_info, x_nodes, G_spatial)
 
             # Transient simulation
             solver = TransientSolver(device_info, contact="cathode")
