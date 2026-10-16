@@ -246,3 +246,23 @@ class TestScoreStructures:
         assert (
             set(df.columns) == expected_cols
         ), f"Missing columns: {expected_cols - set(df.columns)}"
+
+
+class TestMicrodosimetricSweepEndToEnd:
+    """B-03: the sweep must resolve default junction doping instead of failing every row."""
+
+    @pytest.mark.slow
+    def test_one_config_is_not_nan(self):
+        from etna.core.optimization import microdosimetric_sweep
+
+        df = microdosimetric_sweep(
+            half_widths_um=(25,),
+            epi_thicknesses_cm=(10e-4,),
+            N_D_bulks=(5e14,),
+            V_biases=(60,),
+            n_lateral_points=3,
+        )
+        row = df.iloc[0]
+        assert np.isfinite(row["V_fd"]), "V_fd is NaN: the Mj-3 gate raised and the row was dropped"
+        assert np.isfinite(row["center_cce"])
+        assert bool(row["is_fully_depleted"])

@@ -460,9 +460,9 @@ def create_sic_2d_device(
         "mu_p": mu_p,
         "num_nodes": num_nodes,
         "doping_profile": doping_profile,
-        "N_D_junction": N_D_junction,
-        "N_D_bulk": N_D_bulk,
-        "L_transition": L_transition,
+        "N_D_junction": _N_D_junction,  # resolved defaults (audit B-03), never None
+        "N_D_bulk": _N_D_bulk,
+        "L_transition": _L_transition,
         "half_width_cm": half_width_cm,
         "dimension": 2,
     }
