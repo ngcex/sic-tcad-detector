@@ -123,3 +123,66 @@ Conclusion: PROVEN numerical. Using the box rule for I_gen collapses edge/centre
 mesh. The whole 1.3e-4 edge/centre difference comes from the I_gen triangle quadrature (mesh-dependent, O(h)). It is not
 the solver's lateral resolution, not the Neumann mirror (a half-Gaussian at x=0 or x=hw = mid stripe to 5e-9), and
 not the cathode-row loss (laterally uniform; it gives the common ~1.5e-3 deficit, 0.998474 everywhere).
+
+## Promotion to etna/core/engine2d (2026-10-16 evening)
+
+Package: etna/core/engine2d/{grid,banded,kernels,device,scan}.py; entry points
+`engine2d_unsupported_reason(...)`, `lateral_cce_scan_2d(...)`; integration only in
+etna/core/optimization.py (`microdosimetric_sweep(..., solver="devsim"|"auto")`, records get a
+"solver" column). Tests: tests/test_engine2d.py (16 fast + 3 slow, all pass; slow 21 s).
+
+Changes vs the lab spike:
+- I_generated = sum(NodeVolume*G) (box rule), matching compute_cce_2d after fd631e3.
+- Mesh: still devsim's mesh-only build (create_sic_2d_device, no equations, ~30-90 ms); not
+  regenerated in numpy. Every engine assumption is ASSERTED on that device (grid_from_arrays):
+  full tensor grid, NodeVolume == rectangular dual, Donors/Acceptors identical across columns,
+  anode/cathode == full rows j=0 / j=ny-1. Doping is taken from devsim's evaluated node models.
+- Cathode current evaluated in a balanced (well-conditioned) form: electrons from the summed
+  interior balance sum V(G-U) + electron flux at the anode (minority there), holes by the direct
+  cathode edge flux (minority there). Same quantity as get_contact_current at convergence. The
+  direct edge form (devsim's) is a small difference of huge SG terms when the epi next to the
+  cathode is quasi-neutral: e.g. hw=25, epi 20 um, N_D 5e14, 80 V: point-to-point scatter of the
+  10 CCE values 1.4e-6 (direct, also seen in devsim) vs 2.6e-8 (balanced); default 50 V: 3.1e-8 vs 4.1e-9.
+- Punch-through: devsim walls measured (`bench/devsim_wall.py 25 5e13 8.5e13 5e14`, 0.5 V steps
+  from 50 V): last converged 54.5 V (5e13), 56.5 V (8.5e13), 80 V reached (5e14). The quantity that
+  lines up at the wall is the dark field on the last cell before the cathode:
+  4.745e4 / 4.627e4 V/cm at the last converged points, 4.795e4 / 4.677e4 at the failing ones;
+  converged at 4.30e4 (5e13, 50 V) and 3.20e4 (5e14, 80 V). (Not n/N_D: flat-qF n underflows in
+  the depleted epi, and "n near the cathode" is mesh-position dependent.)
+  Rule: field <= 4.45e4 -> engine answers; > 5.0e4 -> Engine2DPunchThrough (caller writes the
+  same NaN row devsim produces); in between -> Engine2DFallback (devsim decides). Calibrated at
+  hw=25, epi 10 um only (guess: devsim's wall may move with hw/epi; the gate checks hw 25-150).
+- Gummel non-convergence or a Newton failure -> Engine2DFallback (devsim decides).
+- Spot checks via _sweep_one, auto vs devsim (hw=25): epi 5 um 20 V dC 2e-9; epi 5 um 50 V both NaN
+  (engine punch-through 0.02 s vs devsim failure 11.2 s); epi 20 um 50 V dC 2.8e-8; epi 20 um 5e14 80 V
+  dC 5.2e-7, dE 2.1e-6, dRatio 1.6e-6 (devsim's direct-current noise; see above); epi 10 um 5e14 80 V dC 5.2e-7.
+
+## GATE: notebook 20 grid, 36 configs (hw 25/50/100/150, epi 10 um, N_D 5e13/8.5e13/5e14, V 20/50/80)
+
+`uv run python lab/solver2d/bench/gate_nb20.py --jobs 4` (load 2.8 at start, no pytest), then
+`uv run python lab/solver2d/bench/gate_analyse.py`. CSVs: notes/gate_devsim.csv, gate_auto.csv
+(gate_auto_final.csv = rerun with final code: identical to 1e-16).
+
+- Wall time, n_jobs=1: devsim 1187.4 s, auto 8.81 s (135x). auto n_jobs=4: 4.57 s, identical results.
+- Per config (median by hw, devsim / engine): 25: 5.15 / 0.042 s; 50: 13.5 / 0.104; 100: 28.5 / 0.288;
+  150: 47.9 / 0.663 s. The 8 failing configs: devsim 10.6-155 s each, engine 0.03-0.15 s.
+- Cold JIT (empty NUMBA_CACHE_DIR, fresh process): first config 0.94 s (warm cache: 0.12 s);
+  `import etna.core.optimization` ~1 s either way. Spawned workers pay that import, which is why
+  n_jobs=4 gives only 1.9x on a 9 s run.
+- All 36 rows were served by engine2d (no fallbacks). NaN rows identical (8: V=80, N_D 5e13 / 8.5e13,
+  every hw). devsim ramp failures at 54.25 V (5e13, all hw) and 58.0 / 58.0 / 56.6 / 56.6 V (8.5e13,
+  hw 25/50/100/150); engine: Engine2DPunchThrough, cathode-cell field 5.29e4 / 5.48e4 V/cm.
+- is_valid identical (also is_fully_depleted, passes_cce_floor).
+- max |dCCE| center 1.17e-5 (> 1e-5 target), edge 9.4e-6, ratio 2.7e-6, cce_std 2.5e-6; signed mean
+  dCCE -1.1e-6 (engine lower).
+- Strict ranking NOT identical; tie-aware ranking (ratio rounded to 5 decimals, grid-order tiebreak)
+  identical. The valid-group ratios span 3.0e-6 in devsim vs 1.5e-8 in the engine: after the box-rule
+  fix every valid ratio is 1 and the strict order is devsim's numerical noise.
+- The one row beyond 1e-5: hw=150, N_D 5e14, 20 V (partially depleted, CCE 0.816, is_valid False).
+  The differences grow with hw: 2.7e-6 (50), 6.8e-6 (100), 1.17e-5 (150). Engine centre CCE for this
+  config is 0.81611930 / 0.81611930 / 0.81611929 at hw 25 / 50 / 150 (hw-independent to 1e-9);
+  devsim gives 0.81612016 (hw 25) and 0.81613094 (hw 150). Three extra devsim Newton iterations at
+  rel 1e-14 leave the devsim value unchanged (stagnated). The engine's own direct edge-flux
+  evaluation also drifts with hw (-3.6e-6 at 150) while the balanced form does not. Conclusion: devsim
+  has ~1e-5 roundoff error in this partially depleted (quasi-neutral cathode side) regime; the engine
+  is the more accurate side.
