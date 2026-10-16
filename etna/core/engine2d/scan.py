@@ -9,8 +9,8 @@ Outcomes:
 * ``Engine2DFallback``: the engine declines (outside the validated envelope, or a
   loop did not converge) -- the caller should run devsim;
 * ``Engine2DPunchThrough``: deep punch-through, where devsim's coupled Newton is
-  known not to converge (its ramp stops at 54.5-56.5 V for N_D_bulk 5e13-8.5e13
-  on the 10 um epi). The caller should record the same failure devsim would.
+  known not to converge (cathode-cell field above FIELD_NAN_MIN; e.g. its ramp stops at
+  54.5-56.5 V for N_D_bulk 5e13-8.5e13 on the 10 um epi, 26.5-27 V on the 5 um epi). The caller should record the same failure devsim would.
 """
 
 from __future__ import annotations
@@ -31,9 +31,12 @@ from .grid import NotLaterallyUniform, grid_from_devsim
 # Validated envelope (parity vs devsim: tests/test_engine2d.py, lab/solver2d/notes/LOG.md).
 ENGINE2D_BOX = {
     "half_width_um": (25.0, 150.0),
-    "epi_thickness_cm": (10e-4, 10e-4),  # gated at 10 um only; 5/20 um had hw=25 spot checks (widen with a parity run)
+    "epi_thickness_cm": (
+        5e-4,
+        20e-4,
+    ),  # parity grid: lab/solver2d/notes/LOG.md "box widening"
     "N_D_bulk": (5e13, 5e14),
-    "V_bias": (20.0, 80.0),  # compared against devsim at 20, 50, 80 V only
+    "V_bias": (5.0, 80.0),
     "n_lateral_points": (2, 50),
 }
 # Device keywords the engine accepts, with the only value it accepts (create_sic_2d_device defaults).
@@ -47,10 +50,16 @@ _FIXED_KWARGS = {
     "L_transition": _L_TRANSITION_DEFAULT,
 }
 # Punch-through indicator: dark field on the last cell before the cathode (V/cm).
-# devsim's 2D ramp (0.5 V steps, hw=25, 10 um epi) last converged at 4.745e4 (5e13,
-# 54.5 V) / 4.627e4 (8.5e13, 56.5 V) and failed from 4.795e4 / 4.677e4; it converged
-# at 4.30e4 (5e13, 50 V) and 3.20e4 (5e14, 80 V). Below FIELD_ENGINE_MAX the engine
-# answers; above FIELD_NAN_MIN it reports devsim's failure; in between devsim decides.
+# devsim's 2D ramp (0.5 V steps from a converged bias, hw=25; lab/solver2d/notes/LOG.md)
+# last converged / first failed at, per (epi um, N_D_bulk):
+#   (5, 5e13) 4.632e4 / 4.732e4    (5, 8.5e13) 4.585e4 / 4.685e4    (5, 5e14) 4.821e4 / 4.921e4
+#   (7.5, 5e13) 4.670e4 / 4.736e4  (7.5, 5e14) 4.661e4 / 4.728e4
+#   (10, 5e13) 4.745e4 / 4.795e4   (10, 8.5e13) 4.627e4 / 4.677e4
+# and reached 80 V without failing at (15, 5e13) 4.476e4, (20, 5e13) 2.95e4, (20, 8.5e13) 2.31e4,
+# (10, 5e14) 3.20e4. Every failure is above 4.685e4 and every converged point below 4.83e4,
+# for every epi. Below FIELD_ENGINE_MAX the engine answers; above FIELD_NAN_MIN it reports
+# devsim's failure; in between devsim decides (its adaptive create_2d_dd_device ramp can fail
+# below the 0.5 V-step wall, e.g. epi 5 um, 5e14, 37 V).
 FIELD_ENGINE_MAX = 4.45e4
 FIELD_NAN_MIN = 5.0e4
 
@@ -179,4 +188,75 @@ def lateral_cce_scan_2d(
         "device_info": info,
         "cathode_field": field,
         "gummel_iterations": list(dev.gummel_iterations),
+    }
+
+
+# Dark-state (field map) envelope. The dark solve is the quasi-Fermi Poisson only (no
+# continuity, no mobility); doping parameters may vary inside the 1D engine's validated
+# graded box. Parity vs devsim run_field: tests/test_api_field_engine.py.
+ENGINE2D_DARK_BOX = {
+    "half_width_um": (25.0, 150.0),
+    "epi_thickness_cm": (5e-4, 20e-4),
+    "N_D_bulk": (5e13, 5e14),
+    "N_D_junction": (1e15, 1e16),
+    "L_transition": (0.3e-4, 3e-4),
+    "V_cathode": (5.0, 80.0),
+}
+_DARK_FIXED = {"doping_profile": "graded", "N_A": 1e19, "T": 300, "substrate_thickness_cm": 1e-4, "N_D": None}
+
+
+def engine2d_dark_unsupported_reason(half_width_um, V_cathode, **device_kwargs):
+    """Why ``dark_state_2d`` cannot serve this device/bias (None = it can)."""
+    vals = dict(half_width_um=half_width_um, V_cathode=V_cathode)
+    for key, value in device_kwargs.items():
+        if key in _DARK_FIXED:
+            ref = _DARK_FIXED[key]
+            if not (value == ref or (value is None and ref is None)):
+                return f"{key}={value!r} (engine validated only for {ref!r})"
+        elif key in ENGINE2D_DARK_BOX:
+            vals[key] = value
+        else:
+            return f"unsupported device keyword {key}"
+    for name, value in vals.items():
+        lo, hi = ENGINE2D_DARK_BOX[name]
+        if value is None or not np.isfinite(value) or not lo <= value <= hi:
+            return f"{name}={value} outside [{lo:g}, {hi:g}]"
+    if vals.get("N_D_bulk", 0.0) >= vals.get("N_D_junction", np.inf):
+        return "N_D_bulk >= N_D_junction"
+    return None
+
+
+def dark_state_2d(half_width_um, V_cathode, **device_kwargs):
+    """Engine equivalent of create_sic_2d_device + Poisson/DD setup + ramp of the cathode
+    to ``V_cathode`` (V, positive = reverse bias), dark.
+
+    Returns node arrays in devsim's node order of the same device (so they line up with
+    the devsim path one to one): x, y (cm), NetDoping (cm^-3), Potential (V), plus
+    ``device_info`` (mesh-only create_sic_2d_device dict) and ``cathode_field`` (V/cm).
+    Raises Engine2DFallback when ineligible, not laterally uniform, not converged, or
+    beyond FIELD_ENGINE_MAX (devsim's ramp decides near punch-through).
+    """
+    reason = engine2d_dark_unsupported_reason(half_width_um, V_cathode, **device_kwargs)
+    if reason is not None:
+        raise Engine2DFallback(reason)
+    try:
+        grid, info = grid_from_devsim(half_width_um=half_width_um, **device_kwargs)
+    except NotLaterallyUniform as e:
+        raise Engine2DFallback(f"device is not laterally uniform: {e}") from e
+    dev = Device2D(grid, info)
+    try:
+        field = dev.dark(float(V_cathode), stop_field=FIELD_ENGINE_MAX)
+    except EngineNotConverged as e:
+        raise Engine2DFallback(str(e)) from e
+    if field > FIELD_ENGINE_MAX:
+        raise Engine2DFallback(f"near devsim's punch-through wall (cathode-cell field {field:.3g} V/cm)")
+    X = np.tile(grid.xs, grid.ny)
+    Y = np.repeat(grid.ys, grid.nx)
+    return {
+        "x": grid.to_devsim(X),
+        "y": grid.to_devsim(Y),
+        "NetDoping": grid.to_devsim(np.repeat(dev.D, grid.nx)),
+        "Potential": grid.to_devsim(dev.u * dev.Vt),
+        "device_info": info,
+        "cathode_field": field,
     }

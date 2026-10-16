@@ -19,6 +19,9 @@ class TestEligibility:
     def test_default_config_supported(self):
         assert engine2d_unsupported_reason(50.0, 50.0) is None
         assert engine2d_unsupported_reason(25.0, 20.0, 10e-4, 5e14, 10) is None
+        # widened box (LOG.md "box widening": parity at epi 5-20 um, 5-80 V)
+        assert engine2d_unsupported_reason(25.0, 5.0, 5e-4, 5e13, 10) is None
+        assert engine2d_unsupported_reason(150.0, 80.0, 20e-4, 5e14, 10) is None
 
     @pytest.mark.parametrize(
         "args, kwargs, fragment",
@@ -32,7 +35,7 @@ class TestEligibility:
             ((50.0, 120.0), {}, "V_bias"),
             ((50.0, -5.0), {}, "V_bias"),
             ((50.0, 50.0, 30e-4), {}, "epi_thickness_cm"),
-            ((50.0, 50.0, 5e-4), {}, "epi_thickness_cm"),  # not gated: devsim decides
+            ((50.0, 4.0), {}, "V_bias"),  # below the 5 V parity points
             ((50.0, 50.0, 10e-4, 1e16), {}, "N_D_bulk"),
         ],
     )

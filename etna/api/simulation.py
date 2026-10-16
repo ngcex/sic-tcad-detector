@@ -371,6 +371,99 @@ def _run_cv_devsim(config: DeviceConfig, bias_array) -> SimResult:
             reset_devsim_fully()
 
 
+def _node_field_2d(x_coords, y_coords, potential):
+    """Node-aligned |E| (V/cm) for a 2D mesh, the plotting2d.py pattern: interpolate
+    Potential onto a regular 100 x 200 grid, gradient, interpolate |E| back onto the
+    nodes, NaN -> 0. Shared by the devsim and engine paths of ``run_field``."""
+    from scipy.interpolate import LinearNDInterpolator
+
+    n_x = 100
+    n_y = 200
+    x_reg = np.linspace(x_coords.min(), x_coords.max(), n_x)
+    y_reg = np.linspace(y_coords.min(), y_coords.max(), n_y)
+    X_reg, Y_reg = np.meshgrid(x_reg, y_reg)
+
+    interp = LinearNDInterpolator(list(zip(x_coords, y_coords)), potential)
+    V_grid = interp(X_reg, Y_reg)
+
+    dy = y_reg[1] - y_reg[0]
+    dx = x_reg[1] - x_reg[0]
+    Ey, Ex = np.gradient(-V_grid, dy, dx)
+    E_mag_grid = np.sqrt(Ex**2 + Ey**2)
+
+    E_interp = LinearNDInterpolator(
+        list(zip(X_reg.ravel(), Y_reg.ravel())),
+        E_mag_grid.ravel(),
+    )
+    field_nodes = E_interp(x_coords, y_coords)
+    nan_mask = np.isnan(field_nodes)
+    if np.any(nan_mask):
+        field_nodes[nan_mask] = 0.0
+    return field_nodes
+
+
+def _field_engine_unsupported_reason(config: DeviceConfig, bias_V: float) -> "str | None":
+    """Why the 2D engine cannot serve ``run_field(config, bias_V)`` (None = it can)."""
+    from etna.core.engine2d import engine2d_dark_unsupported_reason
+
+    if config.half_width_um is None:
+        return "1D device"
+    if not np.isfinite(bias_V) or bias_V > 0:
+        return "forward or non-finite bias"
+    return engine2d_dark_unsupported_reason(
+        config.half_width_um, -bias_V, **device_kwargs(config)
+    )
+
+
+def _run_field_2d_engine(config: DeviceConfig, bias_V: float) -> SimResult:
+    """2D dark state from etna.core.engine2d, packaged exactly like the devsim path.
+
+    Node arrays come back in devsim's node order of the same mesh, so MeshData is
+    interchangeable with the devsim path (same names, units, ordering).
+    """
+    from etna.core.engine2d import dark_state_2d
+
+    st = dark_state_2d(config.half_width_um, -bias_V, **device_kwargs(config))
+    x_coords, y_coords = st["x"], st["y"]
+    potential, net_doping = st["Potential"], st["NetDoping"]
+    info = st["device_info"]
+    mesh = MeshData(
+        x_coords=x_coords,
+        y_coords=y_coords,
+        node_values={
+            "NetDoping": net_doping,
+            "Potential": potential,
+            "ElectricField": _node_field_2d(x_coords, y_coords, potential),
+        },
+        regions=[
+            {
+                "name": info["region_name"],
+                "x_min": float(x_coords.min()),
+                "x_max": float(x_coords.max()),
+                "y_min": float(y_coords.min()),
+                "y_max": float(y_coords.max()),
+            }
+        ],
+        contacts=[
+            {"name": "anode", "position": 0.0},
+            {"name": "cathode", "position": float(info["total_length"])},
+        ],
+    )
+    return SimResult(
+        config=config,
+        sim_type="field",
+        x=np.array([]),
+        y=np.array([]),
+        metadata={
+            "bias_V": bias_V,
+            "potential": potential,
+            "net_doping": net_doping,
+            "solver": "engine2d",
+        },
+        mesh=mesh,
+    )
+
+
 @serialized
 def run_field(config: DeviceConfig, bias_V: float = -50.0) -> SimResult:
     """Ramp a device to a fixed reverse bias and return a field/potential SimResult.
@@ -419,11 +512,18 @@ def run_field(config: DeviceConfig, bias_V: float = -50.0) -> SimResult:
         node_values with "NetDoping"/"Potential"/"ElectricField", regions,
         contacts).
 
+    2D devices inside the engine's validated envelope (graded default-family
+    device, reverse bias; ``etna.core.engine2d.engine2d_dark_unsupported_reason``)
+    are solved by the numba 2D engine instead of devsim, with identical node
+    arrays and ordering; ``metadata["solver"]`` is "engine2d" or "devsim".
+
     Warning
     -------
-    Calling this function deletes all devsim devices currently in the
-    process, not just those created by etna. `run_field` calls
-    `reset_devsim_fully()` unconditionally at entry (see
+    On the devsim path (1D, or 2D outside the engine envelope / engine fallback)
+    this function deletes all devsim devices currently in the
+    process, not just those created by etna. The engine path builds and deletes
+    only its own mesh-only device and does not reset devsim. The devsim path calls
+    `reset_devsim_fully()` before building its device (see
     `etna.core.devsim_reset`), which enumerates and deletes every
     device registered with devsim in the process — devsim state is
     process-global, not etna-scoped. If your process holds another
@@ -431,6 +531,19 @@ def run_field(config: DeviceConfig, bias_V: float = -50.0) -> SimResult:
     unrelated code sharing the process) across a `run_field()` call, that
     device will be silently deleted.
     """
+    if config.half_width_um is not None:
+        # PERF-03: laterally uniform default-family 2D devices in the validated box get
+        # the numba engine (no devsim device with equations, no reset); anything else, or
+        # any engine decline/error, falls through to the devsim path below.
+        reason = _field_engine_unsupported_reason(config, bias_V)
+        if reason is None:
+            try:
+                return _run_field_2d_engine(config, bias_V)
+            except Exception as e:  # Engine2DFallback or an engine error -> devsim decides
+                logger.info(f"run_field: engine2d declined ({e}); using devsim")
+        else:
+            logger.debug(f"run_field: engine2d unsupported ({reason}); using devsim")
+
     reset_devsim_fully()
     device_info = build_device(config)
 
@@ -464,33 +577,7 @@ def run_field(config: DeviceConfig, bias_V: float = -50.0) -> SimResult:
         )
 
         if is_2d:
-            # 2D: node-aligned E-magnitude via the plotting2d.py pattern —
-            # interpolate Potential onto a regular grid, gradient, interpolate
-            # E-magnitude back onto the mesh nodes, NaN -> 0.
-            from scipy.interpolate import LinearNDInterpolator
-
-            n_x = 100
-            n_y = 200
-            x_reg = np.linspace(x_coords.min(), x_coords.max(), n_x)
-            y_reg = np.linspace(y_coords.min(), y_coords.max(), n_y)
-            X_reg, Y_reg = np.meshgrid(x_reg, y_reg)
-
-            interp = LinearNDInterpolator(list(zip(x_coords, y_coords)), potential)
-            V_grid = interp(X_reg, Y_reg)
-
-            dy = y_reg[1] - y_reg[0]
-            dx = x_reg[1] - x_reg[0]
-            Ey, Ex = np.gradient(-V_grid, dy, dx)
-            E_mag_grid = np.sqrt(Ex**2 + Ey**2)
-
-            E_interp = LinearNDInterpolator(
-                list(zip(X_reg.ravel(), Y_reg.ravel())),
-                E_mag_grid.ravel(),
-            )
-            field_nodes = E_interp(x_coords, y_coords)
-            nan_mask = np.isnan(field_nodes)
-            if np.any(nan_mask):
-                field_nodes[nan_mask] = 0.0
+            field_nodes = _node_field_2d(x_coords, y_coords, potential)
         else:
             # 1D: ElectricField is an EDGE model (N-1 values); interpolate
             # onto the node-length x array to get a node-aligned magnitude.
@@ -527,6 +614,7 @@ def run_field(config: DeviceConfig, bias_V: float = -50.0) -> SimResult:
             "bias_V": bias_V,
             "potential": potential,
             "net_doping": net_doping,
+            "solver": "devsim",
         }
 
         if is_2d:
