@@ -182,20 +182,14 @@ def cv_sweep(device_info, V_range, eps_r=9.7, area=1.0):
         # Negative V_target (reverse bias) -> positive cathode voltage
         V_cathode_target = -V_target
 
-        # Ramp cathode in 0.5V steps from current state
-        V_step = 0.5
-        if V_cathode_target < current_V_cathode:
-            V_step = -0.5
-
-        V = current_V_cathode + V_step
+        # Ramp cathode from the current state in equal steps of at most 0.5 V
+        # that end exactly on the target (an off-lattice target used to stop at
+        # the last multiple of 0.5 V below it while being labelled V_target).
+        n_steps = max(1, int(np.ceil(abs(V_cathode_target - current_V_cathode) / 0.5 - 1e-9)))
+        V_steps = np.linspace(current_V_cathode, V_cathode_target, n_steps + 1)[1:]
         converged = True
 
-        if V_step > 0:
-            cond = lambda v: v <= V_cathode_target + 1e-10
-        else:
-            cond = lambda v: v >= V_cathode_target - 1e-10
-
-        while cond(V):
+        for V in V_steps:
             devsim.set_parameter(device=device, name=bias_name, value=V)
             try:
                 devsim.solve(
@@ -216,8 +210,6 @@ def cv_sweep(device_info, V_range, eps_r=9.7, area=1.0):
                     logger.warning(f"cv_sweep: failed at V_cathode={V:.2f}V: {e}")
                     converged = False
                     break
-            V += V_step
-            V = round(V, 10)
 
         if converged:
             W = extract_depletion_width_numerical(device_info)

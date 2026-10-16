@@ -765,7 +765,7 @@ def cce_vs_fluence(
 
             # Ramp bias (cathode voltage = -V_bias for reverse bias)
             cathode_V = -V_bias
-            ramp_bias(device_info, cathode_V, contact="cathode", V_step=0.5)
+            ramp_bias(device_info, cathode_V, contact="cathode", V_step=0.5, V_step_max=2.0)
 
             # Prepare generation profile
             x_nodes = np.array(
@@ -973,7 +973,7 @@ def cce_vs_bias_at_fluence(
         for idx, V_target in zip(sorted_indices, sorted_V):
             cathode_V = -V_target  # reverse bias convention
 
-            ramp_bias(device_info, cathode_V, contact="cathode", V_step=0.5)
+            ramp_bias(device_info, cathode_V, contact="cathode", V_step=0.5, V_step_max=2.0)
 
             # Add generation and solve
             add_generation_to_dd(device_info, gen_values)
@@ -1151,7 +1151,7 @@ def cce_post_anneal(
 
         # Ramp bias
         cathode_V = -V_bias
-        ramp_bias(device_info, cathode_V, contact="cathode", V_step=0.5)
+        ramp_bias(device_info, cathode_V, contact="cathode", V_step=0.5, V_step_max=2.0)
 
         # Prepare generation profile
         x_nodes = np.array(
@@ -1397,7 +1397,7 @@ def cce_vs_epi_thickness(
 
             # Ramp to bias (cathode voltage is -V_bias)
             cathode_V = -V_bias
-            ramp_bias(device_info, cathode_V, contact="cathode", V_step=0.5)
+            ramp_bias(device_info, cathode_V, contact="cathode", V_step=0.5, V_step_max=2.0)
 
             # Add generation and solve
             add_generation_to_dd(device_info, gen_values)

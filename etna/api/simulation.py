@@ -442,7 +442,7 @@ def run_field(config: DeviceConfig, bias_V: float = -50.0) -> SimResult:
         # with the exact cv_sweep sign/contact convention (cv_analysis.py:171,
         # "positive V on cathode = reverse bias for p+/n- diode"):
         # conventional-negative bias_V -> positive cathode voltage -bias_V.
-        ramp_bias(device_info, V_target=-bias_V, contact="cathode", V_step=0.5)
+        ramp_bias(device_info, V_target=-bias_V, contact="cathode", V_step=0.5, V_step_max=2.0)
 
         is_2d = device_info.get("dimension") == 2 or config.half_width_um is not None
 

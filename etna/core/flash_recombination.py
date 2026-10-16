@@ -347,7 +347,7 @@ def cce_vs_dose_rate(
 
         # Ramp to bias (cathode voltage is -V_bias for reverse bias)
         cathode_V = -V_bias
-        ramp_bias(device_info, cathode_V, contact="cathode", V_step=0.5)
+        ramp_bias(device_info, cathode_V, contact="cathode", V_step=0.5, V_step_max=2.0)
 
         # Get mesh nodes
         x_nodes = np.array(
@@ -400,7 +400,7 @@ def cce_vs_dose_rate(
     try:
         # No Auger -- just SRH
         cathode_V = -V_bias
-        ramp_bias(device_info2, cathode_V, contact="cathode", V_step=0.5)
+        ramp_bias(device_info2, cathode_V, contact="cathode", V_step=0.5, V_step_max=2.0)
 
         x_nodes2 = np.array(
             devsim.get_node_model_values(device=device2, region=region2, name="x")
