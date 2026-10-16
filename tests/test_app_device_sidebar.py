@@ -24,6 +24,8 @@ ALL_FIELDS_VALUES = {
     "L_transition_um": 1.5,
     "T": 310.0,
     "area_cm2": 2e-4,
+    "nplus_thickness_um": 2.0,  # added with the n+ layer DeviceConfig fields
+    "N_D_nplus": 5e18,
 }
 
 

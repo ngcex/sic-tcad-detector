@@ -341,3 +341,67 @@ Wall moves beyond 100 V: YES (>= 150 V, 1D and 2D). Calibrated range changes < 1
 => NOT a pure validity extension. Redo: graded-doping C-V calibration (calibrate_graded_doping, its 2D twin;
 W targets at -10/-30 V move 4 % / 0.9 %), N_t fit of the dark current (-60 V +0.3 %, more at low bias),
 and decide whether the alpha deposits in the n+ (CCE -3.7 %).
+
+## n+ substrate in production (feat/nplus-substrate, 2026-10-16)
+
+Phase 1 (balanced extraction, no n+): see commit message; lab/solver2d/bench/balanced_check.py.
+Direct-vs-balanced dark-current gap is an N_t-independent ~3e-13 A/cm^2 round-off floor of the
+direct form (balanced current exactly linear in N_t), not the SRV term as the spike note said.
+
+Phase 2 (option `nplus_thickness_cm` / `N_D_nplus` / `nplus_generation` in create_sic_device,
+create_sic_2d_device; DeviceConfig.nplus_thickness_um / N_D_nplus). lab/solver2d/bench/nplus_check.py:
+- default (None) bit-for-bit vs phase 1 (bitforbit.py: mesh, W, C, CCE, dark, run_cv/run_cce/run_dark_current).
+- reproduces the spike exactly: W(-10/-30/-50 V) 9.213316/9.895584/9.940143 um; CCE (epi-only G)
+  0.998867 0.999562 0.999708 0.999778 0.999820 (raw collected/generated, < 1).
+- wall: 1D fixed 0.5 V steps 67.5 V -> 150 V; 2D hw 25, epi 10 um, N_D_bulk 5e13: 150 V (161 s).
+- dark current depended on the n+ thickness (f_depl floor of the effective-generation proxy
+  generates throughout the n+: -60 V 1.8014e-11 A at 1 um, 1.8114e-11 at 5 um). The proxy is now
+  confined to x <= epi end when an n+ layer exists: 1/5/20 um -> 1.7982941/1.7982946/1.7982946e-11 A
+  (-60 V, 0.04 cm2, N_t 2.8e12; no n+: 1.7956753e-11, +0.15 %).
+- alpha deposit in the n+ (nplus_generation=True; 15 um range, 10 um epi, I_gen 1.9224e-4 vs
+  1.5919e-4 epi-only), CCE at -10 / -50 V by n+ thickness (n+ inherits epi tau_p 0.6 us, mu_p 75.7,
+  L_p ~11 um): 1 um 0.9612/0.9622 (track truncated, I_gen 1.7259e-4), 5 um 0.9466/0.9479,
+  10 um 0.9680/0.9694, 20 um 0.9758/0.9772, 50 um 0.9770/0.9784. Not converged in thickness below
+  ~50 um and set by the assumed n+ hole lifetime; a realistic short n+ lifetime drives it to the
+  no-collection bound CCE_epi * 1.5919/1.9224 = 0.828. Epi-only: 0.998868/0.999820 (any thickness).
+
+Phase 3 (batched 1D engine with n+): lab/solver2d/bench/nplus_parity1d.py, 10 configs to -100 V:
+max rel dW 6.1e-15, |dpsi| 1.4e-14 V, |dCCE| 3.2e-11. p+ 0.3/0.5 um without n+: dW 1.6e-15, dCCE 3.2e-12.
+Engine box: p+ 0.3-3 um, n+ 1-5 um, N_D_nplus 1e18-1e19. 2D engine: rejects n+ (devsim).
+Reach-through with n+ = edge within one Debye length of the epi end (12.85 V default device;
+the mesh rule gives 17.0 V without n+ and never fires with n+).
+
+Phase 4 (recalibration, record only: etna.core.device.NPLUS_CALIBRATION; lab/solver2d/bench/nplus_calibrate.py):
+- C-V targets W = 1.7 / 9.5 / 9.73 um at 0 / -10 / -30 V (A = 4 mm2): NO exact solution for
+  (N_D_junction, N_D_bulk, L) with n+ (best: N_D_bulk at the 1e12 bound, -30 V +1.5 %) nor without
+  (best: N_D_junction at the 1e17 bound, L 0.11 um, -30 V +2.6 %; the shipped defaults also miss
+  -30 V by +2.61 %). Past full depletion W saturates at the epi end (n+: 9.90 um at -30 V).
+  p+ thickness has no effect on W (1 vs 0.3 um identical).
+- 2-point exact solve (0, -10 V) at held L (n+, p+ 0.3 um), residual -30 V and deliverables:
+  | L um | N_D_junction | N_D_bulk | res -30 V | CCE -10 / -50 V | I(N_t 2.8e12) -10/-30/-60 V (A, 4 mm2) |
+  | 0.500 | 6.770553e15 | 9.228039e13 | +1.77 % | 0.999104 / 0.999819 | 6.140e-12 / 1.5216e-11 / 1.79667e-11 |
+  | 0.750 | 3.948229e15 | 7.985437e13 | +1.76 % | 0.999070 / 0.999819 | 6.155e-12 / 1.5028e-11 / 1.79659e-11 |
+  | 0.987 | 2.974271e15 | 6.335936e13 | +1.74 % | 0.999021 / 0.999819 | 6.121e-12 / 1.4845e-11 / 1.79657e-11 |
+  | 1.250 | 2.451669e15 | 3.920880e13 | +1.71 % | 0.998954 / 0.999819 | 6.066e-12 / 1.4663e-11 / 1.79656e-11 |
+  | 1.500 | 2.179422e15 | 4.732929e12 | +1.7 %  | 0.998897 / 0.999818 | 6.029e-12 / 1.4560e-11 / 1.79655e-11 |
+  (L = 2 um: no 2-point solution, N_D_bulk at the 1e12 bound.) Record: L = 0.987 um (held).
+- N_t: 2.8e12 -> 2.805349e12 (I(-60 V) 17.9657 -> 18.0000 pA; -10 V 6.132e-12, -30 V 1.4873e-11 A).
+- E_t 0.65 -> 0.67 (radiation_damage Z1/2, Burin Table I): leakage <= 1.8e-6 (n+ model), but on the
+  default no-n+ model run_dark_current then stops at -89.5 V instead of -100 V (wall), so the default
+  SiC4H_Parameters.E_t stays 0.65 until the flip. run_dark_current reports no "truncated" flag (open item).
+- p+ 1 -> 0.3 um (n+ model): dark -0.28 % at -10 V, -0.10 % at -60 V (f_depl floor in the p+);
+  CCE <= 8.5e-7.
+- Old default (no n+, p+ 1 um, 2.93e15/8.82e13/0.987, N_t 2.8e12) -> record: CCE -10/-30/-50 V
+  0.963266/0.997719/0.998474 -> 0.999021/0.999706/0.999819; dark -10/-30/-60 V
+  5.962/14.564/17.957 pA -> 6.132/14.873/18.000 pA; W 0/-10/-30 V 1.697/9.515/9.984 -> 1.700/9.500/9.899 um.
+
+Post-phase-4 checks:
+- 2D devsim with n+ (hw 25, n+ 1 um): balanced raw CCE 0.9995626 (-20 V) / 0.9998488 (-60 V),
+  = 1D, laterally flat; the direct contact current gives 1.0136 / 0.9891 (unusable). Alpha in the
+  n+ (1 um): 0.9619 / 0.9622. Fixed: cce_lateral_scan's in_mesh_generation_fraction now counts the
+  n+ depth when nplus_generation=True (0.8978 vs 0.8280 epi-only).
+- Alpha-in-n+ bracket on the record (p+ 0.3 um, record doping), raw CCE at -10 / -30 / -50 V:
+  epi-only (any n+ thickness) 0.999022 / 0.999706 / 0.999819;
+  in n+, 5 um 0.946929 / 0.947792 / 0.947922; 20 um 0.976105 / 0.977040 / 0.977178;
+  50 um 0.977322 / 0.978260 / 0.978398 (n+ inherits epi tau_p 0.6 us -> L_p ~11 um);
+  no collection from the n+: 0.999819 * 1.591911/1.922426 = 0.8279 (-50 V).

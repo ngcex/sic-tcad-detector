@@ -209,18 +209,22 @@ class TestCompareCCE2Dvs1D:
     """Tests for compare_cce_2d_vs_1d."""
 
     @pytest.mark.slow
-    def test_returns_ratio_less_than_one(self):
-        """Active-to-geometric ratio should be < 1.0 for 100um SV."""
+    def test_ratio_is_one_for_laterally_uniform_device(self):
+        """Active-to-geometric ratio of the laterally uniform 100 um SV is 1 (no edge loss).
+
+        The device is laterally uniform (mirror side walls, full-width contacts), so CCE(x)
+        is flat and the ratio is 1 (DESIGN-2: CCE uniformity is not a modelled result). The
+        former assertion ``ratio < 1.0`` held only through the round-off floor of the direct
+        cathode current (ratio 0.999999964, lateral CCE scattered by 5e-8); with the
+        balanced extraction the scatter is ~1e-9 and the ratio 1.0000000002.
+        """
         result = compare_cce_2d_vs_1d(half_width_um=50.0, V_bias=50.0, gen_rate=1e18)
 
         assert result["cce_1d"] > 0, f"1D CCE should be > 0, got {result['cce_1d']}"
         assert (
             result["cce_2d_center"] > 0
         ), f"2D center CCE should be > 0, got {result['cce_2d_center']}"
-        assert result["active_to_geometric_ratio"] < 1.0, (
-            f"Active/geometric ratio ({result['active_to_geometric_ratio']:.4f}) "
-            f"should be < 1.0 (edge effects reduce effective volume)"
-        )
+        assert result["active_to_geometric_ratio"] == pytest.approx(1.0, abs=1e-6)
 
 
 # ---------------------------------------------------------------------------
@@ -266,7 +270,9 @@ class TestCCELateralScanSharedDevice:
         assert len(result["x_positions_cm"]) == 2
         f_in = result["in_mesh_generation_fraction"]
         assert 0.0 < f_in <= 1.0
-        np.testing.assert_allclose(result["q_collected_over_deposited"], result["cce_values"] * f_in)
+        np.testing.assert_allclose(
+            result["q_collected_over_deposited"], result["cce_values"] * f_in
+        )
 
 
 class TestCCEHeatmap2D:

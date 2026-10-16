@@ -67,7 +67,7 @@ class TransportResult:
     psi: np.ndarray  # (B, N) V
     n: np.ndarray  # (B, N)
     p: np.ndarray  # (B, N)
-    J_cathode: np.ndarray  # (B,) A/cm^2, Jn + Jp on the last edge
+    J_cathode: np.ndarray  # (B,) A/cm^2, cathode Jn + Jp (Jn in the balanced form)
     gummel_iterations: int
     converged: np.ndarray  # (B,) bool
 
@@ -201,8 +201,20 @@ class ContinuityBatch:
             # tiny difference of two large SG terms, so it is NOT re-evaluated after the Poisson
             # update below
             Jn, Jp = self.currents(psi_T, n_new, p_new)
-            J = Jn[-1] + Jp[-1]
-            dJ = np.abs(J - J_prev) / (np.abs(J) + 1e-300) if J_prev is not None else np.full(B, np.inf)
+            # Balanced form (as devsim's extract_steady_state_current): summing the electron
+            # equation over the interior nodes gives Jn(cathode edge) = Jn(anode edge) +
+            # sum q v (U - G); both terms are well conditioned (electrons are minority at the
+            # p+ anode), unlike Jn[-1] itself, which is a difference of huge SG terms when n
+            # is large at the cathode (n+ layer). Holes are minority at the cathode: direct.
+            denom = tau_p * (n_new + n_i) + tau_n * (p_new + n_i)
+            U = (n_new * p_new - n_i**2) / denom
+            S = (Q * self.v[1:-1] * (U[1:-1] - G_T[1:-1])).sum(axis=0)
+            J = Jn[0] + S + Jp[-1]
+            dJ = (
+                np.abs(J - J_prev) / (np.abs(J) + 1e-300)
+                if J_prev is not None
+                else np.full(B, np.inf)
+            )
             J_prev = J
             # Poisson with nodal quasi-Fermi levels implied by (n, p)
             phi_n = psi_T - pb.V_t[None, :] * np.log(np.maximum(n_new, 1e-300) / n_i)

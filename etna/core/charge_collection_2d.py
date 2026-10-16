@@ -34,13 +34,13 @@ from etna.core.device2d import create_sic_2d_device
 from etna.core.poisson import setup_poisson, solve_equilibrium
 from etna.core.drift_diffusion import (
     setup_sic_drift_diffusion,
-    extract_contact_current,
+    extract_steady_state_current,
     _restore_solution,
     _snapshot_solution,
     ramp_bias,
 )
 from etna.core.charge_collection import add_generation_to_dd
-from etna.core.generation_profiles import alpha_depth_shape
+from etna.core.generation_profiles import alpha_depth_shape, confine_generation_to_epi
 
 logger = logging.getLogger(__name__)
 
@@ -233,7 +233,7 @@ def compute_cce_2d(device_info, generation_values, contact="cathode"):
     I_generated = Q * integrate_nodes_box_2d(device_info, generation_values)
 
     # I_collected at contact [A/cm for 2D]
-    I_collected = abs(extract_contact_current(device_info, contact))
+    I_collected = abs(extract_steady_state_current(device_info, contact))
 
     if I_generated <= 0:
         return 0.0
@@ -345,6 +345,7 @@ def cce_lateral_scan(
 
         # Zero out generation in substrate (y < junction_pos)
         generation[y_from_junction < 0] = 0.0
+        generation = confine_generation_to_epi(device_info, y_nodes, generation)
 
         # Inject generation, solve, extract CCE
         add_generation_to_dd(device_info, generation)
@@ -373,9 +374,12 @@ def cce_lateral_scan(
 
     cce_values = np.array(cce_values)
     edge_to_center = cce_values[-1] / cce_values[0] if cce_values[0] > 0 else 0.0
-    f_in = in_mesh_generation_fraction(
-        device_info["epi_thickness_cm"], alpha_range_cm=alpha_range_cm
-    )
+    # depth over which pairs are generated: the epi, plus the n+ layer only if the device
+    # was built with nplus_generation=True (confine_generation_to_epi)
+    gen_depth = device_info["epi_thickness_cm"]
+    if device_info.get("nplus_thickness_cm") is not None and device_info.get("nplus_generation"):
+        gen_depth += device_info["nplus_thickness_cm"]
+    f_in = in_mesh_generation_fraction(gen_depth, alpha_range_cm=alpha_range_cm)
 
     return {
         "x_positions_cm": x_positions,
@@ -507,6 +511,7 @@ def compare_cce_2d_vs_1d(half_width_um=50.0, V_bias=50.0, gen_rate=1e18):
 
         # Uniform epi generation: G = gen_rate for y > junction, 0 otherwise
         gen_2d = np.where(y_nodes_2d >= junction_pos, gen_rate, 0.0)
+        gen_2d = confine_generation_to_epi(device_info_2d, y_nodes_2d, gen_2d)
 
         # Compute 2D CCE (full area, uniform generation)
         add_generation_to_dd(device_info_2d, gen_2d)
