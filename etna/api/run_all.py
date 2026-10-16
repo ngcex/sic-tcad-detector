@@ -62,6 +62,8 @@ def _run_sweep(config: DeviceConfig) -> SimResult:
     from etna.core.engine2d import engine2d_unsupported_reason
     from etna.core.optimization import microdosimetric_sweep
 
+    if config.nplus_thickness_um is not None:
+        raise _SweepUnsupported("the sweep models the current stack without n+ substrate")
     epi_cm = config.epi_thickness_um * 1e-4
     for hw in _SWEEP_HALF_WIDTHS:
         for vb in _SWEEP_BIASES:
@@ -230,7 +232,7 @@ def run_all(config: DeviceConfig, sections: "tuple[str, ...] | None" = None) -> 
             res = runner(config)
         except _SweepUnsupported as exc:
             done.append(
-                SectionResult(name, title, "skipped", reason=f"outside the 2D engine box: {exc}")
+                SectionResult(name, title, "skipped", reason=f"not available here: {exc}")
             )
         except Exception as exc:  # a section never aborts the run
             done.append(

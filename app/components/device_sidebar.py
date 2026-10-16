@@ -123,29 +123,16 @@ def render_device_sidebar() -> None:
         help="p+ anode layer (not the n+ substrate, see 'n+ layer under the epi').",
     )
     nplus_on = st.sidebar.checkbox(
-        "n+ layer under the epi",
-        value=DeviceConfig.nplus_thickness_um is not None,
+        "n+ stack preset (uncalibrated, owner unconfirmed)",
+        value=False,
         key="cfg_nplus_on",
-        help="Conductive n+ substrate (truncated) between the n- epi and the cathode "
-        "contact. Off = historical model: cathode directly on the n- epi.",
+        help="Applies the whole recorded n+ stack together: 1 um n+ (1e19) under the "
+        "epi, 0.3 um p+ anode, N_D_junction 2.974e15, N_D_bulk 6.336e13 (overrides the "
+        "fields above). Off = historical model with the cathode directly on the n- epi. "
+        "The preset is not validated against measurement and the device stack is not "
+        "yet confirmed; the 2D engine does not support it (devsim, slower).",
     )
-    if nplus_on:
-        nplus_thickness_um = st.sidebar.number_input(
-            "n+ layer thickness (µm)",
-            value=DeviceConfig.nplus_thickness_um or 1.0,
-            step=0.5,
-            format="%.2f",
-            key="cfg_nplus_thickness_um",
-        )
-        N_D_nplus = st.sidebar.number_input(
-            "N_D n+ (cm⁻³)",
-            value=DeviceConfig.N_D_nplus,
-            step=1e18,
-            format="%.3e",
-            key="cfg_N_D_nplus",
-        )
-    else:
-        nplus_thickness_um, N_D_nplus = None, DeviceConfig.N_D_nplus
+    nplus_thickness_um, N_D_nplus = None, DeviceConfig.N_D_nplus
     if dim == "2D":
         half_width_um = st.sidebar.number_input(
             "Half-width (µm)",
@@ -241,6 +228,20 @@ def render_device_sidebar() -> None:
         "nplus_thickness_um": nplus_thickness_um,
         "N_D_nplus": N_D_nplus,
     }
+
+    if nplus_on:
+        from etna.core.device import NPLUS_CALIBRATION as _C
+
+        values.update(
+            substrate_thickness_um=_C["substrate_thickness_cm"] * 1e4,
+            nplus_thickness_um=_C["nplus_thickness_cm"] * 1e4,
+            N_D_nplus=_C["N_D_nplus"],
+            doping_profile="graded",
+            N_D_junction=_C["N_D_junction"],
+            N_D_bulk=_C["N_D_bulk"],
+            L_transition_um=_C["L_transition"] * 1e4,
+        )
+        st.sidebar.warning("n+ preset active: uncalibrated stack, owner unconfirmed.")
 
     try:
         st.session_state["device_config"] = assemble_config(values)

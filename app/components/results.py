@@ -250,7 +250,8 @@ def build_field_figures(result: SimResult) -> tuple[go.Figure, go.Figure]:
 
 CROSS_CHECK_SCOPE = (
     "the batched engine and devsim agree (relative difference <= 3e-6) at the "
-    "checked biases down to -40 V; not validated against measurement"
+    "checked biases down to -40 V (-100 V with the n+ layer); not validated "
+    "against measurement"
 )
 DEVSIM_ONLY_TEXT = (
     "devsim result; not cross-checked against the batched engine and not "
