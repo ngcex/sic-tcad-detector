@@ -1,0 +1,23 @@
+JIT warm-up (compile from cache or fresh) + hw=25 run: 0.14s
+
+=== hw=50 um, load 1.7
+engine full-2D ramp: {'mesh': 0.0314, 'dark': 0.204, 'factor': 0.0048, 'scan': 0.0549, 'total': 0.295, 'gummel': [4, 4, 4, 4, 4, 4, 4, 4, 4, 4], 'newton_2d': 81, 'I_dark': 0.0} speedup 43.9x, max|dCCE| 1.45e-07
+engine (best of 3): {'mesh': 0.0301, 'dark': 0.0036, 'factor': 0.0049, 'scan': 0.0547, 'total': 0.0933, 'gummel': [4, 4, 4, 4, 4, 4, 4, 4, 4, 4], 'newton_2d': 1, 'I_dark': 0.0}
+engine (after devsim): 0.0946
+devsim: {'build': 10.091, 'scan': 2.854, 'total': 12.945, 'I_dark': 0.0}
+cce engine [0.99849483 0.99848248 0.99847653 0.99848111 0.99847696 0.99848092
+ 0.99846679 0.99849091 0.99846901 0.99836869]
+cce devsim [0.99849493 0.99848256 0.99847658 0.99848116 0.99847701 0.99848098
+ 0.99846685 0.99849098 0.99846908 0.99836884]
+max |dCCE| = 1.45e-07   speedup = 138.8x (vs post-devsim engine run 136.8x)
+
+=== hw=150 um, load 1.6
+engine full-2D ramp: {'mesh': 0.0872, 'dark': 4.2673, 'factor': 0.1021, 'scan': 0.4656, 'total': 4.9221, 'gummel': [4, 4, 4, 4, 4, 4, 4, 4, 4, 4], 'newton_2d': 81, 'I_dark': 0.0} speedup 9.8x, max|dCCE| 1.11e-07
+engine (best of 3): {'mesh': 0.087, 'dark': 0.0552, 'factor': 0.1021, 'scan': 0.4613, 'total': 0.7057, 'gummel': [4, 4, 4, 4, 4, 4, 4, 4, 4, 4], 'newton_2d': 1, 'I_dark': 0.0}
+engine (after devsim): 0.7177
+devsim: {'build': 37.827, 'scan': 10.183, 'total': 48.011, 'I_dark': 0.0}
+cce engine [0.99848949 0.99847638 0.9984739  0.99847552 0.99847549 0.99847556
+ 0.99847558 0.99847676 0.99847565 0.99839167]
+cce devsim [0.99848956 0.99847644 0.99847397 0.99847563 0.9984756  0.99847566
+ 0.99847567 0.99847687 0.99847569 0.99839172]
+max |dCCE| = 1.11e-07   speedup = 68.0x (vs post-devsim engine run 66.9x)
