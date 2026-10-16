@@ -41,3 +41,23 @@ D-02/B-06 (DESIGN-1 "18 pA" not produced by the model: measured 141 pA), A-02..A
 ## 4. Housekeeping
 - [ ] Open a PR from fix/audit-v7-top into main when ready (not done; user has not asked).
 - [ ] lab/gpu_solver stays as the research record (MLX/numpy backends live only there).
+
+## 5. Session 2026-10-16/17 findings (adaptive ramp, slow-suite profile)
+- Slow suite before: 19 min (73 tests, only 4 touched the batched engine; MLX is lab-only). The 2D build
+  (`create_2d_dd_device`) dominates: 72% of its time is UMFPACK `factor_numeric` (41 ms x ~1800 Newton
+  iterations for a 50 um / -50 V build). Full suite now 606 passed in 653 s.
+- Done: `ramp_bias(V_step_max=)` adaptive ramp (2 V steps, coarse tolerance on intermediate points, strict
+  on the target, snapshot/restore + halving on failure). 2D build 2.2x (50 um 102->47 s, 150 um 390->177 s),
+  parity ~1e-9. Enabled in create_2d_dd_device, run_field, flash (2), cce_vs_fluence, cce_vs_bias_at_fluence,
+  cce_post_anneal, cce_vs_epi_thickness (1D gains only 1.3-1.9x: the ramp is a smaller share than guessed).
+  NOT enabled: sweep_iv_vs_temperature (1.0x), cce_vs_bias and cv_sweep (ramp failure = reported truncation
+  voltage), TAT dark-current loops (lagged E-field/gamma make the final state path dependent), transient.
+- cce_vs_fluence at 1e14 and cce_post_anneal gave NaN with fixed steps (ramp fails at the first 0.1 V step,
+  effective doping < 1e10); adaptive converges. Value 0.9907 has no independent reference yet.
+- Stale-device hazard (open, pre-existing): `devsim.solve` is global; a live converged 2D device sits at a
+  ~1e-9 noise floor (strict rel 1e-10 never met) and can make other builds fail to converge. Tests worked
+  around by deleting devices early and running fixture tests last. Not yet checked: do the facades that do
+  not reset devsim (radiation_damage, temperature_sweep, flash, transient) leave devices alive?
+- Fixed A-01 in cv_sweep (off-lattice target solved at the lattice point below it): tests/test_cv_sweep_lattice.py.
+- Next: SuperLU (or other) replacement of devsim's UMFPACK shim callback (time one factorization first);
+  run_field / temperature sweep onto the batched engine; device_list check after facade calls.
