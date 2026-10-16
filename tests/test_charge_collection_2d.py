@@ -177,8 +177,15 @@ class TestCCELateralScan:
     """Tests for cce_lateral_scan."""
 
     @pytest.mark.slow
-    def test_edge_lower_than_center(self):
-        """CCE at edge should be lower than CCE at center for 100um SV."""
+    def test_edge_equals_center_for_uniform_device(self):
+        """Edge and centre CCE agree for the laterally uniform 100um SV.
+
+        This test used to assert edge < center. That was an artefact: I_generated was
+        integrated with a triangle rule that differs from the solver's box-rule source by
+        O(h), so the ratio read ~0.9998. Nothing in the model (depth-only doping,
+        full-width contacts, mirror sides) separates edge from centre, so the physical
+        answer is 1 (PERF-03).
+        """
         device_info = None
         try:
             device_info = create_2d_dd_device(half_width_um=50.0, V_bias=50.0)
@@ -188,20 +195,15 @@ class TestCCELateralScan:
             cce_edge = result["cce_values"][-1]
 
             assert cce_center > 0, f"Center CCE should be positive, got {cce_center}"
-            assert cce_edge < cce_center, (
-                f"Edge CCE ({cce_edge:.4f}) should be less than "
-                f"center CCE ({cce_center:.4f})"
-            )
-            assert result["edge_to_center_ratio"] < 1.0, (
-                f"edge_to_center_ratio ({result['edge_to_center_ratio']:.4f}) "
-                f"should be < 1.0"
-            )
+            assert cce_edge == pytest.approx(cce_center, rel=1e-6)
+            assert result["edge_to_center_ratio"] == pytest.approx(1.0, abs=1e-6)
         finally:
             if device_info is not None:
                 try:
                     devsim.delete_device(device=device_info["device_name"])
                 except Exception:
                     pass
+
 
 class TestCompareCCE2Dvs1D:
     """Tests for compare_cce_2d_vs_1d."""
@@ -285,3 +287,21 @@ class TestCCEHeatmap2D:
         # Active fraction should be between 0 and 1
         af = result["active_fraction"]
         assert 0 <= af <= 1.0, f"active_fraction ({af}) should be between 0 and 1"
+
+
+class TestLateralScanIsMeshIndependentForUniformDevice:
+    """PERF-03: the device is laterally uniform, so edge and centre CCE must agree.
+
+    With the old triangle rule for I_generated the ratio differed from 1 by ~1e-4
+    (O(h), mesh dependent); with the box rule that matches the solver's source it is 1
+    to solver tolerance.
+    """
+
+    @pytest.mark.slow
+    def test_edge_to_centre_ratio_is_one(self):
+        device_info = create_2d_dd_device(half_width_um=25.0, V_bias=50.0)
+        try:
+            scan = cce_lateral_scan(device_info, n_points=3, gen_rate=1e18)
+        finally:
+            devsim.delete_device(device=device_info["device_name"])
+        assert scan["edge_to_center_ratio"] == pytest.approx(1.0, abs=1e-6)

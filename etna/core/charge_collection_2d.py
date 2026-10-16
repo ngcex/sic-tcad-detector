@@ -70,6 +70,22 @@ def _robust_dc_solve():
         logger.info("DC solve converged with relaxed tolerances")
 
 
+def integrate_nodes_box_2d(device_info, node_values):
+    """Integrate a per-node field with devsim's box rule: sum(NodeVolume * value).
+
+    This is the quadrature the solver itself applies to a node source term, so
+    I_generated and the collected current are consistent. The triangle rule of
+    ``integrate_over_mesh_2d`` differs from it by O(h_x h_y dG/dx dG/dy), which
+    made the edge/centre CCE ratio a mesh artefact (audit PERF-03).
+    """
+    device = device_info["device_name"]
+    region = device_info["region_name"]
+    volume = np.array(
+        devsim.get_node_model_values(device=device, region=region, name="NodeVolume")
+    )
+    return float(np.sum(volume * np.asarray(node_values, dtype=float)))
+
+
 def integrate_over_mesh_2d(device_info, node_values):
     """Integrate a per-node scalar field over the 2D triangular mesh.
 
@@ -193,7 +209,7 @@ def compute_cce_2d(device_info, generation_values, contact="cathode"):
         Charge collection efficiency, clipped to [0, 1].
     """
     # I_generated = Q * integral(G dA)  [A/cm for 2D]
-    I_generated = Q * integrate_over_mesh_2d(device_info, generation_values)
+    I_generated = Q * integrate_nodes_box_2d(device_info, generation_values)
 
     # I_collected at contact [A/cm for 2D]
     I_collected = abs(extract_contact_current(device_info, contact))
