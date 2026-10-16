@@ -245,7 +245,7 @@ def create_dd_device(doping_profile="graded", **kwargs):
 
 _RAMP_SOLVE = dict(type="dc", absolute_error=1e10, relative_error=DC_REL_ERROR, maximum_iterations=40)
 _RAMP_SOLVE_COARSE = dict(
-    type="dc", absolute_error=1e10, relative_error=DC_REL_ERROR, maximum_iterations=60
+    type="dc", absolute_error=1e10, relative_error=DC_REL_ERROR, maximum_iterations=40
 )
 _RAMP_SOLVE_RELAXED = dict(
     type="dc", absolute_error=1e12, relative_error=1e-8, maximum_iterations=100
