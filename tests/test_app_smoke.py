@@ -61,6 +61,12 @@ def _batch_sweep():
     render()
 
 
+def _run_all():
+    from app.workflows.run_all import render
+
+    render()
+
+
 def _start(fn):
     at = AppTest.from_function(fn, default_timeout=TIMEOUT)
     at.session_state["device_config"] = DeviceConfig()
@@ -119,6 +125,15 @@ def test_field_map_page_default_run():
     assert "Solver: devsim" in _captions(at)
 
 
+def test_run_all_page_default_run():
+    at = _start(_run_all)
+    _click_run(at)
+    rep = at.session_state["run_all_report"]
+    assert rep.ok, rep.rows()
+    assert len(at.dataframe) == 1 and len(rep.sections) == 7
+    assert not at.warning
+
+
 def test_dark_current_page_two_temperatures():
     at = _start(_dark_current)
     assert any("calibration input" in (w.value or "") for w in at.warning)
@@ -169,6 +184,7 @@ def test_batch_sweep_page_default_run():
         _radiation_damage,
         _microdosimetry,
         _batch_sweep,
+        _run_all,
     ],
 )
 def test_pages_render_without_config(fn):

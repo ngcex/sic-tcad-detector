@@ -23,6 +23,7 @@ from app.workflows.radiation_damage import render as render_radiation_damage
 from app.workflows.dark_current import render as render_dark_current
 from app.workflows.microdosimetry import render as render_microdosimetry
 from app.workflows.batch_sweep import render as render_batch_sweep
+from app.workflows.run_all import render as render_run_all
 
 st.set_page_config(
     page_title="ETNA — SiC TCAD Simulator",
@@ -42,6 +43,12 @@ render_device_sidebar()
 pages = [
     st.Page(
         render_home, title="Home", icon=":material/home:", url_path="home", default=True
+    ),
+    st.Page(
+        render_run_all,
+        title="Run All",
+        icon=":material/play_circle:",
+        url_path="run-all",
     ),
     st.Page(
         render_cv, title="C-V Analysis", icon=":material/show_chart:", url_path="cv"

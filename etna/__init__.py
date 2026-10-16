@@ -18,6 +18,7 @@ from etna.api.simulation import (
     run_temperature_sweep,
     run_transient,
 )
+from etna.api.run_all import Report, SectionResult, run_all
 from etna.api.sweep import ParametricSweep
 
 __all__ = [
@@ -36,5 +37,8 @@ __all__ = [
     "run_transient",
     "run_microdosimetry",
     "ParametricSweep",
+    "run_all",
+    "Report",
+    "SectionResult",
     "__version__",
 ]
