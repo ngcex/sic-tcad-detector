@@ -201,3 +201,17 @@ Status: written from code and logs only; nothing was run. **GUESS** marks infere
 - Open: create_sic_2d_device can leak a half-built mesh if it raises inside engine2d's grid builder; single_particle still uses the
   triangle rule (track charge); the generator script is stale vs the notebook (guarded by NB20_FORCE_REGENERATE);
   n_jobs for the engine path only 1.9x (import cost per worker, serial is fine); engine default switch left to the user.
+
+
+## n+ substrate spike (2026-10-16, lab/solver2d/notes/LOG.md "n+ substrate spike")
+- The devsim non-convergence wall is a contact/mesh artefact: with a 1 um n+ layer (1e19 or 1e18) under the epi the 1D fixed-step ramp
+  (0.5 V) reaches 150 V (was 54.5/67.5 V for N_D_bulk 5e13/8.5e13) and 2D hw=25 reaches 150 V for epi 5 and 10 um (was 26.5-37 V and 54.5-94 V).
+  Refining the epi-end mesh alone moves the wall (77/60 V) but only n+ removes it.
+- It is NOT a pure validity extension: with n+ (alpha restricted to the epi) C(-10 V) +4.1 %, C(-30 V) +0.9 %, C(-50 V) +0.46 %;
+  CCE(-10 V) 0.9666 -> 0.9989, CCE(-50 V) +1.3e-3; dark current (N_t 2.8e12, 0.04 cm2) -10/-30/-60 V: +2.5/+1.0/+0.32 %.
+  If the alpha also deposits in the n+ (range 15 um > 11 um device) CCE drops to ~0.962 at every bias.
+  devsim's direct contact current is unusable with n+ (CCE jumps 1-2 %, sometimes > 1): the well-conditioned electron balance is required.
+- Redo needed if n+ is adopted: graded-doping C-V fit (W targets move 4 %/0.9 %), N_t fit, a decision on alpha deposition in n+, builders
+  (etna/core/device.py, device2d.py), current extraction (drift_diffusion, charge_collection*, dark_current), W extraction (poisson, cv_analysis),
+  the 1D engine (etna/core/batched/*), the 2D engine thresholds (obsolete), DeviceConfig/_ENGINE_BOX, baselines and the tests listed in the LOG.
+- DECISION FOR THE OWNER: adopt a physical n+ substrate (recalibrate C-V and N_t) or keep the current model and its labelled validity limit.
