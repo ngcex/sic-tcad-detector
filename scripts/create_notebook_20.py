@@ -12,9 +12,33 @@ Sections:
 5. Fabrication Recommendations -- FEAS-04 (cells 21-26)
 
 This is the NBKV-05 deliverable for Phase 25 (capstone notebook).
+
+!!! WARNING -- THIS SCRIPT IS STALE (as of 2026-10-16) !!!
+The notebook notebooks/20_feasibility_report.ipynb is the SOURCE OF TRUTH.
+This generator was NOT updated with the 2026-10-16 corrections: it still ranks
+geometries by the edge/center CCE ratio (an I_generated quadrature artefact;
+the 2D model is laterally uniform, so the ratio is 1 by construction), selects
+the half-width by idxmax of that ratio, lacks solver='auto', lacks the
+ranked_hw operating-point logic and the correction note cell, and still
+carries the old dark-current calibration wording and the uniformity
+conclusions. Re-running it would OVERWRITE the corrected notebook with these
+retracted results. It therefore refuses to overwrite an existing notebook
+unless the environment variable NB20_FORCE_REGENERATE=1 is set.
 """
 
+import os
+import sys
+
 import nbformat
+
+NB_PATH = "notebooks/20_feasibility_report.ipynb"
+if os.path.exists(NB_PATH) and os.environ.get("NB20_FORCE_REGENERATE") != "1":
+    print(
+        f"Refusing to overwrite {NB_PATH}: this generator is STALE relative to the "
+        "notebook (see module docstring); the .ipynb is the source of truth. "
+        "Set NB20_FORCE_REGENERATE=1 to overwrite anyway."
+    )
+    sys.exit(1)
 
 nb = nbformat.v4.new_notebook()
 nb.metadata.kernelspec = {
@@ -1071,6 +1095,6 @@ print("=" * 80)
 # Write notebook
 # =============================================================================
 nb.cells = cells
-nb_path = "notebooks/20_feasibility_report.ipynb"
+nb_path = NB_PATH
 nbformat.write(nb, nb_path)
 print(f"Created notebook with {len(cells)} cells: {nb_path}")
