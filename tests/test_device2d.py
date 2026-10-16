@@ -257,35 +257,19 @@ class TestCalibrationCV:
             V_bias=0.0,
             doping_profile="graded",
         )
-        W_2d = []
-        import devsim
-        import devsim.python_packages.simple_physics as simple_physics
+        from etna.core.drift_diffusion import ramp_bias
 
-        bias_name = simple_physics.GetContactBiasName("cathode")
-        current_V = 0.0
+        # Walk the voltage list with the adaptive ramp (lands exactly on each
+        # target; the old hand-rolled 0.5 V loop made ~100 strict 2D solves).
+        W_2d = []
         for V_rev in voltages:
-            V_cathode_target = -V_rev
-            V = current_V
-            while V < V_cathode_target - 1e-10:
-                V = min(V + 0.5, V_cathode_target)
-                devsim.set_parameter(
-                    device=dev_2d["device_name"], name=bias_name, value=V
-                )
-                try:
-                    devsim.solve(
-                        type="dc",
-                        absolute_error=1e10,
-                        relative_error=1e-10,
-                        maximum_iterations=40,
-                    )
-                except devsim.error:
-                    devsim.solve(
-                        type="dc",
-                        absolute_error=1e12,
-                        relative_error=1e-8,
-                        maximum_iterations=100,
-                    )
-            current_V = V_cathode_target
+            ramp_bias(
+                dev_2d,
+                V_target=-V_rev,
+                contact="cathode",
+                V_step=0.5,
+                V_step_max=5.0,
+            )
             W_2d.append(extract_depletion_width_2d_center(dev_2d))
         W_2d = np.array(W_2d)
 
