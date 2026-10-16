@@ -227,41 +227,24 @@ class TestSurfaceRecombination:
 class TestDarkCurrentCalibration:
     """Test dark current calibration against experimental target."""
 
-    def test_dark_current_order_of_magnitude(self):
-        """Simulated dark current at -30V should be within order of magnitude of 18 pA.
+    def test_dark_current_matches_calibration_target(self):
+        """Leakage on the field-refreshed path matches the calibration target.
 
-        Target range: 1.8 pA to 180 pA (0.1x to 10x of 18 pA).
-        Uses default parameters: N_t=2.2e13 cm^-3/s, S_n=S_p=1e3 cm/s.
-        N_t was calibrated to produce ~18 pA at -30V with the E-field-weighted
-        effective generation model.
+        N_t is fitted so that I(300 K, -60 V, 4 mm2) equals the experimental upper
+        bound of 18 pA (Photons paper); the model therefore sits AT the bound by
+        construction, this is a regression guard on the fit, not a validation.
+        The old version of this test refreshed the TAT field after ramp_bias with
+        no re-solve (stale path, audit B-01) and accepted anything in 1.8-180 pA.
         """
         dev = create_dark_current_device(device_name=_unique_name("calib"))
-        ramp_bias(dev, V_target=-30.0, contact="anode", V_step=1.0)
-        _compute_node_efield(dev["device_name"], dev["region_name"])
-        _compute_gamma_factors(dev["device_name"], dev["region_name"])
-
-        components = extract_dark_current_components(dev, area=0.05)
-        I_dark = abs(components["I_total"])
-
-        assert 1.8e-12 <= I_dark <= 180e-12, (
-            f"Dark current at -30V = {I_dark:.2e} A ({I_dark*1e12:.2f} pA), "
-            f"should be between 1.8 pA and 180 pA"
-        )
-
-    def test_dark_current_sweep_monotonic(self):
-        """Dark current magnitude should increase monotonically with reverse voltage."""
-        dev = create_dark_current_device(device_name=_unique_name("mono"))
-
-        V_range = [0.0, -5.0, -10.0, -20.0, -30.0]
-        result = dark_current_sweep(dev, V_range, area=0.05, V_step=1.0)
-
-        I_mag = np.abs(result["I_total"])
-        for i in range(1, len(I_mag)):
-            if I_mag[i - 1] > 1e-20:
-                assert I_mag[i] >= I_mag[i - 1] * 0.9, (
-                    f"|I| at V={result['voltages'][i]:.0f}V ({I_mag[i]:.2e}) "
-                    f"decreased from V={result['voltages'][i-1]:.0f}V ({I_mag[i-1]:.2e})"
-                )
+        try:
+            res = dark_current_sweep(dev, [-30.0, -60.0], area=0.04, V_step=0.5)
+        finally:
+            devsim.delete_device(device=dev["device_name"])
+        I_60 = abs(res["I_total"][-1])
+        assert I_60 == pytest.approx(18e-12, rel=0.1), f"I(-60 V, 0.04 cm2) = {I_60:.3e} A"
+        # Saturates past full depletion: -30 V is lower than -60 V but the same order
+        assert 0.3 * I_60 < abs(res["I_total"][0]) < I_60
 
 
 # ---------------------------------------------------------------------------
