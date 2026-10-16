@@ -85,4 +85,14 @@ def test_sweep_is_opt_in_and_reports_rows():
 def test_sweep_outside_engine_box_is_skipped_not_run():
     rep = etna.run_all(etna.DeviceConfig(epi_thickness_um=40.0), ("sweep",))
     assert rep.get("sweep").status == "skipped"
-    assert "engine box" in rep.get("sweep").reason
+    assert "epi_thickness_cm" in rep.get("sweep").reason
+
+
+def test_sweep_skipped_when_config_has_nplus():
+    rep = etna.run_all(etna.DeviceConfig(nplus_thickness_um=1.0), ("sweep",))
+    assert rep.get("sweep").status == "skipped" and "n+" in rep.get("sweep").reason
+
+
+def test_run_field_2d_with_nplus_uses_devsim():
+    res = etna.run_field(etna.DeviceConfig(half_width_um=25.0, nplus_thickness_um=1.0), bias_V=-20.0)
+    assert res.metadata["solver"] == "devsim", res.metadata

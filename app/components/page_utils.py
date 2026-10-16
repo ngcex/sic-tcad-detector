@@ -36,8 +36,8 @@ INVALID_CONFIG_TEXT = (
 )
 CROSS_CHECK_SCOPE = (
     "cross-check = the batched engine and devsim agree (relative difference "
-    "≤ 3e-6) at the checked biases down to −40 V; neither is validated against "
-    "measurement there"
+    "≤ 3e-6, typically far smaller) at the checked biases down to −40 V "
+    "(−100 V with the n+ layer); neither is validated against measurement there"
 )
 
 
