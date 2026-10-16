@@ -56,7 +56,7 @@ E_PAIR_EV = (
 def _sweep_one(task):
     """One configuration of ``microdosimetric_sweep`` (module level so it can be pickled)."""
     i, total, hw, epi, nd, vb, n_lateral_points, *rest = task
-    solver = rest[0] if rest else "devsim"
+    solver = rest[0] if rest else "auto"
     if solver not in ("devsim", "auto"):
         raise ValueError(f"solver must be 'devsim' or 'auto', got {solver!r}")
     logger.info(f"Sweep {i + 1}/{total}: hw={hw}, epi={epi}, nd={nd:.1e}, vb={vb}")
@@ -201,7 +201,7 @@ def microdosimetric_sweep(
     n_lateral_points=10,
     max_configs=None,
     n_jobs=1,
-    solver="devsim",
+    solver="auto",
 ):
     """Sweep SV geometry and doping parameters, ranking by CCE uniformity.
 
@@ -227,11 +227,11 @@ def microdosimetric_sweep(
     n_jobs : int
         Worker processes (default 1 = serial in this process). Configurations are
         independent fresh builds, so results are identical to the serial run.
-    solver : {"devsim", "auto"}
-        "devsim" (default) builds every config with devsim. "auto" uses the numba
+    solver : {"auto", "devsim"}
+        "auto" (default) uses the numba
         2D engine (etna.core.engine2d, PERF-03) for configs it supports -- laterally
         uniform default devices inside its validated box -- and devsim for the rest
-        or whenever the engine declines. Deep punch-through configs where devsim's
+        or whenever the engine declines. "devsim" builds every config with devsim. Deep punch-through configs where devsim's
         ramp does not converge are reported as the same failed (NaN) row.
 
     Returns
