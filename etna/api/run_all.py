@@ -218,6 +218,7 @@ def run_all(config: DeviceConfig, sections: "tuple[str, ...] | None" = None) -> 
         raise ValueError(f"unknown section(s) {unknown}; choose from {list(table)}")
 
     t_all = time.perf_counter()
+    preexisting = set(_devices_alive())  # not ours; never flagged or deleted
     done: "list[SectionResult]" = []
     for name in names:
         title, runner, one_d_only = table[name]
@@ -254,7 +255,7 @@ def run_all(config: DeviceConfig, sections: "tuple[str, ...] | None" = None) -> 
                 result=res,
             )
             done.append(sec)
-        leaked = _devices_alive()
+        leaked = [d for d in _devices_alive() if d not in preexisting]
         if leaked:  # would couple this section to the next one
             last = done[-1]
             last.status = "error"

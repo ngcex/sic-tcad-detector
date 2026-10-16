@@ -53,7 +53,13 @@ def test_leaked_device_is_reported(monkeypatch):
     import devsim
 
     deleted = []
-    monkeypatch.setattr(ra, "_devices_alive", lambda: ["leaky"] if not deleted else [])
+    calls = []
+
+    def alive():  # first call = snapshot before the run (none), then one leak
+        calls.append(1)
+        return [] if len(calls) == 1 or deleted else ["leaky"]
+
+    monkeypatch.setattr(ra, "_devices_alive", alive)
     monkeypatch.setattr(devsim, "delete_device", lambda device: deleted.append(device))
     rep = etna.run_all(etna.DeviceConfig(), ("cv",))
     assert rep.get("cv").status == "error" and "leaked" in rep.get("cv").reason
