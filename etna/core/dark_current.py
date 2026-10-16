@@ -236,10 +236,30 @@ def setup_tat_model(device_info, E_t=None, m_t=None, N_t=None):
 def _compute_node_efield(device, region):
     """Average absolute edge electric field to nodes.
 
-    Computes the arithmetic mean of adjacent edge |E| values for each node.
-    Boundary nodes use the single adjacent edge. Result clamped to minimum
+    1D: arithmetic mean of adjacent edge |E| values for each node (boundary nodes
+    use the single adjacent edge). 2D: |grad Potential| from devsim's node gradient. Result clamped to minimum
     1e3 V/cm to avoid division by zero in Kt computation.
     """
+    if devsim.get_dimension(device=device) == 2:
+        # The 1D edge indexing below does not hold on a 2D mesh, and the edge model
+        # is the field component along each edge, not |E| (audit B-02). Use the
+        # node gradient of Potential, which is mesh-consistent.
+        devsim.vector_gradient(
+            device=device, region=region, node_model="Potential", calc_type="default"
+        )
+        gx = np.array(
+            devsim.get_node_model_values(device=device, region=region, name="Potential_gradx")
+        )
+        gy = np.array(
+            devsim.get_node_model_values(device=device, region=region, name="Potential_grady")
+        )
+        E_node = np.maximum(np.hypot(gx, gy), 1e3)
+        devsim.node_model(device=device, region=region, name="E_field_node", equation="1e3")
+        devsim.set_node_values(
+            device=device, region=region, name="E_field_node", values=E_node.tolist()
+        )
+        return
+
     E_edge = np.array(
         devsim.get_edge_model_values(device=device, region=region, name="ElectricField")
     )
