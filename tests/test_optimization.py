@@ -301,3 +301,38 @@ class TestMicrodosimetricSweepEndToEnd:
         parallel = microdosimetric_sweep(**kw, n_jobs=4)
         assert len(serial) == 4 and serial["center_cce"].isna().sum() >= 1
         pd.testing.assert_frame_equal(serial, parallel, rtol=1e-6, atol=1e-9)
+
+
+class TestDarkCurrent2DMatches1DTwin:
+    """The 2D domain is the half device: total current must equal J(1D twin) x full SV area."""
+
+    @pytest.mark.slow
+    def test_total_current_is_j_times_sv_area(self):
+        import uuid
+
+        import devsim
+
+        from etna.core.dark_current import create_dark_current_device, dark_current_sweep
+        from etna.core.device2d import _L_TRANSITION_DEFAULT, _N_D_JUNCTION_DEFAULT
+        from etna.core.devsim_reset import reset_devsim_fully
+        from etna.core.optimization import get_dark_current_2d
+
+        hw = 25.0
+        reset_devsim_fully()
+        I2 = get_dark_current_2d(half_width_um=hw, V_bias=50.0, epi_thickness_cm=10e-4, N_D_bulk=8.5e13)
+        reset_devsim_fully()
+        name = f"dc_twin_{uuid.uuid4().hex[:6]}"
+        dev = create_dark_current_device(
+            device_name=name,
+            doping_profile="graded",
+            N_D_junction=_N_D_JUNCTION_DEFAULT,
+            N_D_bulk=8.5e13,
+            L_transition=_L_TRANSITION_DEFAULT,
+            epi_thickness_cm=10e-4,
+        )
+        try:
+            J = abs(dark_current_sweep(dev, [-50.0], area=1.0, V_step=0.5)["J_total"][-1])
+        finally:
+            devsim.delete_device(device=name)
+        # abs=0: the default 1e-12 absolute tolerance would swallow currents of ~1e-14 A
+        assert I2 == pytest.approx(J * (2 * hw * 1e-4) ** 2, rel=0.03, abs=0)

@@ -508,10 +508,12 @@ def get_dark_current_2d(half_width_um=50.0, V_bias=50.0, **device_kwargs):
         # Extract 2D current (A/cm)
         I_2d = extract_contact_current(device_info, contact="cathode")
 
-        # Convert to total current: multiply by SV depth
-        # Default SV depth = 2 * half_width (square cross-section)
+        # Convert to total current. The 2D domain is the HALF device (x from 0 to
+        # half_width, mirror boundaries), so the full SV has twice that current per cm
+        # of depth; then multiply by the SV depth (square cross-section, 2 * half_width).
+        # Missing the factor 2 made this 0.501x the 1D-twin J times the SV area (PERF-03).
         sv_depth_cm = 2.0 * half_width_um * 1e-4
-        I_total = I_2d * sv_depth_cm
+        I_total = 2.0 * I_2d * sv_depth_cm
 
         logger.info(
             f"Dark current 2D: I_2d={I_2d:.3e} A/cm, "
