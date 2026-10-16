@@ -186,3 +186,86 @@ Changes vs the lab spike:
   evaluation also drifts with hw (-3.6e-6 at 150) while the balanced form does not. Conclusion: devsim
   has ~1e-5 roundoff error in this partially depleted (quasi-neutral cathode side) regime; the engine
   is the more accurate side.
+
+## Box widening (TASK 1, 2026-10-16 ~19:00, load 1.6-4)
+
+Walls: `bench/devsim_wall2.py HW EPI_UM V0 V1 ND...` (devsim 0.5 V steps from a converged bias, hw=25):
+| epi um | N_D_bulk | last converged V (field V/cm) | first failed V (field) |
+|---|---|---|---|
+| 5 | 5e13 | 26.5 (4.632e4) | 27.0 (4.732e4) |
+| 5 | 8.5e13 | 27.0 (4.585e4) | 27.5 (4.685e4) |
+| 5 | 5e14 | 37.0 (4.821e4) | 37.5 (4.921e4) |
+| 7.5 | 5e13 | 40.0 (4.670e4) | 40.5 (4.736e4) |
+| 7.5 | 5e14 | 62.5 (4.661e4) | 63.0 (4.728e4) |
+| 10 | 5e13 | 54.5 (4.745e4) | 55.0 (4.795e4) |
+| 10 | 8.5e13 | 56.5 (4.627e4) | 57.0 (4.677e4) |
+| 15 | 5e13 | 80 reached (4.476e4) | - |
+| 20 | 5e13 | 80 reached (2.952e4) | - |
+| 20 | 8.5e13 | 80 reached (2.305e4) | - |
+
+Same field rule separates converged/failed at every epi (failures >= 4.685e4, converged <= 4.821e4);
+thresholds unchanged (engine <= 4.45e4 < devsim decides < 5.0e4 < punch-through NaN).
+
+Parity grid: `bench/parity_box.py START STOP` (3 chunks, each < 3 min) -> notes/parity_box.csv,
+_sweep_one solver='auto' vs 'devsim', 24 points:
+
+```
+ hw  epi_um           nd  V solver_a  center_d            dC            dE            dR  valid_d  valid_a   t_d    t_a
+ 25     5.0 5.000000e+13  5 engine2d  0.983523 -4.922353e-08 -3.341402e-08  1.607436e-08     True     True  2.31  0.092
+ 25     5.0 8.823059e+13 20 engine2d  0.994375  2.096925e-09  6.354144e-10 -1.469777e-09     True     True  2.67  0.092
+ 25     5.0 5.000000e+14 35 engine2d  0.994435  2.020600e-09  2.257342e-09  2.380667e-10     True     True  3.14  0.029
+ 25     5.0 5.000000e+14 37   devsim       NaN           NaN           NaN           NaN    False    False  4.87  4.873
+ 50     5.0 5.000000e+13 10 engine2d  0.993400 -5.057928e-08 -4.178771e-08  8.849982e-09     True     True  6.80  0.074
+ 25     5.0 8.500000e+13 50 engine2d       NaN           NaN           NaN           NaN    False    False 12.67  0.020
+ 25     7.5 5.000000e+13 20 engine2d  0.995550 -2.418130e-09 -1.463040e-09  9.593597e-10     True     True  3.25  0.106
+ 25     7.5 5.000000e+14 65   devsim       NaN           NaN           NaN           NaN    False    False 10.42 10.450
+ 25     7.5 8.823059e+13 35 engine2d  0.995736 -1.681085e-10 -1.767736e-10 -8.702372e-12     True     True  3.59  0.035
+ 50     7.5 5.000000e+14 50 engine2d  0.995773 -2.563675e-08 -2.916150e-08 -3.539715e-09     True     True 12.42  0.091
+ 25    10.0 5.000000e+13  5 engine2d  0.864047  5.994777e-08  1.521038e-08 -5.177656e-08    False    False  3.37  0.043
+ 25    10.0 8.823059e+13 10 engine2d  0.963119  1.747448e-07  1.476699e-07 -2.811174e-08    False    False  3.91  0.039
+ 25    10.0 5.000000e+14 35 engine2d  0.924837 -5.401995e-07 -5.414102e-07 -1.309047e-09    False    False  5.24  0.040
+ 50    10.0 8.500000e+13 65 engine2d       NaN           NaN           NaN           NaN    False    False 28.15  0.053
+ 25    10.0 5.000000e+14 75 engine2d  0.998299 -4.673510e-07  5.020491e-07  9.710516e-07     True     True  6.31  0.041
+ 25    15.0 5.000000e+13 80   devsim  0.999738  0.000000e+00  0.000000e+00  0.000000e+00     True     True  6.25  6.332
+ 25    15.0 8.823059e+13 50 engine2d  0.999635  4.663177e-09 -1.092284e-08 -1.559171e-08     True     True  6.11  0.051
+ 25    15.0 5.000000e+14  5 engine2d  0.666305  1.985336e-07  2.820717e-07  1.253749e-07    False    False  3.75  0.054
+ 50    15.0 5.000000e+13 35 engine2d  0.999497 -3.059433e-08 -2.814684e-08  2.448714e-09     True     True 15.61  0.123
+ 25    20.0 5.000000e+13 80 engine2d  0.999746 -7.084600e-11 -5.440359e-11  1.644662e-11     True     True  7.98  0.056
+ 25    20.0 8.823059e+13 20 engine2d  0.998949 -3.312713e-08 -4.884073e-08 -1.573014e-08    False    False  6.45  0.057
+ 25    20.0 5.000000e+14 10 engine2d  0.783241 -3.756942e-07 -2.997107e-07  9.701117e-08    False    False  5.22  0.061
+ 50    20.0 5.000000e+14 65 engine2d  0.990542  4.103059e-06  4.246861e-06  1.451746e-07    False    False 25.50  0.145
+ 25    20.0 5.000000e+13  5 engine2d  0.899261  1.689414e-09  3.856723e-09  2.410107e-09    False    False  4.79  0.063
+```
+
+max|dC| 4.10e-06, max|dE| 4.25e-06, max|dRatio| 9.71e-07; NaN rows identical True; is_valid identical True; solver counts {'engine2d': 21, 'devsim': 3}
+devsim-decides points: (25,5um,5e14,37 V) devsim NaN (its adaptive ramp fails below the 0.5 V-step wall);
+(25,7.5um,5e14,65 V) devsim NaN; (25,15um,5e13,80 V) devsim converges (field 4.476e4, just above ENGINE_MAX).
+Largest dC 4.1e-6 at (50,20um,5e14,65 V, partially depleted, valid False); max ratio diff ~1e-6 from devsim's
+edge noise at (25,10um,5e14,75 V): devsim ratio 0.99999903, engine 1.0000000003.
+
+Final ENGINE2D_BOX: hw 25-150, epi 5-20 um, N_D_bulk 5e13-5e14, V 5-80. hw 100/150 evidence only from the
+36-config gate (epi 10); other epi only at hw 25/50 (lateral uniformity is asserted per device).
+
+## TASK 2: run_field 2D -> engine (2026-10-16 ~19:30)
+
+etna/api/simulation.py: run_field tries the engine first for 2D configs eligible under
+`_field_engine_unsupported_reason` (new helper -> etna.core.engine2d.engine2d_dark_unsupported_reason:
+graded, N_A 1e19, T 300, substrate 1 um, N_D None, hw 25-150, epi 5-20 um, N_D_bulk 5e13-5e14,
+N_D_junction 1e15-1e16, L_transition 0.3-3 um, reverse bias 5-80 V). Engine: `dark_state_2d` (new, scan.py) =
+mesh-only devsim build + 1-column ramp + 2D polish, returned in devsim's node order. Above
+FIELD_ENGINE_MAX (4.45e4 V/cm) or on any engine error -> devsim path (unchanged; reset_devsim_fully only
+there). The node |E| code was factored into `_node_field_2d` and is shared by both paths.
+metadata["solver"] = "engine2d" | "devsim".
+
+Parity (DeviceConfig(half_width_um=hw), engine vs forced devsim path, same process):
+| hw | bias | engine | devsim | x/y order | NetDoping | max dPotential | max rel dE (floor 1e-3 Emax) |
+|---|---|---|---|---|---|---|---|
+| 25 | -20 | 0.190 s | 2.50 s | identical | identical | 5.3e-15 V | 4.5e-13 |
+| 25 | -50 | 0.128 s | 3.67 s | identical | identical | 7.1e-15 V | 2.8e-13 |
+| 50 | -20 | 0.177 s | 6.66 s | identical | identical | 5.3e-15 V | 4.5e-13 |
+| 50 | -50 | 0.176 s | 9.78 s | identical | identical | 1.4e-14 V | 3.4e-13 |
+Engine time is mostly the LinearNDInterpolator |E| post-processing (same code as devsim path).
+Tests: tests/test_api_field_engine.py (10 fast + 4 slow), tests/test_api_field.py, tests/test_app_field_page.py,
+tests/test_engine2d.py fast: all pass (slow field files 11.6 s).
+Note: tests/test_api_field.py's 2D test (hw=50, -10 V) now runs the engine path; the devsim 2D path is covered
+by the forced-devsim parity and fallback tests in test_api_field_engine.py.

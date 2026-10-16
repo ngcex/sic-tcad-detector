@@ -10,6 +10,8 @@ from .scan import (
     ENGINE2D_BOX,
     Engine2DFallback,
     Engine2DPunchThrough,
+    dark_state_2d,
+    engine2d_dark_unsupported_reason,
     engine2d_unsupported_reason,
     lateral_cce_scan_2d,
 )
@@ -20,6 +22,8 @@ __all__ = [
     "ENGINE2D_BOX",
     "Engine2DFallback",
     "Engine2DPunchThrough",
+    "dark_state_2d",
+    "engine2d_dark_unsupported_reason",
     "engine2d_unsupported_reason",
     "lateral_cce_scan_2d",
 ]
