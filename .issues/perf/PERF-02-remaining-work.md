@@ -31,7 +31,7 @@ Read PERF-01 first. Audit issues A-*, B-* are still open (D-01, D-04, C-01, C-04
 - [ ] CCE batch memory: ContinuityBatch holds ~30 (N,B) temporaries (1.2 GB at B=10000); chunk the batch
       if larger sweeps become routine.
 - [ ] 2D: no engine path yet (PERF-01 option D). The 2D tests dominate the remaining suite time.
-- [ ] Fix devsim cv_sweep 0.5 V lattice (A-01) so the fallback path is also exact.
+- [x] Fix devsim cv_sweep 0.5 V lattice (A-01) so the fallback path is also exact (tests/test_cv_sweep_lattice.py).
 
 ## 3. Audit issues still open (see .issues/audit-v7/issues/*-INDEX.md)
 Highest value next: B-01 (stale TAT field in sweep_iv_vs_temperature, leakage 7.6x low), B-02
@@ -61,3 +61,22 @@ D-02/B-06 (DESIGN-1 "18 pA" not produced by the model: measured 141 pA), A-02..A
 - Fixed A-01 in cv_sweep (off-lattice target solved at the lattice point below it): tests/test_cv_sweep_lattice.py.
 - Next: SuperLU (or other) replacement of devsim's UMFPACK shim callback (time one factorization first);
   run_field / temperature sweep onto the batched engine; device_list check after facade calls.
+
+## 6. Predictor + split (same session, later)
+- Newton start for Potential extrapolated from the two previous converged states in `_ramp_bias_adaptive`
+  (carriers: no gain, left alone). Measured factorizations per 2 V step 28 -> ~8. 2D build 50 um 102 -> 11.5 s,
+  150 um 390 -> 74 s (V_step_max=5 in create_2d_dd_device); 1D safe sites 3.3-6.6x. Parity unchanged.
+- TestReverseBiasConvergence moved to tests/test_device2d_convergence.py. Full suite: 606 passed in 305 s
+  (was ~19 min for the slow part alone).
+- Facades leave no devsim devices alive (checked 1D and 2D, repeated calls): stale-device item closed.
+- Strict rel 1e-10 sits below the ~1e-9 noise floor of 2D solves: strict solves at the target sometimes hit
+  the 40-iteration cap and fall back to the relaxed retry (~15% of factorizations). NOT changed: the
+  tolerance is a numerical contract (test_api_engine_switch compares at rtol 1e-10); user decision.
+- cce_vs_fluence: 5e13 still NaN in both modes (new open failure); 7e13 and 1e14 now converge (no independent
+  reference). Grid where fixed steps converge: identical values.
+- B-01 plan (read-only agent): make sweep_iv_vs_temperature use dark_current_sweep (per-step TAT refresh,
+  fixed steps; raise on empty result). Fixing moves leakage at 300 K from ~18 pA to ~141 pA, so N_t=2.2e13
+  ("calibrated ~18 pA") was likely tuned on the stale path; notebook 06 outputs change. Needs a decision on
+  recalibrating N_t before touching it.
+- Next candidates: run_field and temperature sweep onto the batched engine; SuperLU timing for one
+  factorization; remaining slow tests: test_2d_vs_1d_cv_centerline (153 s), test_center_matches_1d (132 s).
