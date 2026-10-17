@@ -42,7 +42,7 @@ def _sec(name, res, solver="batched"):
     return SectionResult(name, name, "ok", solver=solver, result=res)
 
 
-def _fake_report(cfg, w30_um=9.8995):
+def _fake_report(cfg, w30_um=9.9788):  # eps*A/C(-30 V) of the default stack
     bias = np.linspace(0.0, -50.0, 51)
     W = np.interp(-bias, [0, 10, 30, 50], [1.7, 9.49, w30_um, 9.93]) * 1e-4
     md = dict(
@@ -88,8 +88,9 @@ def test_label_is_verbatim():
 
 
 def test_analytic_vfd_pinned_default_stack():
-    # same V_bi inputs as the 2D sweep gate (etna.core.optimization): 8.21 V
-    assert analytic_vfd(DeviceConfig()) == pytest.approx(8.21, abs=0.005)
+    # same V_bi inputs as the 2D sweep gate (etna.core.optimization): 9.93 V (8.21 V
+    # before the 2026-10-17 small-signal C recalibration: N_D_bulk 6.34e13 -> 8.25e13)
+    assert analytic_vfd(DeviceConfig()) == pytest.approx(9.93, abs=0.005)
 
 
 def test_spec_default_reference_device():
@@ -101,7 +102,7 @@ def test_spec_default_reference_device():
         fd["reach_through_V"] == 10.3
         and "Debye length" in fd["reach_through_definition"]
     )
-    assert fd["analytic_V_fd_V"] == pytest.approx(8.21, abs=0.005)
+    assert fd["analytic_V_fd_V"] == pytest.approx(9.93, abs=0.005)
     assert [L["name"] for L in spec["layers"]] == ["p+ anode", "n- epi", "n+ substrate"]
     assert [L["thickness_um"] for L in spec["layers"]] == [0.3, 10.0, 1.0]
     assert "not a fabrication thickness" in spec["layers"][2]["note"]
@@ -109,10 +110,13 @@ def test_spec_default_reference_device():
     assert s[0]["N_D_cm3"] == pytest.approx(cfg.N_D_junction)
     assert s[-1]["depth_below_junction_um"] == 10.0
     assert (
-        "+1.7 %" in spec["cv"]["systematic"]
+        "+2.6 %" in spec["cv"]["systematic"]
         and "not refitted" in spec["cv"]["systematic"]
+        and "none is picked" in spec["cv"]["systematic"]
     )
-    assert "calibration, not validation" in spec["cv"]["calibration"]
+    assert "calibration inputs" in spec["cv"]["calibration"]
+    assert spec["cv"]["W_um"]["-30 V"] == pytest.approx(9.9788, abs=1e-4)
+    assert "dQ/dV" in spec["cv"]["W_definition"]
     assert (
         "65 deg" in spec["cce"]["generation"]
         and "never reach the n+" in spec["cce"]["generation"]
@@ -183,7 +187,7 @@ def test_spec_formats_carry_label():
     assert rows[0] == ["# " + LABEL] and rows[1] == ["key", "value"]
     assert ["full_depletion.reach_through_V", "10.3"] in rows
     md = spec_to_markdown(spec)
-    assert LABEL in md and "Reach-through: 10.30 V" in md and "8.21 V" in md
+    assert LABEL in md and "Reach-through: 10.30 V" in md and "9.93 V" in md
     pdf = spec_to_pdf(spec, cfg)
     assert pdf.startswith(b"%PDF") and len(pdf) > 5000
 

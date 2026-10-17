@@ -36,8 +36,8 @@ junction field.
 | Junction type                          | p⁺/n⁻, one-sided                                        | —                             | design choice                                   |
 | Epi thickness (biased clinical device) | **10 µm**                                               | ±1 µm                         | calibrated config                               |
 | Graded epi donor profile N_D(y)        | N_D(y) = N_D_bulk + (N_D_junction − N_D_bulk)·exp(−y/L) | see below                     | calibrated (Phase 26)                           |
-| → N_D_junction (near junction)         | **2.97 × 10¹⁵ cm⁻³**                                    | ±20 %                         | exact solve on W(0 V), W(−10 V), n⁺ stack       |
-| → N_D_bulk (deep epi)                  | **6.34 × 10¹³ cm⁻³**                                    | ±20 %                         | exact solve on W(0 V), W(−10 V), n⁺ stack       |
+| → N_D_junction (near junction)         | **2.96 × 10¹⁵ cm⁻³**                                    | ±20 %                         | exact solve on ε·A/C at 0 V, −10 V, n⁺ stack    |
+| → N_D_bulk (deep epi)                  | **8.25 × 10¹³ cm⁻³**                                    | ±20 %                         | exact solve on ε·A/C at 0 V, −10 V, n⁺ stack    |
 | → L (grading length)                   | **0.99 µm**                                             | ±0.3 µm                       | held (not fitted)                               |
 | n⁺ substrate (cathode side)            | 10¹⁹ cm⁻³ (1 µm modelled)                               | —                             | device stack (owner-confirmed)                  |
 | p⁺ anode doping N_A (total)            | 1 × 10¹⁹ cm⁻³                                           | fab implant/anneal            | active ≈ 1.3 × 10¹⁸ cm⁻³ (≈13 % ionized, model) |
@@ -45,19 +45,21 @@ junction field.
 | Relative permittivity ε_r              | 9.7                                                     | —                             | 4H-SiC literature                               |
 | Guard ring                             | required                                                | geometry per fab design rules | edge termination                                |
 
-**Depletion behaviour (calibrated graded profile; W at 0 / −10 / −30 V are the
-measured values the profile was fitted to — fit inputs, not TCAD predictions):**
+**Depletion behaviour (calibrated graded profile; W = ε·A/C of the small-signal C, as
+the measured W. The 0 V and −10 V values are fit inputs, not TCAD predictions; the
+n/N_D = 0.5 depletion edge is 1.69 / 9.27 / 9.90 µm):**
 
-| Reverse bias | Depletion width W | Note                                                                 |
+| Reverse bias | W = ε·A/C         | Note                                                                 |
 | ------------ | ----------------- | -------------------------------------------------------------------- |
-| 0 V          | **1.70 µm**       | built-in depletion (self-powered drift region)                       |
-| −10 V        | ~9.5 µm           | fit input; **epi essentially fully depleted (~9 µm)**                |
-| −30 V        | 9.73 µm measured  | model 9.90 µm (+1.7 %): known C-V systematic, see below; not refitted |
+| 0 V          | **1.70 µm**       | fit input; built-in depletion (self-powered drift region)            |
+| −10 V        | 9.5 µm            | fit input; **epi essentially fully depleted**                        |
+| −30 V        | 9.73 µm measured  | model 9.98 µm (+2.6 %): known C-V residual, see below; not refitted  |
 
-> **Known ~2 % C-V systematic at −30 V.** Past full depletion the model W saturates
-> at the epi end (9.90 µm), so the measured 9.73 µm is unreachable for any graded
-> profile; the paper study attributes the gap to edge/fringe capacitance of the die
-> falling with bias, which a 1D model cannot carry. Not refitted.
+> **Known +2.6 % C-V residual at −30 V.** Past full depletion the 1D model saturates
+> near the epi end. A ~0.5 µm graded n⁻/n⁺ buffer, an epi ~2.5 % thinner than nominal
+> (inside typical tolerance) and edge/fringe capacitance of the die falling with bias
+> each close the gap; three C-V points cannot separate them (the C-V knee at −5…−15 V
+> or a SIMS profile could). None is picked; not refitted.
 
 > The model is the p⁺ / graded n⁻ epi / n⁺ substrate stack: the cathode sits on the
 > n⁺, and devsim converges to ≥ −150 V (1D) / −100 V (2D, the parity-checked range).
@@ -66,12 +68,13 @@ measured values the profile was fitted to — fit inputs, not TCAD predictions):
 > punch-through or breakdown. There is still **no rated voltage and no breakdown
 > model** — see §5.
 
-**Full-depletion voltage V_fd (analytic, graded profile):** ~3.6 V (5 µm epi),
-**~8.2 V (10 µm epi)**, ~26 V (20 µm epi) (legacy profile: 4.0 / 10.4 / 35 V).
+**Full-depletion voltage V_fd (analytic, graded profile):** ~4.0 V (5 µm epi),
+**~9.9 V (10 µm epi)**, ~33 V (20 µm epi) (before the 2026-10-17 recalibration on the
+small-signal C: 3.6 / 8.2 / 26 V; legacy profile: 4.0 / 10.4 / 35 V).
 Operate at **≥ 1.2 × V_fd** for the chosen epi (the 20 % margin covers the ±20 %
-doping tolerance of §2): ≥ ~4.3 V, **≥ ~9.9 V**, ≥ ~31 V respectively. This is the
+doping tolerance of §2): ≥ ~4.8 V, **≥ ~11.9 V**, ≥ ~40 V respectively. This is the
 validity gate used by the sweep code. The drift-diffusion reach-through
-(`reach_through_V`, edge within one Debye length of the n⁻/n⁺ step) is 10.3 V for
+(`reach_through_V`, edge within one Debye length of the n⁻/n⁺ step) is 12.3 V for
 the 10 µm epi: a stricter *definition* of the same transition (paper: ~10 V).
 
 **Charge collection (reverse bias, TCAD-model, consistent with the 1D twin):**
@@ -102,7 +105,7 @@ diffusion, which our model does not quantify at 0 V. So:
 W(0 V) ∝ √(V*bi·ε / (q·N_D)). To get a \_meaningful* depleted fraction at 0 V,
 use a **thinner, lower-doped epi**: target **~3–4 µm epi at N_D ≈ 1–3 × 10¹⁴ cm⁻³**,
 which depletes ≳ 80 % of the epi at 0 V (W(0 V) ≈ 3–6 µm). This trades signal
-depth for self-powered operation. The calibrated 2.93 × 10¹⁵ junction profile
+depth for self-powered operation. The calibrated 2.96 × 10¹⁵ junction profile
 above is the _biased clinical_ device — NOT the zero-bias variant. If a dedicated
 zero-bias detector is wanted, we will re-run the calibration at the thin/low-doped
 target and quote its model W(0 V).
@@ -162,7 +165,7 @@ not be read as "matches measured C-V" without that qualifier. The one genuinely
 independent check available is a comparison against Bruzzi & Verroi ("Epitaxial
 SiC Dosimeters and Flux Monitoring Detectors for Proton Therapy Beams," Materials
 2023, 16(10), 3643), an unrelated published 4H-SiC device our model was never
-calibrated to: ETNA's predicted depletion width at −40 V deviates 2.0% from
+calibrated to: ETNA's predicted depletion width (ε·A/C) at −40 V deviates 2.8% from
 that paper's reported endpoint. This is a narrow but real absolute-scale sanity
 check (two fitted endpoints, not a dense point-by-point overlay) — see
 `.planning/VALIDATION_LITERATURE.md` for the full comparison and caveats. The

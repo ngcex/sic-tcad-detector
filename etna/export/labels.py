@@ -16,7 +16,8 @@ VALIDATION_LABEL = (
 MEASURED_W_30V_UM = 9.73  # Photons Fig. 4b, W = eps*A/C at -30 V (A = 4 mm2)
 CALIBRATION_NOTE = (
     "Doping (N_D_junction, N_D_bulk) was solved exactly on the measured C-V points at 0 V "
-    "and -10 V (W = 1.7 / 9.5 um): agreement there is calibration, not validation."
+    "and -10 V (W = eps*A/C = 1.7 / 9.5 um, with C the small-signal dQ/dV): these two points "
+    "are calibration inputs, not reproduced or validated points."
 )
 DARK_CALIBRATION_NOTE = (
     "Dark current is a calibration / budget estimate, not a prediction: N_t is fitted so "
@@ -24,14 +25,14 @@ DARK_CALIBRATION_NOTE = (
     "as equality (N_t is the magnitude of an effective-generation proxy, not a trap density)."
 )
 CV_SYSTEMATIC_NOTE = (
-    "Known C-V systematic: W(-30 V) simulated {w:.2f} um vs measured 9.73 um ({d:+.1f} %, "
-    "~2 %), the one out-of-fit measurement comparison. Attributed (paper study) to the "
-    "edge/fringe capacitance of the die falling with bias, which a 1D model cannot carry; "
-    "deliberately not refitted."
+    "Known C-V residual: W = eps*A/C at -30 V simulated {w:.2f} um vs measured 9.73 um "
+    "({d:+.1f} %), the one out-of-fit measurement comparison. Three C-V points cannot tell "
+    "apart its candidate causes (a ~0.5 um graded n-/n+ buffer, an epi ~2.5 % thinner than "
+    "nominal, lateral edge/fringe capacitance falling with bias): none is picked; not refitted."
 )
 CV_SYSTEMATIC_OTHER = (
-    "Known C-V systematic (~2 % at -30 V, edge/fringe capacitance, not refitted) is stated "
-    "for the reference device (default stack, 300 K); not re-evaluated for this config."
+    "Known C-V residual (+2.6 % in eps*A/C at -30 V, cause not identified, not refitted) is "
+    "stated for the reference device (default stack, 300 K); not re-evaluated for this config."
 )
 ALPHA_NOTE = (
     "Epi-only alpha generation matches the measurement geometry (alphas tilted 65 deg, "
@@ -65,7 +66,7 @@ def reach_through_definition(config) -> str:
         return (
             "smallest |V| at which the depletion edge (n/N_D = 0.5) lies within one "
             "extrinsic Debye length L_D = sqrt(eps V_t / (q N_D(epi end))) of the "
-            "n-/n+ step. A definition, not a measurement (10.30 V on the default stack; "
+            "n-/n+ step. A definition, not a measurement (12.30 V on the default stack; "
             "paper: ~10 V)"
         )
     return (

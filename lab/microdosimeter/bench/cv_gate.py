@@ -114,6 +114,17 @@ def devsim_ac(volts=(0.0, -10.0, -30.0), freqs=(1.0, 1e3), cfg=None):
     from etna.core.devsim_reset import reset_devsim_fully
     from etna.core.poisson import extract_depletion_width_numerical
 
+    def dc():
+        # the circuit row converges to ~1e-11 relative only: 1e-10, else the production 1e-8
+        try:
+            devsim.solve(
+                type="dc", absolute_error=1e10, relative_error=1e-10, maximum_iterations=60
+            )
+        except devsim.error:
+            devsim.solve(
+                type="dc", absolute_error=1e10, relative_error=1e-8, maximum_iterations=60
+            )
+
     reset_devsim_fully()
     cfg = DeviceConfig() if cfg is None else cfg
     info = build_device(cfg)
@@ -122,9 +133,7 @@ def devsim_ac(volts=(0.0, -10.0, -30.0), freqs=(1.0, 1e3), cfg=None):
     devsim.circuit_element(name="V1", n1=bias, n2=0, value=0.0, acreal=1.0, acimag=0.0)
     sp.CreateSiliconPotentialOnlyContact(dev, reg, "cathode", True)
     sp.CreateSiliconDriftDiffusionAtContact(dev, reg, "cathode", True)
-    devsim.solve(
-        type="dc", absolute_error=1e10, relative_error=1e-10, maximum_iterations=60
-    )
+    dc()
     print("== (b) devsim small-signal AC (cathode on V1, acreal = 1) ==")
     Vc_now = 0.0
     out = {}
@@ -136,12 +145,7 @@ def devsim_ac(volts=(0.0, -10.0, -30.0), freqs=(1.0, 1e3), cfg=None):
             # node in the DC residual); the circuit node carries the AC excitation
             devsim.circuit_alter(name="V1", value=float(v))
             devsim.set_parameter(device=dev, name=bias, value=float(v))
-            devsim.solve(
-                type="dc",
-                absolute_error=1e10,
-                relative_error=1e-10,
-                maximum_iterations=60,
-            )
+            dc()
         Vc_now = target
         row = []
         for f in freqs:

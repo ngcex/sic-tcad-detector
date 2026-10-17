@@ -148,12 +148,12 @@ def _reach_through_V(W, bias_array, config: DeviceConfig) -> "float | None":
     With an n+ layer the n/N_D >= 0.5 edge approaches the epi end only
     asymptotically (electron tail of the n-/n+ high-low junction), so full
     depletion is taken as the edge within one Debye length L_D of the epi end,
-    L_D = sqrt(eps V_t / (q N_D_epi_end)) (0.47 um on the default device). A
-    definition, not a measurement: 10.30 V on the default stack (paper: ~10 V; the
-    legacy model's mesh rule gave 17.0 V, and the pre-recalibration doping with n+
-    12.85 V). The 2D sweep's is_fully_depleted gate uses the analytic graded V_fd
-    instead (8.21 V on the default stack, |V| >= 1.2 V_fd = 9.85 V): the looser of the
-    two definitions.
+    L_D = sqrt(eps V_t / (q N_D_epi_end)) (0.41 um on the default device). A
+    definition, not a measurement: 12.30 V on the default stack (paper: ~10 V; 10.30 V
+    with the doping calibrated on the depletion edge before 2026-10-17; the legacy
+    model's mesh rule gave 17.0 V). The 2D sweep's is_fully_depleted gate uses the
+    analytic graded V_fd instead (9.93 V on the default stack, |V| >= 1.2 V_fd =
+    11.92 V): the looser of the two definitions.
     """
     epi_cm = config.epi_thickness_um * 1e-4
     if config.nplus_thickness_um is not None:
@@ -577,10 +577,12 @@ def run_cv(
 
     Full depletion: ``metadata["reach_through_V"]`` is the smallest |V| at which
     the epi is fully depleted (default stack: depletion edge within one Debye
-    length of the n-/n+ step, 10.30 V -- a definition; see ``_reach_through_V``),
-    or None if not reached. Known C-V systematic: W(-30 V) = 9.90 um vs the
-    measured 9.73 um (+1.7 %, ~2 %): edge/fringe capacitance of the die falling with
-    bias (paper study), not representable in 1D; not refitted. Legacy model (no n+,
+    length of the n-/n+ step, 12.30 V -- a definition; see ``_reach_through_V``),
+    or None if not reached. C-V calibration: the default doping is solved exactly on
+    eps*A/C at 0 / -10 V (calibration inputs, not validation points). Known C-V
+    residual: eps*A/C(-30 V) = 9.98 um vs the measured 9.73 um (+2.6 %); a graded
+    n-/n+ buffer, a ~2.5 % thinner epi or edge/fringe capacitance each close it and
+    three points cannot separate them (none picked; not refitted). Legacy model (no n+,
     ``legacy_config()``): W reaches the epi end to within the last mesh interval
     (17.0 V) and devsim stops converging at about -64 V, an artefact of the ohmic
     cathode directly on the n- epi, not a physical device limit.
