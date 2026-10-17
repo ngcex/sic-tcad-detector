@@ -248,7 +248,8 @@ class TestIonTrackGeneration:
         device_info = None
         try:
             device_info = create_2d_dd_device(
-                half_width_um=50.0, V_bias=50.0, device_name="test_gen_integral"
+                # hw 25 (was 50): the 1 um Gaussian track lies well inside
+                half_width_um=25.0, V_bias=50.0, device_name="test_gen_integral"
             )
 
             LET = 10.0  # keV/um
@@ -303,7 +304,8 @@ class TestChargeConservation:
         device_info = None
         try:
             device_info = create_2d_dd_device(
-                half_width_um=50.0, V_bias=50.0, device_name="test_conservation"
+                # hw 25 (was 50): centred 1 um track on a laterally uniform device
+                half_width_um=25.0, V_bias=50.0, device_name="test_conservation"
             )
 
             generation, Q_gen = ion_track_generation_2d(
@@ -353,15 +355,18 @@ class TestCCEVsBias:
             device_info = None
             try:
                 device_info = create_2d_dd_device(
-                    half_width_um=50.0,
+                    # hw 25 (was 50): centred track on a laterally uniform device, same
+                    # CCE to 1e-6 (0.977590 / 1.006619), 66 -> 25 s
+                    half_width_um=25.0,
                     V_bias=V_bias,
                     device_name=f"test_bias_{int(V_bias)}",
                     # device2d's pre-flip model, pinned (geometry too: the builder default
-                    # is now the n+ stack): no n+ -> cathode current, 0.9780 / 1.0066.
+                    # is now the n+ stack): no n+ -> cathode current, 0.9776 / 1.0066.
                     # Open item: on the default stack (n+, anode current since 2026-10-17)
-                    # CCE is 0.9824 / 0.9772 (10 / 50 V), still non-monotone. Cause: the
-                    # 1%-of-peak early termination of simulate_single_particle (full-time
-                    # integration: anode 1.0376 / 0.9993), not the contact.
+                    # CCE is 0.9824 / 0.9772 (10 / 50 V, hw 50), still non-monotone. Cause:
+                    # the 1%-of-peak early termination plus the post-injection trapezoid of
+                    # simulate_single_particle, not the contact (backward-Euler sum incl.
+                    # the injection step, no early stop: anode 0.99978 / 0.99997).
                     substrate_thickness_cm=1e-4,
                     nplus_thickness_cm=None,
                     N_D_junction=2.931417e15,
