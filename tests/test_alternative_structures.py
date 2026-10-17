@@ -281,24 +281,17 @@ class TestDeltaEEDevice:
             devsim.delete_device(device=name)
 
     def test_delta_e_e_poisson_solve(self):
-        from etna.core.alternative_structures import (
-            create_delta_e_e_device,
-            _setup_poisson_region,
-        )
-        from etna.core.poisson import solve_equilibrium
+        """Two independent diodes: Poisson on each layer with its own contact pair,
+        no interface between them."""
+        from etna.core.alternative_structures import create_delta_e_e_device
+        from etna.core.poisson import setup_poisson, solve_equilibrium
 
         name = _uid()
         dev = create_delta_e_e_device(device_name=name)
         try:
-            # Setup Poisson on both regions with their respective contacts
-            # No contacts at interface boundary (would prevent interface creation)
-            _setup_poisson_region(name, "delta_e", ["de_anode"])
-            _setup_poisson_region(name, "e_stop", ["estop_cathode"])
-
-            # Setup interface for potential continuity (Poisson-only)
-            import devsim.python_packages.simple_physics as sp
-
-            sp.CreateSiliconOxideInterface(name, "de_interface")
+            for layer in dev["layers"].values():
+                setup_poisson(layer)
+            assert devsim.get_interface_list(device=name) == ()
 
             solve_equilibrium(dev)
 
@@ -325,10 +318,18 @@ class TestDeltaEEDevice:
         dev = create_delta_e_e_device(device_name=name)
         try:
             contacts = devsim.get_contact_list(device=name)
-            expected = {"de_anode", "estop_cathode"}
+            expected = {"de_anode", "de_cathode", "e_anode", "e_cathode"}
             assert (
                 set(contacts) == expected
-            ), f"Expected 2 contacts {expected}, got {set(contacts)}"
+            ), f"Expected 4 contacts {expected}, got {set(contacts)}"
+            assert dev["layers"]["delta_e"]["contacts"] == ("de_anode", "de_cathode")
+            assert dev["layers"]["e_stop"]["contacts"] == ("e_anode", "e_cathode")
+            # the E layer's junction depth in device coordinates (alpha entry depth)
+            e = dev["layers"]["e_stop"]
+            assert e["junction_pos"] == pytest.approx(
+                dev["delta_e_thickness_cm"] + dev["spacer_cm"] + 1e-4
+            )
+            assert e["substrate_thickness_cm"] == e["junction_pos"]
         finally:
             devsim.delete_device(device=name)
 
@@ -361,36 +362,20 @@ class TestGuardRingDevice:
             devsim.delete_device(device=name)
 
     def test_guard_ring_poisson_solve(self):
+        """setup_poisson puts a contact equation on all three contacts
+        (device_info['contacts'])."""
         from etna.core.alternative_structures import create_guard_ring_device
-        from etna.core.poisson import _create_sic_potential_only
+        from etna.core.poisson import setup_poisson, solve_equilibrium
 
         name = _uid()
         dev = create_guard_ring_device(device_name=name)
         try:
-            # Guard ring has 3 contacts: anode, cathode, guard_ring_anode
-            # Use manual Poisson setup to handle the extra contact
-            import devsim.python_packages.simple_physics as sp
-
-            _create_sic_potential_only(name, "sic")
-            for contact in ("anode", "cathode", "guard_ring_anode"):
-                bias_name = sp.GetContactBiasName(contact)
-                devsim.set_parameter(device=name, name=bias_name, value=0.0)
-                sp.CreateSiliconPotentialOnlyContact(name, "sic", contact)
-
-            try:
-                devsim.solve(
-                    type="dc",
-                    absolute_error=1e10,
-                    relative_error=1e-10,
-                    maximum_iterations=40,
-                )
-            except devsim.error:
-                # Fallback with relaxed tolerances (same as solve_equilibrium)
-                devsim.solve(
-                    type="dc",
-                    absolute_error=1e12,
-                    relative_error=1e-8,
-                    maximum_iterations=100,
+            assert dev["contacts"] == ("anode", "cathode", "guard_ring_anode")
+            setup_poisson(dev)
+            solve_equilibrium(dev)
+            for c in dev["contacts"]:
+                assert "PotentialEquation" in devsim.get_contact_equation_list(
+                    device=name, contact=c
                 )
 
             pot = devsim.get_node_model_values(
@@ -449,5 +434,67 @@ class TestGuardRingDevice:
                 assert np.any(
                     acceptors_gr > 0
                 ), "Acceptors_GR should have non-zero values in guard ring region"
+        finally:
+            devsim.delete_device(device=name)
+
+    def test_guard_ring_is_a_ring_not_a_short(self):
+        """The p+ anode implant stops at the SV edge: the gap surface is n-type and
+        the guard contact does not share a continuous p+ sheet with the anode."""
+        from etna.core.alternative_structures import create_guard_ring_device
+
+        name = _uid()
+        dev = create_guard_ring_device(device_name=name)
+        try:
+            x = np.array(
+                devsim.get_node_model_values(device=name, region="sic", name="x")
+            )
+            y = np.array(
+                devsim.get_node_model_values(device=name, region="sic", name="y")
+            )
+            net = np.array(
+                devsim.get_node_model_values(
+                    device=name, region="sic", name="NetDoping"
+                )
+            )
+            surf = y < 1e-9
+            gap = (
+                surf
+                & (x > dev["sv_half_width_cm"] + 1e-6)
+                & (x < dev["guard_inner_cm"] - 1e-6)
+            )
+            assert gap.any() and (net[gap] > 0).all()
+            assert (net[surf & (x < dev["sv_half_width_cm"] - 1e-6)] < 0).all()
+            assert (net[surf & (x > dev["guard_inner_cm"] + 1e-6)] < 0).all()
+        finally:
+            devsim.delete_device(device=name)
+
+    def test_rebuild_with_same_name_after_delete(self):
+        """devsim keeps the mesh after delete_device; the builder must drop it."""
+        from etna.core.alternative_structures import create_guard_ring_device
+
+        name = _uid()
+        dev = create_guard_ring_device(device_name=name)
+        devsim.delete_device(device=name)
+        dev = create_guard_ring_device(device_name=name, with_guard=False)
+        try:
+            assert dev["contacts"] == ("anode", "cathode")
+        finally:
+            devsim.delete_device(device=name)
+
+    def test_without_guard_is_an_overhang_diode(self):
+        from etna.core.alternative_structures import create_guard_ring_device
+
+        name = _uid()
+        dev = create_guard_ring_device(device_name=name, with_guard=False)
+        try:
+            assert dev["contacts"] == ("anode", "cathode")
+            assert dev["guard_ring_contact"] is None
+            assert set(devsim.get_contact_list(device=name)) == {"anode", "cathode"}
+            acc_gr = np.array(
+                devsim.get_node_model_values(
+                    device=name, region="sic", name="Acceptors_GR"
+                )
+            )
+            assert np.all(acc_gr == 0)
         finally:
             devsim.delete_device(device=name)

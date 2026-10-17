@@ -79,8 +79,13 @@ def test_balanced_conserves_current_between_contacts(illuminated):
 
 
 def test_rejects_unknown_contact():
-    with pytest.raises(ValueError):
-        extract_steady_state_current({"device_name": "x", "region_name": "sic"}, "gate")
+    """The contact list is read from devsim, so this needs a real device."""
+    info = create_dd_device(device_name=_name("unk"), **LEGACY_GEOM)
+    try:
+        with pytest.raises(ValueError, match="contact must be one of"):
+            extract_steady_state_current(info, "gate")
+    finally:
+        devsim.delete_device(device=info["device_name"])
 
 
 @pytest.mark.slow
@@ -90,7 +95,9 @@ def test_dark_current_is_linear_in_N_t_balanced_not_direct():
     an N_t-independent absolute floor (~3e-13 A/cm^2, i.e. 2.5 % at N_t = 2.8e11)."""
     J = {}
     for nt in (2.8e11, 2.8e12):
-        info = create_dark_current_device(N_t=nt, device_name=_name("lin"), **LEGACY_GEOM)
+        info = create_dark_current_device(
+            N_t=nt, device_name=_name("lin"), **LEGACY_GEOM
+        )
         try:
             dark_current_sweep(info, np.array([-10.0]), area=1.0)
             J[nt] = (

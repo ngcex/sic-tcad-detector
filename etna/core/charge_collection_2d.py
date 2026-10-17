@@ -23,7 +23,6 @@ References:
     - reference experimental microdosimeter geometry
 """
 
-from etna.core.solver_tol import DC_REL_ERROR
 import logging
 import uuid
 
@@ -33,11 +32,17 @@ import numpy as np
 from etna.core.device2d import create_sic_2d_device
 from etna.core.poisson import setup_poisson, solve_equilibrium
 from etna.core.drift_diffusion import (
+    _AGGRESSIVE,
+    _RAMP_TIERS,
+    _contact_node_indices,
     setup_sic_drift_diffusion,
+    contacts_on_region,
     extract_steady_state_current,
+    node_volume_model_name,
     _restore_solution,
     _snapshot_solution,
     ramp_bias,
+    solve_tier,
 )
 from etna.core.charge_collection import add_generation_to_dd
 from etna.core.generation_profiles import alpha_depth_shape, confine_generation_to_epi
@@ -51,7 +56,9 @@ Q = 1.602e-19  # C, elementary charge
 _ALPHA_RANGE_CM = 15e-4  # 15 um
 
 
-def in_mesh_generation_fraction(epi_thickness_cm, alpha_range_cm=_ALPHA_RANGE_CM, n=20001):
+def in_mesh_generation_fraction(
+    epi_thickness_cm, alpha_range_cm=_ALPHA_RANGE_CM, n=20001
+):
     """Fraction of the alpha's e-h pairs (depth profile) generated inside the simulated epi.
 
     The lateral scans generate pairs only between the junction and the cathode, i.e.
@@ -72,23 +79,37 @@ def in_mesh_generation_fraction(epi_thickness_cm, alpha_range_cm=_ALPHA_RANGE_CM
     return float(min(1.0, inside / total))
 
 
-def _robust_dc_solve():
-    """Solve DC with fallback to relaxed tolerances on convergence failure."""
-    try:
-        devsim.solve(
-            type="dc",
-            absolute_error=1e10,
-            relative_error=DC_REL_ERROR,
-            maximum_iterations=40,
-        )
-    except devsim.error:
-        devsim.solve(
-            type="dc",
-            absolute_error=1e12,
-            relative_error=1e-8,
-            maximum_iterations=100,
-        )
+def _robust_dc_solve(device_info=None):
+    """Solve DC with fallback to relaxed, then aggressive tolerances.
+
+    Same three tiers as ``solve_equilibrium`` and ``ramp_bias`` (strict: abs 1e10 /
+    rel DC_REL_ERROR / 40 it; relaxed: 1e12 / 1e-8 / 100; aggressive: 1e14 / 1e-6 /
+    200), with ``drift_diffusion.solve_tier``'s acceptance of a stalled solve whose
+    final update is already within the aggressive tolerance (the lateral p+ edge
+    limit cycle). The third tier's use is logged as a warning, and a state accepted
+    there should be checked with the balanced contact-current sum
+    (:func:`contact_current_sharing`).
+
+    ``device_info`` is optional: a device whose bias ramp already needed the
+    aggressive tier (``device_info["ramp_aggressive_retries"]``) is solved at that
+    tier directly, which is what the strict attempt would end up accepting anyway
+    after 40 cycling iterations. Raises devsim.error when no tier converges.
+    """
+    start = 0
+    if device_info is not None and device_info.get("ramp_aggressive_retries", 0) > 0:
+        start = _AGGRESSIVE
+    for tier in range(start, len(_RAMP_TIERS)):
+        done = solve_tier(tier)
+        if done is not None:
+            break
+    else:
+        raise devsim.error("DC solve failed to converge (all tolerance tiers)")
+    if done == 1:
         logger.info("DC solve converged with relaxed tolerances")
+    elif done >= 2:
+        logger.warning(
+            "DC solve converged only with aggressive tolerances (abs 1e14, rel 1e-6)"
+        )
 
 
 def integrate_nodes_box_2d(device_info, node_values):
@@ -97,12 +118,17 @@ def integrate_nodes_box_2d(device_info, node_values):
     This is the quadrature the solver itself applies to a node source term, so
     I_generated and the collected current are consistent. The triangle rule of
     ``integrate_over_mesh_2d`` differs from it by O(h_x h_y dG/dx dG/dy), which
-    made the edge/centre CCE ratio a mesh artefact (audit PERF-03).
+    made the edge/centre CCE ratio a mesh artefact (audit PERF-03). The volume model
+    is the one the equations are assembled with (``CylindricalNodeVolume`` on the
+    axisymmetric 3D-electrode device, where the Cartesian ``NodeVolume`` would weight
+    a shell at radius r as if it had no circumference).
     """
     device = device_info["device_name"]
     region = device_info["region_name"]
     volume = np.array(
-        devsim.get_node_model_values(device=device, region=region, name="NodeVolume")
+        devsim.get_node_model_values(
+            device=device, region=region, name=node_volume_model_name()
+        )
     )
     return float(np.sum(volume * np.asarray(node_values, dtype=float)))
 
@@ -206,7 +232,7 @@ def create_2d_dd_device(
     return device_info
 
 
-def compute_cce_2d(device_info, generation_values, contact="cathode"):
+def compute_cce_2d(device_info, generation_values, contact="cathode", node_set=None):
     """Compute 2D charge collection efficiency from DD simulation.
 
     CCE = |I_collected| / I_generated, where I_generated is computed via
@@ -214,6 +240,11 @@ def compute_cce_2d(device_info, generation_values, contact="cathode"):
 
     The symmetry factor of 2 (half-device) cancels in the ratio since
     both I_collected and I_generated are for the half-device.
+
+    The contact currents devsim reports are those of the LAST solve: the caller must
+    inject ``generation_values`` (``add_generation_to_dd``) and solve before calling
+    this, or use :func:`cce_with_generation`, which does both and restores the
+    device afterwards.
 
     Parameters
     ----------
@@ -223,6 +254,9 @@ def compute_cce_2d(device_info, generation_values, contact="cathode"):
         Generation rate G(x,y) at each mesh node (cm^-3 s^-1).
     contact : str
         Contact at which to extract collected current.
+    node_set : array_like, optional
+        Passed to :func:`extract_steady_state_current` (needed for a p+ contact next
+        to another p+ contact, e.g. the guard-ring anode).
 
     Returns
     -------
@@ -233,7 +267,9 @@ def compute_cce_2d(device_info, generation_values, contact="cathode"):
     I_generated = Q * integrate_nodes_box_2d(device_info, generation_values)
 
     # I_collected at contact [A/cm for 2D]
-    I_collected = abs(extract_steady_state_current(device_info, contact))
+    I_collected = abs(
+        extract_steady_state_current(device_info, contact, node_set=node_set)
+    )
 
     if I_generated <= 0:
         return 0.0
@@ -242,31 +278,162 @@ def compute_cce_2d(device_info, generation_values, contact="cathode"):
     return float(np.clip(cce, 0.0, 1.0))
 
 
+def alpha_stripe_generation(
+    device_info,
+    x_pos_cm,
+    gen_rate=1e18,
+    stripe_sigma_cm=2e-4,
+    depth_from=None,
+    zero_on_contacts=False,
+):
+    """Alpha-like generation stripe entering the epi at lateral position ``x_pos_cm``.
+
+    G(x, y) = gen_rate * depth_shape(y - y_entry) * exp(-0.5 ((x - x_pos) / sigma)^2),
+    the profile :func:`cce_lateral_scan` uses at every lateral position: the 1D alpha
+    depth shape (``alpha_depth_shape``, flat box + erfc roll-off, peak renormalised to
+    ``gen_rate``) below the junction, zero in the p+ layer, and zero beyond the epi end
+    when the device has an n+ layer (``confine_generation_to_epi``). ``depth_from``
+    overrides the entry depth (default: the junction, ``substrate_thickness_cm``). For
+    an axisymmetric device x is the radius and the stripe is a cylindrical shell.
+
+    ``zero_on_contacts=True`` zeroes G on the contact nodes. The contact equation
+    replaces the continuity equation there (Dirichlet carrier densities), so pairs
+    assigned to those nodes are never injected into the device, while the box-rule
+    ``I_generated`` of :func:`compute_cce_2d` counts them: the CCE then carries a
+    purely mesh-dependent deficit equal to the contact nodes' share of the generation
+    (measured at 50 V on the legacy planar diode: 1.3e-3 with the 50 nm device2d mesh
+    at the cathode, 4.6e-3 with the coarser alternative-structure mesh; the physical
+    loss left after removing it is ~1e-4-2e-4). The default keeps the historical
+    normalisation (frozen v3 baselines); the structure comparison of notebook 19 uses
+    True so that the meshes of its five builders are comparable.
+
+    AUDIT Mj-5 (v5): the scan previously used a monotonically DECAYING exponential
+    exp(-y/alpha), backwards for an alpha (energy loss per unit path RISES toward the
+    end of range) and inconsistent with the 1D alpha profile; both now share
+    ``alpha_depth_shape`` (qualitative, not Bragg-peaked by default).
+    """
+    device = device_info["device_name"]
+    region = device_info["region_name"]
+    x_nodes = np.array(
+        devsim.get_node_model_values(device=device, region=region, name="x")
+    )
+    y_nodes = np.array(
+        devsim.get_node_model_values(device=device, region=region, name="y")
+    )
+    y_entry = (
+        device_info["substrate_thickness_cm"] if depth_from is None else depth_from
+    )
+    y_from_entry = y_nodes - y_entry
+    # alpha_depth_shape is a pure function of depth (no sorting requirement), safe on
+    # unordered 2D node coordinates; clip the p+ side to 0 so the erfc roll-off only
+    # sees non-negative depth, then renormalise to a peak of 1 (the contract here is a
+    # peak rate, not a total per-alpha dose).
+    shape = alpha_depth_shape(
+        np.clip(y_from_entry, 0.0, None), alpha_range_cm=_ALPHA_RANGE_CM
+    )
+    peak = np.max(shape)
+    if peak > 0:
+        shape = shape / peak
+    generation = (
+        gen_rate * shape * np.exp(-0.5 * ((x_nodes - x_pos_cm) / stripe_sigma_cm) ** 2)
+    )
+    generation[y_from_entry < 0] = 0.0
+    generation = confine_generation_to_epi(device_info, y_nodes, generation)
+    if zero_on_contacts:
+        generation = np.array(generation, dtype=float, copy=True)
+        for c in contacts_on_region(device, region):
+            generation[sorted(_contact_node_indices(device, region, c))] = 0.0
+    return generation
+
+
+def cce_with_generation(device_info, generation, contacts=("cathode",), node_sets=None):
+    """Inject ``generation``, re-solve, and return the CCE at each of ``contacts``.
+
+    The device is left as it was: the generation is reset to zero and the pre-injection
+    solution (Potential, Electrons, Holes) restored, then one DC solve from that exact
+    state (1-2 Newton iterations) so the contact currents devsim reports are consistent
+    for the next user. ``node_sets`` maps a contact name to the ``node_set`` of
+    :func:`compute_cce_2d` (guard ring: anode and guard share the majority carrier).
+
+    Returns ``{contact: cce}``. A bare ``compute_cce_2d`` call after changing the
+    generation array WITHOUT this inject-and-solve step reads the contact currents of
+    whatever was solved last (the dark state): that was the notebook-19 bug.
+    """
+    node_sets = node_sets or {}
+    return _solved_with_generation(
+        device_info,
+        generation,
+        lambda G: {
+            c: compute_cce_2d(device_info, G, c, node_set=node_sets.get(c))
+            for c in contacts
+        },
+    )
+
+
+def contact_current_sharing(device_info, generation, node_sets=None):
+    """Signed balanced current of EVERY contact of the region under ``generation``,
+    as a fraction of the generated current, plus the conservation residual.
+
+    Returns ``(fractions, residual)``: ``fractions[contact] = I_contact / I_gen`` with
+    devsim's sign (positive into the device; the cathode of a reverse-biased diode is
+    positive, the p+ contacts negative), and ``residual = sum(I_contact) / I_gen``,
+    which is zero at a converged steady state up to the solver tolerance: it is the
+    a-posteriori check of a bias point accepted on a relaxed/aggressive tier. For a
+    guard-ring device ``fractions`` tells how an edge event splits between the
+    anode and the guard. ``node_sets`` as in :func:`cce_with_generation`. The device
+    is restored afterwards.
+    """
+    node_sets = node_sets or {}
+    device = device_info["device_name"]
+    region = device_info["region_name"]
+    contacts = contacts_on_region(device, region)
+    I_gen = Q * integrate_nodes_box_2d(device_info, generation)
+    currents = _solved_with_generation(
+        device_info,
+        generation,
+        lambda G: {
+            c: extract_steady_state_current(device_info, c, node_set=node_sets.get(c))
+            for c in contacts
+        },
+    )
+    if I_gen <= 0:
+        raise ValueError("generation integrates to zero")
+    fractions = {c: cur / I_gen for c, cur in currents.items()}
+    return fractions, sum(currents.values()) / I_gen
+
+
+def _solved_with_generation(device_info, generation, extract):
+    """Inject ``generation``, solve, return ``extract(generation)``; then zero the
+    generation, restore the pre-injection solution and solve once from it."""
+    device = device_info["device_name"]
+    region = device_info["region_name"]
+    baseline = _snapshot_solution(device, region)
+    generation = np.asarray(generation, dtype=float)
+    try:
+        add_generation_to_dd(device_info, generation)
+        _robust_dc_solve(device_info)
+        return extract(generation)
+    finally:
+        add_generation_to_dd(device_info, np.zeros_like(generation))
+        _restore_solution(device, region, baseline)
+        _robust_dc_solve(device_info)
+
+
 def cce_lateral_scan(
     device_info,
     n_points=20,
     gen_rate=1e18,
     stripe_sigma_cm=2e-4,
     contact="cathode",
+    node_set=None,
+    x_max_cm=None,
+    zero_on_contacts=False,
 ):
     """Compute CCE at multiple lateral positions from center to edge.
 
-    At each lateral position x_pos, creates a Gaussian-stripe generation
-    profile G(x,y) = depth_shape(y) * gen_rate * exp(-0.5*((x-x_pos)/sigma)^2)
-    where y is measured from the junction (epi entrance), and depth_shape
-    is the same smooth flat-box + erfc roll-off alpha depth profile used
-    by the 1D path (`etna.core.generation_profiles.alpha_generation_profile`,
-    shape-only, renormalized to peak at gen_rate here rather than to total
-    deposited energy). Generation is zero in the substrate (y < junction_pos).
-
-    AUDIT Mj-5 (v5): this previously used a monotonically DECAYING
-    exponential exp(-y/alpha) — generation highest at the entrance and
-    falling with depth, which is backwards for an alpha particle (energy
-    loss per unit path RISES toward end-of-range, the Bragg-curve shape)
-    and was inconsistent with the flat-box shape already used by the 1D
-    alpha profile in generation_profiles.py. Fixed to reuse that same
-    (qualitative, non-Bragg-peaked-by-default) shape so both alpha
-    generation profiles in this codebase agree.
+    At each lateral position x_pos the generation is the alpha stripe of
+    :func:`alpha_stripe_generation` (flat-box + erfc depth shape below the junction,
+    Gaussian lateral stripe), injected and solved, and the CCE read at ``contact``.
 
     Parameters
     ----------
@@ -275,12 +442,21 @@ def cce_lateral_scan(
     n_points : int
         Number of lateral positions to scan.
     gen_rate : float
-        Peak generation rate (cm^-3 s^-1) — the depth profile's plateau
-        value, not a total dose; see Notes.
+        Peak generation rate (cm^-3 s^-1) -- the depth profile's plateau
+        value, not a total dose.
     stripe_sigma_cm : float
         Gaussian width of the lateral generation stripe (cm).
     contact : str
         Contact for current extraction.
+    node_set : array_like, optional
+        ``node_set`` of :func:`extract_steady_state_current` for ``contact`` (the
+        guard-ring anode needs one; two-terminal devices do not).
+    x_max_cm : float, optional
+        Last lateral position (default ``device_info["half_width_cm"]``).
+    zero_on_contacts : bool
+        Passed to :func:`alpha_stripe_generation` (default False: historical
+        normalisation, which includes the never-injected contact-node generation in
+        ``I_generated``).
 
     Returns
     -------
@@ -299,38 +475,8 @@ def cce_lateral_scan(
     """
     device = device_info["device_name"]
     region = device_info["region_name"]
-    half_width_cm = device_info["half_width_cm"]
-    substrate_thickness_cm = device_info["substrate_thickness_cm"]
+    half_width_cm = device_info["half_width_cm"] if x_max_cm is None else x_max_cm
     alpha_range_cm = _ALPHA_RANGE_CM
-
-    # Get mesh node coordinates
-    x_nodes = np.array(
-        devsim.get_node_model_values(device=device, region=region, name="x")
-    )
-    y_nodes = np.array(
-        devsim.get_node_model_values(device=device, region=region, name="y")
-    )
-
-    # Depth measured from junction (epi entrance)
-    junction_pos = substrate_thickness_cm
-    y_from_junction = y_nodes - junction_pos
-
-    # Depth shape: same flat-box + erfc roll-off used by the 1D alpha
-    # profile (generation_profiles.alpha_depth_shape), reused here so both
-    # alpha profiles in the codebase agree on where generation is largest.
-    # alpha_depth_shape is a pure function of x (no sorting requirement),
-    # safe to evaluate directly on unordered 2D mesh node coordinates —
-    # unlike alpha_generation_profile, which additionally normalizes to
-    # total deposited energy via a trapezoidal integral that assumes
-    # sorted x. Clip negative depths (substrate side) to 0 first so the
-    # erfc roll-off math only ever sees non-negative depth, then
-    # renormalize to a peak of 1.0 since this function's contract is a
-    # peak rate (gen_rate), not a total per-alpha dose.
-    depth_shape_raw = alpha_depth_shape(
-        np.clip(y_from_junction, 0.0, None), alpha_range_cm=alpha_range_cm
-    )
-    max_shape = np.max(depth_shape_raw)
-    depth_shape = depth_shape_raw / max_shape if max_shape > 0 else depth_shape_raw
 
     # Lateral positions: center (x=0) to edge (x=half_width)
     x_positions = np.linspace(0, half_width_cm, n_points)
@@ -338,19 +484,18 @@ def cce_lateral_scan(
     baseline = None
 
     for i, x_pos in enumerate(x_positions):
-        # Build generation profile: depth shape * Gaussian lateral stripe
-        depth_profile = gen_rate * depth_shape
-        lateral_profile = np.exp(-0.5 * ((x_nodes - x_pos) / stripe_sigma_cm) ** 2)
-        generation = depth_profile * lateral_profile
-
-        # Zero out generation in substrate (y < junction_pos)
-        generation[y_from_junction < 0] = 0.0
-        generation = confine_generation_to_epi(device_info, y_nodes, generation)
+        generation = alpha_stripe_generation(
+            device_info,
+            x_pos,
+            gen_rate=gen_rate,
+            stripe_sigma_cm=stripe_sigma_cm,
+            zero_on_contacts=zero_on_contacts,
+        )
 
         # Inject generation, solve, extract CCE
         add_generation_to_dd(device_info, generation)
-        _robust_dc_solve()
-        cce = compute_cce_2d(device_info, generation, contact)
+        _robust_dc_solve(device_info)
+        cce = compute_cce_2d(device_info, generation, contact, node_set=node_set)
         cce_values.append(cce)
 
         logger.info(
@@ -360,24 +505,25 @@ def cce_lateral_scan(
         # Reset generation to zero and restore the baseline. The first reset is
         # solved (that is the baseline); later ones restore its snapshot instead of
         # re-solving (~9-11 Newton iterations each, ~75% of the scan time).
-        zero_gen = np.zeros_like(x_nodes)
-        add_generation_to_dd(device_info, zero_gen)
+        add_generation_to_dd(device_info, np.zeros_like(generation))
         if baseline is None:
-            _robust_dc_solve()
+            _robust_dc_solve(device_info)
             baseline = _snapshot_solution(device, region)
         else:
             _restore_solution(device, region, baseline)
 
     # Contact currents are evaluated during assembly: one solve from the exact
     # baseline (1-2 iterations) leaves the device consistent for later users.
-    _robust_dc_solve()
+    _robust_dc_solve(device_info)
 
     cce_values = np.array(cce_values)
     edge_to_center = cce_values[-1] / cce_values[0] if cce_values[0] > 0 else 0.0
     # depth over which pairs are generated: the epi, plus the n+ layer only if the device
     # was built with nplus_generation=True (confine_generation_to_epi)
     gen_depth = device_info["epi_thickness_cm"]
-    if device_info.get("nplus_thickness_cm") is not None and device_info.get("nplus_generation"):
+    if device_info.get("nplus_thickness_cm") is not None and device_info.get(
+        "nplus_generation"
+    ):
         gen_depth += device_info["nplus_thickness_cm"]
     f_in = in_mesh_generation_fraction(gen_depth, alpha_range_cm=alpha_range_cm)
 

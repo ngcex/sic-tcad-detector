@@ -112,12 +112,23 @@ def setup_poisson(device_info):
 
     _create_sic_potential_only(device, region)
 
-    for contact in ("anode", "cathode"):
+    for contact in region_contacts(device_info):
         bias_name = simple_physics.GetContactBiasName(contact)
         devsim.set_parameter(device=device, name=bias_name, value=0.0)
         simple_physics.CreateSiliconPotentialOnlyContact(device, region, contact)
 
     logger.info("Poisson equation setup complete")
+
+
+def region_contacts(device_info):
+    """Contacts on ``device_info["region_name"]`` that get contact equations.
+
+    ``device_info["contacts"]`` when the builder set it (guard ring: anode, cathode and
+    guard_ring_anode; delta-E/E: one pair per layer), else the historical
+    ``("anode", "cathode")``. Every contact of the region must be listed: a contact
+    without a contact equation is silently a Neumann (reflecting) boundary.
+    """
+    return tuple(device_info.get("contacts") or ("anode", "cathode"))
 
 
 def solve_equilibrium(device_info):
