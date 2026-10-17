@@ -29,9 +29,15 @@ def _name(tag):
     return f"{tag}_{uuid.uuid4().hex[:8]}"
 
 
+# The direct-vs-balanced floors below are measured on the no-n+ geometry (p+ 1 um, cathode
+# on the epi); the builders default to the n+ stack since 2026-10-17, where the direct
+# cathode current is the 1e19 majority term (round-off ~1e-8 A/cm^2), so pin it explicitly.
+LEGACY_GEOM = dict(substrate_thickness_cm=1e-4, nplus_thickness_cm=None)
+
+
 @pytest.fixture(scope="module")
 def illuminated():
-    info = create_dd_device(device_name=_name("bal"))
+    info = create_dd_device(device_name=_name("bal"), **LEGACY_GEOM)
     try:
         ramp_bias(info, 20.0, contact="cathode", V_step=0.5)
         x = np.array(
@@ -84,7 +90,7 @@ def test_dark_current_is_linear_in_N_t_balanced_not_direct():
     an N_t-independent absolute floor (~3e-13 A/cm^2, i.e. 2.5 % at N_t = 2.8e11)."""
     J = {}
     for nt in (2.8e11, 2.8e12):
-        info = create_dark_current_device(N_t=nt, device_name=_name("lin"))
+        info = create_dark_current_device(N_t=nt, device_name=_name("lin"), **LEGACY_GEOM)
         try:
             dark_current_sweep(info, np.array([-10.0]), area=1.0)
             J[nt] = (

@@ -30,12 +30,15 @@ EPI, SUB, NP = 10e-4, 1e-4, 1e-4
 GRADED = dict(
     doping_profile="graded", N_D_junction=2.9e15, N_D_bulk=8.5e13, L_transition=1e-4
 )
-NPLUS = dict(nplus_thickness_cm=NP, N_D_nplus=1e19)
+# p+ thickness explicit: the builders default to the stack (0.3 um) since 2026-10-17
+NPLUS = dict(nplus_thickness_cm=NP, N_D_nplus=1e19, substrate_thickness_cm=SUB)
 BIASES = np.array([0.0, -10.0, -40.0, -100.0])
 
 
 def test_nplus_mesh_matches_devsim_device():
-    info = create_sic_device(device_name=f"npm_{uuid.uuid4().hex[:6]}", **NPLUS)
+    info = create_sic_device(
+        device_name=f"npm_{uuid.uuid4().hex[:6]}", **NPLUS
+    )
     try:
         ref = np.array(
             devsim.get_node_model_values(
@@ -111,4 +114,3 @@ def test_nplus_outside_box_goes_to_devsim(cfg):
     assert "nplus" in sim.validated_domain_reason(
         cfg
     ) or "N_D_nplus" in sim.validated_domain_reason(cfg)
-

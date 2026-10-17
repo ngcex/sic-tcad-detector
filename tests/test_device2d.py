@@ -41,7 +41,8 @@ class TestDevice2DCreation:
         from etna.core.device2d import create_sic_2d_device
 
         dev = create_sic_2d_device(device_name=_unique_name(), half_width_um=50)
-        assert dev["junction_pos"] == pytest.approx(1e-4)  # 1 um substrate
+        # p+ anode thickness default = the stack's 0.3 um (was 1 um before 2026-10-17)
+        assert dev["junction_pos"] == pytest.approx(0.3e-4)
         assert dev["N_A_ionized"] > 1e17
         assert dev["N_A_ionized"] < 5e18
         assert dev["half_width_cm"] == pytest.approx(50.0 * 1e-4)
@@ -176,7 +177,7 @@ class TestMeshStructure:
         device = dev["device_name"]
         region = dev["region_name"]
         half_width_cm = half_width_um * 1e-4
-        total_depth = dev["epi_thickness_cm"] + dev["substrate_thickness_cm"]
+        total_depth = dev["total_length"]  # includes the default n+ layer
         buffer = 1e-8
 
         x = np.array(
@@ -452,7 +453,7 @@ class TestGradedDopingSmoothness:
         xc, yc, dc = x[center], y[center], donors[center]
         order = np.argsort(yc)
         yc, dc = yc[order], dc[order]
-        in_epi = (yc > dev["junction_pos"]) & (dc > 0)
+        in_epi = (yc > dev["junction_pos"]) & (dc > 0) & (yc < dev["epi_end"] - 1e-12)
         d_in = dc[in_epi]
 
         assert len(d_in) >= 4, f"expected >=4 center-column epi nodes, got {len(d_in)}"

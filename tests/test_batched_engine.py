@@ -18,10 +18,13 @@ from etna.core.drift_diffusion import create_dd_device
 EPI, SUB = 10e-4, 1e-4
 GRADED = dict(N_D_junction=2.90e15, N_D_bulk=8.50e13, L_transition=1.0e-4)
 BIASES = np.array([0.0, -5.0, -10.0, -20.0, -40.0])  # multiples of 0.5 V: devsim lattice
+# This file checks the engine on the no-n+ geometry (p+ 1 um, cathode on the epi); the
+# builders default to the n+ stack since 2026-10-17 (the n+ parity: test_nplus_engine.py).
+LEGACY_GEOM = dict(substrate_thickness_cm=SUB, nplus_thickness_cm=None)
 
 
 def _devsim_cv(name, biases=BIASES, **kw):
-    info = create_dd_device(device_name=name, **kw)
+    info = create_dd_device(device_name=name, **{**LEGACY_GEOM, **kw})
     try:
         res = cv_sweep(info, biases)
         psi = np.array(
@@ -35,7 +38,7 @@ def _devsim_cv(name, biases=BIASES, **kw):
 
 
 def test_mesh_matches_devsim_device():
-    info = create_sic_device(device_name="mesh_ref", epi_thickness_cm=EPI)
+    info = create_sic_device(device_name="mesh_ref", epi_thickness_cm=EPI, **LEGACY_GEOM)
     try:
         ref = np.array(
             devsim.get_node_model_values(
@@ -110,7 +113,7 @@ def test_cce_matches_devsim():
     from etna.core.charge_collection import cce_vs_bias
 
     volts = np.array([0.0, -10.0, -30.0])
-    ref = cce_vs_bias(volts, epi_thickness_cm=EPI, device_kwargs=dict(GRADED))
+    ref = cce_vs_bias(volts, epi_thickness_cm=EPI, device_kwargs=dict(GRADED, **LEGACY_GEOM))
     assert not ref["truncated"]
     x = node_positions(EPI, SUB)
     pb = make_batch(x, SUB, 1e19, 2.9e15, 8.5e13, 1e-4)
