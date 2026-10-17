@@ -65,8 +65,8 @@ def _fake_report(cfg, w30_um=9.8995):
         -4.5e-14 * np.abs(db) / 60.0,
         dict(solver="devsim", validated_domain=True, domain_note=None),
     )
-    x = np.array([0.0, 0.3, 5.0, 10.29, 10.3, 10.31, 11.3])
-    E = np.array([0.0, 1.14e5, 3e4, 2.2e4, 9e5, 2.1e4, 0.0])
+    x = np.array([0.0, 0.3, 0.5, 5.0, 10.29, 10.3, 10.31, 11.3])
+    E = np.array([0.0, 8e5, 1.14e5, 3e4, 2.2e4, 9e5, 2.1e4, 0.0])
     field = SimResult(
         cfg,
         "field",
@@ -120,7 +120,7 @@ def test_spec_default_reference_device():
     assert spec["dark_current"]["I_at_minus60V_A"] == pytest.approx(4.5e-14)
     assert spec["dark_current"]["J_at_minus60V_A_per_cm2"] == pytest.approx(4.5e-10)
     assert "calibration" in spec["dark_current"]["note"]
-    # the epi/n+ Debye spike (9e5 at 10.3 um) is excluded from the peak
+    # the spikes at both abrupt steps (8e5 at 0.3 um, 9e5 at 10.3 um) are excluded from the peak
     assert spec["field"]["peak_E_V_per_cm"] == pytest.approx(1.14e5)
     assert [p["solver"] for p in spec["provenance"]] == [
         "batched",
@@ -222,14 +222,13 @@ def test_stack_layers_uniform_and_legacy():
     assert len(stack_layers(etna.legacy_config())) == 2
 
 
-def test_peak_field_helper_excludes_interface_only_with_nplus():
-    x = np.array([0.3, 10.3, 11.0])
-    E = np.array([1.0, 5.0, 0.5])
-    assert peak_field_1d(x, E, DeviceConfig())[:2] == (1.0, 0.3)
-    assert peak_field_1d(x, E, etna.legacy_config(epi_thickness_um=9.3))[:2] == (
-        5.0,
-        10.3,
-    )
+def test_peak_field_helper_excludes_the_abrupt_steps():
+    x = np.array([0.3, 1.0, 5.0, 10.3, 11.0])
+    E = np.array([9.0, 7.0, 2.0, 8.0, 0.5])
+    # default stack: p+ 0.3 um step and epi/n+ step (10.3) excluded
+    assert peak_field_1d(x, E, DeviceConfig())[:2] == (7.0, 1.0)
+    # legacy (p+ 1 um, no n+): only the step at 1.0 um is excluded
+    assert peak_field_1d(x, E, etna.legacy_config())[:2] == (9.0, 0.3)
 
 
 # ------------------------------------------------------------------ mesh / profile

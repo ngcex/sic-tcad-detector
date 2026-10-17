@@ -60,7 +60,7 @@ def test_leaked_device_is_reported(monkeypatch):
         return [] if len(calls) == 1 or deleted else ["leaky"]
 
     monkeypatch.setattr(ra, "_devices_alive", alive)
-    monkeypatch.setattr(devsim, "delete_device", lambda device: deleted.append(device))
+    monkeypatch.setattr(ra, "_delete_device", lambda name: deleted.append(name))
     rep = etna.run_all(etna.DeviceConfig(), ("cv",))
     assert rep.get("cv").status == "error" and "leaked" in rep.get("cv").reason
     assert deleted == ["leaky"]
@@ -119,7 +119,7 @@ def test_2d_field_summary_reports_the_map():
 def test_1d_field_summary_excludes_the_nplus_interface_spike():
     rep = etna.run_all(etna.DeviceConfig(), ("field",))
     res, summ = rep.get("field").result, rep.get("field").summary
-    assert "excl. epi/n+ interface spike" in summ
+    assert "excl. spikes at the abrupt doping steps" in summ
     assert float(summ.split("peak |E| ")[1].split(" ")[0]) < 0.7 * float(res.y.max())
 
 def test_truncated_sweep_is_flagged_in_the_summary(monkeypatch):

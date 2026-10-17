@@ -236,13 +236,13 @@ def _summarize(res: SimResult) -> str:
         return res.metadata["summary"] + _truncation_note(res)
     x, y = np.asarray(res.x, dtype=float), np.asarray(res.y, dtype=float)
     cfg = res.config
-    if res.sim_type == "field" and x.size and getattr(cfg, "nplus_thickness_um", None):
-        # exclude the nm-scale Debye spike at the abrupt epi/n+ interface
+    if res.sim_type == "field" and x.size:
+        # exclude the nm-scale mesh/estimator-dependent spikes at the abrupt doping steps
         pk = peak_field_1d(x, y, cfg)
         if pk is not None and pk[2]:
             return (
                 f"{x.size} pts, peak |E| {pk[0]:.3g} V/cm at x={pk[1]:.2f} um "
-                "(excl. epi/n+ interface spike)"
+                "(excl. spikes at the abrupt doping steps)"
             )
     if not x.size and res.mesh is not None and "ElectricField" in res.mesh.node_values:
         E = np.asarray(res.mesh.node_values["ElectricField"], dtype=float)
@@ -260,6 +260,12 @@ def _summarize(res: SimResult) -> str:
 
 def _solver_of(res: SimResult) -> str:
     return str(res.metadata.get("solver") or "")
+
+
+def _delete_device(name: str) -> None:
+    import devsim
+
+    devsim.delete_device(device=name)
 
 
 def _devices_alive() -> "list[str]":
@@ -326,8 +332,6 @@ def run_all(config: DeviceConfig, sections: "tuple[str, ...] | None" = None) -> 
             last.reason = (last.reason + "; " if last.reason else "") + (
                 f"leaked devsim device(s) {leaked}"
             )
-            import devsim
-
             for d in leaked:
-                devsim.delete_device(device=d)
+                _delete_device(d)
     return Report(config, done, time.perf_counter() - t_all)

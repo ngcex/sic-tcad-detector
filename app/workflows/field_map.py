@@ -80,11 +80,12 @@ def render() -> None:
         )
         st.caption(f"Bias: {result.metadata.get('bias_V', float('nan')):.1f} V")
         show_result_notes(result)
-        if result.config.nplus_thickness_um is not None and result.mesh.y_coords is None:
+        if result.mesh.y_coords is None:
             st.caption(
-                "The sharp spike at the epi/n+ interface is the nm-scale Debye layer of "
-                "the abrupt n+ step, not a breakdown site; the physical peak field is "
-                "at the p+/n- junction."
+                "Sharp nm-scale spikes at the abrupt doping steps (p+/n- junction, epi/n+ "
+                "interface) depend on the mesh and on the field estimator (the 2D result "
+                "shows none); they are not breakdown sites and are excluded from the "
+                "reported peak field."
             )
         if result.mesh.y_coords is None:
             # 1D branch: existing line charts + CSV + expander (read result.x/y),

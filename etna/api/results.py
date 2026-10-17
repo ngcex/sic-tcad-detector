@@ -26,8 +26,11 @@ INTERFACE_SPIKE_WINDOW_UM = 0.1
 def peak_field_1d(x_um, E, config) -> "tuple[float, float, bool] | None":
     """(peak |E| V/cm, its depth um, interface_excluded) of a 1D field profile.
 
-    With an n+ layer, nodes within ``INTERFACE_SPIKE_WINDOW_UM`` of the epi/n+
-    interface are excluded (``interface_excluded=True``). None if no finite value.
+    Nodes within ``INTERFACE_SPIKE_WINDOW_UM`` of the two abrupt doping steps (the
+    p+/n- junction and, with an n+ layer, the epi/n+ interface) are excluded
+    (``interface_excluded=True``): the nm-scale spike there depends on the mesh and on
+    the field estimator (2D shows none), so it is not a resolved physical peak. None if
+    no finite value.
     """
     x = np.asarray(x_um, dtype=float)
     y = np.asarray(E, dtype=float)
@@ -35,9 +38,13 @@ def peak_field_1d(x_um, E, config) -> "tuple[float, float, bool] | None":
         return None
     keep = np.isfinite(y)
     excluded = False
+    steps = [config.substrate_thickness_um]
     if getattr(config, "nplus_thickness_um", None):
-        x_if = config.substrate_thickness_um + config.epi_thickness_um
-        window = np.abs(x - x_if) > INTERFACE_SPIKE_WINDOW_UM
+        steps.append(config.substrate_thickness_um + config.epi_thickness_um)
+    if True:
+        window = np.ones_like(x, dtype=bool)
+        for x_step in steps:
+            window &= np.abs(x - x_step) > INTERFACE_SPIKE_WINDOW_UM
         if (keep & window).any():
             keep &= window
             excluded = True
