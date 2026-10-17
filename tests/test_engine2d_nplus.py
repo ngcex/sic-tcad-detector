@@ -23,7 +23,8 @@ from etna.core.engine2d import (
 from etna.core.engine2d.grid import grid_from_devsim
 from etna.core.optimization import _sweep_one
 
-NPLUS = dict(nplus_thickness_cm=1e-4, N_D_nplus=1e19)
+# p+ 1 um explicit (the builders default to the stack's 0.3 um since 2026-10-17)
+NPLUS = dict(nplus_thickness_cm=1e-4, N_D_nplus=1e19, substrate_thickness_cm=1e-4)
 
 
 class TestNplusEligibility:
@@ -82,8 +83,10 @@ class TestNplusEligibility:
         assert "V_cathode" in engine2d_dark_unsupported_reason(50.0, 120.0, **NPLUS)
 
     def test_no_nplus_box_unchanged(self):
-        # without n+ the bias limit stays the field-rule box (80 V)
-        assert "V_bias" in engine2d_unsupported_reason(50.0, 90.0)
+        # without n+ (explicit None) the bias limit stays the field-rule box (80 V)
+        assert "V_bias" in engine2d_unsupported_reason(50.0, 90.0, nplus_thickness_cm=None)
+        # a missing key is the builder default, the stack's n+ layer: n+ box (100 V)
+        assert engine2d_unsupported_reason(50.0, 90.0) is None
         assert ENGINE2D_NPLUS_BOX["V_bias"] == (5.0, 100.0)
         # n+ keywords that have no effect without a layer do not change eligibility
         assert (

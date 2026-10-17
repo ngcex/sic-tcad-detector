@@ -188,7 +188,7 @@ def test_cce_vs_dose_rate_merges_device_kwargs(monkeypatch):
     with pytest.raises(_Stop):
         cce_vs_dose_rate([20.0], device_kwargs={"T": 350.0, "N_A": 5e18})
     assert (got["T"], got["N_A"]) == (350.0, 5e18)
-    assert got["N_D_junction"] == 2.90e15
+    assert got["N_D_junction"] == 2.974271e15  # DEFAULT_STACK (was a hardcoded 2.90e15)
 
 
 def test_transient_merges_device_kwargs(monkeypatch):
@@ -201,4 +201,4 @@ def test_transient_merges_device_kwargs(monkeypatch):
             dose_rates=[20.0], device_kwargs={"T": 350.0, "N_A": 5e18}
         )
     assert (got["T"], got["N_A"]) == (350.0, 5e18)
-    assert got["N_D_junction"] == 2.90e15
+    assert got["N_D_junction"] == 2.974271e15  # DEFAULT_STACK (was a hardcoded 2.90e15)

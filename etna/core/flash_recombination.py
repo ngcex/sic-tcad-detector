@@ -54,6 +54,7 @@ import numpy as np
 
 from etna.core.charge_collection import add_generation_to_dd, compute_cce_from_dd
 from etna.core.generation_profiles import confine_generation_to_epi, proton_generation_profile
+from etna.core.device import DEFAULT_STACK as _STACK
 
 logger = logging.getLogger(__name__)
 
@@ -266,9 +267,9 @@ def cce_vs_dose_rate(
     epi_thickness_cm=10e-4,
     E_MeV=62,
     n_continuation_steps=5,
-    N_D_junction=2.90e15,
-    N_D_bulk=8.50e13,
-    L_transition=1.0e-4,
+    N_D_junction=_STACK["N_D_junction"],
+    N_D_bulk=_STACK["N_D_bulk"],
+    L_transition=_STACK["L_transition"],
     device_kwargs=None,
 ):
     """Compute CCE vs dose rate across the FLASH range (exploratory sensitivity bound).
@@ -295,11 +296,11 @@ def cce_vs_dose_rate(
     n_continuation_steps : int
         Steps for generation-rate continuation ramp. Default: 5.
     N_D_junction : float
-        Donor concentration at junction (cm^-3). Default: 2.90e15.
+        Donor concentration at junction (cm^-3). Default: DEFAULT_STACK (2.974271e15).
     N_D_bulk : float
-        Donor concentration in bulk epi (cm^-3). Default: 8.50e13.
+        Donor concentration in bulk epi (cm^-3). Default: DEFAULT_STACK (6.335936e13).
     L_transition : float
-        Transition length for graded doping profile (cm). Default: 1.0e-4.
+        Transition length for graded doping profile (cm). Default: DEFAULT_STACK (0.987 um).
     device_kwargs : dict or None
         Additional keyword arguments for create_dd_device (e.g. N_A, T,
         substrate_thickness_cm, doping_profile, N_D); override the defaults.
@@ -455,10 +456,11 @@ def parametric_cce_sweep(
     N_D_bulk_values=(5e13, 1e14, 2e14, 5e14),
     bias_voltages=(-10.0, -30.0, -50.0),
     E_MeV=62,
-    N_D_junction_base=2.90e15,
-    N_D_bulk_base=8.50e13,
-    L_transition=1.0e-4,
+    N_D_junction_base=_STACK["N_D_junction"],
+    N_D_bulk_base=_STACK["N_D_bulk"],
+    L_transition=_STACK["L_transition"],
     n_continuation_steps=5,
+    device_kwargs=None,
 ):
     """Sweep CCE vs dose rate across epi thickness, doping, and bias combinations.
 
@@ -486,6 +488,10 @@ def parametric_cce_sweep(
         Transition length for graded doping profile (cm).
     n_continuation_steps : int
         Steps for generation-rate continuation ramp.
+
+    device_kwargs : dict or None
+        Forwarded to cce_vs_dose_rate (geometry overrides, e.g. the legacy
+        nplus_thickness_cm=None / substrate_thickness_cm=1e-4).
 
     Returns
     -------
@@ -518,6 +524,7 @@ def parametric_cce_sweep(
                 N_D_bulk=N_D_b,
                 L_transition=L_transition,
                 n_continuation_steps=n_continuation_steps,
+                device_kwargs=device_kwargs,
             )
             results[(epi, N_D_b, V)] = result
         except Exception:

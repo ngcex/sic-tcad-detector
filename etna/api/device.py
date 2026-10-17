@@ -123,10 +123,12 @@ def device_kwargs(config: DeviceConfig) -> dict:
         N_D_bulk=config.N_D_bulk,
         L_transition=config.L_transition_um * 1e-4,
     )
-    # n+ keys only when the layer is on: consumers that do not know them (engine gates,
-    # older core signatures) then see exactly the historical keyword set.
+    # nplus_thickness_cm is always present: the core builders default to the stack's n+
+    # layer, so the legacy (no n+) geometry must be passed as an explicit None.
     if config.nplus_thickness_um is not None:
         kw.update(nplus_thickness_cm=config.nplus_thickness_um * 1e-4, N_D_nplus=config.N_D_nplus)
+    else:
+        kw.update(nplus_thickness_cm=None)
     return kw
 
 

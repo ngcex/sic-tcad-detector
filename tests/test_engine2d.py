@@ -15,6 +15,10 @@ from etna.core.engine2d import (
 from etna.core.engine2d.grid import NotLaterallyUniform, grid_from_arrays
 from etna.core.optimization import _sweep_one, microdosimetric_sweep
 
+# The no-n+ (legacy) geometry, explicit: the builders default to the n+ stack since
+# 2026-10-17, and the contact-on-epi wall tested below exists only without n+.
+LEGACY_GEOM = dict(substrate_thickness_cm=1e-4, nplus_thickness_cm=None)
+
 
 class TestEligibility:
     def test_default_config_supported(self):
@@ -80,7 +84,7 @@ class TestOutsideValidity:
 
     def test_deep_wall_signals_failure(self):
         with pytest.raises(Engine2DOutsideValidity, match="outside model validity"):
-            lateral_cce_scan_2d(25.0, 80.0, N_D_bulk=5e13)
+            lateral_cce_scan_2d(25.0, 80.0, N_D_bulk=5e13, **LEGACY_GEOM)
 
     def test_old_name_is_an_alias(self):
         assert Engine2DPunchThrough is Engine2DOutsideValidity
@@ -88,17 +92,19 @@ class TestOutsideValidity:
     def test_near_wall_defers_to_devsim(self):
         # devsim's ramp stops at 54.5 V here; 55 V is inside the undecided band.
         with pytest.raises(Engine2DFallback, match="non-convergence wall"):
-            lateral_cce_scan_2d(25.0, 55.0, N_D_bulk=5e13)
+            lateral_cce_scan_2d(25.0, 55.0, N_D_bulk=5e13, **LEGACY_GEOM)
 
     def test_engine_answers_below_wall(self):
-        r = lateral_cce_scan_2d(25.0, 50.0, N_D_bulk=5e13, n_lateral_points=3)
+        r = lateral_cce_scan_2d(
+            25.0, 50.0, N_D_bulk=5e13, n_lateral_points=3, **LEGACY_GEOM
+        )
         assert np.all(np.isfinite(r["cce_values"]))
         assert abs(r["edge_to_center_ratio"] - 1.0) < 1e-6
 
 
 def _rows(hw, epi, nd, vb):
     task = (0, 1, hw, epi, nd, vb, 10)
-    return _sweep_one(task + ("auto",)), _sweep_one(task + ("devsim",))
+    return _sweep_one(task + ("auto", LEGACY_GEOM)), _sweep_one(task + ("devsim", LEGACY_GEOM))
 
 
 @pytest.mark.slow
@@ -148,7 +154,7 @@ def test_unexpected_engine_error_falls_back_to_devsim(monkeypatch):
 
 
 def test_outside_validity_row_has_failure_reason():
-    row = _sweep_one((0, 1, 25.0, 10e-4, 8.5e13, 80.0, 3, "auto"))
+    row = _sweep_one((0, 1, 25.0, 10e-4, 8.5e13, 80.0, 3, "auto", LEGACY_GEOM))
     assert row["solver"] == "engine2d" and math.isnan(row["center_cce"])
     assert not row["is_valid"]
     assert "outside model validity" in row["failure_reason"]
@@ -162,7 +168,7 @@ def test_devsim_ramp_failure_has_failure_reason(monkeypatch):
         raise RuntimeError("ramp_bias: failed to converge at V=56.000V: stub")
 
     monkeypatch.setattr(opt, "create_2d_dd_device", ramp_fails)
-    row = opt._sweep_one((0, 1, 25.0, 10e-4, 8.5e13, 60.0, 3, "devsim"))
+    row = opt._sweep_one((0, 1, 25.0, 10e-4, 8.5e13, 60.0, 3, "devsim", LEGACY_GEOM))
     assert row["solver"] == "devsim" and math.isnan(row["center_cce"])
     assert row["failure_reason"].startswith("outside model validity")
     assert "devsim" in row["failure_reason"]

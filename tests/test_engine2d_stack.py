@@ -52,6 +52,7 @@ class TestStackEligibility:
                 substrate_thickness_cm=1e-4,
                 N_D_junction=2.93e15,
                 L_transition=0.987e-4,
+                nplus_thickness_cm=None,  # explicit: a missing key is the n+ default
             )
             is None
         )
@@ -96,6 +97,7 @@ class TestStackEligibility:
                 substrate_thickness_cm=0.3e-4,
                 N_D_junction=2.974271e15,
                 L_transition=0.987e-4,
+                nplus_thickness_cm=None,  # explicit: the builder default is the n+ stack
             ),
         ),  # no n+
     ],

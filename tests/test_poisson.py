@@ -37,7 +37,8 @@ class TestDeviceCreation:
         assert dev["N_D"] == pytest.approx(1.07e15, rel=0.01)
         assert dev["N_A_ionized"] > 1e17  # ionized fraction of 1e19
         assert dev["N_A_ionized"] < 5e18
-        assert dev["junction_pos"] == pytest.approx(1e-4)  # 1 um substrate
+        # p+ default = the stack's 0.3 um (1 um before 2026-10-17)
+        assert dev["junction_pos"] == pytest.approx(0.3e-4)
 
     def test_device_has_sic_material_params(self):
         from etna.core.device import create_sic_device
@@ -90,8 +91,11 @@ class TestPoissonSolver:
         assert len(x) == len(E)
         assert len(x) > 50  # sufficient resolution
 
-        # E-field should peak near junction
+        # E-field should peak near the p+/n junction. The n-/n+ high-low step of the
+        # default stack (builder default since 2026-10-17) carries its own built-in
+        # field at the epi end: look on the p+/n- side only.
         jp = dev["junction_pos"]
+        E = np.where(x < dev["epi_end"] - 1e-6, E, 0.0)
         idx_max = np.argmax(np.abs(E))
         x_peak = x[idx_max]
         assert (

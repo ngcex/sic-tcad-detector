@@ -54,7 +54,8 @@ def test_graded_doping_profile_sets_donors():
         assert np.all(p_side == 0.0), "Donors should be zero on p-side"
 
         # Donors should be non-zero and non-uniform on n-side
-        n_side = donors[x > junction_pos + 1e-7]  # skip exact junction node
+        # skip the exact junction node; epi only (the default stack's n+ layer follows)
+        n_side = donors[(x > junction_pos + 1e-7) & (x < device_info["epi_end"] - 1e-9)]
         assert len(n_side) > 5, "Should have multiple n-side nodes"
         assert np.all(n_side > 0), "Donors should be positive on n-side"
 
@@ -192,7 +193,12 @@ def test_contact_current_at_equilibrium():
             L_transition=2e-4,
         )
 
-        I_cathode = extract_contact_current(device_info, contact="cathode")
+        # The cathode sits on the default n+ layer (builder default since 2026-10-17):
+        # its direct current is the 1e19 majority-carrier term, round-off (~2e-8 A/cm^2);
+        # the balanced steady-state form is the meaningful one there.
+        from etna.core.drift_diffusion import extract_steady_state_current
+
+        I_cathode = extract_steady_state_current(device_info, contact="cathode")
         I_anode = extract_contact_current(device_info, contact="anode")
 
         # At equilibrium (0V), net current should be negligible.

@@ -93,7 +93,10 @@ def test_sweep_runs_on_the_engine_when_config_has_nplus():
     sec = rep.get("sweep")
     assert sec.status == "ok", sec
     df = sec.result.metadata["table"]
-    assert set(df["solver"]) == {"engine2d"} and "n+ 1 um" in sec.result.metadata["summary"]
+    assert (
+        set(df["solver"]) == {"engine2d"}
+        and "n+ 1 um" in sec.result.metadata["summary"]
+    )
 
 
 def test_sweep_skipped_when_nplus_outside_engine_box():
@@ -102,7 +105,9 @@ def test_sweep_skipped_when_nplus_outside_engine_box():
 
 
 def test_run_field_2d_with_nplus_uses_engine():
-    res = etna.run_field(etna.DeviceConfig(half_width_um=25.0, nplus_thickness_um=1.0), bias_V=-20.0)
+    res = etna.run_field(
+        etna.DeviceConfig(half_width_um=25.0, nplus_thickness_um=1.0), bias_V=-20.0
+    )
     assert res.metadata["solver"] == "engine2d", res.metadata
 
 
@@ -116,3 +121,28 @@ def test_1d_field_summary_excludes_the_nplus_interface_spike():
     res, summ = rep.get("field").result, rep.get("field").summary
     assert "excl. epi/n+ interface spike" in summ
     assert float(summ.split("peak |E| ")[1].split(" ")[0]) < 0.7 * float(res.y.max())
+
+def test_truncated_sweep_is_flagged_in_the_summary(monkeypatch):
+    from etna.api import simulation as s
+
+    def cut(cfg, *a, **k):
+        return etna.SimResult(
+            config=cfg,
+            sim_type="dark_current",
+            x=np.array([0.0, -10.0, -20.0]),
+            y=np.array([1e-12, 2e-12, 3e-12]),
+            metadata={"truncated": True, "requested_v_stop": -100.0},
+        )
+
+    monkeypatch.setattr(s, "run_dark_current", cut)
+    rep = etna.run_all(etna.DeviceConfig(), sections=("dark",))
+    summary = rep.get("dark").summary
+    assert "TRUNCATED: reached -20 V of requested -100 V" in summary, summary
+    full = etna.SimResult(
+        config=etna.DeviceConfig(),
+        sim_type="dark_current",
+        x=np.array([0.0, -100.0]),
+        y=np.array([1e-12, 2e-12]),
+        metadata={"truncated": False, "requested_v_stop": -100.0},
+    )
+    assert "TRUNCATED" not in ra._summarize(full)

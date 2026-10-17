@@ -23,6 +23,8 @@ from etna.core.sic_material import (
     mobility_caughey_thomas_T,
     srh_lifetime,
 )
+from etna.core.device import DEFAULT_STACK as _STACK
+
 
 logger = logging.getLogger(__name__)
 
@@ -79,9 +81,9 @@ def sweep_iv_vs_temperature(
             device_name=dev_name,
             T=T,
             doping_profile="graded",
-            N_D_junction=2.90e15,
-            N_D_bulk=8.50e13,
-            L_transition=1.0e-4,
+            N_D_junction=_STACK["N_D_junction"],
+            N_D_bulk=_STACK["N_D_bulk"],
+            L_transition=_STACK["L_transition"],
         )
         kwargs.update(device_kwargs)
 
@@ -188,9 +190,9 @@ def sweep_cv_vs_temperature(
             device_name=dev_name,
             T=T,
             doping_profile="graded",
-            N_D_junction=2.90e15,
-            N_D_bulk=8.50e13,
-            L_transition=1.0e-4,
+            N_D_junction=_STACK["N_D_junction"],
+            N_D_bulk=_STACK["N_D_bulk"],
+            L_transition=_STACK["L_transition"],
         )
         kwargs.update(device_kwargs)
 
@@ -270,9 +272,9 @@ def sweep_cce_vs_temperature(
                 device_name=dev_name,
                 T=T,
                 doping_profile="graded",
-                N_D_junction=2.90e15,
-                N_D_bulk=8.50e13,
-                L_transition=1.0e-4,
+                N_D_junction=_STACK["N_D_junction"],
+                N_D_bulk=_STACK["N_D_bulk"],
+                L_transition=_STACK["L_transition"],
             )
             kwargs.update(device_kwargs)
 
@@ -303,9 +305,9 @@ def sweep_cce_vs_temperature(
             try:
                 dd_kwargs = dict(
                     doping_profile="graded",
-                    N_D_junction=2.90e15,
-                    N_D_bulk=8.50e13,
-                    L_transition=1.0e-4,
+                    N_D_junction=_STACK["N_D_junction"],
+                    N_D_bulk=_STACK["N_D_bulk"],
+                    L_transition=_STACK["L_transition"],
                     T=T,
                 )
                 dd_kwargs.update(device_kwargs)

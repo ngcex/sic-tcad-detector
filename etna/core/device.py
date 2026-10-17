@@ -39,8 +39,11 @@ DEFAULT_N_D_NPLUS = 1e19  # cm^-3
 # n+ substrate (1 um modelled, cathode on its far end), confirmed by the device owner.
 # Read by DeviceConfig, create_sic_device / create_sic_2d_device (graded-doping fallbacks),
 # cce_vs_bias and the 2D engine gate; SiC4H_Parameters holds N_t / E_t (read back here).
-# Core builders keep their historical GEOMETRY defaults (p+ 1 um, no n+) and take the
-# stack explicitly; the default model is DeviceConfig().
+# Every core default reads it: the builders' geometry (p+ 0.3 um, n+ 1 um) and graded
+# doping, and the sweep helpers (transient, flash, temperature, C-V, dark current, CCE).
+# Explicit arguments win; nplus_thickness_cm=None (explicit) builds the no-n+ legacy
+# geometry. Before 2026-10-17 the builders kept p+ 1 um / no n+ and the helpers hardcoded
+# 2.90e15 / 8.50e13 / 1.0e-4 (a third doping set), so direct core calls mixed models.
 # Calibration (lab/solver2d/bench/nplus_calibrate.py; pinned by
 # tests/test_nplus_calibration.py; notes in lab/solver2d/notes/LOG.md):
 # C-V: the three W targets (1.7 / 9.5 / 9.73 um at 0 / -10 / -30 V, W = eps*A/C, A = 4 mm2;
@@ -155,7 +158,7 @@ def create_sic_device(
     device_name="sic_diode",
     region_name="sic",
     epi_thickness_cm=10e-4,
-    substrate_thickness_cm=1e-4,
+    substrate_thickness_cm=DEFAULT_STACK["substrate_thickness_cm"],
     N_A=1e19,
     N_D=None,
     T=300,
@@ -163,8 +166,8 @@ def create_sic_device(
     N_D_junction=None,
     N_D_bulk=None,
     L_transition=None,
-    nplus_thickness_cm=None,
-    N_D_nplus=DEFAULT_N_D_NPLUS,
+    nplus_thickness_cm=DEFAULT_STACK["nplus_thickness_cm"],
+    N_D_nplus=DEFAULT_STACK["N_D_nplus"],
     nplus_generation=False,
 ):
     """Create a 1D p+/n- 4H-SiC diode device in devsim.
@@ -180,8 +183,9 @@ def create_sic_device(
     epi_thickness_cm : float
         Epitaxial layer thickness (cm). Default 10 um = 10e-4 cm.
     substrate_thickness_cm : float
-        p+ ANODE layer thickness (cm). Default 1 um = 1e-4 cm. (Historical name: this
-        is not the n+ substrate, see ``nplus_thickness_cm``.)
+        p+ ANODE layer thickness (cm). Default DEFAULT_STACK (0.3 um); the legacy model
+        used 1 um = 1e-4 cm. (Historical name: this is not the n+ substrate, see
+        ``nplus_thickness_cm``.)
     N_A : float
         Total acceptor concentration in p+ substrate (cm^-3).
     N_D : float or None
@@ -200,9 +204,10 @@ def create_sic_device(
         For graded profile: characteristic decay length (cm).
     nplus_thickness_cm : float or None
         Thickness (cm) of an n+ layer under the n- epi, cathode contact on its far end
-        (the conductive n+ substrate of the real device, truncated). None (default) =
-        the historical model: cathode contact directly on the n- epi, which produces a
-        non-convergence wall at deep reverse bias (a contact artefact).
+        (the conductive n+ substrate of the real device, truncated). Default
+        DEFAULT_STACK (1 um). None = the historical (legacy) model: cathode contact
+        directly on the n- epi, which produces a non-convergence wall at deep reverse
+        bias (a contact artefact).
     N_D_nplus : float
         n+ donor concentration (cm^-3), fully ionized. The n+ inherits the device's
         scalar mobility and SRH lifetimes (like the rest of the model).

@@ -139,7 +139,7 @@ See `etna/__init__.py` for the full public API surface (`DeviceConfig`,
 | `etna/`         | Installable Python package: `etna/api/` (public facades — `DeviceConfig`, `run_cv`, `run_cce`, …) and `etna/core/` (internal solver modules — material params, Poisson, drift-diffusion, CCE, dark current, radiation damage, microdosimetry, 2D devices, …) |
 | `app/`          | Streamlit UI: `app/main.py` (navigation shell), `app/workflows/` (one page per simulation type), `app/components/` (sidebar, plotting, CSV export)                                                                                                           |
 | `notebooks/`    | 22 analysis notebooks (validation, characterisation, FLASH, radiation damage, microdosimetry, feasibility)                                                                                                                                                   |
-| `tests/`        | 57 pytest modules (~700 tests) — `test_api_*.py` (library facades), `test_app_*.py` (Streamlit AppTest, incl. un-mocked per-page smoke tests), plus the core-physics modules                                                                                |
+| `tests/`        | 57 pytest modules (~700 tests) — `test_api_*.py` (library facades), `test_app_*.py` (Streamlit AppTest, incl. un-mocked per-page smoke tests), plus the core-physics modules                                                                                 |
 | `data/`         | Material/stopping-power tables (`data/srim/` holds **placeholders** for κ — see below)                                                                                                                                                                       |
 | `deliverables/` | Foundry-facing detector design specs (PDF + Markdown)                                                                                                                                                                                                        |
 | `figures/`      | Generated publication figures                                                                                                                                                                                                                                |
@@ -184,7 +184,7 @@ reported value. In the interest of honesty, the current limitations are:
   n⁻ epi / n⁺ substrate (1 µm modelled, 10¹⁹ cm⁻³, cathode on its far end), doping
   re-solved on the 0 / −10 V C-V points (`etna.core.device.DEFAULT_STACK`). There is
   no deep-bias convergence wall (devsim converges to ≥ −150 V; the engine is
-  cross-checked to −100 V). Reach-through is **10.3 V** by a *definition*: the
+  cross-checked to −100 V). Reach-through is **10.3 V** by a _definition_: the
   depletion edge within one Debye length of the n⁻/n⁺ step (`metadata["reach_through_V"]`;
   paper: ~10 V; 17 V under the legacy mesh rule).
 - ⚠️ **Known C-V systematic:** W(−30 V) is 9.90 µm vs the measured 9.73 µm (+1.7 %,
@@ -195,6 +195,9 @@ reported value. In the interest of honesty, the current limitations are:
   pre-flip numbers: cathode directly on the n⁻ epi, p⁺ 1 µm, 2.93e15 / 8.82e13 /
   0.987 µm, N_t 2.8e12, E_t 0.65. Only there does devsim stop converging at deep bias
   (≈ −64 V) — an artefact of the missing n⁺ substrate, **not** a physical limit.
+  Direct core calls (`etna.core.*` builders and sweeps) default to the same stack; pass
+  `nplus_thickness_cm=None, substrate_thickness_cm=1e-4` (or
+  `device_kwargs(legacy_config())`) for the legacy geometry.
 - 🔧 **Data-blocked (machinery ready, real data needed):**
   - Tissue-equivalence κ(E): the Bragg-additivity machinery is in place
     (`compute_kappa_table(source="bragg")`) but `data/srim/*.csv` are placeholders

@@ -123,7 +123,11 @@ def _run_sweep(config: DeviceConfig) -> SimResult:
         sim_type="sweep",
         x=per_v.index.to_numpy(dtype=float),
         y=per_v.to_numpy(dtype=float),
-        metadata={"solver": "+".join(sorted(set(df["solver"]))), "summary": summary, "table": df},
+        metadata={
+            "solver": "+".join(sorted(set(df["solver"]))),
+            "summary": summary,
+            "table": df,
+        },
     )
 
 
@@ -215,9 +219,21 @@ def config_key(config: DeviceConfig) -> str:
     ).hexdigest()[:16]
 
 
+def _truncation_note(res: SimResult) -> str:
+    """' (TRUNCATED: reached X of requested Y V)' for a sweep cut short, else ''."""
+    md = res.metadata
+    if not md.get("truncated"):
+        return ""
+    req = md.get("requested_v_stop")
+    x = np.asarray(res.x, dtype=float)
+    reached = f"{x[np.argmax(np.abs(x))]:.3g} V" if x.size else "no point"
+    req_txt = f" of requested {req:.3g} V" if req is not None else ""
+    return f" (TRUNCATED: reached {reached}{req_txt})"
+
+
 def _summarize(res: SimResult) -> str:
     if res.metadata.get("summary"):
-        return res.metadata["summary"]
+        return res.metadata["summary"] + _truncation_note(res)
     x, y = np.asarray(res.x, dtype=float), np.asarray(res.y, dtype=float)
     cfg = res.config
     if res.sim_type == "field" and x.size and getattr(cfg, "nplus_thickness_um", None):
@@ -234,14 +250,14 @@ def _summarize(res: SimResult) -> str:
         E = np.asarray(res.mesh.node_values["ElectricField"], dtype=float)
         return f"2D map, {E.size} nodes, max |E| {np.nanmax(E):.3g} V/cm"
     if not x.size or not y.size:
-        return "no data"
+        return "no data" + _truncation_note(res)
     finite = y[np.isfinite(y)]
     if not finite.size:
-        return f"{x.size} points, all NaN"
+        return f"{x.size} points, all NaN" + _truncation_note(res)
     return (
         f"{x.size} pts, x {np.nanmin(x):.3g}..{np.nanmax(x):.3g}, "
         f"y {finite.min():.3g}..{finite.max():.3g}"
-    )
+    ) + _truncation_note(res)
 
 
 def _solver_of(res: SimResult) -> str:

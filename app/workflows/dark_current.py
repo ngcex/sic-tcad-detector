@@ -48,9 +48,7 @@ def render() -> None:
     cfg = require_config()
 
     if cfg.half_width_um is not None:
-        st.warning(
-            "This workflow is 1D-only. Set Dimensionality to 1D in the sidebar."
-        )
+        st.warning("This workflow is 1D-only. Set Dimensionality to 1D in the sidebar.")
         st.stop()
 
     T_min = st.number_input(
@@ -123,6 +121,18 @@ def render() -> None:
             errors: list[str] = []
             notes: list[str] = []
             for T_value, result in zip(temperatures, sweep_results):
+                if result.metadata.get("truncated"):
+                    # the sweep stopped before V_bias (devsim non-convergence)
+                    reached = result.metadata.get("reached_v_stop")
+                    reached_txt = (
+                        "no bias point" if reached is None else f"{reached:.2f} V"
+                    )
+                    requested = result.metadata.get("requested_v_stop", V_bias)
+                    errors.append(
+                        f"T={T_value:.1f} K: sweep truncated, reached {reached_txt} "
+                        f"of requested {requested:.2f} V"
+                    )
+                    continue
                 if len(result.x) < 1:
                     if result.metadata.get("error"):
                         errors.append(f"T={T_value:.1f} K: {result.metadata['error']}")
@@ -130,7 +140,9 @@ def render() -> None:
                 T_ok.append(float(T_value))
                 I_total.append(float(result.y[0]))
                 if result.metadata.get("validated_domain") is False:
-                    notes.append(result.metadata.get("domain_note") or f"T={T_value:g} K")
+                    notes.append(
+                        result.metadata.get("domain_note") or f"T={T_value:g} K"
+                    )
 
             if not T_ok:
                 st.error(
@@ -170,8 +182,9 @@ def render() -> None:
         if n_ok < n_requested:
             st.warning(
                 f"{n_ok} of {n_requested} temperature points completed "
-                "successfully; the rest failed to converge or returned no "
-                "data and are omitted from the plot below."
+                "successfully; the rest failed to converge, were truncated "
+                "before V_bias or returned no data and are omitted from the "
+                "plot below."
             )
             errors = st.session_state.get("dark_current_errors") or []
             if errors:

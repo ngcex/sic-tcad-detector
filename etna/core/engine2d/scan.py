@@ -39,6 +39,7 @@ from etna.core.device2d import (
     _L_TRANSITION_DEFAULT,
     _N_D_BULK_DEFAULT,
     _N_D_JUNCTION_DEFAULT,
+    _NPLUS_DEFAULT_CM,
     _SUBSTRATE_DEFAULT_CM,
 )
 from etna.core.generation_profiles import alpha_depth_shape
@@ -103,8 +104,12 @@ def _in_box(value, lo, hi):
 
 
 def _nplus_reason(device_kwargs, allow_generation=True):
-    """(reason or None, has_nplus) for the n+ keywords in ``device_kwargs`` (popped)."""
-    t = device_kwargs.pop("nplus_thickness_cm", None)
+    """(reason or None, has_nplus) for the n+ keywords in ``device_kwargs`` (popped).
+
+    A missing ``nplus_thickness_cm`` means create_sic_2d_device's default (the default
+    stack's n+ layer), an explicit None means no n+ (legacy geometry).
+    """
+    t = device_kwargs.pop("nplus_thickness_cm", _NPLUS_DEFAULT_CM)
     nd = device_kwargs.pop("N_D_nplus", None)
     gen = device_kwargs.pop("nplus_generation", False)
     if t is None:  # no n+ layer: N_D_nplus / nplus_generation have no effect in devsim
