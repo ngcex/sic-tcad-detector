@@ -57,15 +57,21 @@ logger = logging.getLogger(__name__)
 # Depth mesh of the alternative structures. device2d.py meshes the planar diode with
 # 1 nm at the junction and 50 nm through the epi (327 y lines for a 10 um epi, 8.5k
 # nodes for 26 x lines). The structures here need 80-150 x lines for their lateral
-# features (implant edges, column, ring), so the depth mesh is coarser (~120 y lines
-# for a 10 um epi). Checked on the mesa pillar (= the planar problem): centre CCE
-# 0.99872 on both meshes.
-ALT_JUNCTION_PS = 5e-7
-ALT_EPI_PS = 2e-5
+# features (implant edges, column, ring), and the direct solver's cost per Newton
+# iteration grows superlinearly with the node count (0.013 s at 4.8k nodes, 0.26 s
+# at 18k), so the depth mesh is coarser. Checked on the mesa pillar (= the planar
+# problem): centre CCE 0.9987214 with (5e-7, 2e-5), 0.9987196 with the values below;
+# (2e-6, 1e-4) is too coarse (DD equilibrium fails).
+ALT_JUNCTION_PS = 1e-6
+ALT_EPI_PS = 5e-5
 # Lateral (x) spacing at an abrupt implant edge. devsim grades ~8 %/line away from a
-# fine line (ln(coarse/fine)/0.08 lines per transition, ~45 for 2e-6 -> 2e-4) and
-# meshes the span between two lines of EQUAL ps uniformly (a 3 um gap at 2e-6 would be
-# 1500 lines -> always put a coarse line in the middle of a gap).
+# fine line (ln(coarse/fine)/0.08 lines per transition) and meshes the span between
+# two lines of EQUAL ps uniformly (a 3 um gap at 2e-6 would be 1500 lines -> always
+# put a coarse line in the middle of a gap). The abrupt lateral p+/n- step (1e18 vs
+# 3e15, ~3 V built-in) needs cells of a few 10 nm: with 1e-5 the DD equilibrium
+# Newton fails on every guard-ring device, with 5e-6 the 50 um one only converges on
+# the aggressive tier, with 3e-6 and 2e-6 all converge strictly (9.7k / 10.3k nodes
+# for the 50 um guard ring with the depth mesh above).
 ALT_LATERAL_EDGE_PS = 2e-6
 
 

@@ -33,12 +33,16 @@ import numpy as np
 from etna.core.device2d import create_sic_2d_device
 from etna.core.poisson import setup_poisson, solve_equilibrium
 from etna.core.drift_diffusion import (
+    _AGGRESSIVE,
+    _RAMP_TIERS,
     setup_sic_drift_diffusion,
+    contacts_on_region,
     extract_steady_state_current,
     node_volume_model_name,
     _restore_solution,
     _snapshot_solution,
     ramp_bias,
+    solve_tier,
 )
 from etna.core.charge_collection import add_generation_to_dd
 from etna.core.generation_profiles import alpha_depth_shape, confine_generation_to_epi
@@ -75,41 +79,37 @@ def in_mesh_generation_fraction(
     return float(min(1.0, inside / total))
 
 
-def _robust_dc_solve():
+def _robust_dc_solve(device_info=None):
     """Solve DC with fallback to relaxed, then aggressive tolerances.
 
     Same three tiers as ``solve_equilibrium`` and ``ramp_bias`` (strict: abs 1e10 /
     rel DC_REL_ERROR / 40 it; relaxed: 1e12 / 1e-8 / 100; aggressive: 1e14 / 1e-6 /
-    200). The third tier is the one the lateral p+ implant edges need (see
-    ``drift_diffusion._RAMP_SOLVE_AGGRESSIVE``); its use is logged as a warning, and a
-    state accepted there should be checked with the balanced contact-current sum.
+    200), with ``drift_diffusion.solve_tier``'s acceptance of a stalled solve whose
+    final update is already within the aggressive tolerance (the lateral p+ edge
+    limit cycle). The third tier's use is logged as a warning, and a state accepted
+    there should be checked with the balanced contact-current sum
+    (:func:`contact_current_sharing`).
+
+    ``device_info`` is optional: a device whose bias ramp already needed the
+    aggressive tier (``device_info["ramp_aggressive_retries"]``) is solved at that
+    tier directly, which is what the strict attempt would end up accepting anyway
+    after 40 cycling iterations. Raises devsim.error when no tier converges.
     """
-    try:
-        devsim.solve(
-            type="dc",
-            absolute_error=1e10,
-            relative_error=DC_REL_ERROR,
-            maximum_iterations=40,
+    start = 0
+    if device_info is not None and device_info.get("ramp_aggressive_retries", 0) > 0:
+        start = _AGGRESSIVE
+    for tier in range(start, len(_RAMP_TIERS)):
+        done = solve_tier(tier)
+        if done is not None:
+            break
+    else:
+        raise devsim.error("DC solve failed to converge (all tolerance tiers)")
+    if done == 1:
+        logger.info("DC solve converged with relaxed tolerances")
+    elif done >= 2:
+        logger.warning(
+            "DC solve converged only with aggressive tolerances (abs 1e14, rel 1e-6)"
         )
-    except devsim.error:
-        try:
-            devsim.solve(
-                type="dc",
-                absolute_error=1e12,
-                relative_error=1e-8,
-                maximum_iterations=100,
-            )
-            logger.info("DC solve converged with relaxed tolerances")
-        except devsim.error:
-            devsim.solve(
-                type="dc",
-                absolute_error=1e14,
-                relative_error=1e-6,
-                maximum_iterations=200,
-            )
-            logger.warning(
-                "DC solve converged only with aggressive tolerances (abs 1e14, rel 1e-6)"
-            )
 
 
 def integrate_nodes_box_2d(device_info, node_values):
@@ -338,23 +338,64 @@ def cce_with_generation(device_info, generation, contacts=("cathode",), node_set
     generation array WITHOUT this inject-and-solve step reads the contact currents of
     whatever was solved last (the dark state): that was the notebook-19 bug.
     """
+    node_sets = node_sets or {}
+    return _solved_with_generation(
+        device_info,
+        generation,
+        lambda G: {
+            c: compute_cce_2d(device_info, G, c, node_set=node_sets.get(c))
+            for c in contacts
+        },
+    )
+
+
+def contact_current_sharing(device_info, generation, node_sets=None):
+    """Signed balanced current of EVERY contact of the region under ``generation``,
+    as a fraction of the generated current, plus the conservation residual.
+
+    Returns ``(fractions, residual)``: ``fractions[contact] = I_contact / I_gen`` with
+    devsim's sign (positive into the device; the cathode of a reverse-biased diode is
+    positive, the p+ contacts negative), and ``residual = sum(I_contact) / I_gen``,
+    which is zero at a converged steady state up to the solver tolerance: it is the
+    a-posteriori check of a bias point accepted on a relaxed/aggressive tier. For a
+    guard-ring device ``fractions`` tells how an edge event splits between the
+    anode and the guard. ``node_sets`` as in :func:`cce_with_generation`. The device
+    is restored afterwards.
+    """
+    node_sets = node_sets or {}
     device = device_info["device_name"]
     region = device_info["region_name"]
-    node_sets = node_sets or {}
+    contacts = contacts_on_region(device, region)
+    I_gen = Q * integrate_nodes_box_2d(device_info, generation)
+    currents = _solved_with_generation(
+        device_info,
+        generation,
+        lambda G: {
+            c: extract_steady_state_current(device_info, c, node_set=node_sets.get(c))
+            for c in contacts
+        },
+    )
+    if I_gen <= 0:
+        raise ValueError("generation integrates to zero")
+    fractions = {c: I / I_gen for c, I in currents.items()}
+    return fractions, sum(currents.values()) / I_gen
+
+
+def _solved_with_generation(device_info, generation, extract):
+    """Inject ``generation``, solve, return ``extract(generation)``; then zero the
+    generation, restore the pre-injection solution and solve once from it."""
+    device = device_info["device_name"]
+    region = device_info["region_name"]
     baseline = _snapshot_solution(device, region)
     generation = np.asarray(generation, dtype=float)
     try:
         add_generation_to_dd(device_info, generation)
-        _robust_dc_solve()
-        out = {
-            c: compute_cce_2d(device_info, generation, c, node_set=node_sets.get(c))
-            for c in contacts
-        }
+        _robust_dc_solve(device_info)
+        return extract(generation)
     finally:
         add_generation_to_dd(device_info, np.zeros_like(generation))
         _restore_solution(device, region, baseline)
-        _robust_dc_solve()
-    return out
+        _robust_dc_solve(device_info)
 
 
 def cce_lateral_scan(
@@ -423,7 +464,7 @@ def cce_lateral_scan(
 
         # Inject generation, solve, extract CCE
         add_generation_to_dd(device_info, generation)
-        _robust_dc_solve()
+        _robust_dc_solve(device_info)
         cce = compute_cce_2d(device_info, generation, contact, node_set=node_set)
         cce_values.append(cce)
 
@@ -436,14 +477,14 @@ def cce_lateral_scan(
         # re-solving (~9-11 Newton iterations each, ~75% of the scan time).
         add_generation_to_dd(device_info, np.zeros_like(generation))
         if baseline is None:
-            _robust_dc_solve()
+            _robust_dc_solve(device_info)
             baseline = _snapshot_solution(device, region)
         else:
             _restore_solution(device, region, baseline)
 
     # Contact currents are evaluated during assembly: one solve from the exact
     # baseline (1-2 iterations) leaves the device consistent for later users.
-    _robust_dc_solve()
+    _robust_dc_solve(device_info)
 
     cce_values = np.array(cce_values)
     edge_to_center = cce_values[-1] / cce_values[0] if cce_values[0] > 0 else 0.0

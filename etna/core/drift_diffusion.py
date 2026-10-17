@@ -481,6 +481,13 @@ _RAMP_SOLVE_RELAXED = dict(
 _RAMP_SOLVE_AGGRESSIVE = dict(
     type="dc", absolute_error=1e14, relative_error=1e-6, maximum_iterations=200
 )
+# Tier order of the fallback chain; the index is what the ramp bookkeeping stores.
+_RAMP_TIERS = (
+    ("strict", _RAMP_SOLVE),
+    ("relaxed", _RAMP_SOLVE_RELAXED),
+    ("aggressive", _RAMP_SOLVE_AGGRESSIVE),
+)
+_AGGRESSIVE = len(_RAMP_TIERS) - 1
 _RAMP_MODELS = ("Potential", "Electrons", "Holes")
 
 
@@ -518,25 +525,63 @@ def _note_aggressive_retry(device_info, V):
     )
 
 
-def _solve_ramp_point_fallbacks(device_info, bias_name, V, snap):
-    """Retry a ramp point whose strict solve failed: relaxed, then aggressive
-    tolerances, each from the last converged state ``snap`` (the failed Newton
-    iterate is discarded). Raises RuntimeError when both fail."""
+def _note_tier(device_info, tier, V):
+    if tier == 1:
+        _note_relaxed_retry(device_info, V)
+    elif tier >= 2:
+        _note_aggressive_retry(device_info, V)
+
+
+def _final_errors(result):
+    """(relative, absolute) error of the last Newton iteration of a
+    ``devsim.solve(info=True)`` result, maximised over the loaded devices."""
+    last = result["iterations"][-1]["devices"]
+    return (
+        max(d["relative_error"] for d in last),
+        max(d["absolute_error"] for d in last),
+    )
+
+
+def solve_tier(tier):
+    """Run the DC solve of ``_RAMP_TIERS[tier]`` and return the index of the tier the
+    resulting state satisfies, or None when it satisfies none.
+
+    A solve that hits its iteration cap with the final update already below the
+    aggressive tolerance (relative < 1e-6, absolute < 1e14) is ACCEPTED as an
+    aggressive-tier solution (index ``_AGGRESSIVE``): that is the tolerance limit
+    cycle of the lateral p+ edges (RelError ~5e-8 for 40 iterations), and the state
+    is exactly what the aggressive tier would stop at, without re-solving. Any other
+    failure returns None and the caller restores the last converged state.
+    """
+    name, kw = _RAMP_TIERS[tier]
+    try:
+        result = devsim.solve(info=True, **kw)
+    except devsim.error:
+        return None
+    if result.get("converged"):
+        return tier
+    try:
+        rel, ab = _final_errors(result)
+    except (KeyError, IndexError, ValueError):
+        return None
+    agg = _RAMP_SOLVE_AGGRESSIVE
+    if rel < agg["relative_error"] and ab < agg["absolute_error"]:
+        return _AGGRESSIVE
+    return None
+
+
+def _climb_tiers(device_info, bias_name, V, snap, start):
+    """Solve the ramp point ``V`` with the tiers from index ``start`` upward, each from
+    the last converged state ``snap``. Returns the accepted tier index or None."""
     device = device_info["device_name"]
     region = device_info["region_name"]
-    devsim.set_parameter(device=device, name=bias_name, value=V)
-    try:
-        devsim.solve(**_RAMP_SOLVE_RELAXED)
-    except devsim.error:
-        _restore_solution(device, region, snap)
+    for tier in range(start, len(_RAMP_TIERS)):
         devsim.set_parameter(device=device, name=bias_name, value=V)
-        try:
-            devsim.solve(**_RAMP_SOLVE_AGGRESSIVE)
-        except devsim.error as e:
-            raise RuntimeError(f"ramp_bias: failed to converge at V={V:.3f}V: {e}")
-        _note_aggressive_retry(device_info, V)
-        return
-    _note_relaxed_retry(device_info, V)
+        done = solve_tier(tier)
+        if done is not None:
+            return done
+        _restore_solution(device, region, snap)
+    return None
 
 
 def _ramp_bias_adaptive(device_info, bias_name, V_from, V_to, h_min, h_max):
@@ -548,22 +593,31 @@ def _ramp_bias_adaptive(device_info, bias_name, V_from, V_to, h_min, h_max):
     bias step saves most of the iterations (2D 50 um / -50 V: 28 -> ~8 per 2 V).
     Carriers keep the previous solution: extrapolating them too gained nothing.
 
-    When a step at the minimum size ``h_min`` still fails, the point is retried with
-    relaxed tolerances (_RAMP_SOLVE_RELAXED: absolute 1e12, relative 1e-8), then with
-    aggressive ones (_RAMP_SOLVE_AGGRESSIVE: absolute 1e14, relative 1e-6, 200
-    iterations), always from the last converged state. Such a point is less tightly
-    converged; each use is logged (warning) and counted in
-    ``device_info["ramp_relaxed_retries"]`` / ``["ramp_aggressive_retries"]``.
+    Fallback tiers. A strict solve that fails at a step above ``h_min`` halves the
+    step (a genuine Newton failure). At ``h_min`` the point is retried with relaxed
+    tolerances (_RAMP_SOLVE_RELAXED: absolute 1e12, relative 1e-8), then aggressive
+    ones (_RAMP_SOLVE_AGGRESSIVE: absolute 1e14, relative 1e-6, 200 iterations),
+    always from the last converged state. A solve that stalls with its final update
+    already below the aggressive tolerance is accepted as an aggressive-tier point
+    without halving or re-solving (``solve_tier``: the tolerance limit cycle of a
+    lateral p+ edge is not cured by a smaller step). Once a point has needed a
+    fallback tier, the following INTERMEDIATE points are solved at that tier first
+    (the ramp only chooses the path; the target point always starts strict), and
+    each such point is counted like a retry. Each use is logged (warning) and
+    counted in ``device_info["ramp_relaxed_retries"]`` /
+    ``["ramp_aggressive_retries"]``.
     """
     device = device_info["device_name"]
     region = device_info["region_name"]
     sign = 1.0 if V_to >= V_from else -1.0
     V, h = V_from, h_max
     hist = [(V, _snapshot_solution(device, region))]
+    sticky = 0  # tier intermediate points start at (raised once a fallback was needed)
     while abs(V_to - V) > 1e-12:
         step = min(h, abs(V_to - V))
         V_next = V_to if step >= abs(V_to - V) - 1e-12 else V + sign * step
         final = V_next == V_to
+        at_h_min = step <= h_min * (1 + 1e-9)
         snap = hist[-1][1]
         if len(hist) >= 2:
             (V1, s1), (V0, s0) = hist[-1], hist[-2]
@@ -576,16 +630,26 @@ def _ramp_bias_adaptive(device_info, bias_name, V_from, V_to, h_min, h_max):
                 values=(psi1 + (psi1 - psi0) * ratio).tolist(),
             )
         devsim.set_parameter(device=device, name=bias_name, value=V_next)
-        try:
-            # _RAMP_SOLVE and _RAMP_SOLVE_COARSE are currently identical (same tolerance
-            # and iteration cap at the target and at intermediate points).
-            devsim.solve(**(_RAMP_SOLVE if final else _RAMP_SOLVE_COARSE))
-        except devsim.error:
+        first = 0 if final else sticky
+        done = solve_tier(first)
+        if done is None:
             _restore_solution(device, region, snap)
-            if step > h_min * (1 + 1e-9):
-                h = max(h_min, step / 2)
-                continue
-            _solve_ramp_point_fallbacks(device_info, bias_name, V_next, snap)
+            # A device known to need a fallback tier, or a step already minimal: climb
+            # the tiers above the one that failed (never below the sticky one).
+            if sticky > 0 or at_h_min:
+                done = _climb_tiers(
+                    device_info, bias_name, V_next, snap, max(first + 1, sticky)
+                )
+            if done is None:
+                if not at_h_min:
+                    h = max(h_min, step / 2)
+                    continue
+                raise RuntimeError(
+                    f"ramp_bias: failed to converge at V={V_next:.3f}V "
+                    f"(all tolerance tiers)"
+                )
+        _note_tier(device_info, done, V_next)
+        sticky = max(sticky, done)
         V = V_next
         hist = [hist[-1], (V, _snapshot_solution(device, region))]
         h = min(h * 2, h_max)
@@ -621,7 +685,9 @@ def ramp_bias(device_info, V_target, contact="anode", V_step=0.5, V_step_max=Non
     warning and counted in ``device_info["ramp_relaxed_retries"]`` (absent = none);
     likewise the aggressive third tier (abs 1e14, rel 1e-6, 200 iterations) in
     ``device_info["ramp_aggressive_retries"]``. Both retries start from the last
-    converged state.
+    converged state; see ``_ramp_bias_adaptive`` for the acceptance of a stalled
+    solve whose final update is already within the aggressive tolerance and for the
+    sticky fallback tier of intermediate points (the fixed-step ramp does the same).
 
     Returns
     -------
@@ -657,14 +723,25 @@ def ramp_bias(device_info, V_target, contact="anode", V_step=0.5, V_step_max=Non
     V_intermediates = np.linspace(current_V, V_target, n_steps + 1)[1:]
 
     region = device_info["region_name"]
-    for V_int in V_intermediates:
+    sticky = 0
+    for i, V_int in enumerate(V_intermediates):
+        final = i == len(V_intermediates) - 1
         snap = _snapshot_solution(device, region)
         devsim.set_parameter(device=device, name=bias_name, value=V_int)
-        try:
-            devsim.solve(**_RAMP_SOLVE)
-        except devsim.error:
+        first = 0 if final else sticky
+        done = solve_tier(first)
+        if done is None:
             _restore_solution(device, region, snap)
-            _solve_ramp_point_fallbacks(device_info, bias_name, V_int, snap)
+            done = _climb_tiers(
+                device_info, bias_name, V_int, snap, max(first + 1, sticky)
+            )
+            if done is None:
+                raise RuntimeError(
+                    f"ramp_bias: failed to converge at V={V_int:.3f}V "
+                    f"(all tolerance tiers)"
+                )
+        _note_tier(device_info, done, V_int)
+        sticky = max(sticky, done)
 
     logger.debug(f"ramp_bias: ramped {contact} to {V_target:.3f}V")
     return True

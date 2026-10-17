@@ -29,6 +29,7 @@ from etna.core.charge_collection_2d import (  # noqa: E402
     Q,
     _robust_dc_solve,
     alpha_stripe_generation,
+    contact_current_sharing,
     integrate_nodes_box_2d,
 )
 from etna.core.drift_diffusion import (  # noqa: E402
@@ -96,6 +97,53 @@ def test_three_balanced_currents_sum_to_zero(guard_device):
     assert abs(I_direct["cathode"] - I["cathode"]) < 1e-6 * I_gen  # n- cathode: fine
     for c in ("anode", "guard_ring_anode"):
         assert I_direct[c] == pytest.approx(I[c], rel=1e-2)
+
+
+def test_contact_current_sharing_conserves_and_restores(guard_device):
+    """contact_current_sharing gives the signed split of an edge event between the
+    anode and the guard with a ~0 conservation residual, and leaves the device in
+    its previous state (same contact currents afterwards)."""
+    info, _ = guard_device
+    ns = guard_ring_node_sets(info)
+    # the fixture leaves its own stripe injected: measure, go dark, call, re-inject
+    G_fix = alpha_stripe_generation(
+        info, info["sv_half_width_cm"], stripe_sigma_cm=1e-4
+    )
+    before = {
+        c: extract_steady_state_current(info, c, node_set=ns.get(c))
+        for c in info["contacts"]
+    }
+    add_generation_to_dd(info, np.zeros_like(G_fix))
+    _robust_dc_solve()
+    dark = {
+        c: extract_steady_state_current(info, c, node_set=ns.get(c))
+        for c in info["contacts"]
+    }
+    try:
+        G = alpha_stripe_generation(info, info["guard_inner_cm"], stripe_sigma_cm=1e-4)
+        frac, residual = contact_current_sharing(info, G, node_sets=ns)
+        assert set(frac) == set(info["contacts"])
+        assert abs(residual) < 1e-6
+        assert 0.5 < frac["cathode"] <= 1.0 + 1e-9
+        # a stripe centred on the ring's inner edge goes mostly to the guard
+        assert frac["guard_ring_anode"] < frac["anode"] < 0
+        assert frac["guard_ring_anode"] < -0.5
+        # the device is back in the (dark) state it was called in
+        after = {
+            c: extract_steady_state_current(info, c, node_set=ns.get(c))
+            for c in info["contacts"]
+        }
+        for c in info["contacts"]:
+            assert after[c] == pytest.approx(dark[c], rel=1e-6, abs=1e-20)
+    finally:
+        add_generation_to_dd(info, G_fix)
+        _robust_dc_solve()
+    restored = {
+        c: extract_steady_state_current(info, c, node_set=ns.get(c))
+        for c in info["contacts"]
+    }
+    for c in info["contacts"]:
+        assert restored[c] == pytest.approx(before[c], rel=1e-6)
 
 
 def test_edge_based_path_matches_contact_current_path(guard_device):
