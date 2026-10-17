@@ -692,11 +692,11 @@ def cce_vs_fluence(
     epi_thickness_cm : float
         Epitaxial layer thickness (cm). Default: 10 um.
     N_D_junction : float
-        Junction-side donor concentration (cm^-3). Default: 2.90e15.
+        Junction-side donor concentration (cm^-3). Default: DEFAULT_STACK (2.974271e15).
     N_D_bulk : float
-        Bulk-side donor concentration (cm^-3). Default: 8.50e13.
+        Bulk-side donor concentration (cm^-3). Default: DEFAULT_STACK (6.335936e13).
     L_transition : float
-        Doping transition length (cm). Default: 1.0e-4 (1 um).
+        Doping transition length (cm). Default: DEFAULT_STACK (0.987 um).
     alpha_range_cm : float
         Alpha particle range in SiC (cm). Default: 15 um.
     generation_rate : float
@@ -882,6 +882,7 @@ def cce_vs_bias_at_fluence(
     energy_MeV=62.0,
     lifetime_model="linear",
     damage_params=None,
+    device_kwargs=None,
 ):
     """Compute CCE vs reverse bias voltage at a fixed proton fluence.
 
@@ -898,11 +899,11 @@ def cce_vs_bias_at_fluence(
     epi_thickness_cm : float
         Epitaxial layer thickness (cm). Default: 10 um.
     N_D_junction : float
-        Junction-side donor concentration (cm^-3). Default: 2.90e15.
+        Junction-side donor concentration (cm^-3). Default: DEFAULT_STACK (2.974271e15).
     N_D_bulk : float
-        Bulk-side donor concentration (cm^-3). Default: 8.50e13.
+        Bulk-side donor concentration (cm^-3). Default: DEFAULT_STACK (6.335936e13).
     L_transition : float
-        Doping transition length (cm). Default: 1.0e-4 (1 um).
+        Doping transition length (cm). Default: DEFAULT_STACK (0.987 um).
     alpha_range_cm : float
         Alpha particle range in SiC (cm). Default: 15 um.
     generation_rate : float
@@ -913,6 +914,13 @@ def cce_vs_bias_at_fluence(
         "linear" or "logarithmic". Default: "linear".
     damage_params : RadiationDamageParams or None
         Custom damage parameters. Default: RadiationDamageParams().
+
+    device_kwargs : dict or None
+        Extra create_sic_device keywords (geometry: substrate_thickness_cm,
+        nplus_thickness_cm, N_D_nplus, ...; or doping), overriding the defaults.
+        None = the default stack (DEFAULT_STACK); nplus_thickness_cm=None and
+        substrate_thickness_cm=1e-4 (or etna.api.device.device_kwargs(legacy_config()))
+        give the legacy geometry.
 
     Returns
     -------
@@ -926,6 +934,14 @@ def cce_vs_bias_at_fluence(
         - "energy_MeV": float
         - "lifetime_model": str
     """
+    dev_kw = dict(
+        epi_thickness_cm=epi_thickness_cm,
+        doping_profile="graded",
+        N_D_junction=N_D_junction,
+        N_D_bulk=N_D_bulk,
+        L_transition=L_transition,
+    )
+    dev_kw.update(device_kwargs or {})
     from etna.core.device import apply_damaged_params, create_sic_device
     from etna.core.drift_diffusion import ramp_bias, setup_sic_drift_diffusion
     from etna.core.poisson import setup_poisson, solve_equilibrium
@@ -942,11 +958,7 @@ def cce_vs_bias_at_fluence(
     ref_name = f"bias_fluence_ref_{ref_id}"
     ref_info = create_sic_device(
         device_name=ref_name,
-        epi_thickness_cm=epi_thickness_cm,
-        doping_profile="graded",
-        N_D_junction=N_D_junction,
-        N_D_bulk=N_D_bulk,
-        L_transition=L_transition,
+        **dev_kw,
     )
     try:
         ref_x = np.array(
@@ -996,11 +1008,7 @@ def cce_vs_bias_at_fluence(
 
     device_info = create_sic_device(
         device_name=dev_name,
-        epi_thickness_cm=epi_thickness_cm,
-        doping_profile="graded",
-        N_D_junction=N_D_junction,
-        N_D_bulk=N_D_bulk,
-        L_transition=L_transition,
+        **dev_kw,
     )
 
     apply_damaged_params(device_info, damaged)
@@ -1101,6 +1109,7 @@ def cce_post_anneal(
     lifetime_model="linear",
     damage_params=None,
     anneal_params=None,
+    device_kwargs=None,
 ) -> dict:
     """Compute CCE for an irradiated + annealed device at a single operating point.
 
@@ -1134,6 +1143,13 @@ def cce_post_anneal(
     anneal_params : AnnealingParams or None
         Custom annealing parameters.
 
+    device_kwargs : dict or None
+        Extra create_sic_device keywords (geometry: substrate_thickness_cm,
+        nplus_thickness_cm, N_D_nplus, ...; or doping), overriding the defaults.
+        None = the default stack (DEFAULT_STACK); nplus_thickness_cm=None and
+        substrate_thickness_cm=1e-4 (or etna.api.device.device_kwargs(legacy_config()))
+        give the legacy geometry.
+
     Returns
     -------
     result : dict
@@ -1143,6 +1159,14 @@ def cce_post_anneal(
         compensation after annealing (see full_compensation_reason) or when
         the solve fails.
     """
+    dev_kw = dict(
+        epi_thickness_cm=epi_thickness_cm,
+        doping_profile="graded",
+        N_D_junction=_STACK["N_D_junction"],
+        N_D_bulk=_STACK["N_D_bulk"],
+        L_transition=_STACK["L_transition"],
+    )
+    dev_kw.update(device_kwargs or {})
     from etna.core.device import apply_damaged_params, create_sic_device
     from etna.core.drift_diffusion import ramp_bias, setup_sic_drift_diffusion
     from etna.core.poisson import setup_poisson, solve_equilibrium
@@ -1159,11 +1183,7 @@ def cce_post_anneal(
     ref_name = f"cce_anneal_ref_{ref_id}"
     ref_info = create_sic_device(
         device_name=ref_name,
-        epi_thickness_cm=epi_thickness_cm,
-        doping_profile="graded",
-        N_D_junction=2.90e15,
-        N_D_bulk=8.50e13,
-        L_transition=1.0e-4,
+        **dev_kw,
     )
     try:
         ref_x = np.array(
@@ -1227,11 +1247,7 @@ def cce_post_anneal(
     try:
         device_info = create_sic_device(
             device_name=dev_name,
-            epi_thickness_cm=epi_thickness_cm,
-            doping_profile="graded",
-            N_D_junction=2.90e15,
-            N_D_bulk=8.50e13,
-            L_transition=1.0e-4,
+            **dev_kw,
         )
 
         # Apply annealed params before Poisson setup
@@ -1406,6 +1422,7 @@ def cce_vs_epi_thickness(
     V_bias=-3.0,
     alpha_range_cm=15e-4,
     generation_rate=1e18,
+    device_kwargs=None,
 ):
     """Compute CCE vs epitaxial layer thickness at fixed reverse bias.
 
@@ -1424,6 +1441,11 @@ def cce_vs_epi_thickness(
         Alpha particle range in SiC (cm). Default: 15 um.
     generation_rate : float
         Peak generation rate (cm^-3 s^-1). Default: 1e18.
+
+    device_kwargs : dict or None
+        Extra create_dd_device keywords except epi_thickness_cm (geometry or doping),
+        overriding the defaults (DEFAULT_STACK); nplus_thickness_cm=None and
+        substrate_thickness_cm=1e-4 give the legacy geometry.
 
     Returns
     -------
@@ -1455,13 +1477,15 @@ def cce_vs_epi_thickness(
         dev_id = uuid.uuid4().hex[:8]
         dev_name = f"cce_epi_{dev_id}"
 
-        device_info = create_dd_device(
-            device_name=dev_name,
-            epi_thickness_cm=epi_thick,
+        dev_kw = dict(
             doping_profile="graded",
-            N_D_junction=2.90e15,
-            N_D_bulk=8.50e13,
-            L_transition=1.0e-4,
+            N_D_junction=_STACK["N_D_junction"],
+            N_D_bulk=_STACK["N_D_bulk"],
+            L_transition=_STACK["L_transition"],
+        )
+        dev_kw.update(device_kwargs or {})  # geometry / doping overrides (not epi)
+        device_info = create_dd_device(
+            device_name=dev_name, epi_thickness_cm=epi_thick, **dev_kw
         )
 
         device = device_info["device_name"]
@@ -1576,7 +1600,12 @@ def compare_cce_hecht_vs_dd(V_range, epi_thickness_cm=10e-4, **kwargs):
     # Partial depletion Hecht using a simple W(V) model
     # W ~ sqrt(2 * eps * V / (q * N_D)) with calibrated N_D
     # For graded doping, use an effective N_D ~ geometric mean
-    N_D_eff = np.sqrt(2.90e15 * 8.50e13)  # ~ 1.57e14
+    # (the device doping of the DD sweep: device_kwargs, else DEFAULT_STACK; was a
+    # hardcoded 2.90e15 / 8.50e13)
+    _dk = kwargs.get("device_kwargs") or {}
+    N_D_eff = np.sqrt(
+        (_dk.get("N_D_junction") or _STACK["N_D_junction"]) * (_dk.get("N_D_bulk") or _STACK["N_D_bulk"])
+    )  # ~ 4.34e14 for the default stack
     eps_sic = 9.66 * 8.854e-14  # F/cm
     Q_val = 1.602e-19
 

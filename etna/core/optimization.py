@@ -85,7 +85,8 @@ def _sweep_one(task):
     """One configuration of ``microdosimetric_sweep`` (module level so it can be pickled)."""
     i, total, hw, epi, nd, vb, n_lateral_points, *rest = task
     solver = rest[0] if rest else "auto"
-    # optional extra create_sic_2d_device keywords (n+ layer); absent = historical task
+    # optional extra create_sic_2d_device keywords (n+ layer); absent = builder defaults
+    # (the default stack, n+ included)
     dkw = dict(rest[1]) if len(rest) > 1 and rest[1] else {}
     if solver not in ("devsim", "auto"):
         raise ValueError(f"solver must be 'devsim' or 'auto', got {solver!r}")
@@ -94,7 +95,7 @@ def _sweep_one(task):
     used = "devsim"
     failure_reason = ""
     # stack columns of the row (the n+ layer of this config; NaN / False = no n+)
-    t_np = dkw.get("nplus_thickness_cm")
+    t_np = dkw.get("nplus_thickness_cm", DEFAULT_STACK["nplus_thickness_cm"])
     stack = {
         "nplus_thickness_um": np.nan if t_np is None else round(t_np * 1e4, 12),
         "N_D_nplus": np.nan if t_np is None else dkw.get("N_D_nplus", DEFAULT_N_D_NPLUS),
@@ -149,7 +150,7 @@ def _sweep_one(task):
                 )
             except RuntimeError as e:
                 if "ramp_bias: failed to converge" in str(e):
-                    if dkw.get("nplus_thickness_cm") is not None:
+                    if t_np is not None:
                         raise  # n+ device: no contact-on-epi wall, a plain failure
                     raise _DevsimNonConvergence(str(e)) from e
                 raise
@@ -350,9 +351,11 @@ def microdosimetric_sweep(
         grid = grid[:max_configs]
         total = len(grid)
 
-    dkw = {}
+    # nplus_thickness_cm is always passed: None must reach the builder as an explicit
+    # "no n+" (its default is the stack's n+ layer).
+    dkw = {"nplus_thickness_cm": nplus_thickness_cm}
     if nplus_thickness_cm is not None:
-        dkw = dict(nplus_thickness_cm=nplus_thickness_cm, nplus_generation=bool(nplus_generation))
+        dkw["nplus_generation"] = bool(nplus_generation)
         if N_D_nplus is not None:
             dkw["N_D_nplus"] = N_D_nplus
     # p+ anode / graded doping of every config (None = create_sic_2d_device default)

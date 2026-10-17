@@ -33,6 +33,7 @@ from etna.core.poisson import (
 )
 from etna.core.radiation_damage import compute_damaged_params, compute_phi_crit
 from etna.core.sic_material import srh_lifetime
+from etna.core.device import DEFAULT_STACK as _STACK
 
 logger = logging.getLogger(__name__)
 
@@ -247,13 +248,14 @@ def cv_at_fluence(
     V_range,
     area=1.0,
     epi_thickness_cm=10e-4,
-    N_D_junction=2.90e15,
-    N_D_bulk=8.50e13,
-    L_transition=1.0e-4,
+    N_D_junction=_STACK["N_D_junction"],
+    N_D_bulk=_STACK["N_D_bulk"],
+    L_transition=_STACK["L_transition"],
     energy_MeV=62.0,
     lifetime_model="linear",
     damage_params=None,
     phi_crit_threshold=0.90,
+    device_kwargs=None,
 ):
     """Compute C-V curve for a device at a given proton fluence.
 
@@ -272,11 +274,11 @@ def cv_at_fluence(
     epi_thickness_cm : float
         Epitaxial layer thickness (cm). Default 10 um.
     N_D_junction : float
-        Junction-side donor concentration (cm^-3). Default: 2.90e15.
+        Junction-side donor concentration (cm^-3). Default: DEFAULT_STACK (2.974271e15).
     N_D_bulk : float
-        Bulk-side donor concentration (cm^-3). Default: 8.50e13.
+        Bulk-side donor concentration (cm^-3). Default: DEFAULT_STACK (6.335936e13).
     L_transition : float
-        Doping transition length (cm). Default: 1.0e-4 (1 um).
+        Doping transition length (cm). Default: DEFAULT_STACK (0.987 um).
     energy_MeV : float
         Proton energy (MeV). Default 62.0.
     lifetime_model : str
@@ -285,6 +287,11 @@ def cv_at_fluence(
         Custom damage parameters. Default: RadiationDamageParams().
     phi_crit_threshold : float
         Fraction of Phi_crit at which to warn. Default 0.90.
+    device_kwargs : dict or None
+        Extra create_sic_device keywords (geometry: substrate_thickness_cm,
+        nplus_thickness_cm, N_D_nplus, ...; or doping), overriding the defaults.
+        Default None = the default stack (DEFAULT_STACK); pass
+        ``etna.api.device.device_kwargs(legacy_config())`` minus epi for the legacy model.
 
     Returns
     -------
@@ -293,6 +300,14 @@ def cv_at_fluence(
         fluence. Returns None if fluence >= Phi_crit (solver would diverge).
     """
     V_range = np.asarray(V_range, dtype=float)
+    dev_kw = dict(
+        epi_thickness_cm=epi_thickness_cm,
+        doping_profile="graded",
+        N_D_junction=N_D_junction,
+        N_D_bulk=N_D_bulk,
+        L_transition=L_transition,
+    )
+    dev_kw.update(device_kwargs or {})
 
     # Extract pristine lifetimes
     pristine_tau_n = srh_lifetime(300.0, "electron")
@@ -303,11 +318,7 @@ def cv_at_fluence(
     ref_name = f"cv_ref_{ref_id}"
     ref_info = create_sic_device(
         device_name=ref_name,
-        epi_thickness_cm=epi_thickness_cm,
-        doping_profile="graded",
-        N_D_junction=N_D_junction,
-        N_D_bulk=N_D_bulk,
-        L_transition=L_transition,
+        **dev_kw,
     )
     try:
         ref_x = np.array(
@@ -372,11 +383,7 @@ def cv_at_fluence(
         # Staged device creation
         device_info = create_sic_device(
             device_name=dev_name,
-            epi_thickness_cm=epi_thickness_cm,
-            doping_profile="graded",
-            N_D_junction=N_D_junction,
-            N_D_bulk=N_D_bulk,
-            L_transition=L_transition,
+            **dev_kw,
         )
 
         # Apply damage BEFORE Poisson setup

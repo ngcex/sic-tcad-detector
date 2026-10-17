@@ -16,7 +16,8 @@ from etna.core.charge_collection import cce_vs_bias
 from etna.core.device import create_sic_device
 from etna.core.drift_diffusion import create_dd_device, ramp_bias
 
-NPLUS = dict(nplus_thickness_cm=1e-4, N_D_nplus=1e19)
+# p+ 1 um explicit: the spike geometry (builders default to the stack 0.3 um since 2026-10-17)
+NPLUS = dict(nplus_thickness_cm=1e-4, N_D_nplus=1e19, substrate_thickness_cm=1e-4)
 # Doping the spike numbers were taken with: the core graded fallbacks before the n+ flip
 # (cce_vs_bias 2.90e15 / 8.50e13 / 1 um; device2d 2.931417e15 / 8.823059e13 / 0.9872267 um).
 # The fallbacks are now DEFAULT_STACK; pinned here so the tests keep checking the n+
@@ -97,8 +98,10 @@ def test_dark_current_independent_of_nplus_thickness():
     np.testing.assert_allclose(out[0], out[1], rtol=1e-5)
 
 
-def test_device_kwargs_only_carry_nplus_when_on():
-    assert "nplus_thickness_cm" not in device_kwargs(legacy_config())
+def test_device_kwargs_carry_nplus_explicitly():
+    # legacy: explicit None (the builders default to the stack's n+ layer since 2026-10-17)
+    legacy = device_kwargs(legacy_config())
+    assert legacy["nplus_thickness_cm"] is None and "N_D_nplus" not in legacy
     assert device_kwargs(DeviceConfig())["nplus_thickness_cm"] == pytest.approx(1e-4)
     kw = device_kwargs(DeviceConfig(nplus_thickness_um=2.0, N_D_nplus=5e18))
     assert kw["nplus_thickness_cm"] == pytest.approx(2e-4)

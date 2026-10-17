@@ -57,7 +57,8 @@ def test_default_config_inside_every_engine_domain():
     )
     assert engine2d_dark_unsupported_reason(50.0, 50.0, **kw) is None
     legacy = device_kwargs(legacy_config())
-    assert "nplus_thickness_cm" not in legacy  # builder default = no n+
+    # explicit None: the builders default to the stack's n+ layer since 2026-10-17
+    assert legacy["nplus_thickness_cm"] is None
 
 
 def test_legacy_preset_matches_the_old_default():

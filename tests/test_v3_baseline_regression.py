@@ -37,7 +37,9 @@ def _compute_cce_center(half_width_um):
     generation rate across the epi (y >= junction_pos), robust DC solve, and
     read the CCE scalar. The ONE deliberate difference: N_D_junction /
     N_D_bulk / L_transition are NOT passed, so create_sic_2d_device falls back
-    to the module-level _N_D_*_DEFAULT constants patched by Plan 03.
+    to its defaults. Since 2026-10-17 those are the full default stack (geometry
+    included: p+ 0.3 um, n+ 1 um), i.e. the DeviceConfig() model, so this is a guard
+    of the default model's 2D builder (see metadata.rebaselined_default_cleanup).
     """
     import numpy as np
     from etna.core.charge_collection_2d import (
@@ -86,6 +88,7 @@ def test_v3_cce_center_100um_preserved():
 
 
 @pytest.mark.slow
+@pytest.mark.exhaustive  # laterally uniform: same value as the 100 um test (0.95346904)
 def test_v3_cce_center_300um_preserved():
     """Calibrated 2D defaults must reproduce v3.0 CCE at the 300 um SV center."""
     from etna.core.devsim_reset import reset_devsim_fully
@@ -128,6 +131,9 @@ def test_v3_cv_1d_preserved():
             N_D_junction=v3_doping["N_D_junction"],
             N_D_bulk=v3_doping["N_D_bulk"],
             L_transition=v3_doping["L_transition"],
+            # v3 geometry, explicit: the builders default to the n+ stack since 2026-10-17
+            substrate_thickness_cm=1e-4,
+            nplus_thickness_cm=None,
         )
         voltages = [0.0, -5.0, -10.0]
         result = cv_sweep(dev, V_range=voltages)

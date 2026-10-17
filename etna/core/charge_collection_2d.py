@@ -555,6 +555,8 @@ def compare_cce_2d_vs_1d(half_width_um=50.0, V_bias=50.0, gen_rate=1e18):
         )
         junction_1d = device_info_1d["junction_pos"]
         gen_1d = np.where(x_nodes_1d >= junction_1d, gen_rate, 0.0)
+        # same confinement as the 2D side (the default stack has an n+ layer)
+        gen_1d = confine_generation_to_epi(device_info_1d, x_nodes_1d, gen_1d)
 
         add_generation_to_dd(device_info_1d, gen_1d)
         _robust_dc_solve()

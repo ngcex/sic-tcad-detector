@@ -117,7 +117,7 @@ def simulate_single_particle(
     t_collect=200e-9,
     dt_min=1e-13,
     dt_max=1e-9,
-    contact="cathode",
+    contact=None,
 ):
     """Simulate single-particle charge collection transient.
 
@@ -141,8 +141,15 @@ def simulate_single_particle(
         Minimum time step during collection (s). Default: 1e-13.
     dt_max : float
         Maximum time step during collection (s). Default: 1e-9.
-    contact : str
-        Contact for current extraction.
+    contact : {"cathode", "anode"} or None
+        Contact whose (direct, conduction) current is integrated. None = "anode"
+        when the device has an n+ layer (``device_info["nplus_thickness_cm"]`` not
+        None), else "cathode" (the historical choice; legacy numbers unchanged).
+        With an n+ cathode the direct cathode current is the majority-carrier current
+        in 1e19 material, a small difference of huge Scharfetter-Gummel terms
+        dominated by round-off (same finding as transient_cce_vs_dose_rate). The
+        balanced steady-state form (extract_steady_state_current) is NOT used: it has
+        no dQ/dt term and is wrong in a transient.
 
     Returns
     -------
@@ -152,7 +159,14 @@ def simulate_single_particle(
         - "Q_collected": integrated collected charge (C/cm for 2D), float
         - "I_dark": baseline dark current (A/cm), float
         - "I_peak": peak signal current (A/cm), float
+        - "current_contact": the contact actually integrated, str
     """
+    if contact is None:
+        contact = (
+            "anode" if device_info.get("nplus_thickness_cm") is not None else "cathode"
+        )
+    if contact not in ("cathode", "anode"):
+        raise ValueError(f"contact must be 'cathode' or 'anode', got {contact!r}")
     device = device_info["device_name"]
     region = device_info["region_name"]
     n_nodes = len(generation_profile)
@@ -292,6 +306,7 @@ def simulate_single_particle(
         "Q_collected": Q_collected,
         "I_dark": float(I_dark),
         "I_peak": float(I_peak),
+        "current_contact": contact,
     }
 
 
@@ -347,6 +362,8 @@ def build_cce_let_table(
     let_min=0.1,
     let_max=1000.0,
     x_ion_cm=0.0,
+    contact=None,
+    device_kwargs=None,
 ):
     """Build CCE(LET) lookup table from transient simulations.
 
@@ -368,6 +385,10 @@ def build_cce_let_table(
         Maximum LET (keV/um).
     x_ion_cm : float
         Lateral position of ion track (cm).
+    contact : {"cathode", "anode"} or None
+        Forwarded to simulate_single_particle (None = anode with n+, else cathode).
+    device_kwargs : dict or None
+        Extra keyword arguments for create_2d_dd_device (geometry / doping stack).
 
     Returns
     -------
@@ -382,14 +403,14 @@ def build_cce_let_table(
         device_info = None
         try:
             device_info = create_2d_dd_device(
-                half_width_um=half_width_um, V_bias=V_bias
+                half_width_um=half_width_um, V_bias=V_bias, **(device_kwargs or {})
             )
 
             generation, Q_gen = ion_track_generation_2d(
                 device_info, LET, x_ion_cm=x_ion_cm
             )
 
-            sim_result = simulate_single_particle(device_info, generation)
+            sim_result = simulate_single_particle(device_info, generation, contact=contact)
 
             Q_col = sim_result["Q_collected"]
             cce_raw = Q_col / Q_gen if Q_gen > 0 else float("nan")

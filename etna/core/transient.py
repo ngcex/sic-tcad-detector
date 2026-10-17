@@ -32,6 +32,7 @@ from etna.core.charge_collection import add_generation_to_dd
 from etna.core.drift_diffusion import create_dd_device, extract_contact_current, ramp_bias
 from etna.core.flash_recombination import add_auger_recombination
 from etna.core.generation_profiles import confine_generation_to_epi, proton_generation_profile
+from etna.core.device import DEFAULT_STACK as _STACK
 
 logger = logging.getLogger(__name__)
 
@@ -180,14 +181,19 @@ class TransientSolver:
     device_info : dict
         Device info dict from create_dd_device(), already biased and
         with Auger recombination added. Must have dd_initialized=True.
-    contact : str
-        Contact at which to extract current. Default: "cathode".
+    contact : {"cathode", "anode"} or None
+        Contact at which to extract current. None (default) = "anode" when the device
+        has an n+ layer (the direct cathode current on the n+ is round-off, see
+        transient_cce_vs_dose_rate), else "cathode" (the historical choice).
     method : str
         Transient solve method. Default: "transient_bdf1".
     """
 
-    def __init__(self, device_info, contact="cathode", method="transient_bdf1"):
+    def __init__(self, device_info, contact=None, method="transient_bdf1"):
         self.device_info = device_info
+        if contact is None:
+            has_nplus = device_info.get("nplus_thickness_cm") is not None
+            contact = "anode" if has_nplus else "cathode"
         self.contact = contact
         self.method = method
 
@@ -438,7 +444,7 @@ def simulate_pulse_train(
     t_gap=1e-3,
     dt_min=1e-8,
     dt_max=1e-4,
-    contact="cathode",
+    contact=None,
     dose_rate_Gy_s=None,
 ):
     """Simulate N consecutive FLASH pulses with inter-pulse carrier memory.
@@ -469,8 +475,9 @@ def simulate_pulse_train(
         Minimum time step (s). Default: 1e-8.
     dt_max : float
         Maximum time step (s). Default: 1e-4.
-    contact : str
-        Contact for current extraction. Default: "cathode".
+    contact : {"cathode", "anode"} or None
+        Contact for current extraction. None (default) = anode with n+, else cathode
+        (see TransientSolver).
     dose_rate_Gy_s : float or None
         Dose rate for metadata. Not used in computation.
 
@@ -492,7 +499,7 @@ def simulate_pulse_train(
     solver.initialize()
 
     # Record dark current before first pulse
-    I_dark = extract_contact_current(device_info, contact=contact)
+    I_dark = extract_contact_current(device_info, contact=solver.contact)
 
     all_times = []
     all_currents = []
@@ -604,13 +611,15 @@ def transient_cce_vs_dose_rate(
     dev_kw = dict(
         epi_thickness_cm=epi_thickness_cm,
         doping_profile="graded",
-        N_D_junction=2.90e15,
-        N_D_bulk=8.50e13,
-        L_transition=1.0e-4,
+        N_D_junction=_STACK["N_D_junction"],
+        N_D_bulk=_STACK["N_D_bulk"],
+        L_transition=_STACK["L_transition"],
     )
     dev_kw.update(device_kwargs or {})
     if contact is None:
-        contact = "anode" if dev_kw.get("nplus_thickness_cm") is not None else "cathode"
+        # (a missing key = create_sic_device's default, the stack's n+ layer)
+        has_nplus = dev_kw.get("nplus_thickness_cm", _STACK["nplus_thickness_cm"]) is not None
+        contact = "anode" if has_nplus else "cathode"
     if contact not in ("cathode", "anode"):
         raise ValueError(f"contact must be 'cathode' or 'anode', got {contact!r}")
 

@@ -45,7 +45,8 @@ logger = logging.getLogger(__name__)
 _N_D_JUNCTION_DEFAULT = DEFAULT_STACK["N_D_junction"]  # cm^-3
 _N_D_BULK_DEFAULT = DEFAULT_STACK["N_D_bulk"]  # cm^-3
 _L_TRANSITION_DEFAULT = DEFAULT_STACK["L_transition"]  # cm
-_SUBSTRATE_DEFAULT_CM = 1e-4  # cm, p+ anode (builder geometry default; the stack: 0.3e-4)
+_SUBSTRATE_DEFAULT_CM = DEFAULT_STACK["substrate_thickness_cm"]  # cm, p+ anode (was 1e-4)
+_NPLUS_DEFAULT_CM = DEFAULT_STACK["nplus_thickness_cm"]  # cm, n+ under the epi (was None)
 
 # Physical constants (CGS)
 EPS_0 = 8.854e-14  # F/cm, vacuum permittivity
@@ -169,8 +170,8 @@ def create_sic_2d_device(
     N_D_junction=None,
     N_D_bulk=None,
     L_transition=None,
-    nplus_thickness_cm=None,
-    N_D_nplus=DEFAULT_N_D_NPLUS,
+    nplus_thickness_cm=_NPLUS_DEFAULT_CM,
+    N_D_nplus=DEFAULT_STACK["N_D_nplus"],
     nplus_generation=False,
 ):
     """Create a 2D p+/n- 4H-SiC diode device in devsim.
@@ -191,7 +192,7 @@ def create_sic_2d_device(
     epi_thickness_cm : float
         Epitaxial layer thickness (cm). Default 10 um = 10e-4 cm.
     substrate_thickness_cm : float
-        p+ substrate thickness (cm). Default 1 um = 1e-4 cm.
+        p+ anode layer thickness (cm). Default DEFAULT_STACK (0.3 um; legacy 1 um).
     N_A : float
         Total acceptor concentration in p+ substrate (cm^-3).
     N_D : float or None
@@ -210,7 +211,8 @@ def create_sic_2d_device(
         For graded profile: characteristic decay length (cm).
     nplus_thickness_cm, N_D_nplus, nplus_generation :
         Optional n+ layer under the epi (cathode on its far end); see
-        ``etna.core.device.create_sic_device``. None = historical model.
+        ``etna.core.device.create_sic_device``. Default DEFAULT_STACK (1 um, 1e19);
+        nplus_thickness_cm=None = historical (legacy) model, cathode on the n- epi.
 
     Returns
     -------

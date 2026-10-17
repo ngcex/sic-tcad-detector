@@ -85,6 +85,7 @@ class TestComputeCCE2D:
     """Tests for 2D CCE computation."""
 
     @pytest.mark.slow
+    @pytest.mark.exhaustive  # covered tighter by TestCompareCCE2Dvs1D (hw 50: CCE_1D == CCE_2D to 1e-3)
     def test_center_matches_1d(self):
         """2D center CCE should match 1D CCE within 10% for wide device.
 
@@ -225,6 +226,9 @@ class TestCompareCCE2Dvs1D:
             result["cce_2d_center"] > 0
         ), f"2D center CCE should be > 0, got {result['cce_2d_center']}"
         assert result["active_to_geometric_ratio"] == pytest.approx(1.0, abs=1e-6)
+        # 1D twin with the same (epi-confined) generation: the laterally uniform device
+        # gives the same CCE (the 1D side used to generate in the n+ too: 0.9543 vs 0.9998)
+        assert result["cce_1d"] == pytest.approx(result["cce_2d_center"], abs=1e-3)
 
 
 # ---------------------------------------------------------------------------

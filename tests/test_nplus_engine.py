@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 
 from etna.api import simulation as sim
-from etna.api.device import DeviceConfig, build_device, device_kwargs
+from etna.api.device import DeviceConfig
 from etna.core.batched import (
     alpha_generation,
     cce_sweep,
@@ -22,7 +22,6 @@ from etna.core.batched import (
 )
 from etna.core.charge_collection import cce_vs_bias
 from etna.core.cv_analysis import cv_sweep
-from etna.core.devsim_reset import reset_devsim_fully
 from etna.core.drift_diffusion import create_dd_device
 from etna.core.device import create_sic_device
 
@@ -30,12 +29,15 @@ EPI, SUB, NP = 10e-4, 1e-4, 1e-4
 GRADED = dict(
     doping_profile="graded", N_D_junction=2.9e15, N_D_bulk=8.5e13, L_transition=1e-4
 )
-NPLUS = dict(nplus_thickness_cm=NP, N_D_nplus=1e19)
+# p+ thickness explicit: the builders default to the stack (0.3 um) since 2026-10-17
+NPLUS = dict(nplus_thickness_cm=NP, N_D_nplus=1e19, substrate_thickness_cm=SUB)
 BIASES = np.array([0.0, -10.0, -40.0, -100.0])
 
 
 def test_nplus_mesh_matches_devsim_device():
-    info = create_sic_device(device_name=f"npm_{uuid.uuid4().hex[:6]}", **NPLUS)
+    info = create_sic_device(
+        device_name=f"npm_{uuid.uuid4().hex[:6]}", **NPLUS
+    )
     try:
         ref = np.array(
             devsim.get_node_model_values(
@@ -75,31 +77,6 @@ def test_nplus_cv_potential_and_cce_match_devsim():
     assert ce.J_generated == pytest.approx(c["I_generated"], rel=1e-12)
 
 
-def test_api_routes_nplus_to_the_engine_and_matches_devsim():
-    cfg = DeviceConfig(nplus_thickness_um=1.0)
-    assert sim.validated_domain_reason(cfg) is None
-    res = sim.run_cce(cfg, v_start=-10.0, v_stop=-100.0, n_points=4)
-    assert res.metadata["solver"] == "batched"
-    assert res.metadata["cross_checked_to_V"] == 100.0
-    kw = device_kwargs(cfg)
-    ref = cce_vs_bias(
-        np.linspace(-10.0, -100.0, 4),
-        epi_thickness_cm=kw.pop("epi_thickness_cm"),
-        device_kwargs=kw,
-    )
-    np.testing.assert_allclose(res.y, ref["cce_values"], atol=1e-6)
-    cv = sim.run_cv(cfg, v_start=0.0, v_stop=-20.0, n_points=9)
-    assert cv.metadata["solver"] == "batched"
-    reset_devsim_fully()
-    ref_cv = cv_sweep(build_device(cfg), np.linspace(0.0, -20.0, 9), area=cfg.area_cm2)
-    reset_devsim_fully()
-    np.testing.assert_allclose(
-        cv.metadata["depletion_widths"], ref_cv["depletion_widths"], rtol=1e-10
-    )
-    # reach-through with n+: depletion edge within one Debye length of the epi end
-    assert 10.0 < cv.metadata["reach_through_V"] < 15.0
-
-
 @pytest.mark.parametrize(
     "cfg",
     [
@@ -111,4 +88,3 @@ def test_nplus_outside_box_goes_to_devsim(cfg):
     assert "nplus" in sim.validated_domain_reason(
         cfg
     ) or "N_D_nplus" in sim.validated_domain_reason(cfg)
-

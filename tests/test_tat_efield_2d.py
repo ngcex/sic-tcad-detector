@@ -17,13 +17,18 @@ def _node(dev, reg, name):
 
 def test_2d_center_column_matches_1d_twin():
     reset_devsim_fully()
-    d2 = create_2d_dd_device(half_width_um=50.0, V_bias=30.0)
+    # hw 25 (was 50): laterally uniform device, the centre column is the same with half the lateral extent
+    d2 = create_2d_dd_device(half_width_um=25.0, V_bias=30.0)
     dev, reg = d2["device_name"], d2["region_name"]
     _compute_node_efield(dev, reg)
     x, y, E2 = _node(dev, reg, "x"), _node(dev, reg, "y"), _node(dev, reg, "E_field_node")
     centre = np.isclose(x, x.min())
     order = np.argsort(y[centre])
     yc, Ec = y[centre][order], E2[centre][order]
+    psi = _node(dev, reg, "Potential")[centre][order]
+    # delete the 2D device first: devsim.solve is global, so a live 2D device is
+    # re-solved in every step of the 1D ramp (that made this test ~45 s of its ~55 s)
+    devsim.delete_device(device=dev)
 
     d1 = create_dd_device(device_name="b02_twin_1d", doping_profile="graded")
     ramp_bias(d1, 30.0, contact="cathode", V_step=0.5)
@@ -34,6 +39,5 @@ def test_2d_center_column_matches_1d_twin():
         e1 = E1[np.argmin(np.abs(x1 - depth_um * 1e-4))]
         assert e2 == pytest.approx(e1, rel=0.03), depth_um
     # field integral along the centre column = potential drop
-    psi = _node(dev, reg, "Potential")[centre][order]
     assert np.trapezoid(Ec, yc) == pytest.approx(psi.max() - psi.min(), rel=0.02)
     reset_devsim_fully()
