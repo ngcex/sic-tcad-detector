@@ -180,7 +180,7 @@ Explore how charge collection efficiency (CCE) in the SiC detector behaves under
 | Structure                 | Planar p-n junction                                      | Photons paper Fig. 1                  |
 | Epitaxial layer           | 10 μm, n-type                                            | Photons paper p.3                     |
 | Epi doping (N_D)          | 0.5–1 × 10¹⁴ cm⁻³                                        | Photons paper p.3, Microdosimetry p.3 |
-| Substrate                 | p⁺, 350 μm, N_A ≈ 10¹⁹ cm⁻³                              | Photons paper p.3                     |
+| Stack                     | p⁺ (0.3–1 μm, N_A ≈ 10¹⁹) / n⁻ epi / conductive n⁺ substrate (100 μm JINST fig., 350 μm Micro); the text 'p⁺ substrate' is a copy error (stack confirmed by user 2026-10-17) | JINST Fig. 1; Micro p.2–3 |
 | Sensitive area            | 4 mm² (2×2 mm) dosimetry; 25 mm² (5×5 mm) microdosimetry | Photons p.3; Micro p.2                |
 | Bandgap                   | 3.26 eV                                                  | Photons paper p.2                     |
 | Dielectric constant (ε_r) | 9.7                                                      | Photons paper p.6                     |
