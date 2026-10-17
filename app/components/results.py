@@ -236,6 +236,17 @@ def build_field_figures(result: SimResult) -> tuple[go.Figure, go.Figure]:
         xaxis_title="Depth (µm)",
         yaxis_title="Electric Field (V/cm)",
     )
+    # scale the axis to the peak without the nm-scale spikes at the abrupt doping steps
+    from etna.api.results import peak_field_1d
+
+    pk = peak_field_1d(result.x, result.y, result.config)
+    if pk is not None and pk[2]:
+        efield_fig.update_yaxes(range=[0, 1.2 * pk[0]])
+        efield_fig.add_annotation(
+            text="y-axis clipped: nm-scale spikes at the abrupt doping steps not shown",
+            xref="paper", yref="paper", x=1, y=1.06, showarrow=False, xanchor="right",
+            font=dict(size=10),
+        )
 
     potential = result.metadata["potential"]
     potential_fig = go.Figure(data=go.Scatter(x=result.x, y=potential, mode="lines"))
