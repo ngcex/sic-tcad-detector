@@ -56,6 +56,9 @@ def assemble_config(values: dict) -> DeviceConfig:
     )
 
 
+# The sidebar models the 4 mm² dosimeter (DeviceConfig itself keeps its 1e-4 cm² default).
+SIDEBAR_DEFAULT_AREA_CM2 = 4e-2
+
 # Sidebar labels for DeviceConfig fields, used to phrase validation errors.
 FIELD_LABELS = {
     "epi_thickness_um": "Epi thickness (µm)",
@@ -212,11 +215,12 @@ def render_device_sidebar() -> None:
     )
     area_cm2 = st.sidebar.number_input(
         "Area (cm²)",
-        value=1e-4,
-        step=1e-5,
+        value=SIDEBAR_DEFAULT_AREA_CM2,
+        step=1e-3,
         format="%.3e",
         key="cfg_area_cm2",
-        help="4 mm² = 4.000e-02 cm²",
+        help="Default: the 4 mm² dosimeter (4.000e-02 cm²). Capacitance and "
+        "leakage scale with area.",
     )
 
     values = {

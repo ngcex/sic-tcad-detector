@@ -191,3 +191,4 @@ def test_pages_render_without_config(fn):
     at = AppTest.from_function(fn, default_timeout=TIMEOUT)
     at.run()
     assert at.exception == []
+
