@@ -192,3 +192,29 @@ def test_pages_render_without_config(fn):
     at.run()
     assert at.exception == []
 
+
+
+def _export():
+    from app.workflows.export import render
+
+    render()
+
+
+def test_export_page_default_run():
+    """Real solvers: spec sheet (C-V, CCE, field, dark) and the 1D profile."""
+    at = _start(_export)
+    next(b for b in at.button if b.key == "ex_spec_btn").click()
+    at.run()
+    assert at.exception == [] and len(at.error) == 0, at.exception
+    rep = at.session_state["export_report"]
+    assert rep.ok, rep.rows()
+    next(b for b in at.button if b.key == "ex_field_btn").click()
+    at.run()
+    assert at.exception == [] and len(at.error) == 0
+    assert at.session_state["export_field"].metadata["solver"] == "devsim"
+
+
+def test_export_page_without_config():
+    at = AppTest.from_function(_export, default_timeout=TIMEOUT)
+    at.run()
+    assert at.exception == []
