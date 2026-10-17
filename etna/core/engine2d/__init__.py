@@ -8,6 +8,7 @@ from .scan import (
     FIELD_ENGINE_MAX,
     FIELD_NAN_MIN,
     ENGINE2D_BOX,
+    ENGINE2D_NPLUS_BOX,
     Engine2DFallback,
     Engine2DOutsideValidity,
     Engine2DPunchThrough,
@@ -21,6 +22,7 @@ __all__ = [
     "FIELD_ENGINE_MAX",
     "FIELD_NAN_MIN",
     "ENGINE2D_BOX",
+    "ENGINE2D_NPLUS_BOX",
     "Engine2DFallback",
     "Engine2DOutsideValidity",
     "Engine2DPunchThrough",  # backward-compatible alias of Engine2DOutsideValidity

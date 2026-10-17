@@ -82,7 +82,9 @@ def validated_domain_reason(config: DeviceConfig) -> "str | None":
         "substrate_thickness_um": config.substrate_thickness_um,
     }
     if config.nplus_thickness_um is not None:
-        checks.update(nplus_thickness_um=config.nplus_thickness_um, N_D_nplus=config.N_D_nplus)
+        checks.update(
+            nplus_thickness_um=config.nplus_thickness_um, N_D_nplus=config.N_D_nplus
+        )
     if config.doping_profile == "graded":
         checks.update(
             N_D_junction=config.N_D_junction,
@@ -130,7 +132,9 @@ def _cross_checked_to_V(config: DeviceConfig) -> float:
 
 
 def _nplus_cm(config: DeviceConfig) -> "float | None":
-    return None if config.nplus_thickness_um is None else config.nplus_thickness_um * 1e-4
+    return (
+        None if config.nplus_thickness_um is None else config.nplus_thickness_um * 1e-4
+    )
 
 
 def _reach_through_V(W, bias_array, config: DeviceConfig) -> "float | None":
@@ -300,7 +304,11 @@ def _engine_groups(configs, bias_array, facade):
             logger.info("%s: using devsim (%s)", facade, reason)
             continue
         kw = device_kwargs(config)
-        key = (kw["epi_thickness_cm"], kw["substrate_thickness_cm"], kw.get("nplus_thickness_cm"))
+        key = (
+            kw["epi_thickness_cm"],
+            kw["substrate_thickness_cm"],
+            kw.get("nplus_thickness_cm"),
+        )
         groups.setdefault(key, []).append(i)
     return groups
 
@@ -436,7 +444,11 @@ def _cce_batch(configs, v_start, v_stop, n_points, capture):
                     bias_array,
                 )
         # cce_vs_bias defaults: alpha range 15 um, peak generation 1e18 cm^-3 s^-1.
-        epi_end = sub + kws[0]["epi_thickness_cm"] if kws[0].get("nplus_thickness_cm") else None
+        epi_end = (
+            sub + kws[0]["epi_thickness_cm"]
+            if kws[0].get("nplus_thickness_cm")
+            else None
+        )
         G = alpha_generation(x, sub, 15e-4, 1e18, epi_end=epi_end)
         # Mobility inputs mirror cce_vs_bias exactly (electrons from N_D, holes from N_A).
         res = cce_sweep(
@@ -830,7 +842,8 @@ def run_field(config: DeviceConfig, bias_V: float = -50.0) -> SimResult:
         contacts).
 
     2D devices inside the engine's validated envelope (graded default-family
-    device, reverse bias; ``etna.core.engine2d.engine2d_dark_unsupported_reason``)
+    device, reverse bias, optionally with the n+ layer inside
+    ``etna.core.engine2d.ENGINE2D_NPLUS_BOX``; ``engine2d_dark_unsupported_reason``)
     are solved by the numba 2D engine instead of devsim, with identical node
     arrays and ordering; ``metadata["solver"]`` is "engine2d" or "devsim".
 

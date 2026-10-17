@@ -84,6 +84,8 @@ def _sweep_one(task):
     """One configuration of ``microdosimetric_sweep`` (module level so it can be pickled)."""
     i, total, hw, epi, nd, vb, n_lateral_points, *rest = task
     solver = rest[0] if rest else "auto"
+    # optional extra create_sic_2d_device keywords (n+ layer); absent = historical task
+    dkw = dict(rest[1]) if len(rest) > 1 and rest[1] else {}
     if solver not in ("devsim", "auto"):
         raise ValueError(f"solver must be 'devsim' or 'auto', got {solver!r}")
     logger.info(f"Sweep {i + 1}/{total}: hw={hw}, epi={epi}, nd={nd:.1e}, vb={vb}")
@@ -102,12 +104,17 @@ def _sweep_one(task):
                 lateral_cce_scan_2d,
             )
 
-            reason = engine2d_unsupported_reason(hw, vb, epi, nd, n_lateral_points)
+            reason = engine2d_unsupported_reason(hw, vb, epi, nd, n_lateral_points, **dkw)
             if reason is None:
                 try:
                     used = "engine2d"
                     scan = lateral_cce_scan_2d(
-                        hw, vb, epi_thickness_cm=epi, N_D_bulk=nd, n_lateral_points=n_lateral_points
+                        hw,
+                        vb,
+                        epi_thickness_cm=epi,
+                        N_D_bulk=nd,
+                        n_lateral_points=n_lateral_points,
+                        **dkw,
                     )
                     params = scan["device_info"]
                 except Engine2DOutsideValidity:
@@ -130,9 +137,12 @@ def _sweep_one(task):
                     V_bias=vb,
                     epi_thickness_cm=epi,
                     N_D_bulk=nd,
+                    **dkw,
                 )
             except RuntimeError as e:
                 if "ramp_bias: failed to converge" in str(e):
+                    if dkw.get("nplus_thickness_cm") is not None:
+                        raise  # n+ device: no contact-on-epi wall, a plain failure
                     raise _DevsimNonConvergence(str(e)) from e
                 raise
             scan = cce_lateral_scan(device_info, n_points=n_lateral_points)
@@ -240,6 +250,9 @@ def microdosimetric_sweep(
     max_configs=None,
     n_jobs=1,
     solver="auto",
+    nplus_thickness_cm=None,
+    N_D_nplus=None,
+    nplus_generation=False,
 ):
     """Sweep SV geometry and doping parameters with a validity gate and operating-point ranking.
 
@@ -277,6 +290,12 @@ def microdosimetric_sweep(
         with no n+ substrate; past reach-through devsim's ramp stops converging at a
         fixed contact-cell field, which is not physical punch-through) are reported as
         the same failed (NaN) row, with ``failure_reason`` set.
+    nplus_thickness_cm, N_D_nplus, nplus_generation :
+        Optional n+ layer under the epi for every config (create_sic_2d_device
+        keywords; None = no n+, the historical device). With n+ the cathode sits on
+        the n+ and there is no contact-on-epi wall. "auto" serves n+ configs inside
+        etna.core.engine2d.ENGINE2D_NPLUS_BOX (parity vs devsim:
+        lab/solver2d/notes/LOG.md "2D engine with n+"); outside it, devsim.
 
     Returns
     -------
@@ -310,8 +329,13 @@ def microdosimetric_sweep(
         grid = grid[:max_configs]
         total = len(grid)
 
+    dkw = {}
+    if nplus_thickness_cm is not None:
+        dkw = dict(nplus_thickness_cm=nplus_thickness_cm, nplus_generation=bool(nplus_generation))
+        if N_D_nplus is not None:
+            dkw["N_D_nplus"] = N_D_nplus
     tasks = [
-        (i, total, hw, epi, nd, vb, n_lateral_points, solver)
+        (i, total, hw, epi, nd, vb, n_lateral_points, solver) + ((dkw,) if dkw else ())
         for i, (hw, epi, nd, vb) in enumerate(grid)
     ]
     if solver not in ("devsim", "auto"):
