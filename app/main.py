@@ -24,6 +24,7 @@ from app.workflows.dark_current import render as render_dark_current
 from app.workflows.microdosimetry import render as render_microdosimetry
 from app.workflows.batch_sweep import render as render_batch_sweep
 from app.workflows.run_all import render as render_run_all
+from app.workflows.export import render as render_export
 
 st.set_page_config(
     page_title="ETNA — SiC TCAD Simulator",
@@ -85,6 +86,9 @@ pages = [
         title="Batch Sweep",
         icon=":material/stacked_line_chart:",
         url_path="batch-sweep",
+    ),
+    st.Page(
+        render_export, title="Export", icon=":material/download:", url_path="export"
     ),
 ]
 
