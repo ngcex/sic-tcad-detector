@@ -171,6 +171,42 @@ class TestSaveLoadCCETable:
             Path(filepath).unlink(missing_ok=True)
 
 
+class TestCurrentContact:
+    """The integrated contact: anode with an n+ cathode, cathode without (no devsim)."""
+
+    @staticmethod
+    def _run(monkeypatch, device_info, **kw):
+        import etna.core.single_particle as sp
+
+        seen = []
+
+        def fake_current(info, contact):
+            seen.append(contact)
+            return 0.0
+
+        monkeypatch.setattr(sp.devsim, "solve", lambda **k: None)
+        monkeypatch.setattr(sp, "add_generation_to_dd", lambda info, g: None)
+        monkeypatch.setattr(sp, "extract_contact_current", fake_current)
+        r = sp.simulate_single_particle(device_info, np.zeros(3), t_collect=3e-12, **kw)
+        return r["current_contact"], set(seen)
+
+    def test_auto_contact(self, monkeypatch):
+        from etna.core.device import DEFAULT_STACK, LEGACY_STACK
+
+        info = {"device_name": "x", "region_name": "sic"}
+        for stack, expected in ((DEFAULT_STACK, "anode"), (LEGACY_STACK, "cathode")):
+            dev = {**info, "nplus_thickness_cm": stack["nplus_thickness_cm"]}
+            assert self._run(monkeypatch, dev) == (expected, {expected})
+        # explicit argument wins; unknown contact rejected
+        dev = {**info, "nplus_thickness_cm": 1e-4}
+        assert self._run(monkeypatch, dev, contact="cathode") == (
+            "cathode",
+            {"cathode"},
+        )
+        with pytest.raises(ValueError):
+            self._run(monkeypatch, dev, contact="bulk")
+
+
 class TestLETConversion:
     """Test LET to pairs/cm conversion."""
 
@@ -320,10 +356,14 @@ class TestCCEVsBias:
                     half_width_um=50.0,
                     V_bias=V_bias,
                     device_name=f"test_bias_{int(V_bias)}",
-                    # device2d's pre-flip fallbacks: with DEFAULT_STACK doping on the no-n+
-                    # builder geometry the direct-current CCE is 1.0077 / 1.0048 (10 / 50 V),
-                    # non-monotone above 1 (was 0.9776 / 1.0066). Open item: single_particle
-                    # integrates the direct cathode current (noisy past ~1).
+                    # device2d's pre-flip model, pinned (geometry too: the builder default
+                    # is now the n+ stack): no n+ -> cathode current, 0.9780 / 1.0066.
+                    # Open item: on the default stack (n+, anode current since 2026-10-17)
+                    # CCE is 0.9824 / 0.9772 (10 / 50 V), still non-monotone. Cause: the
+                    # 1%-of-peak early termination of simulate_single_particle (full-time
+                    # integration: anode 1.0376 / 0.9993), not the contact.
+                    substrate_thickness_cm=1e-4,
+                    nplus_thickness_cm=None,
                     N_D_junction=2.931417e15,
                     N_D_bulk=8.823059e13,
                     L_transition=9.872267e-5,
