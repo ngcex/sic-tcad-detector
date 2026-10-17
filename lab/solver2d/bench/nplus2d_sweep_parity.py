@@ -108,15 +108,24 @@ def field():
     import etna
     from etna.api import simulation as sim
 
-    for hw, npu, ndn, bias in [
-        (25, 1.0, 1e19, -20.0),
-        (25, 1.0, 1e19, -100.0),
-        (50, 5.0, 1e18, -60.0),
-        (150, 2.0, 1e19, -100.0),
-    ]:
-        cfg = etna.DeviceConfig(
-            half_width_um=float(hw), nplus_thickness_um=npu, N_D_nplus=ndn
-        )
+    extra = sys.argv[2:] == ["doping"]
+    cases = [
+        (25, 1.0, 1e19, -20.0, {}),
+        (25, 1.0, 1e19, -100.0, {}),
+        (50, 5.0, 1e18, -60.0, {}),
+        (150, 2.0, 1e19, -100.0, {}),
+    ]
+    if extra:  # non-default graded doping inside the dark box, with n+
+        cases = [
+            (25, 5.0, 1e18, -100.0, dict(N_D_junction=1e16, L_transition_um=0.3, N_D_bulk=5e13)),
+            (25, 1.0, 1e19, -100.0, dict(N_D_junction=1e15, L_transition_um=2.9, N_D_bulk=5e14)),
+            (50, 3.0, 3e18, -5.0, dict(N_D_junction=5e15, L_transition_um=2.0, N_D_bulk=1e14,
+                                       epi_thickness_um=20.0)),
+            (25, 2.0, 1e19, -100.0, dict(N_D_junction=1e16, L_transition_um=1.0, N_D_bulk=2e14,
+                                         epi_thickness_um=5.0)),
+        ]
+    for hw, npu, ndn, bias, dop in cases:
+        cfg = etna.DeviceConfig(half_width_um=float(hw), nplus_thickness_um=npu, N_D_nplus=ndn, **dop)
         t = time.perf_counter()
         re = sim.run_field(cfg, bias_V=bias)
         te = time.perf_counter() - t
