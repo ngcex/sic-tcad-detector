@@ -17,9 +17,13 @@ Petringa group's 4H-SiC detector work at INFN-LNS Catania.
 
 - **Electrostatics & C–V** — built-in potential, depletion width, electric
   field, capacitance–voltage extraction. R² = 0.998 is fit-recovery (same
-  points used to calibrate the doping profile); an independently published
-  4H-SiC device (Bruzzi & Verroi 2023) agrees to +3.1 % at −40 V (ε·A/C) —
-  see `.planning/VALIDATION_LITERATURE.md`.
+  points used to calibrate the doping profile); the only literature check
+  (Bruzzi & Verroi 2023, a Schottky diode on a different, 30 µm epi wafer at 2.46e15) is a
+  solver-scale check, not a validation of this device: the +3.1 % at −40 V is the Schottky-vs-pn
+  built-in-voltage difference (<1 % with V_bi matched). The measured C-V of this device
+  (Photons Fig. 4b, digitised in `lab/cv_gap/`) puts the knee at −1…−4 V where the model has it
+  at −8…−10 V — see `.issues/perf/PERF-05-default-stack-followups.md` and
+  `.planning/VALIDATION_LITERATURE.md`.
 - **Charge collection (CCE)** — drift-diffusion transport, Hecht analysis,
   CCE vs bias, single-particle and transient response.
 - **Dark current** — total leakage vs temperature from an effective
@@ -166,9 +170,9 @@ This code has undergone deep physics audits (`.planning/PHYSICS_AUDIT_v*.md`),
 a full v5.0 integration audit (`.planning/milestones/v5.0-MILESTONE-AUDIT.md`,
 21/25 requirements satisfied, 4 partial with disclosed upstream cause), and a
 literature validation pass (`.planning/VALIDATION_LITERATURE.md`) comparing
-simulated C–V against an independently published, open-access 4H-SiC device
-(Bruzzi & Verroi 2023) — high-bias depletion width (eps·A/C of the small-signal C)
-agrees to +3.1 % at −40 V of the reported value. In the interest of honesty, the current limitations are:
+simulated C–V against an open-access 4H-SiC Schottky device on a different wafer
+(Bruzzi & Verroi 2023): a solver-scale check only (+3.1 % at −40 V is the Schottky-vs-pn
+built-in-voltage difference; <1 % with V_bi matched), not a validation of this device. In the interest of honesty, the current limitations are:
 
 - ✅ **Solid / publishable:** electrostatics, C–V, CCE-vs-bias, the calibrated
   graded-doping 2D model (converges to −50 V; 2D C–V matches the 1D twin,

@@ -94,18 +94,15 @@ read at a solved −40 V point (1 V grid). The previous table (4.284 µm, 2.0 %)
 the small-signal C (C = dQ/dV since 2026-10-17); an intermediate +2.8 % was read at
 −39.74 V, the nearest point of the default `linspace(0, -50, 40)` grid.
 
-**Verdict:** the high-bias depletion width (4.330 µm vs the paper's reported
-4.2 µm endpoint, +3.1 % deviation) confirms ETNA produces a C-V curve of the
-correct **absolute magnitude and shape** for a real, independently-fabricated
-device of known geometry and doping that the simulator was never calibrated
-to. The low-bias offset is the correctly predicted consequence of comparing a
-p-n junction to a Schottky diode, not a discrepancy. This is a genuine,
-non-circular absolute-scale sanity check on the drift-diffusion C-V solver —
-narrower than a full independent validation, since it rests on the paper's
-derived endpoints rather than raw measured C(V) data. A stronger check would
-require either Bruzzi's raw measured points (not published) or institutional
-access to JINST C05023's I-V/angular-response data (see below — independent
-of the existing calibration).
+**Verdict (corrected 2026-10-18):** this is a SOLVER-SCALE check on a DIFFERENT device, not a
+validation of the ETNA dosimeter. Bruzzi & Verroi measured a Schottky diode on a 30 um epi at
+N = 2.46e15 (V_bi = 1.2 V held in their fit); the +3.1 % at -40 V (4.330 um vs 4.2 um) is exactly
+the Schottky-vs-pn built-in-voltage difference (abrupt estimate 4.24 um with V_bi 1.2 V vs
+4.33 um with 2.9 V): with V_bi matched the solver's absolute scale agrees to < 1 %. It places no
+constraint on this device's N_D_bulk (30x the doping). The only dataset that tests THIS device is
+the measured C-V of Photons Fig. 4b (digitised in lab/cv_gap/): it puts the depletion-width knee
+at -1...-4 V (W(-2 V) = 7.18 um, W(-5 V) = 9.27 um) whereas the calibrated model has W(-2 V) =
+2.99 um and W(-5 V) = 5.93 um; see .issues/perf/PERF-05-default-stack-followups.md.
 
 ---
 

@@ -161,13 +161,15 @@ agreement is a mesh/implementation consistency check (laterally uniform mesh, so
 against the same three experimental points (W at 0/−10/−30 V = 1.7/9.5/9.73 µm)
 that were used to _fit_ the doping profile in the first place — it is a
 fit-recovery / self-consistency check, not independent validation, and should
-not be read as "matches measured C-V" without that qualifier. The one genuinely
-independent check available is a comparison against Bruzzi & Verroi ("Epitaxial
+not be read as "matches measured C-V" without that qualifier. The only literature
+comparison available is against Bruzzi & Verroi ("Epitaxial
 SiC Dosimeters and Flux Monitoring Detectors for Proton Therapy Beams," Materials
 2023, 16(10), 3643), an unrelated published 4H-SiC device our model was never
 calibrated to: ETNA's predicted depletion width (ε·A/C) at −40 V deviates 3.1% from
-that paper's reported endpoint. This is a narrow but real absolute-scale sanity
-check (two fitted endpoints, not a dense point-by-point overlay) — see
+that paper's reported endpoint; that is the Schottky-vs-pn built-in-voltage difference
+(<1 % with V_bi matched, Schottky on a 30 µm epi at 2.46e15: a different device, NOT a
+validation of this one). The measured C-V of THIS device (Photons Fig. 4b) puts the knee at
+−1…−4 V, the model at −8…−10 V (lab/cv_gap). This is a solver-scale sanity check (two fitted endpoints, not a dense point-by-point overlay) — see
 `.planning/VALIDATION_LITERATURE.md` for the full comparison and caveats. The
 electrostatics model itself (drift-diffusion/Poisson) is independently checked
 against Sze & Ng textbook forms and is not in question here — only the R² = 0.998

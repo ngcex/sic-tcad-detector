@@ -48,3 +48,16 @@ What fits (chi2 198/224): junction layer ~8e15 / L 0.46 um, bulk ~3.4e13, and a 
 transition still at only ~1e16 at 10 um. The production doping FORM cannot represent the data;
 proposal (not applied) in lab/cv_gap/notes/LOG.md section 6. Bruzzi & Verroi: different wafer,
 no constraint on N_D_bulk; its +3.1 % is the Schottky-vs-pn V_bi.
+
+## Mott-Schottky cross-check of the digitised C-V (2026-10-18)
+1/C^2 slope of the digitised Photons Fig. 4b points (C = eps*A/W, A = 4 mm2): -3..-0.5 V: N = 3.9e13;
+-6..-2 V: 1.2e14 (this window gives the authors' "order 1e14"); -10..-3 V: 4.8e14; -30..-10 V: 5.7e15.
+So the authors' "order 1e14, consistent with nominal" is a loose slope over the knee window; the
+digitisation is consistent with their statement and the profile is far from uniform (doping rises
+steeply toward the epi/n+ end). Bruzzi & Verroi is a Schottky on a 30 um epi at 2.46e15: no
+constraint on this device (see VALIDATION_LITERATURE.md, corrected).
+Decision pending (user): adopt an opt-in graded n-/n+ transition (NJ 8.2e15, L 0.46, NB 3.4e13,
+Lb 1.14 um, N_end 4.5e16) with gates; flipping the default puts N_D_bulk below every documented
+doping statement and the epi/n+ position is no longer fixed by the data.
+Cheapest discriminating measurements: C-V to -100...-200 V (models predict eps*A/C 9.96-9.98 um
+at -100 V, 10.09-10.11 um at -200 V) or SIMS/SRP through the epi/n+ interface.
