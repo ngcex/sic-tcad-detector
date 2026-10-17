@@ -1,6 +1,6 @@
 {
-  "cce_center_100um": 0.95346904,
-  "cce_center_300um": 0.95346904,
+  "cce_center_100um": 0.95377414,
+  "cce_center_300um": 0.95377414,
   "cv_1d": {
     "-10.0": 0.0009592594516739858,
     "-5.0": 0.0005775706380019595,
@@ -20,7 +20,7 @@
     "rebaselined_nplus_flip": "cce_center_*um updated from 0.96085509 to 0.98552834 (+2.57 %): the create_sic_2d_device graded fallbacks now read DEFAULT_STACK (2.974271e15 / 6.335936e13 / 0.987 um, was 2.931417e15 / 8.823059e13 / 0.9872267 um); geometry unchanged (p+ 1 um, no n+). Lower N_D_bulk -> wider depletion at 10 V. tolerance_rel kept at 0.1%.",
     "rebaselined_plan_26_04": "cce_center_*um updated from 0.96446952 (v3.0 snapshot) to 0.96085509 (calibrated graded defaults). The 0.37% shift is the intended consequence of the -50V convergence calibration (CONS-01 SC#1); N_D_bulk 8.5e13->8.823e13 dominates. tolerance_rel kept at 0.1% as a forward guard.",
     "rebaselined_default_cleanup": "2026-10-17: cce_center_*um 0.98552834 -> 0.95346904 (-3.25 %). The 2D builder defaults are now the full default stack (DEFAULT_STACK = DeviceConfig(): p+ 0.3 um, graded 2.974271e15 / 6.335936e13 / 0.987 um, n+ 1 um 1e19); the previous value froze a mix that was neither DeviceConfig() nor legacy_config() (builder geometry p+ 1 um / no n+ with the new doping). The 2D entries are therefore a guard of the default model at 10 V (just below its 10.3 V reach-through). cv_1d is unchanged: that test now pins the v3 geometry (p+ 1 um, no n+) explicitly with the v3 doping.",
-    "note_cv_observable_2026_10_17": "Not re-baselined: after the small-signal-C recalibration (N_D_bulk 6.335936e13 -> 8.252732e13) and the hole mobility at the epi doping, cce_center (hw 50) = 0.95375989 vs frozen 0.95346904 (+0.03 %, inside tolerance_rel). The default model's reach-through is now 12.3 V (analytic 1.2 V_fd 11.92 V), so 10 V is BELOW full depletion, not 'just below' it as the rebaselined_default_cleanup note says."
+    "rebaselined_cv_observable_and_mobility": "2026-10-17: cce_center_*um 0.95346904 -> 0.95377414 (+0.032 %). Chain: 0.95346904 (rebaselined_default_cleanup) -> 0.95375989 (small-signal-C recalibration, N_D_bulk 6.335936e13 -> 8.252732e13, N_D_junction 2.958237e15, and hole mobility at the epi doping, audit-v7 A-03) -> 0.95377414 (both mobilities at N_D_bulk instead of DEFAULT_N_D 1.07e15 for graded profiles: mu_p +1.83 %, mu_n +3.14 %). Re-pinned so the 0.1 % guard keeps its full margin (the unpinned drift had already used 0.032 % of it). Measured at both widths: hw 50 = 0.9537741357890963, hw 150 = 0.9537741357890964 (laterally uniform generation, identical to 1e-16). The default model's reach-through is 12.3 V (analytic V_fd 9.93 V), so 10 V is below full depletion."
   },
   "notebook_list": [
     "01_phase1_validation.ipynb",
