@@ -32,10 +32,12 @@ def test_one_source_of_truth():
     assert NPLUS_CALIBRATION is DEFAULT_STACK
     assert c.substrate_thickness_um == 0.3 and c.nplus_thickness_um == 1.0
     assert c.N_D_nplus == DEFAULT_STACK["N_D_nplus"] == 1e19
-    assert c.N_D_junction == DEFAULT_STACK["N_D_junction"] == 2.974271e15
-    assert c.N_D_bulk == DEFAULT_STACK["N_D_bulk"] == 6.335936e13
+    # 2026-10-17 recalibration on eps*A/C of the small-signal C (was 2.974271e15 /
+    # 6.335936e13 / 2.805349e12, calibrated on the depletion edge)
+    assert c.N_D_junction == DEFAULT_STACK["N_D_junction"] == 2.958237e15
+    assert c.N_D_bulk == DEFAULT_STACK["N_D_bulk"] == 8.252732e13
     assert c.L_transition_um == 0.987
-    assert c.N_t == SiC4H_Parameters().N_t == DEFAULT_STACK["N_t"] == 2.805349e12
+    assert c.N_t == SiC4H_Parameters().N_t == DEFAULT_STACK["N_t"] == 2.805336e12
     assert c.E_t == SiC4H_Parameters().E_t == DEFAULT_STACK["E_t"] == 0.67
     assert core_device2d._N_D_JUNCTION_DEFAULT == DEFAULT_STACK["N_D_junction"]
     assert core_device2d._N_D_BULK_DEFAULT == DEFAULT_STACK["N_D_bulk"]
@@ -102,19 +104,26 @@ def test_legacy_preset_reproduces_the_pre_flip_numbers():
 
 
 def test_default_numbers_are_the_calibration_record():
-    """LOG.md phase 4 record: W 1.700 / 9.500 / 9.899 um, CCE 0.999021 / 0.999706 /
-    0.999819, dark 6.132 / 14.873 / 18.000 pA (4 mm2)."""
+    """Calibration record (2026-10-17, on the small-signal C; lab/solver2d/notes/LOG.md):
+    eps*A/C 1.700 / 9.500 (inputs) / 9.979 um (out of fit, +2.56 %), depletion edge
+    1.689 / 9.267 / 9.896 um, CCE 0.998899 / 0.999707 / 0.999820, dark 6.077 / 14.720 /
+    18.000 pA (4 mm2). Previous record (edge calibration): edge 1.700 / 9.500 / 9.899,
+    CCE 0.999021 / 0.999706 / 0.999819, dark 6.132 / 14.873 / 18.000, reach-through 10.3 V."""
     c = DeviceConfig()
     cv = sim.run_cv(c, 0.0, -30.0, 31)
+    WC = np.asarray(cv.metadata["W_from_C"]) * 1e4
+    np.testing.assert_allclose(WC[[0, 10, 30]], [1.7, 9.5, 9.978827], rtol=0, atol=1e-6)
     W = np.asarray(cv.metadata["depletion_widths"]) * 1e4
-    np.testing.assert_allclose(W[[0, 10, 30]], [1.7, 9.5, 9.899478], rtol=0, atol=1e-6)
-    # Debye-length reach-through rule (a definition): 10.3 V (paper: ~10 V)
-    assert cv.metadata["reach_through_V"] == pytest.approx(10.3)
+    np.testing.assert_allclose(
+        W[[0, 10, 30]], [1.688703, 9.266588, 9.896195], rtol=0, atol=1e-6
+    )
+    # Debye-length reach-through rule on the depletion edge (a definition; paper: ~10 V)
+    assert cv.metadata["reach_through_V"] == pytest.approx(12.3)
     cce = sim.run_cce(c, -10.0, -50.0, 3)
-    np.testing.assert_allclose(cce.y, [0.999021, 0.999706, 0.999819], atol=1e-6)
+    np.testing.assert_allclose(cce.y, [0.998899, 0.999707, 0.999820], atol=1e-6)
     d = sim.run_dark_current(dataclasses.replace(c, area_cm2=0.04), 0.0, -60.0, 7)
     np.testing.assert_allclose(
-        d.y[[1, 3, 6]] * 1e12, [6.132, 14.873, 18.000], atol=1e-3
+        d.y[[1, 3, 6]] * 1e12, [6.077, 14.720, 18.000], atol=1e-3
     )
 
 

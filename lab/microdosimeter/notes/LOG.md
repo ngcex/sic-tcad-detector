@@ -228,3 +228,13 @@ Production DEFAULT_STACK, W in um:
 - Consequence: the observable of the paper's W (eps A / C of a measured C) is W_C; the
   production stack calibrated on W_edge misses its own -10 V point by +2.78 % in W_C.
   Production change follows (feat/cv-observable).
+
+Production (feat/cv-observable): run_cv / cv_sweep / cv_at_fluence return C = dQ/dV.
+Engine: exact linearisation (PoissonBatch.small_signal_capacitance, = the AC solve to 1e-8).
+devsim path: +-1 mV central difference of sum(NodeVolume*Holes) on the DD state (vs the
+engine: 2.5e-8 at 0 V .. 1.5e-12 at -30 V; Richardson 0.01/0.02 V: 5e-11). The devsim AC
+solve is NOT used in production: in devsim 2.10 a circuit cannot be removed again
+(delete_circuit() raises and the next DC solve dies with CIRCUIT_UNEXPECTED; reset_devsim()
+with a circuit present -> Newton UNEXPECTED on the next device). It stays as an own-process
+pin (tests/test_cv_small_signal.py::test_devsim_ac_solve_agrees_with_both_paths).
+Recalibration of DEFAULT_STACK on eps*A/C: lab/solver2d/notes/LOG.md (end).

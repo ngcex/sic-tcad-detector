@@ -159,7 +159,7 @@ def test_cce_vs_fluence_merges_device_kwargs(monkeypatch):
         )
     assert (got["T"], got["N_A"], got["doping_profile"]) == (350.0, 5e18, "uniform")
     # untouched defaults survive the merge (DEFAULT_STACK since the n+ flip; was 2.90e15)
-    assert got["N_D_junction"] == 2.974271e15
+    assert got["N_D_junction"] == 2.958237e15
 
 
 def test_cce_vs_fluence_uses_device_temperature_for_lifetimes(monkeypatch):
@@ -188,7 +188,7 @@ def test_cce_vs_dose_rate_merges_device_kwargs(monkeypatch):
     with pytest.raises(_Stop):
         cce_vs_dose_rate([20.0], device_kwargs={"T": 350.0, "N_A": 5e18})
     assert (got["T"], got["N_A"]) == (350.0, 5e18)
-    assert got["N_D_junction"] == 2.974271e15  # DEFAULT_STACK (was a hardcoded 2.90e15)
+    assert got["N_D_junction"] == 2.958237e15  # DEFAULT_STACK (was a hardcoded 2.90e15)
 
 
 def test_transient_merges_device_kwargs(monkeypatch):
@@ -201,4 +201,4 @@ def test_transient_merges_device_kwargs(monkeypatch):
             dose_rates=[20.0], device_kwargs={"T": 350.0, "N_A": 5e18}
         )
     assert (got["T"], got["N_A"]) == (350.0, 5e18)
-    assert got["N_D_junction"] == 2.974271e15  # DEFAULT_STACK (was a hardcoded 2.90e15)
+    assert got["N_D_junction"] == 2.958237e15  # DEFAULT_STACK (was a hardcoded 2.90e15)

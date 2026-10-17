@@ -18,7 +18,7 @@ Petringa group's 4H-SiC detector work at INFN-LNS Catania.
 - **Electrostatics & C–V** — built-in potential, depletion width, electric
   field, capacitance–voltage extraction. R² = 0.998 is fit-recovery (same
   points used to calibrate the doping profile); an independently published
-  4H-SiC device (Bruzzi & Verroi 2023) matches to within 2% at high bias —
+  4H-SiC device (Bruzzi & Verroi 2023) matches to within 3% at high bias —
   see `.planning/VALIDATION_LITERATURE.md`.
 - **Charge collection (CCE)** — drift-diffusion transport, Hecht analysis,
   CCE vs bias, single-particle and transient response.
@@ -167,30 +167,34 @@ a full v5.0 integration audit (`.planning/milestones/v5.0-MILESTONE-AUDIT.md`,
 21/25 requirements satisfied, 4 partial with disclosed upstream cause), and a
 literature validation pass (`.planning/VALIDATION_LITERATURE.md`) comparing
 simulated C–V against an independently published, open-access 4H-SiC device
-(Bruzzi & Verroi 2023) — high-bias depletion width agrees to within 2% of the
-reported value. In the interest of honesty, the current limitations are:
+(Bruzzi & Verroi 2023) — high-bias depletion width (eps·A/C of the small-signal C)
+agrees to within 3% (+2.8 % at −40 V) of the reported value. In the interest of honesty, the current limitations are:
 
 - ✅ **Solid / publishable:** electrostatics, C–V, CCE-vs-bias, the calibrated
   graded-doping 2D model (converges to −50 V; 2D C–V matches the 1D twin,
   R² ≥ 0.99 over 0…−50 V).
 - ⚠️ **Calibration, not prediction:** dark current is a calibration input: one
   trap density N_t fitted to the experimental bound < 18 pA up to −60 V (4 mm²;
-  N_t = 2.805349e12 on the default stack, E_t = 0.67 eV); quote it as a budget
+  N_t = 2.805336e12 on the default stack, E_t = 0.67 eV); quote it as a budget
   estimate only.
 - ⚠️ **FLASH dose-rate:** the high-injection _plasma-recombination_ physics is
   **not implemented** — FLASH dose-rate outputs are exploratory sensitivity
   bounds, not a validated mechanistic prediction.
 - ✅ **Device stack (default since the n⁺ flip):** p⁺ anode 0.3 µm / 10 µm graded
   n⁻ epi / n⁺ substrate (1 µm modelled, 10¹⁹ cm⁻³, cathode on its far end), doping
-  re-solved on the 0 / −10 V C-V points (`etna.core.device.DEFAULT_STACK`). There is
-  no deep-bias convergence wall (devsim converges to ≥ −150 V; the engine is
-  cross-checked to −100 V). Reach-through is **10.3 V** by a _definition_: the
-  depletion edge within one Debye length of the n⁻/n⁺ step (`metadata["reach_through_V"]`;
-  paper: ~10 V; 17 V under the legacy mesh rule).
-- ⚠️ **Known C-V systematic:** W(−30 V) is 9.90 µm vs the measured 9.73 µm (+1.7 %,
-  ~2 %; Photons Fig. 4b labels 1.68 / 9.52 / 9.73 µm). Attributed (paper study) to
-  edge/fringe capacitance falling with bias, which a 1D model cannot carry;
-  deliberately **not** refitted.
+  solved exactly on the 0 / −10 V C-V points (`etna.core.device.DEFAULT_STACK`): those
+  two points are **calibration inputs**, not reproduced validation points. `run_cv`
+  returns the small-signal C = dQ/dV (the observable of a measured C-V; W = ε·A/C in
+  `metadata["W_from_C"]`); the n/N_D = 0.5 depletion edge is metadata
+  (`depletion_widths`). There is no deep-bias convergence wall (devsim converges to
+  ≥ −150 V; the engine is cross-checked to −100 V). Reach-through is **12.3 V** by a
+  _definition_: the depletion edge within one Debye length of the n⁻/n⁺ step
+  (`metadata["reach_through_V"]`; paper: ~10 V; 17 V under the legacy mesh rule).
+- ⚠️ **Known C-V residual:** ε·A/C at −30 V is 9.98 µm vs the measured 9.73 µm
+  (+2.6 %; Photons Fig. 4b labels 1.68 / 9.52 / 9.73 µm), the one out-of-fit C-V point.
+  A ~0.5 µm graded n⁻/n⁺ buffer, an epi ~2.5 % thinner than nominal and edge/fringe
+  capacitance falling with bias each close the gap; three points cannot separate them,
+  so none is picked and nothing is refitted (lab/microdosimeter/notes/LOG.md §4, §6).
 - ⚠️ **Legacy model:** `etna.legacy_config()` (UI: "historical model") reproduces the
   pre-flip numbers: cathode directly on the n⁻ epi, p⁺ 1 µm, 2.93e15 / 8.82e13 /
   0.987 µm, N_t 2.8e12, E_t 0.65. Only there does devsim stop converging at deep bias

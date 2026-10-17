@@ -78,8 +78,10 @@ class SiC4H_Parameters:
     # linear in N_t, 2.2e13 gave 141 pA on the corrected path.)
     # Refitted on the default stack (p+ 0.3 um / graded epi / n+, NPLUS calibration):
     # I(300 K, -60 V, 4 mm2) = 18.000 pA. 2.8e12 before the n+ flip (17.957 pA on the
-    # legacy no-n+ model; LEGACY_STACK in etna/core/device.py).
-    N_t: float = 2.805349e12
+    # legacy no-n+ model; LEGACY_STACK in etna/core/device.py). 2026-10-17: 2.805349e12 ->
+    # 2.805336e12 after the C-V recalibration on the small-signal C (new epi doping:
+    # 17.99992 -> 18.00000 pA; lab/solver2d/bench/nplus_calibrate.py cal-c).
+    N_t: float = 2.805336e12
     S_n: float = 1e3  # cm/s, electron surface recombination velocity
     S_p: float = 1e3  # cm/s, hole surface recombination velocity
 
