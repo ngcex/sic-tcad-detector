@@ -219,6 +219,17 @@ def _summarize(res: SimResult) -> str:
     if res.metadata.get("summary"):
         return res.metadata["summary"]
     x, y = np.asarray(res.x, dtype=float), np.asarray(res.y, dtype=float)
+    cfg = res.config
+    if res.sim_type == "field" and x.size and getattr(cfg, "nplus_thickness_um", None):
+        # exclude the nm-scale Debye spike at the abrupt epi/n+ interface
+        x_if = cfg.substrate_thickness_um + cfg.epi_thickness_um
+        keep = np.abs(x - x_if) > 0.1
+        if keep.any() and np.isfinite(y[keep]).any():
+            i = np.nanargmax(np.where(keep, y, -np.inf))
+            return (
+                f"{x.size} pts, peak |E| {y[i]:.3g} V/cm at x={x[i]:.2f} um "
+                "(excl. epi/n+ interface spike)"
+            )
     if not x.size and res.mesh is not None and "ElectricField" in res.mesh.node_values:
         E = np.asarray(res.mesh.node_values["ElectricField"], dtype=float)
         return f"2D map, {E.size} nodes, max |E| {np.nanmax(E):.3g} V/cm"

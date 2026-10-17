@@ -80,6 +80,12 @@ def render() -> None:
         )
         st.caption(f"Bias: {result.metadata.get('bias_V', float('nan')):.1f} V")
         show_result_notes(result)
+        if result.config.nplus_thickness_um is not None and result.mesh.y_coords is None:
+            st.caption(
+                "The sharp spike at the epi/n+ interface is the nm-scale Debye layer of "
+                "the abrupt n+ step, not a breakdown site; the physical peak field is "
+                "at the p+/n- junction."
+            )
         if result.mesh.y_coords is None:
             # 1D branch: existing line charts + CSV + expander (read result.x/y),
             # THEN the supplemental geometry-viewer bar below them.

@@ -1390,6 +1390,7 @@ def run_flash_recombination(
         metadata={
             "V_bias": result["V_bias"],
             "E_MeV": result["E_MeV"],
+            "solver": "devsim",
         },
         mesh=None,
     )
