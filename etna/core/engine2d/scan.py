@@ -79,6 +79,17 @@ ENGINE2D_NPLUS_BOX = {
     "V_bias": (5.0, 100.0),
 }
 _NPLUS_KEYS = ("nplus_thickness_cm", "N_D_nplus", "nplus_generation")
+# Relative tolerance of the box bounds: a value given in um and converted to cm (e.g.
+# L_transition_um=3.0 -> 3.0 * 1e-4 = 3.0000000000000003e-4) must not fall outside a
+# bound it equals.
+_BOX_RTOL = 1e-9
+
+
+def _in_box(value, lo, hi):
+    """lo <= value <= hi up to _BOX_RTOL (False for None / non-finite values)."""
+    if value is None or not np.isfinite(value):
+        return False
+    return lo * (1.0 - _BOX_RTOL) <= value <= hi * (1.0 + _BOX_RTOL)
 
 
 def _nplus_reason(device_kwargs, allow_generation=True):
@@ -98,7 +109,7 @@ def _nplus_reason(device_kwargs, allow_generation=True):
         nd = DEFAULT_N_D_NPLUS
     for name, value in (("nplus_thickness_cm", t), ("N_D_nplus", nd)):
         lo, hi = ENGINE2D_NPLUS_BOX[name]
-        if value is None or not np.isfinite(value) or not lo <= value <= hi:
+        if not _in_box(value, lo, hi):
             return f"{name}={value} outside [{lo:g}, {hi:g}] (n+ parity box)", True
     return None, True
 
@@ -175,7 +186,7 @@ def engine2d_unsupported_reason(
         lo, hi = (
             ENGINE2D_NPLUS_BOX if has_nplus and name == "V_bias" else ENGINE2D_BOX
         )[name]
-        if value is None or not np.isfinite(value) or not lo <= value <= hi:
+        if not _in_box(value, lo, hi):
             return f"{name}={value} outside [{lo:g}, {hi:g}]"
     return None
 
@@ -334,7 +345,7 @@ def engine2d_dark_unsupported_reason(half_width_um, V_cathode, **device_kwargs):
         lo, hi = ENGINE2D_DARK_BOX[name]
         if has_nplus and name == "V_cathode":
             lo, hi = ENGINE2D_NPLUS_BOX["V_bias"]
-        if value is None or not np.isfinite(value) or not lo <= value <= hi:
+        if not _in_box(value, lo, hi):
             return f"{name}={value} outside [{lo:g}, {hi:g}]"
     if vals.get("N_D_bulk", 0.0) >= vals.get("N_D_junction", np.inf):
         return "N_D_bulk >= N_D_junction"
