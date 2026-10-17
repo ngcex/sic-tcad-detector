@@ -1180,9 +1180,14 @@ def run_cce_tilted_alpha(
     1D model (as run_cce): CCE = J_cathode / (q * pairs generated), i.e. relative to the
     pairs generated in the epi (plus the p+ if ``generation_in_p_plus``). It does NOT
     model track plasma / columnar recombination, trapping within the shaping time,
-    ballistic deficit or 2D edges; compared with the paper's Fig. 4b it plateaus from
-    ~-20 V where the data still rise ~1 % to -50 V (lab/microdosimeter/notes/LOG.md), and
-    its low-bias drop is set by the (unconstrained) hole lifetime and mobility.
+    ballistic deficit or 2D edges. It does not reproduce the paper's Fig. 4b: with the
+    preset (N_D 1e14, W reaches the track end by -3 V) it is flat to 0.5 % from 0 V,
+    while the data drop to 0.908 at 0 V and still rise 1 % from -20 to -50 V. No
+    drift-diffusion variant (N_D 0.5e14-1.2e15, lifetimes x0.03-x3, dead layer, p+) fits
+    (chi2 >= 228 for 6 points at sigma 1e-3); a field-dependent loss in the dense alpha
+    track (columnar/plasma recombination, loss a/(1 + E/E_c) with a ~ 0.15, E_c ~ 3e3
+    V/cm at N_D 1e14) does (chi2 ~ 5 for 4 dof) and is lab-only
+    (lab/microdosimeter/notes/LOG.md section 9).
 
     metadata: ``I_collected`` / ``I_generated`` (A/cm^2, generation scaled to a 1e18
     cm^-3 s^-1 peak as run_cce), ``cce_vs_E0`` (collected / (E0/E_pair): includes the

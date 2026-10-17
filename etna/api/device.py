@@ -161,14 +161,21 @@ def legacy_config(**overrides) -> DeviceConfig:
 
 
 # MICRODOSIMETER preset (Petringa et al. 2025, Physica Medica 140, 105675, pp.2-3): 5x5 mm2
-# die, 10 um n- epi on n+, p+ epi 0.3-1 um. SEPARATE from the C-V-calibrated 4 mm2 dosimeter
-# (DEFAULT_STACK is untouched). Epi doping: ONE parameter, uniform N_D fitted so that the
-# full-depletion voltage (run_cv's reach_through_V definition) is 30.00 V, the paper's
-# "fully depleted ... at approximately -30 V" (lab/microdosimeter/bench/fit_vfd.py). Weakly
-# determined: +-5 % in N_D moves V_fd by -1.55/+1.5 V; the paper's own "on the order of
-# 1e14 cm^-3" (V_fd 9 V here) and its Fig. 3b C-V (a 4 mm2 plateau, knee near -5 V) do
-# not agree with -30 V. The N_t / E_t dark-current fit is the dosimeter's (not refitted).
-MICRODOSIMETER_N_D = 3.0575e14  # cm^-3
+# die (0.25 mm3 = 25 mm2 x 10 um), 10 um n- epi on n+, p+ epi 0.3-1 um. SEPARATE from the
+# C-V-calibrated 4 mm2 dosimeter (DEFAULT_STACK is untouched). Epi doping: uniform N_D =
+# 1e14, the paper's own 1/C^2 estimate ("on the order of 1e14 cm^-3, consistent with
+# nominal values") and the same group's spec for this epi (0.5-1e14, "full depletion at
+# about 10 V, -30 V = over-depleted": Petringa 2025 JINST 20 C08019; SiC_Photons). In this
+# model V_fd (run_cv reach_through_V) = 9.0 V. Until 2026-10-17 the preset was 3.0575e14,
+# fitted to the sentence "fully depleted ... at approximately -30 V"; that reading is
+# contradicted by the paper's Fig. 3b (the 4 mm2 dosimeter's C-V: plateau eps*4 mm2/10 um,
+# W 1.7/9.5 um at 0/-10 V, knee near -5 V) and by the Fig. 4b CCE-vs-bias shape, which under
+# every field-dependent-loss model tested excludes N_D >= 2e14 (Delta chi2 >= 22 for
+# 3.06e14) and admits 0.5-1.5e14 (lab/microdosimeter/notes/LOG.md section 9). N_D = 1e14 is
+# the lower edge of the batched engine's validated box (_ENGINE_BOX N_D_uniform), checked
+# against devsim there (run_cce 3e-16, tests/test_cv_small_signal.py). The N_t / E_t
+# dark-current fit is the dosimeter's (not refitted).
+MICRODOSIMETER_N_D = 1.0e14  # cm^-3
 MICRODOSIMETER_PRESET = {
     "epi_thickness_um": 10.0,
     "substrate_thickness_um": 0.3,  # p+ layer; the paper gives 0.3-1 um
@@ -181,10 +188,10 @@ MICRODOSIMETER_PRESET = {
 
 
 def microdosimeter_config(p_plus_um: float = 0.3, **overrides) -> DeviceConfig:
-    """DeviceConfig of the Petringa 2025 SiC microdosimeter (25 mm2, V_fd = 30 V fit).
+    """DeviceConfig of the Petringa 2025 SiC microdosimeter (25 mm2, N_D 1e14, V_fd 9 V).
 
     ``p_plus_um`` is the p+ layer thickness (paper: 0.3 to 1 um; V_fd does not depend on
-    it). See MICRODOSIMETER_PRESET for what is fitted and how weakly. Use with
+    it). See MICRODOSIMETER_PRESET for where the doping comes from. Use with
     ``run_cce_tilted_alpha`` for the paper's 65-deg 241Am alpha test.
     """
     return DeviceConfig(
