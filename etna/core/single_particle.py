@@ -38,11 +38,12 @@ logger = logging.getLogger(__name__)
 # Physical constants
 Q_ELECTRON = 1.602e-19  # C, elementary charge
 
-# Headroom over the physical CCE ceiling (1.0) attributable to finite-step
-# trapezoidal-quadrature error on the collection-current pulse. Observed error
-# is ~0.6%; an excess beyond this tolerance signals a real bug, not numerics
-# (audit C4). Kept equal to the transient.py tolerance for symmetry.
-_QUADRATURE_TOL = 0.05
+# Headroom over the physical CCE ceiling (1.0) before the table builder warns. The
+# backward-Euler collected charge (collected_charge) has no quadrature error on top
+# of the time stepping, and the validated runs give CCE_raw <= 1 (default stack
+# 0.99997 at 50 V); an excess beyond this tolerance signals a bug, not numerics.
+# (The old 5 % headroom covered the post-injection trapezoid, audit C4.)
+_CCE_EXCESS_TOL = 1e-3
 
 
 def ion_track_generation_2d(
@@ -118,14 +119,21 @@ def simulate_single_particle(
     dt_min=1e-13,
     dt_max=1e-9,
     contact=None,
+    rtol_converged=1e-7,
+    n_converged=3,
 ):
     """Simulate single-particle charge collection transient.
 
     Uses the generation-pulse method (Approach A from research):
     1. Initialize transient state with zero generation
     2. Inject charge as a short pulse (generation/dt_inject for one timestep)
-    3. Zero generation and run BDF1 time-stepping until current returns to
-       baseline
+    3. Zero generation and run BDF1 time-stepping until the collected charge
+       has converged
+
+    Q_collected is the backward-Euler sum over every step, the injection step
+    included (collected_charge); the run stops when the charge added by a step is
+    below ``rtol_converged`` of the running total for ``n_converged`` consecutive
+    steps, or at ``t_collect`` (then ``converged`` is False and a warning is logged).
 
     Parameters
     ----------
@@ -150,16 +158,22 @@ def simulate_single_particle(
         dominated by round-off (same finding as transient_cce_vs_dose_rate). The
         balanced steady-state form (extract_steady_state_current) is NOT used: it has
         no dQ/dt term and is wrong in a transient.
+    rtol_converged : float
+        Relative charge increment below which a step counts as converged.
+    n_converged : int
+        Consecutive converged steps required to stop.
 
     Returns
     -------
     result : dict
-        - "times": time points (s), ndarray
+        - "times": end time of each step from the injection start (s), ndarray;
+          the first entry is the injection step (t = dt_inject)
         - "currents": contact current at each time (A/cm for 2D), ndarray
-        - "Q_collected": integrated collected charge (C/cm for 2D), float
+        - "Q_collected": collected charge (C/cm for 2D), float
         - "I_dark": baseline dark current (A/cm), float
         - "I_peak": peak signal current (A/cm), float
         - "current_contact": the contact actually integrated, str
+        - "converged": False if t_collect / max_steps / a failed step ended the run
     """
     if contact is None:
         contact = (
@@ -224,23 +238,27 @@ def simulate_single_particle(
     logger.debug(f"Current after injection: {I_after_inject:.4e} A/cm")
 
     # Step 4: Zero generation and time-step loop.
-    # Recording starts AFTER the injection step. The first BDF1 step (the 1 ps
-    # injection pulse) is numerically noisy and dominated by the fast field
-    # readjustment to the freshly injected charge; its contact-current sample is
-    # not representative of steady carrier collection. Because injection is
-    # effectively instantaneous (1 ps) while collection takes ~ns, essentially
-    # no real charge is collected during the excluded window (carriers drift a
-    # negligible distance in 1 ps), so excluding it does not under-count.
+    # The injection step IS recorded (t = dt_inject) and counted. Each BDF1 step
+    # returns the contact current at the END of the step, and the backward-Euler
+    # charge it moved through the contact during that step is I_k * dt_k; summing
+    # those right-endpoint terms over every step, the injection step included, is
+    # the charge the discretised equations actually conserve (collected_charge).
+    # The previous estimator (trapezoid over the post-injection samples, stopped at
+    # 1 % of the peak) dropped the injection step and the tail and mixed in a
+    # quadrature the solver does not use: legacy CCE 0.9776 / 1.0066 at 10 / 50 V
+    # (>1), default stack 0.982 / 0.977 (non-monotone). This sum gives legacy
+    # 0.9615 / 0.9985 (steady-state CCE 0.9609 / 0.9983) and default 0.99978 / 0.99997.
     # NOTE: extract_contact_current reads ONLY the continuity-equation
     # (conduction) contact current -- it does NOT include displacement current
     # (dD/dt lives in the Poisson/PotentialEquation, which is never queried).
-    # The residual CCE>1 seen downstream is trapezoidal-quadrature error, not
-    # displacement current (see the CCE clip comment in the table builder, C4).
     add_generation_to_dd(device_info, zeros)
 
-    times = []
-    currents = []
+    times = [dt_inject]
+    currents = [I_after_inject]
     t = dt_inject
+    Q_run = (abs(I_after_inject) - abs(I_dark)) * dt_inject
+    n_small = 0
+    converged = False
 
     I_peak = I_after_inject
     max_steps = 5000
@@ -278,22 +296,36 @@ def simulate_single_particle(
         I = extract_contact_current(device_info, contact)
         times.append(t)
         currents.append(I)
+        step_count += 1
 
         if abs(I) > abs(I_peak):
             I_peak = I
 
-        # Early termination: signal decayed to 1% of peak
-        if abs(I - I_dark) < 0.01 * abs(I_peak - I_dark) and t > 10 * dt_inject:
-            logger.debug(f"Early termination at t={t:.3e} s (signal < 1% peak)")
-            break
-
-        step_count += 1
+        # Convergence stop: the charge still being added is negligible against the
+        # charge collected so far for n_converged consecutive steps. Validated
+        # against 200 ns runs without a stop (legacy and default stack, 10 / 50 V,
+        # LET 0.5-500): the truncated sum agrees to <= 1.4e-7 in CCE.
+        dQ = (abs(I) - abs(I_dark)) * dt
+        Q_run += dQ
+        if Q_run != 0.0 and abs(dQ) < rtol_converged * abs(Q_run):
+            n_small += 1
+            if n_small >= n_converged:
+                converged = True
+                logger.debug(f"Collection converged at t={t:.3e} s")
+                break
+        else:
+            n_small = 0
 
     times = np.array(times)
     currents = np.array(currents)
+    if not converged:
+        logger.warning(
+            f"Single-particle collection not converged at t={t:.3e} s "
+            f"({step_count} steps, t_collect={t_collect:.1e} s): Q_collected is "
+            "truncated"
+        )
 
-    # Q_collected = integral(|I| - |I_dark|) dt, post-injection only
-    Q_collected = float(np.trapezoid(np.abs(currents) - np.abs(I_dark), times))
+    Q_collected = collected_charge(times, currents, I_dark)
 
     logger.info(
         f"Transient complete: {len(times)} steps, t_final={times[-1]:.3e} s, "
@@ -307,16 +339,38 @@ def simulate_single_particle(
         "I_dark": float(I_dark),
         "I_peak": float(I_peak),
         "current_contact": contact,
+        "converged": converged,
     }
+
+
+def collected_charge(times, currents, I_dark, t0=0.0):
+    """Backward-Euler collected charge: sum_k (|I_k| - |I_dark|) * (t_k - t_{k-1}).
+
+    ``times`` are the END times of consecutive implicit (BDF1) steps that start at
+    ``t0`` (the start of the injection step), ``currents`` the contact current the
+    solver returns at each of them. Each term is the charge the discretised
+    equations moved through the contact during that step, so the sum is exact for
+    the time-discrete system (no quadrature error on top of the time-stepping).
+    """
+    times = np.asarray(times, dtype=float)
+    currents = np.asarray(currents, dtype=float)
+    if times.size == 0:
+        return 0.0
+    dt = np.diff(times, prepend=t0)
+    return float(np.sum((np.abs(currents) - abs(I_dark)) * dt))
 
 
 def analyze_current_pulse(times, currents, I_dark):
     """Extract pulse characteristics from transient simulation.
 
+    Uses the same backward-Euler estimator as simulate_single_particle
+    (collected_charge): ``times`` are step end times measured from the injection
+    start (t = 0), so Q_collected here equals simulate_single_particle's.
+
     Parameters
     ----------
     times : array_like
-        Time points (s).
+        Step end times (s), from t = 0 at the injection start.
     currents : array_like
         Contact current at each time point (A/cm for 2D).
     I_dark : float
@@ -325,27 +379,24 @@ def analyze_current_pulse(times, currents, I_dark):
     Returns
     -------
     result : dict
-        - "Q_collected": integrated charge (C/cm for 2D)
+        - "Q_collected": collected charge (C/cm for 2D)
         - "I_peak": peak signal current magnitude (A/cm)
         - "t_peak": time of peak current (s)
         - "t_collection": time to collect 95% of total charge (s)
     """
-    times = np.asarray(times)
-    currents = np.asarray(currents)
+    times = np.asarray(times, dtype=float)
+    currents = np.asarray(currents, dtype=float)
 
     I_signal = np.abs(currents) - np.abs(I_dark)
-    Q_total = float(np.trapezoid(I_signal, times))
+    Q_total = collected_charge(times, currents, I_dark)
 
     I_peak = float(np.max(I_signal))
     t_peak = float(times[np.argmax(I_signal)])
 
-    # Collection time: when cumulative charge reaches 95%
-    if len(times) > 1:
-        Q_cumulative = np.cumsum(0.5 * (I_signal[:-1] + I_signal[1:]) * np.diff(times))
-        idx_95 = np.searchsorted(Q_cumulative, 0.95 * Q_total)
-        t_collection = float(times[min(idx_95 + 1, len(times) - 1)])
-    else:
-        t_collection = float(times[0])
+    # Collection time: end of the step at which the cumulative charge reaches 95%
+    Q_cumulative = np.cumsum(I_signal * np.diff(times, prepend=0.0))
+    idx_95 = int(np.searchsorted(Q_cumulative, 0.95 * Q_total))
+    t_collection = float(times[min(idx_95, len(times) - 1)])
 
     return {
         "Q_collected": Q_total,
@@ -393,8 +444,9 @@ def build_cce_let_table(
     Returns
     -------
     table : pandas.DataFrame
-        Columns: LET_keV_um, Q_generated_fC, Q_collected_fC, CCE,
-        t_collection_ns.
+        Columns: LET_keV_um, Q_generated_fC, Q_collected_fC, CCE (clipped to
+        [0, 1]), CCE_raw (unclipped Q_collected / Q_generated), t_collection_ns,
+        converged.
     """
     LET_values = np.logspace(np.log10(let_min), np.log10(let_max), n_let_points)
 
@@ -410,24 +462,21 @@ def build_cce_let_table(
                 device_info, LET, x_ion_cm=x_ion_cm
             )
 
-            sim_result = simulate_single_particle(device_info, generation, contact=contact)
+            sim_result = simulate_single_particle(
+                device_info, generation, contact=contact
+            )
 
             Q_col = sim_result["Q_collected"]
             cce_raw = Q_col / Q_gen if Q_gen > 0 else float("nan")
-            # Physical ceiling: CCE cannot exceed 1 in a linear DD detector.
-            # AUDIT C4: the residual CCE>1 here is finite-step TRAPEZOIDAL
-            # QUADRATURE error on the collection-current pulse (~0.6% for the
-            # default ~40-step transient), NOT displacement current as the
-            # previous comment claimed -- extract_contact_current reads only the
-            # continuity-equation (conduction) contact current, and the measured
-            # CCE_raw (~1.006) matches the analytical Hecht ceiling (0.996) to
-            # within quadrature error. Enforce the bound, but warn if the excess
-            # is too large to be quadrature (would signal a real bug).
-            if not np.isnan(cce_raw) and cce_raw > 1.0 + _QUADRATURE_TOL:
+            # Physical ceiling: CCE cannot exceed 1 in a linear DD detector. The
+            # backward-Euler estimator gives CCE_raw <= 1 on the validated cases
+            # (the old post-injection trapezoid gave 1.0066, audit C4); the clip
+            # stays as a guard, with a warning if the excess is beyond numerics.
+            if not np.isnan(cce_raw) and cce_raw > 1.0 + _CCE_EXCESS_TOL:
                 logger.warning(
-                    f"LET={LET:.1f}: CCE_raw={cce_raw:.4f} exceeds physical "
-                    f"ceiling by >{_QUADRATURE_TOL:.0%}; likely a bug, not "
-                    f"quadrature error (Q_col={Q_col:.3e}, Q_gen={Q_gen:.3e})."
+                    f"LET={LET:.1f}: CCE_raw={cce_raw:.6f} exceeds the physical "
+                    f"ceiling by >{_CCE_EXCESS_TOL:g}; likely a bug "
+                    f"(Q_col={Q_col:.3e}, Q_gen={Q_gen:.3e})."
                 )
             cce = float(np.clip(cce_raw, 0.0, 1.0))
 
@@ -442,6 +491,8 @@ def build_cce_let_table(
                     "Q_generated_fC": Q_gen * 1e15,
                     "Q_collected_fC": Q_col * 1e15,
                     "CCE": cce,
+                    "CCE_raw": float(cce_raw),
+                    "converged": bool(sim_result["converged"]),
                     "t_collection_ns": t_coll_ns,
                 }
             )
@@ -454,6 +505,8 @@ def build_cce_let_table(
                     "Q_generated_fC": float("nan"),
                     "Q_collected_fC": float("nan"),
                     "CCE": float("nan"),
+                    "CCE_raw": float("nan"),
+                    "converged": False,
                     "t_collection_ns": float("nan"),
                 }
             )
@@ -502,6 +555,9 @@ def save_cce_let_table(table_df, filepath, geometry_info=None):
         "Q_collected_fC": table_df["Q_collected_fC"].tolist(),
         "t_collection_ns": table_df["t_collection_ns"].tolist(),
     }
+    for optional in ("CCE_raw", "converged"):  # build_cce_let_table columns
+        if optional in table_df:
+            data[optional] = table_df[optional].tolist()
 
     with open(filepath, "w") as f:
         json.dump(data, f, indent=2)
