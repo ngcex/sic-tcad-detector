@@ -154,7 +154,7 @@ not be read as "matches measured C-V" without that qualifier. The one genuinely
 independent check available is a comparison against Bruzzi & Verroi ("Epitaxial
 SiC Dosimeters and Flux Monitoring Detectors for Proton Therapy Beams," Materials
 2023, 16(10), 3643), an unrelated published 4H-SiC device our model was never
-calibrated to: ETNA's predicted depletion width at −40 V deviates 2.0% from
+calibrated to: ETNA's predicted depletion width (ε·A/C) at −40 V deviates 3.1% from
 that paper's reported endpoint. This is a narrow but real absolute-scale sanity
 check (two fitted endpoints, not a dense point-by-point overlay) — see
 `.planning/VALIDATION_LITERATURE.md` for the full comparison and caveats. The
