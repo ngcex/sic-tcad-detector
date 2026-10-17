@@ -13,7 +13,7 @@ from functools import lru_cache
 
 import numpy as np
 
-from etna.core.batched.extract import capacitance, depletion_width
+from etna.core.batched.extract import depletion_width
 from etna.core.batched.material import PARAMS, Q, graded_doping, thermal_voltage
 from etna.core.batched.poisson import PoissonBatch
 from etna.core.batched.transport import ContinuityBatch
@@ -99,15 +99,29 @@ class _Ramp:
 @dataclass
 class SweepResult:
     voltages: np.ndarray  # (K,) conventional sign (reverse bias negative)
-    W: np.ndarray  # (K, B) cm
-    C: np.ndarray  # (K, B) F/cm^2 (area = 1)
+    W: np.ndarray  # (K, B) cm, depletion EDGE (n/N_D = 0.5), metadata only
+    C: "np.ndarray | None"  # (K, B) F/cm^2 (area = 1), small-signal dQ/dV; None if not asked
     psi: "np.ndarray | None"  # (K, B, N) V; None unless keep_psi
     converged: np.ndarray  # (K, B) bool, cumulative along the sweep
 
 
 @serialized
-def reverse_sweep(pb, voltages, junction_pos, epi_thickness_cm, tol=1e-8, keep_psi=False):
+def reverse_sweep(
+    pb,
+    voltages,
+    junction_pos,
+    epi_thickness_cm,
+    tol=1e-8,
+    keep_psi=False,
+    capacitance=True,
+):
     """Solve all devices at each of ``voltages`` (<= 0, in the order given).
+
+    ``C`` is the small-signal capacitance dQ/dV (``PoissonBatch.small_signal_capacitance``),
+    the observable of a measured C-V; ``W`` is the n/N_D = 0.5 depletion edge, which is
+    NOT eps/C (they differ near full depletion: 9.500 vs 9.764 um at -10 V on the
+    pre-2026-10-17 default stack). ``capacitance=False`` skips C (``C`` is None), for
+    callers that only need W (reach-through refinement).
 
     Jumps of ~100 V (less at low T: the Newton clamp is in V_t units) between
     consecutive points may not converge in one solve; check ``converged``
@@ -116,17 +130,23 @@ def reverse_sweep(pb, voltages, junction_pos, epi_thickness_cm, tol=1e-8, keep_p
     """
     voltages = _check_voltages(voltages)
     ramp = _Ramp(pb, tol)
-    W, psis, conv = [], [], []
+    W, C, psis, conv = [], [], [], []
     for V in voltages:
         res = ramp.to(-V) if abs(V) > 1e-12 or ramp.Vc != 0.0 else None
-        n = res.n if res is not None else pb.solve(ramp.psi, tol=tol).n
-        W.append(depletion_width(pb.x, n, pb.donors, junction_pos, epi_thickness_cm))
+        if res is None:
+            res = pb.solve(ramp.psi, tol=tol)
+        W.append(depletion_width(pb.x, res.n, pb.donors, junction_pos, epi_thickness_cm))
+        if capacitance:
+            C.append(pb.small_signal_capacitance(res))
         if keep_psi:
             psis.append(ramp.psi.copy())
         conv.append(ramp.converged.copy())
-    W = np.array(W)
     return SweepResult(
-        voltages, W, capacitance(W), np.array(psis) if keep_psi else None, np.array(conv)
+        voltages,
+        np.array(W),
+        np.array(C) if capacitance else None,
+        np.array(psis) if keep_psi else None,
+        np.array(conv),
     )
 
 

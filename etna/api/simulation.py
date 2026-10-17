@@ -23,7 +23,7 @@ from etna.core.batched import (
     node_positions,
     reverse_sweep,
 )
-from etna.core.batched.extract import capacitance
+from etna.core.batched.material import EPS
 from etna.core.charge_collection import cce_vs_bias, cce_vs_fluence
 from etna.core.cv_analysis import cv_sweep
 from etna.core.dark_current import create_dark_current_device, dark_current_sweep
@@ -227,7 +227,11 @@ def _refine_reach_through(
         kws = [device_kwargs(config)]
         pb, _, _ = _engine_batch(kws)
         res = reverse_sweep(
-            pb, -lattice, kws[0]["substrate_thickness_cm"], kws[0]["epi_thickness_cm"]
+            pb,
+            -lattice,
+            kws[0]["substrate_thickness_cm"],
+            kws[0]["epi_thickness_cm"],
+            capacitance=False,
         )
     except Exception as e:  # pragma: no cover - defensive
         logger.info("reach-through refinement failed (%s); using the grid value", e)
@@ -331,7 +335,7 @@ def _reject_2d(configs, why):
             raise NotImplementedError(why)
 
 
-_CV_EMPTY = dict(arrays=("depletion_widths", "one_over_C_squared"))
+_CV_EMPTY = dict(arrays=("depletion_widths", "W_from_C", "one_over_C_squared"))
 _CCE_EMPTY = dict(arrays=("I_collected",), scalars={"I_generated": float("nan")})
 _ENGINE_FALLBACK = "batched engine did not converge"
 
@@ -368,7 +372,7 @@ def _cv_batch(configs, v_start, v_stop, n_points, capture):
                 fell_back.add(i)
                 continue
             W = res.W[:, j]
-            C = capacitance(W, configs[i].area_cm2)
+            C = res.C[:, j] * configs[i].area_cm2
             results[i] = SimResult(
                 config=configs[i],
                 sim_type="cv",
@@ -376,6 +380,7 @@ def _cv_batch(configs, v_start, v_stop, n_points, capture):
                 y=C,
                 metadata={
                     "depletion_widths": W,
+                    "W_from_C": EPS * configs[i].area_cm2 / C,
                     "one_over_C_squared": 1.0 / C**2,
                     "area_cm2": configs[i].area_cm2,
                     "truncated": False,
@@ -438,7 +443,9 @@ def _cce_batch(configs, v_start, v_stop, n_points, capture):
         sub = kws[0]["substrate_thickness_cm"]
         # Full-depletion voltage from a dark Poisson sweep on the same grid
         # (CCE carries no W of its own); cheap, does not touch the CCE numbers.
-        dark = reverse_sweep(pb, bias_array, sub, kws[0]["epi_thickness_cm"])
+        dark = reverse_sweep(
+            pb, bias_array, sub, kws[0]["epi_thickness_cm"], capacitance=False
+        )
         for j, i in enumerate(idxs):
             if dark.converged[:, j].all():
                 reach[i] = _refine_reach_through(
@@ -551,7 +558,8 @@ def run_cv(
     Builds a DD-initialized 1D devsim device from `config`, sweeps the bias
     range [v_start, v_stop] via `etna.core.cv_analysis.cv_sweep`, and
     wraps the result as `SimResult(sim_type="cv")` with bias on `x`,
-    capacitance on `y`, and depletion widths + 1/C^2 in `metadata`.
+    small-signal capacitance dQ/dV on `y`, and depletion edges, eps*A/C and
+    1/C^2 in `metadata`.
 
     Only 1D devices (`config.half_width_um is None`) are supported — core
     `cv_sweep` operates on the 1D DD device returned by `create_dd_device`.
@@ -598,8 +606,13 @@ def run_cv(
         sim_type="cv", x=bias voltages actually reached (V) — shorter than
         the requested [v_start, v_stop] sweep if the DD solver hit a
         convergence wall (devsim path only, deep reverse bias) partway
-        through, y=capacitance (F) for the same points, metadata contains
-        "depletion_widths" (cm), "one_over_C_squared", "area_cm2",
+        through, y=small-signal capacitance C = dQ/dV (F) for the same
+        points (the observable of a measured C-V; engine: exact linearisation,
+        devsim: central difference of the terminal charge, parity <= 1e-6;
+        before 2026-10-17 y was eps*A/W_edge), metadata contains
+        "depletion_widths" (cm, the n/N_D = 0.5 depletion EDGE, which is not
+        eps*A/C near full depletion), "W_from_C" (cm, eps*A/C, the width a
+        measured C implies), "one_over_C_squared", "area_cm2",
         "truncated" (True if the sweep stopped before v_stop), and
         "requested_v_stop" (the originally requested v_stop, for comparison
         against x.min() when truncated).
@@ -637,6 +650,7 @@ def _run_cv_devsim(config: DeviceConfig, bias_array) -> SimResult:
 
         metadata = {
             "depletion_widths": cv_result["depletion_widths"],
+            "W_from_C": cv_result["W_from_C"],
             "one_over_C_squared": 1.0 / cv_result["capacitance"] ** 2,
             "area_cm2": area,
             "truncated": cv_result["truncated"],
@@ -1214,7 +1228,9 @@ def run_cce_tilted_alpha(
     res = cce_sweep(pb, grid, sub, G_rate, T=config.T, N_A=config.N_A, N_D=nd)
     if not res.converged[:, 0].all():
         raise RuntimeError("run_cce_tilted_alpha: batched engine did not converge")
-    dark = reverse_sweep(pb, bias_array, sub, kws[0]["epi_thickness_cm"])
+    dark = reverse_sweep(
+        pb, bias_array, sub, kws[0]["epi_thickness_cm"], capacitance=False
+    )
     rt = None
     if dark.converged[:, 0].all():
         rt = _refine_reach_through(

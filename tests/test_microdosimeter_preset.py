@@ -30,8 +30,9 @@ def test_preset_full_depletion_is_30V(p_plus):
     r = etna.run_cv(etna.microdosimeter_config(p_plus), 0.0, -60.0, 121)
     assert r.metadata["solver"] == "batched"
     assert r.metadata["reach_through_V"] == pytest.approx(30.0, abs=0.05)
-    # 25 mm2 plateau; 4 mm2-equivalent 3.46e-11 F = the paper's Fig. 3b plateau
-    assert r.y[-1] == pytest.approx(2.160e-10, rel=2e-3)
+    # 25 mm2 plateau, small-signal C = dQ/dV (2026-10-17; it was eps*A/W_edge =
+    # 2.160e-10, -0.50 %); 4 mm2-equivalent 3.44e-11 F vs the paper's Fig. 3b 3.46e-11
+    assert r.y[-1] == pytest.approx(2.1493e-10, rel=2e-3)
 
 
 def test_tilted_generation_geometry():

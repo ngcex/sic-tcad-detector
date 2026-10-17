@@ -111,7 +111,10 @@ def test_cv_at_fluence_engine_matches_devsim(fluence, V_range):
     np.testing.assert_allclose(
         eng["depletion_widths"], dev["depletion_widths"], rtol=1e-9
     )
-    np.testing.assert_allclose(eng["capacitance"], dev["capacitance"], rtol=1e-9)
+    # C = dQ/dV since 2026-10-17: engine exact linearisation vs devsim +-1 mV central
+    # difference of the hole charge (independent; measured <= 3e-8). Was rtol 1e-9
+    # when both sides were eps*A/W_edge of the same W.
+    np.testing.assert_allclose(eng["capacitance"], dev["capacitance"], rtol=1e-6)
 
 
 def test_cv_at_fluence_beyond_phi_crit_still_none():

@@ -103,7 +103,10 @@ def main():
     return pb
 
 
-def devsim_ac(volts=(0.0, -10.0, -30.0), freqs=(1.0, 1e3)):
+def devsim_ac(volts=(0.0, -10.0, -30.0), freqs=(1.0, 1e3), cfg=None):
+    """devsim AC C (F/cm^2) per bias, {V: C at freqs[0]}. Run it in its own process and
+    end the process afterwards: devsim 2.10 cannot remove a circuit again
+    (delete_circuit / reset_devsim corrupt the next DC solve)."""
     import devsim
     import devsim.python_packages.simple_physics as sp
 
@@ -112,7 +115,7 @@ def devsim_ac(volts=(0.0, -10.0, -30.0), freqs=(1.0, 1e3)):
     from etna.core.poisson import extract_depletion_width_numerical
 
     reset_devsim_fully()
-    cfg = DeviceConfig()
+    cfg = DeviceConfig() if cfg is None else cfg
     info = build_device(cfg)
     dev, reg = info["device_name"], info["region_name"]
     bias = sp.GetContactBiasName("cathode")
@@ -124,6 +127,7 @@ def devsim_ac(volts=(0.0, -10.0, -30.0), freqs=(1.0, 1e3)):
     )
     print("== (b) devsim small-signal AC (cathode on V1, acreal = 1) ==")
     Vc_now = 0.0
+    out = {}
     for V in volts:
         target = -V
         steps = max(1, int(math.ceil(abs(target - Vc_now) / 0.5)))
@@ -146,14 +150,15 @@ def devsim_ac(volts=(0.0, -10.0, -30.0), freqs=(1.0, 1e3)):
             Ire = devsim.get_circuit_node_value(node="V1.I", solution="ssac_real")
             C = abs(Iim) / (2 * math.pi * f)  # F/cm^2 (1D)
             row.append((f, EPS / C * 1e4, Ire))
+            out.setdefault(float(V), C)
         We = extract_depletion_width_numerical(info)
         print(
             f"V = {V:+.0f} V  W_edge {We*1e4:.4f}  "
             + "  ".join(
-                f"f {f:g} Hz: W_C {w:.4f} um (Re I {re:.2e})" for f, w, re in row
+                f"f {f:g} Hz: W_C {w:.7f} um (Re I {re:.2e})" for f, w, re in row
             )
         )
-    devsim.delete_device(device=dev)
+    return out
 
 
 if __name__ == "__main__":
