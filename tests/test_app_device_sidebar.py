@@ -102,7 +102,10 @@ def test_sidebar_default_is_the_nplus_stack():
 
     at = AppTest.from_file("app/main.py", default_timeout=120)
     at.run()
-    assert at.session_state["device_config"] == DeviceConfig()
+    # the sidebar models the 4 mm2 dosimeter; DeviceConfig keeps its 1e-4 cm2 default
+    import dataclasses
+
+    assert at.session_state["device_config"] == dataclasses.replace(DeviceConfig(), area_cm2=0.04)
     assert not at.sidebar.checkbox(key="cfg_legacy_on").value
     texts = " ".join(c.value for c in at.sidebar.caption)
     assert "Inside the 1D engine/devsim cross-check domain" in texts
@@ -110,4 +113,4 @@ def test_sidebar_default_is_the_nplus_stack():
     at.run()
     from etna import legacy_config
 
-    assert at.session_state["device_config"] == legacy_config()
+    assert at.session_state["device_config"] == dataclasses.replace(legacy_config(), area_cm2=0.04)
