@@ -1,0 +1,5 @@
+ref_s1nm x_edge_um=1 x_out_um=0 surf_ps_um=0.001
+qp5e11_s1nm Qf=5e11 surf_ps_um=0.001
+qp1e12_s1nm Qf=1e12 surf_ps_um=0.001 qcont=0.5
+qp2e12_s1nm Qf=2e12 surf_ps_um=0.001 qcont=0.25
+fp5_meshfine fp_um=5 edge_ps_um=0.01 far_ps_um=2
