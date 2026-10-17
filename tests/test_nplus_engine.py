@@ -70,7 +70,8 @@ def test_nplus_cv_potential_and_cce_match_devsim():
 
     c = cce_vs_bias(BIASES, device_kwargs=dict(GRADED, **NPLUS))
     G = alpha_generation(x, SUB, 15e-4, 1e18, epi_end=SUB + EPI)
-    ce = cce_sweep(pb, BIASES, SUB, G)
+    # mobilities at the graded N_D_bulk, as the devsim builder (mobility_doping)
+    ce = cce_sweep(pb, BIASES, SUB, G, N_D=GRADED["N_D_bulk"])
     assert ce.converged.all()
     np.testing.assert_allclose(ce.cce[:, 0], c["cce_values"], atol=1e-9)
     assert np.all(ce.J_collected[:, 0] / ce.J_generated < 1.0)  # raw, before the clip

@@ -78,6 +78,21 @@ DEFAULT_STACK = {
 # Historical name of the same record (it was the opt-in calibration before the flip).
 NPLUS_CALIBRATION = DEFAULT_STACK
 
+
+def mobility_doping(N_D, doping_profile, N_D_bulk):
+    """Epi donor density (cm^-3) at which BOTH scalar mobilities are evaluated.
+
+    Single rule shared by the devsim builders (1D, 2D, alternative structures) and the
+    batched engine: uniform profile -> ``N_D`` (``DEFAULT_N_D`` when None); graded
+    profile -> the bulk epi doping ``N_D_bulk`` (``DEFAULT_STACK["N_D_bulk"]`` when
+    None), the doping of most of the sensitive volume. Before 2026-10-17 graded devices
+    used ``DEFAULT_N_D`` (1.07e15) whatever N_D_bulk was, so a changed N_D_bulk (e.g. the
+    app sidebar) was silently ignored by the transport.
+    """
+    if doping_profile == "graded":
+        return float(DEFAULT_STACK["N_D_bulk"] if N_D_bulk is None else N_D_bulk)
+    return float(DEFAULT_N_D if N_D is None else N_D)
+
 # LEGACY model (the default before the n+ flip), kept so old numbers stay reproducible:
 # cathode contact directly on the n- epi (no n+; non-convergence wall at deep reverse bias,
 # a contact artefact), p+ 1 um, the old DeviceConfig doping, N_t 2.8e12, E_t 0.65.
@@ -294,9 +309,10 @@ def create_sic_device(
     # sensitive volume; holes are the minority carriers collected there). Before 2026-10-17
     # mu_p was evaluated at the p+ doping N_A (1e19: 75.7 vs 121 cm2/Vs at 1.07e15;
     # .issues/audit-v7 A-03). Scalar per region: the p+ and n+ inherit the epi values.
-    # For graded profiles N_D is the uniform fallback (DEFAULT_N_D) when not given.
-    mu_n = mobility_caughey_thomas_T(N_D, T, "electron", params)
-    mu_p = mobility_caughey_thomas_T(N_D, T, "hole", params)
+    # Graded profiles: the bulk epi doping N_D_bulk (mobility_doping; was DEFAULT_N_D).
+    N_D_mobility = mobility_doping(N_D, doping_profile, N_D_bulk)
+    mu_n = mobility_caughey_thomas_T(N_D_mobility, T, "electron", params)
+    mu_p = mobility_caughey_thomas_T(N_D_mobility, T, "hole", params)
     devsim.set_parameter(
         device=device_name,
         region=region_name,
@@ -386,6 +402,7 @@ def create_sic_device(
         "params": params,
         "mu_n": mu_n,
         "mu_p": mu_p,
+        "N_D_mobility": N_D_mobility,
         "num_nodes": num_nodes,
         "doping_profile": doping_profile,
         "N_D_junction": N_D_junction,
