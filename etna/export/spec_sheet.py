@@ -271,7 +271,7 @@ def build_spec(config, report=None) -> dict:
                 peak_E_V_per_cm=pk[0],
                 peak_depth_um=pk[1],
                 peak_note=(
-                    "excl. the nm Debye spike at the epi/n+ interface" if pk[2] else ""
+                    "excl. the nm-scale spikes at the abrupt doping steps (mesh/estimator dependent)" if pk[2] else ""
                 ),
             )
         elif field.mesh is not None and "ElectricField" in field.mesh.node_values:

@@ -240,7 +240,7 @@ class DepletionScene(Scene):
             pk = fr["peak_E_V_per_cm"]
             pk_txt = "n/a" if pk is None else f"{pk:.3g} V/cm"
             if fr["peak_excludes_interface"]:
-                pk_txt += " (excl. epi/n+ interface Debye spike)"
+                pk_txt += " (excl. spikes at abrupt doping steps)"
             t = Text(
                 f"V = {fr['bias_V']:.0f} V    W = {fr['W_um']:.2f} µm    peak |E| = {pk_txt}",
                 font_size=19,

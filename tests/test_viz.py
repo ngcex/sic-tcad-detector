@@ -30,8 +30,8 @@ def _fake_cv(cfg, v_start=0.0, v_stop=-60.0, n_points=40):
 
 
 def _fake_field(cfg, bias_V=-50.0):
-    x = np.array([0.0, 0.3, 5.0, 10.25, 10.3, 10.35, 11.3])
-    E = np.array([0.0, 1e5 + 100 * abs(bias_V), 3e4, 2e4, 9e5, 1e4, 0.0])
+    x = np.array([0.0, 0.3, 0.5, 5.0, 10.25, 10.3, 10.35, 11.3])
+    E = np.array([0.0, 9e5, 1e5 + 100 * abs(bias_V), 3e4, 2e4, 9e5, 1e4, 0.0])
     return SimResult(cfg, "field", x, E, dict(bias_V=bias_V, solver="devsim"))
 
 
@@ -50,7 +50,7 @@ def test_animation_data_uses_solvers(monkeypatch):
     assert d["label"] == VALIDATION_LABEL
     assert [f["bias_V"] for f in d["frames"]] == [0.0, -5.0, -20.0]
     assert d["frames"][1]["W_um"] == pytest.approx(1.7 + 0.8 * 5)
-    # the 9e5 Debye spike at the epi/n+ step (10.3 um) is excluded from the peak
+    # the 9e5 spikes at both abrupt steps (0.3 and 10.3 um) are excluded from the peak
     assert d["frames"][2]["peak_E_V_per_cm"] == pytest.approx(1e5 + 2000)
     assert all(f["peak_excludes_interface"] for f in d["frames"])
     assert d["E_axis_max"] == pytest.approx(1.15 * (1e5 + 2000))
