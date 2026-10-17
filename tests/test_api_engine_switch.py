@@ -29,7 +29,10 @@ def test_run_cv_matches_devsim_on_lattice(name):
     ref = cv_sweep(build_device(cfg), np.linspace(0.0, -20.0, 9), area=cfg.area_cm2)
     reset_devsim_fully()
     np.testing.assert_allclose(res.metadata["depletion_widths"], ref["depletion_widths"], rtol=1e-10)
-    np.testing.assert_allclose(res.y, ref["capacitance"], rtol=1e-10)
+    # C = dQ/dV since 2026-10-17 (engine: exact linearisation; devsim: +-1 mV central
+    # difference of the hole charge), independent on the two paths: <= 3e-8 measured.
+    # Was rtol 1e-10 when both sides were eps*A/W_edge of the same W.
+    np.testing.assert_allclose(res.y, ref["capacitance"], rtol=1e-6)
     np.testing.assert_array_equal(res.x, ref["voltages"])
 
 
