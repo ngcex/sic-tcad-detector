@@ -22,3 +22,14 @@ epi spacing, ~330 extra rows on a 10 um epi), not in the n+. Candidates move W b
 converged to 5e-6..3.5e-5 in W. Decision (engine2d already serves the app in ~1 s per 2D
 point; devsim is the fallback/validation path): keep the fine mesh. Revisit if devsim 2D
 builds become a bottleneck. Data: lab/solver2d/notes/nplus_mesh_gate.csv, LOG.md.
+
+## -30 V C-V gap (+2.56 %): fringe test (lab/finite_implant, 2026-10-17)
+2D finite p+ implant slice (devsim): fringe capacitance is ~1.5 % of the plane C at -30 V
+(2.2 % peak at reach-through), not 0.1-1 %. Refitting 0/-10 V with it closes 60 % of the gap
+with no charge; it closes it exactly only with oxide charge Qf ~ +2e12 cm^-2 (high for
+SiO2/4H-SiC), plates make -10 V worse. NOT ruled out. Four explanations each reproduce the
+three paper points with one knob: fringe+Qf, 530 nm buffer, 9.75 um epi, ~2.5 % larger area;
+they separate only with the full measured C-V (knee -5..-15 V; eps*A/C at -5 V: buffer 6.55,
+9.75 um epi 6.36, fringe 7.08 um) and C-V on two die sizes. Needs data from the owner.
+Also open: temperature_sweep.py:116-119 and charge_collection.py:135 still use N_ref*0.001 for
+mobility doping; figures/cv_validation_bruzzi2023.png stale.
