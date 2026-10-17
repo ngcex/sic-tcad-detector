@@ -296,9 +296,9 @@ def cce_vs_dose_rate(
     n_continuation_steps : int
         Steps for generation-rate continuation ramp. Default: 5.
     N_D_junction : float
-        Donor concentration at junction (cm^-3). Default: DEFAULT_STACK (2.974271e15).
+        Donor concentration at junction (cm^-3). Default: DEFAULT_STACK (2.958237e15).
     N_D_bulk : float
-        Donor concentration in bulk epi (cm^-3). Default: DEFAULT_STACK (6.335936e13).
+        Donor concentration in bulk epi (cm^-3). Default: DEFAULT_STACK (8.252732e13).
     L_transition : float
         Transition length for graded doping profile (cm). Default: DEFAULT_STACK (0.987 um).
     device_kwargs : dict or None

@@ -378,9 +378,13 @@ def create_sic_2d_device(
         value=V_t,
     )
 
-    # Doping- and temperature-dependent mobility
+    # Doping- and temperature-dependent mobility, both carriers at the EPI doping N_D (the
+    # sensitive volume; holes are the minority carriers collected there). Before 2026-10-17
+    # mu_p was evaluated at the p+ doping N_A (1e19: 75.7 vs 121 cm2/Vs at 1.07e15;
+    # .issues/audit-v7 A-03). Scalar per region: the p+ and n+ inherit the epi values.
+    # For graded profiles N_D is the uniform fallback (DEFAULT_N_D) when not given.
     mu_n = mobility_caughey_thomas_T(N_D, T, "electron", params)
-    mu_p = mobility_caughey_thomas_T(N_A, T, "hole", params)
+    mu_p = mobility_caughey_thomas_T(N_D, T, "hole", params)
     devsim.set_parameter(
         device=device_name,
         region=region_name,

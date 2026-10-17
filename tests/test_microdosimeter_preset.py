@@ -30,8 +30,9 @@ def test_preset_full_depletion_is_30V(p_plus):
     r = etna.run_cv(etna.microdosimeter_config(p_plus), 0.0, -60.0, 121)
     assert r.metadata["solver"] == "batched"
     assert r.metadata["reach_through_V"] == pytest.approx(30.0, abs=0.05)
-    # 25 mm2 plateau; 4 mm2-equivalent 3.46e-11 F = the paper's Fig. 3b plateau
-    assert r.y[-1] == pytest.approx(2.160e-10, rel=2e-3)
+    # 25 mm2 plateau, small-signal C = dQ/dV (2026-10-17; it was eps*A/W_edge =
+    # 2.160e-10, -0.50 %); 4 mm2-equivalent 3.44e-11 F vs the paper's Fig. 3b 3.46e-11
+    assert r.y[-1] == pytest.approx(2.1493e-10, rel=2e-3)
 
 
 def test_tilted_generation_geometry():
@@ -78,7 +79,8 @@ def test_tilted_cce_vs_bias_pins_lab_numbers():
     n = r.y / r.y[V == -50.0][0]
     at = lambda v: n[V == v][0]
     # default: epi-only generation (p+ = dead layer), bragg shape, no metal
-    assert at(0.0) == pytest.approx(0.9488, abs=5e-4)
+    # hole mobility at the epi doping since 2026-10-17 (was N_A, audit-v7 A-03): 0.9488 -> 0.9668 (moves AWAY from the digitised 0.9083; not tuned)
+    assert at(0.0) == pytest.approx(0.9668, abs=5e-4)
     assert at(-10.0) == pytest.approx(0.9993, abs=3e-4)
     # documented model limitation: flat from -20 V (data: 0.9904 -> 1.000 to -50 V)
     assert at(-20.0) > 0.999
@@ -101,3 +103,20 @@ def test_tilted_cce_refuses_outside_engine_domain():
         etna.run_cce_tilted_alpha(etna.microdosimeter_config(), 1.0, -10.0, 3)
     with pytest.raises(NotImplementedError):
         etna.run_cce_tilted_alpha(etna.microdosimeter_config(half_width_um=50.0))
+
+
+def test_run_cce_cold_start_at_minus_50V_stays_on_the_engine():
+    """A cold 0 -> -50 V Poisson jump does not converge on the preset (uniform 3.06e14):
+    run_cce used to fall back to devsim silently. The sweeps now walk 0 V in <= 10 V
+    Poisson sub-steps (as run_cce_tilted_alpha)."""
+    from etna.api import simulation as sim
+
+    c = etna.microdosimeter_config()
+    r = etna.run_cce(c, -50.0, -60.0, 3)
+    assert r.metadata["solver"] == "batched"
+    assert "fallback_reason" not in r.metadata
+    assert r.metadata["reach_through_V"] == pytest.approx(30.0, abs=0.05)
+    d = sim._run_cce_devsim(c, np.array([-50.0, -55.0, -60.0]))
+    np.testing.assert_allclose(r.y, d.y, atol=1e-6)
+    cv = etna.run_cv(c, -50.0, -60.0, 3)
+    assert cv.metadata["solver"] == "batched"

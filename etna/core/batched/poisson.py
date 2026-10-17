@@ -119,6 +119,46 @@ def _newton_batch(
         conv[bi] = converged
 
 
+@njit(cache=True, parallel=True)
+def _dpsi_dvc_batch(n_hat, p_hat, lam2, inv_h, v, out):
+    """Small-signal response du/du_c of a converged flat-quasi-Fermi Poisson state.
+
+    Linearises F(u; u_n = u_c) = 0 in the cathode bias u_c = V_cathode/V_t (phi_n
+    follows the cathode, phi_p the anode): J du = -dF/du_c, dF_i/du_c = v_i n^_i, with
+    du_0 = 0 (anode) and du_{N-1} = 1 (cathode Dirichlet). J is the Newton Jacobian.
+    Then out[b] = sum_i v_i p^_i du_i, the (scaled) hole charge removed per unit u_c.
+    """
+    B, N = n_hat.shape
+    for bi in prange(B):
+        l2 = lam2[bi]
+        cp = np.empty(N)
+        dp = np.empty(N)
+        du = np.empty(N)
+        cp[0] = 0.0
+        dp[0] = 0.0  # du_0 = 0
+        for i in range(1, N - 1):
+            a = l2 * inv_h[i - 1]
+            c = l2 * inv_h[i]
+            b = -l2 * (inv_h[i - 1] + inv_h[i]) - v[i] * (p_hat[bi, i] + n_hat[bi, i])
+            r = -v[i] * n_hat[bi, i]
+            if i == N - 2:
+                r -= c  # du_{N-1} = 1 moved to the rhs
+                c = 0.0
+            m = 1.0 / (b - a * cp[i - 1])
+            cp[i] = c * m
+            dp[i] = (r - a * dp[i - 1]) * m
+        du[N - 1] = 1.0
+        du[0] = 0.0
+        nxt = 0.0
+        for i in range(N - 2, 0, -1):
+            du[i] = dp[i] - cp[i] * nxt
+            nxt = du[i]
+        s = 0.0
+        for i in range(1, N - 1):
+            s += v[i] * p_hat[bi, i] * du[i]
+        out[bi] = s
+
+
 class PoissonBatch:
     """Fixed per-batch data; call solve() repeatedly along a bias ramp."""
 
@@ -186,8 +226,19 @@ class PoissonBatch:
         iters = np.zeros(B, dtype=np.int64)
         conv = np.zeros(B, dtype=np.bool_)
         _newton_batch(
-            u, u_n, u_p, self._D_hat, self.log_ni_hat, self.lam2,
-            self._inv_h, self.v, tol, max_iter, clamp, iters, conv,
+            u,
+            u_n,
+            u_p,
+            self._D_hat,
+            self.log_ni_hat,
+            self.lam2,
+            self._inv_h,
+            self.v,
+            tol,
+            max_iter,
+            clamp,
+            iters,
+            conv,
         )
         lnni = self.log_ni_hat[:, None]
         n = self.N0[:, None] * np.exp(np.minimum(u - u_n + lnni, EXP_CLAMP))
@@ -195,3 +246,21 @@ class PoissonBatch:
         return PoissonResult(
             psi=u * Vt, n=n, p=p, iterations=int(iters.max()), converged=conv
         )
+
+    def small_signal_capacitance(self, res):
+        """Small-signal C = dQ/dV (F/cm^2, area 1) of each device at a converged state.
+
+        ``res`` is a flat-quasi-Fermi PoissonResult (dark reverse bias). Q is the
+        terminal charge: holes leave only through the anode and electrons only through
+        the cathode (generation/recombination are negligible in the quasi-static
+        limit), so dQ/dV = q d(sum_i v_i p_i)/dV_cathode, evaluated exactly (no finite
+        difference) from one linear solve with the Newton Jacobian. This is the C of a
+        measured (low-frequency) C-V, i.e. what W = eps*A/C refers to. It agrees with
+        devsim's small-signal AC solve to ~1e-8 (lab/microdosimeter/bench/cv_gate.py,
+        tests/test_cv_small_signal.py); it is NOT eps/W_edge of the n/N_D = 0.5 edge.
+        """
+        n_hat = np.ascontiguousarray(res.n / self.N0[:, None])
+        p_hat = np.ascontiguousarray(res.p / self.N0[:, None])
+        out = np.empty(self.B)
+        _dpsi_dvc_batch(n_hat, p_hat, self.lam2, self._inv_h, self.v, out)
+        return Q * self.N0 * out / self.V_t

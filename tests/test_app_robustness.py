@@ -324,8 +324,9 @@ def test_reach_through_found_with_nplus(epi):
 def test_run_radiation_damage_forwards_valid_and_reason():
     cfg = DeviceConfig()
     phi_c = sim.compensation_fluence(cfg, 62)
-    # N_D_bulk / (eta 5 * kappa(62 MeV)): 6.335936e13 -> 3.62e13 (legacy 8.82e13 -> 5.04e13)
-    assert 3.4e13 < phi_c < 3.9e13
+    # N_D_bulk / (eta 5 * kappa(62 MeV)): 8.252732e13 -> 4.72e13 (legacy 8.82e13 -> 5.04e13;
+    # 6.335936e13 -> 3.62e13 before the 2026-10-17 small-signal C recalibration)
+    assert 4.5e13 < phi_c < 4.9e13
     res = sim.run_radiation_damage(
         cfg, fluences=np.array([0.5 * phi_c, 2.0 * phi_c]), V_bias=-20.0,
         proton_energy_MeV=62,

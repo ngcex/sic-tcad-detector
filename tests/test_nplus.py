@@ -56,13 +56,14 @@ def test_invalid_nplus_rejected():
 
 def test_cce_with_nplus_matches_spike_and_stays_below_one():
     """Raw collected/generated ratio (before the [0, 1] clip) with the balanced extraction.
-    Spike (epi-only generation): 0.998867 0.999562 0.999708 0.999778 0.999820."""
+    Spike (epi-only generation): 0.998867 0.999562 0.999708 0.999778 0.999820; with the
+    hole mobility at the epi doping since 2026-10-17 (was N_A, audit-v7 A-03): 0.999283 0.999721 0.999813 0.999858 0.999885."""
     r = cce_vs_bias(-np.arange(10.0, 55.0, 10.0), device_kwargs=dict(NPLUS, **SPIKE_1D))
     assert not r["truncated"]
     raw = np.asarray(r["I_collected"]) / r["I_generated"]
     assert np.all(raw < 1.0)
     np.testing.assert_allclose(
-        raw, [0.998867, 0.999562, 0.999708, 0.999778, 0.999820], atol=2e-6
+        raw, [0.999283, 0.999721, 0.999813, 0.999858, 0.999885], atol=2e-6
     )
 
 
@@ -109,7 +110,8 @@ def test_device_kwargs_carry_nplus_explicitly():
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize("gen_in_nplus, expected", [(False, 0.9995626), (True, 0.9619415)])
+# 0.9995626 / 0.9619415 before the hole mobility at the epi doping since 2026-10-17 (was N_A, audit-v7 A-03)
+@pytest.mark.parametrize("gen_in_nplus, expected", [(False, 0.9997212), (True, 0.9621150)])
 def test_2d_cce_with_nplus(gen_in_nplus, expected):
     """2D devsim (hw 25, -20 V, n+ 1 um): balanced raw CCE <= 1, equal to the 1D value
     (0.999562, epi-only G), laterally flat; the direct contact current gives 1.0136 here."""

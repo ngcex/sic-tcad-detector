@@ -19,15 +19,19 @@ from etna.core.engine2d import (
     lateral_cce_scan_2d,
 )
 
-# NPLUS_CALIBRATION stack (p+ 0.3 um, n+ 1 um 1e19, recalibrated graded doping)
+from etna.core.device import DEFAULT_STACK
+
+# NPLUS_CALIBRATION stack (p+ 0.3 um, n+ 1 um 1e19, recalibrated graded doping; read from
+# the record: re-checked on the 2026-10-17 small-signal-C recalibration, was 2.974271e15 /
+# 6.335936e13)
 STACK = dict(
     substrate_thickness_cm=0.3e-4,
-    N_D_junction=2.974271e15,
+    N_D_junction=DEFAULT_STACK["N_D_junction"],
     L_transition=0.987e-4,
     nplus_thickness_cm=1e-4,
     N_D_nplus=1e19,
 )
-ND_BULK = 6.335936e13
+ND_BULK = DEFAULT_STACK["N_D_bulk"]
 
 
 class TestStackEligibility:
@@ -95,7 +99,7 @@ class TestStackEligibility:
             40.0,
             dict(
                 substrate_thickness_cm=0.3e-4,
-                N_D_junction=2.974271e15,
+                N_D_junction=DEFAULT_STACK["N_D_junction"],
                 L_transition=0.987e-4,
                 nplus_thickness_cm=None,  # explicit: the builder default is the n+ stack
             ),
@@ -114,4 +118,4 @@ def test_stack_lateral_scan_matches_devsim(V, kw):
         devsim.delete_device(device=name)
     np.testing.assert_allclose(e["cce_values"], d["cce_values"], rtol=0, atol=1e-10)
     assert e["device_info"]["substrate_thickness_cm"] == pytest.approx(0.3e-4)
-    assert e["device_info"]["N_D_junction"] == 2.974271e15
+    assert e["device_info"]["N_D_junction"] == DEFAULT_STACK["N_D_junction"]

@@ -184,13 +184,22 @@ def build_spec(config, report=None) -> dict:
         "analytic_V_fd_definition": VFD_DEFINITION,
     }
 
-    # C-V: W at the measurement biases
+    # C-V: W at the measurement biases. W_um is eps*A/C of the small-signal C (y), the
+    # quantity a measured W = eps*A/C is; W_edge_um is the n/N_D = 0.5 depletion edge.
     cvd = {"available": cv is not None}
     if cv is not None:
-        W = np.asarray(cv.metadata.get("depletion_widths", []), dtype=float) * 1e4
+        from etna.core.batched.material import EPS
+
+        W = EPS * config.area_cm2 / np.asarray(cv.y, dtype=float) * 1e4
+        We = np.asarray(cv.metadata.get("depletion_widths", []), dtype=float) * 1e4
+        at = lambda arr: {
+            f"{v:g} V": _f(_interp_at(cv.x, arr, v)) for v in (0.0, -10.0, -30.0)
+        }
         cvd.update(
             bias_range_V=[float(np.max(cv.x)), float(np.min(cv.x))],
-            W_um={f"{v:g} V": _f(_interp_at(cv.x, W, v)) for v in (0.0, -10.0, -30.0)},
+            W_um=at(W),
+            W_definition="eps*A/C, C = small-signal dQ/dV (as the measured W)",
+            W_edge_um=at(We) if We.size == np.size(cv.x) else {},
             C_at_minus30V_F=_f(_interp_at(cv.x, cv.y, -30.0)),
         )
     w30 = cvd.get("W_um", {}).get("-30 V")
@@ -287,8 +296,8 @@ def build_spec(config, report=None) -> dict:
         VALIDATION_LABEL,
         "Measurement comparisons (the 'stated' exceptions): "
         + (
-            "C-V W(-30 V) vs Photons Fig. 4b (see cv.systematic); dark current is a "
-            "calibration to the measured bound."
+            "C-V eps*A/C at -30 V vs Photons Fig. 4b (see cv.systematic; 0 / -10 V are "
+            "calibration inputs); dark current is a calibration to the measured bound."
             if ref
             else "none for this config " "(they apply to the reference device only)."
         ),
@@ -387,9 +396,16 @@ def spec_to_markdown(spec: dict) -> str:
             f"- Bias range: {cv['bias_range_V'][0]:g} to {cv['bias_range_V'][1]:g} V"
         )
         L.append(
-            "- W: "
+            "- W = eps*A/C (small-signal C, as measured): "
             + ", ".join(f"{k}: {_g(v, '{:.3f}', 'um')}" for k, v in cv["W_um"].items())
         )
+        if cv.get("W_edge_um"):
+            L.append(
+                "- depletion edge (n/N_D = 0.5): "
+                + ", ".join(
+                    f"{k}: {_g(v, '{:.3f}', 'um')}" for k, v in cv["W_edge_um"].items()
+                )
+            )
         L.append(f"- C(-30 V): {_g(cv['C_at_minus30V_F'], '{:.4g}', 'F')}")
     else:
         L.append("- not available in the report")

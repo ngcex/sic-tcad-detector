@@ -194,7 +194,70 @@ Verdict:
 - `etna.run_cce_tilted_alpha(config, v_start=0, v_stop=-60, n_points=61, theta_deg=65,
 alpha_range_um=18, dead_layer_um=0, shape="bragg", generation_in_p_plus=False)`: engine
   only (OutsideModelValidity outside _ENGINE_BOX); walks from 0 V in <= 10 V steps internally
-  (a cold Gummel start at -50 V does not converge -- run_cce silently falls back to devsim
+  (a cold start at -50 V did not converge -- run_cce fell back to devsim; fixed, section 8
   there). Reproduces the lab nominal rows exactly; normal-incidence/box/15 um/epi-only limit
   matches run_cce to 9e-5 (the 0.3 um origin shift of the profile).
 - tests/test_microdosimeter_preset.py: 7 tests, ~2-3 s.
+
+## 6. GATE: independent check of W_C (`bench/cv_gate.py`, notes/cv_gate.out)
+
+Reviewer decision: verify W_C = eps/(dQ/dV) independently before any production change.
+Production DEFAULT_STACK, W in um:
+
+| method                                                         | 0 V    | -10 V  | -30 V  |
+| -------------------------------------------------------------- | ------ | ------ | ------ |
+| W_edge (production run_cv)                                     | 1.7000 | 9.5000 | 9.8995 |
+| lab W_C (plane x0 = 0.5 um, DV 0.25 V)                         | 1.708  | 9.764  | 9.981  |
+| (a) engine, q d(sum v n)/dV (electrons, no plane), DV 0.05     | 1.7106 | 9.7644 | 9.9807 |
+| (a) engine, q d(sum v p)/dV (holes), DV 0.05 / 0.10 / 0.25     | 1.7106 / 1.7103 / 1.7081 | 9.7644 / 9.7643 / 9.7637 | 9.9807 (all) |
+| (a) engine, n-side space charge from x0                        | = electrons to 1e-4 | | |
+| (b) devsim small-signal AC, Im(I_V1)/(2 pi f), f = 1 Hz, 1 kHz | 1.7107 | 9.7644 | 9.9807 |
+
+- CONFIRMED. The devsim AC solve (DD device of build_device(DeviceConfig()), cathode
+  re-attached to a voltage source with acreal = 1; quasi-static, f-independent) agrees with
+  the engine charge derivatives to 1e-4 um at all three biases; electrons, holes and the
+  plane field coincide (discrete Gauss law + carrier conservation: electrons enter only at
+  the cathode, holes only at the anode). The lab's 0 V value (1.708) is the DV = 0.25 V
+  central difference (curvature, the +DV point is forward bias); DV -> 0 gives 1.7107.
+- The n-side space charge counted from the METALLURGICAL junction is not the terminal
+  charge (4.67 / 18.9 / 15.6 um): the p+ hole Debye tail lies on the n side of x_j and moves
+  with bias; its holes leave through the anode, so it belongs to the p-side charge. This is
+  why buffer_w.py used a carrier-free plane.
+- Re(I_V1) ~ 1e-5 A/cm2 per V, f-independent, sign-random: the round-off floor of the
+  majority-carrier contact current (see extract_steady_state_current), irrelevant to Im.
+- Consequence: the observable of the paper's W (eps A / C of a measured C) is W_C; the
+  production stack calibrated on W_edge misses its own -10 V point by +2.78 % in W_C.
+  Production change follows (feat/cv-observable).
+
+Production (feat/cv-observable): run_cv / cv_sweep / cv_at_fluence return C = dQ/dV.
+Engine: exact linearisation (PoissonBatch.small_signal_capacitance, = the AC solve to 1e-8).
+devsim path: +-1 mV central difference of sum(NodeVolume*Holes) on the DD state (vs the
+engine: 2.5e-8 at 0 V .. 1.5e-12 at -30 V; Richardson 0.01/0.02 V: 5e-11). The devsim AC
+solve is NOT used in production: in devsim 2.10 a circuit cannot be removed again
+(delete_circuit() raises and the next DC solve dies with CIRCUIT_UNEXPECTED; reset_devsim()
+with a circuit present -> Newton UNEXPECTED on the next device). It stays as an own-process
+pin (tests/test_cv_small_signal.py::test_devsim_ac_solve_agrees_with_both_paths).
+Recalibration of DEFAULT_STACK on eps*A/C: lab/solver2d/notes/LOG.md (end).
+## 7. Hole mobility at the epi doping (feat/cv-observable, .issues/audit-v7 A-03)
+
+Both engines evaluated the scalar mu_p at N_A = 1e19 (75.7 cm2/Vs); holes are the minority
+carriers collected in the n- epi. Now mu_p(N_D) identically in device.py / device2d.py /
+alternative_structures.py and the batched cce_sweep (121.1 at 1.07e15; the preset's 3.06e14
+for the microdosimeter). Engine vs devsim CCE 0..-10 V: 1.3e-11. Not tuned to data.
+
+| quantity                                         | mu_p(N_A)                                 | mu_p(N_D)                                 |
+| ------------------------------------------------ | ----------------------------------------- | ----------------------------------------- |
+| default run_cce 0/-2/-4/-6/-8/-10 V              | 0.7715 0.8978 0.9668 0.9914 0.9977 0.9989 | 0.8384 0.9320 0.9787 0.9946 0.9986 0.9993 |
+| default run_cce -30 / -50 V                      | 0.999707 / 0.999820                       | 0.999812 / 0.999884                       |
+| microdosimeter tilted CCE 0 V (normalised -50 V) | 0.9488                                    | 0.9668 (data 0.9083: further away)        |
+| microdosimeter tilted raw 0 / -5 / -10 V         | 0.9486 / 0.9905 / 0.9992                  | 0.9667 / 0.9940 / 0.9995                  |
+| microdosimeter p+ 1 um, raw 0 V                  | 0.9598                                    | 0.9740                                    |
+| dark 4 mm2 -10 / -60 V (pA)                      | 6.07738 / 18.000001                       | 6.07754 / 18.000001 (N_t not re-fitted)   |
+| microdosimeter dark 25 mm2 -60 V (pA)            | 112.4886                                  | 112.4886                                  |
+## 8. run_cce cold start (feat/cv-observable)
+
+The section-5 failure was the dark POISSON jump 0 -> -50 V (not Gummel): the cumulative
+ramp flag went False and run_cce fell back to devsim (2.24 s). The batched _Ramp now walks
+jumps > 10 V in Poisson-only sub-steps (reverse_sweep / cce_sweep max_step_V = 10; Gummel
+only at the requested biases): run_cce(preset, -50, -60, 3) stays on the engine (0.21 s),
+matches devsim to 1e-6, reach-through 30.0 V found; run_cv likewise.
