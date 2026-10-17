@@ -187,7 +187,9 @@ def cv_sweep(device_info, V_range, eps_r=9.7, area=1.0):
         # Ramp cathode from the current state in equal steps of at most 0.5 V
         # that end exactly on the target (an off-lattice target used to stop at
         # the last multiple of 0.5 V below it while being labelled V_target).
-        n_steps = max(1, int(np.ceil(abs(V_cathode_target - current_V_cathode) / 0.5 - 1e-9)))
+        n_steps = max(
+            1, int(np.ceil(abs(V_cathode_target - current_V_cathode) / 0.5 - 1e-9))
+        )
         V_steps = np.linspace(current_V_cathode, V_cathode_target, n_steps + 1)[1:]
         converged = True
 
@@ -243,6 +245,76 @@ def cv_sweep(device_info, V_range, eps_r=9.7, area=1.0):
     }
 
 
+# Batched-engine scope of cv_at_fluence (see charge_collection._fluence_engine_reason):
+# graded/uniform epi, the T box of etna.api.simulation._ENGINE_BOX, reverse biases.
+_CV_ENGINE_T = (250.0, 400.0)
+# Largest cathode step between two engine solves (V); finer grids are solved as given.
+_CV_ENGINE_STEP_V = 10.0
+
+
+def _cv_engine_reason(dev_kw, V_range):
+    """Why the batched engine cannot serve this C-V sweep (None = it can)."""
+    profile = dev_kw.get("doping_profile", "graded")
+    if profile not in ("graded", "uniform"):
+        return f"doping_profile={profile!r}"
+    T = dev_kw.get("T", 300.0)
+    if not _CV_ENGINE_T[0] <= T <= _CV_ENGINE_T[1]:
+        return f"T={T:g} outside [{_CV_ENGINE_T[0]:g}, {_CV_ENGINE_T[1]:g}]"
+    if V_range.size == 0 or not np.all(np.isfinite(V_range)):
+        return "empty or non-finite bias grid"
+    if V_range.max() > 0:
+        return "forward bias requested"
+    from etna.core.charge_collection import _legacy_depth_reason
+
+    return _legacy_depth_reason(dev_kw, float(-V_range.min()))
+
+
+def _cv_engine(x, donors, acceptors, info, V_range, area):
+    """C-V of one (damaged) device with the batched engine; None if not converged.
+
+    Electrostatics as the devsim path (reverse-bias currents do not move psi):
+    quasi-Fermi Poisson on the devsim mesh with the given donors/acceptors, walked
+    up in |V| (steps <= _CV_ENGINE_STEP_V), W extracted as
+    extract_depletion_width_numerical (n/Donors >= 0.5) and C as cv_sweep.
+    """
+    from etna.core.batched.extract import depletion_width
+    from etna.core.batched.material import thermal_voltage
+    from etna.core.batched.poisson import PoissonBatch
+    from etna.core.batched.sweeps import _Ramp
+
+    pb = PoissonBatch(
+        x, donors[None, :], acceptors[None, :], info["n_i"], thermal_voltage(info["T"])
+    )
+    W_of = lambda n: float(
+        depletion_width(
+            x, n, pb.donors, info["junction_pos"], info["epi_thickness_cm"]
+        )[0]
+    )
+    ramp = _Ramp(pb, 1e-8)
+    targets = np.unique(-V_range)  # cathode voltages >= 0, increasing
+    W_at = {}
+    if targets[0] == 0.0:
+        W_at[0.0] = W_of(pb.solve(ramp.psi, tol=1e-8).n)
+    Vc_prev = 0.0
+    for Vc in targets[targets > 0]:
+        n_sub = max(1, int(np.ceil((Vc - Vc_prev) / _CV_ENGINE_STEP_V - 1e-9)))
+        for V in np.linspace(Vc_prev, Vc, n_sub + 1)[1:]:
+            res = ramp.to(V)
+        W_at[Vc] = W_of(res.n)
+        Vc_prev = Vc
+    if not ramp.converged.all():
+        return None
+    W = np.array([W_at[-v + 0.0] for v in V_range])
+    return {
+        "voltages": V_range.copy(),
+        "depletion_widths": W,
+        "capacitance": junction_capacitance(W, area=area),
+        "truncated": False,
+        "requested_v_stop": float(V_range.min()),
+        "solver": "batched",
+    }
+
+
 def cv_at_fluence(
     fluence,
     V_range,
@@ -256,12 +328,16 @@ def cv_at_fluence(
     damage_params=None,
     phi_crit_threshold=0.90,
     device_kwargs=None,
+    solver="auto",
 ):
     """Compute C-V curve for a device at a given proton fluence.
 
-    Creates a fresh DD device with radiation-damaged parameters using the
-    staged device creation pattern (fluence-as-temperature), runs a C-V
-    sweep, and cleans up the device.
+    The damaged donor profile is applied before the Poisson equilibrium. By
+    default the sweep is solved by the batched numba engine (same mesh, doping,
+    contacts and W extraction as the devsim path; W agrees with devsim to ~1e-14,
+    tests/test_fluence_engine.py). Out of the engine scope, or if it does not
+    converge, a fresh damaged devsim DD device runs ``cv_sweep`` (staged device
+    creation) and is cleaned up.
 
     Parameters
     ----------
@@ -292,13 +368,22 @@ def cv_at_fluence(
         nplus_thickness_cm, N_D_nplus, ...; or doping), overriding the defaults.
         Default None = the default stack (DEFAULT_STACK); pass
         ``etna.api.device.device_kwargs(legacy_config())`` minus epi for the legacy model.
+    solver : {"auto", "engine", "devsim"}
+        "auto" (default): batched engine in its scope (graded/uniform epi,
+        250-400 K, reverse biases), devsim otherwise or if it does not converge.
+        "engine": raise if out of scope. "devsim": the devsim path only.
 
     Returns
     -------
     dict or None
         C-V result dict with keys: voltages, depletion_widths, capacitance,
-        fluence. Returns None if fluence >= Phi_crit (solver would diverge).
+        truncated, requested_v_stop, fluence, solver ("batched" or "devsim").
+        Returns None if fluence >= Phi_crit (solver would diverge).
     """
+    if solver not in ("auto", "engine", "devsim"):
+        raise ValueError(
+            f"solver must be 'auto', 'engine' or 'devsim' (got {solver!r})"
+        )
     V_range = np.asarray(V_range, dtype=float)
     dev_kw = dict(
         epi_thickness_cm=epi_thickness_cm,
@@ -329,6 +414,11 @@ def cv_at_fluence(
         ref_donors = np.array(
             devsim.get_node_model_values(
                 device=ref_name, region=ref_info["region_name"], name="Donors"
+            )
+        )
+        ref_acceptors = np.array(
+            devsim.get_node_model_values(
+                device=ref_name, region=ref_info["region_name"], name="Acceptors"
             )
         )
         epi_mask = ref_x >= ref_info["junction_pos"]
@@ -380,6 +470,27 @@ def cv_at_fluence(
             lifetime_model=lifetime_model,
         )
 
+        if solver != "devsim":
+            reason = _cv_engine_reason(dev_kw, V_range)
+            if reason is None:
+                donors = np.zeros_like(ref_x)
+                donors[epi_mask] = damaged["N_D_profile"]
+                cv_result = _cv_engine(
+                    ref_x, donors, ref_acceptors, ref_info, V_range, area
+                )
+                if cv_result is not None:
+                    cv_result["fluence"] = fluence
+                    return cv_result
+                logger.warning(
+                    "cv_at_fluence: batched engine did not converge, using devsim"
+                )
+            elif solver == "engine":
+                raise ValueError(
+                    f"cv_at_fluence: batched engine unavailable ({reason})"
+                )
+            else:
+                logger.info("cv_at_fluence: using devsim (%s)", reason)
+
         # Staged device creation
         device_info = create_sic_device(
             device_name=dev_name,
@@ -398,6 +509,7 @@ def cv_at_fluence(
         # Run C-V sweep
         cv_result = cv_sweep(device_info, V_range, area=area)
         cv_result["fluence"] = fluence
+        cv_result["solver"] = "devsim"
 
         logger.info(
             "cv_at_fluence: fluence=%.3e, %d voltage points solved",
