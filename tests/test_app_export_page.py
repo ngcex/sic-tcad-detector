@@ -151,3 +151,37 @@ def test_export_page_in_main_navigation():
     # callable st.Page entries cannot be switched to by path in AppTest; check the wiring
     src = open("app/main.py").read()
     assert 'url_path="export"' in src and "render_export" in src
+
+
+def test_animation_unavailable_shows_reason(monkeypatch):
+    import etna.viz as viz
+
+    monkeypatch.setattr(
+        viz, "manim_available", lambda: (False, "manim is not importable (test)")
+    )
+    at = _start(monkeypatch, [])
+    assert any("manim is not importable (test)" in i.value for i in at.info)
+    assert not [b for b in at.button if b.key == "ex_anim_btn"]
+
+
+def test_animation_button_renders_videos(monkeypatch, tmp_path):
+    import etna.viz as viz
+
+    rendered = []
+
+    def fake_render(data, scene, out_dir=None, **k):
+        p = tmp_path / f"{scene}.mp4"
+        p.write_bytes(b"\x00\x00\x00\x18ftypmp42fake")
+        rendered.append(scene)
+        return p, 0.1
+
+    monkeypatch.setattr(viz, "manim_available", lambda: (True, ""))
+    monkeypatch.setattr(viz, "animation_data", lambda cfg: {"frames": []})
+    monkeypatch.setattr(viz, "render_animation", fake_render)
+    at = _start(monkeypatch, [])
+    _button(at, "ex_anim_btn").click()
+    at.run()
+    assert at.exception == [], at.exception
+    assert rendered == ["StackScene", "DepletionScene"]
+    cfg, vids = at.session_state["export_animation"]
+    assert cfg == DeviceConfig() and set(vids) == {"StackScene", "DepletionScene"}

@@ -9,6 +9,8 @@ AppTest mocks reach them.
 
 from __future__ import annotations
 
+import tempfile
+
 import streamlit as st
 
 import etna
@@ -111,6 +113,53 @@ def _profile_block(cfg) -> None:
     )
 
 
+def _animation_block(cfg) -> None:
+    import etna.viz as viz
+
+    st.subheader("Animation (manim)")
+    ok, why = viz.manim_available()
+    if not ok:
+        st.info(f"Animations are unavailable: {why}")
+        return
+    if cfg.half_width_um is not None:
+        st.info(
+            "Animations need a 1D device (set the half-width to none in the sidebar)."
+        )
+        return
+    st.write(
+        "Two short low-quality (480p) videos from real solver data at 0 to -60 V: the "
+        "stack in scale, and depletion growth with E(x) vs bias (W from run_cv, E(x) from "
+        "run_field). Plotly stays the live view; this is for slides and reports."
+    )
+    if st.button("Export animation", key="ex_anim_btn"):
+        try:
+            with st.spinner("Solving 13 biases and rendering (about 10 s)..."):
+                data = viz.animation_data(cfg)
+                vids = {}
+                for scene in viz.SCENES:
+                    with tempfile.TemporaryDirectory(prefix="etna_viz_") as td:
+                        path, _ = viz.render_animation(data, scene, out_dir=td)
+                        vids[scene] = path.read_bytes()
+            st.session_state["export_animation"] = (cfg, vids)
+        except Exception as e:
+            show_error(e)
+    stored = st.session_state.get("export_animation")
+    if stored is None:
+        return
+    used_cfg, vids = stored
+    show_stale_warning(used_cfg, cfg)
+    for scene, blob in vids.items():
+        st.caption(scene)
+        st.video(blob, format="video/mp4")
+        st.download_button(
+            f"Download {scene}.mp4",
+            blob,
+            f"etna_{scene}.mp4",
+            "video/mp4",
+            key=f"ex_dl_{scene}",
+        )
+
+
 def render() -> None:
     st.title("Export")
     st.info(ex.VALIDATION_LABEL)
@@ -120,6 +169,8 @@ def render() -> None:
     _cross_section_block(cfg)
     st.divider()
     _profile_block(cfg)
+    st.divider()
+    _animation_block(cfg)
     st.divider()
     st.caption(
         "No GDSII layout: guard ring and pad dimensions are not available, and are not "
