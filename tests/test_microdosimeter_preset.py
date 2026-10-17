@@ -1,7 +1,7 @@
 """Microdosimeter preset (Petringa 2025, Phys. Med. 140) and the tilted-alpha CCE helper.
 
-Numbers from lab/microdosimeter (notes/LOG.md): V_fd fit, tilted generation, CCE(V).
-All on the batched engine (~1 s total).
+Numbers from lab/microdosimeter (notes/LOG.md): doping (section 9), tilted generation,
+CCE(V). All on the batched engine (~1 s total).
 """
 
 import numpy as np
@@ -9,30 +9,42 @@ import pytest
 
 import etna
 from etna.api.device import DEFAULT_STACK, MICRODOSIMETER_N_D, DeviceConfig
-from etna.api.simulation import OutsideModelValidity
+from etna.api.simulation import _ENGINE_BOX, OutsideModelValidity
 from etna.core.generation_profiles import alpha_path_stopping, tilted_alpha_generation
 
 
 def test_preset_fields_and_default_stack_untouched():
     c = etna.microdosimeter_config()
     assert c.area_cm2 == 0.25 and c.epi_thickness_um == 10.0
-    assert c.doping_profile == "uniform" and c.N_D == MICRODOSIMETER_N_D == 3.0575e14
+    assert c.doping_profile == "uniform" and c.N_D == MICRODOSIMETER_N_D == 1.0e14
     assert c.substrate_thickness_um == 0.3 and c.nplus_thickness_um == 1.0
     assert etna.microdosimeter_config(1.0).substrate_thickness_um == 1.0
     assert etna.microdosimeter_config(T=310.0).T == 310.0
+    # the paper's own 1/C^2 order of magnitude, inside the engine's validated box
+    assert (
+        _ENGINE_BOX["N_D_uniform"][0]
+        <= MICRODOSIMETER_N_D
+        <= _ENGINE_BOX["N_D_uniform"][1]
+    )
     d = DeviceConfig()  # the dosimeter default is a different device
     assert d.area_cm2 == 1e-4 and d.doping_profile == "graded"
     assert d.N_D_bulk == DEFAULT_STACK["N_D_bulk"]
 
 
 @pytest.mark.parametrize("p_plus", [0.3, 1.0])
-def test_preset_full_depletion_is_30V(p_plus):
+def test_preset_full_depletion_near_10V(p_plus):
+    """Petringa 2025 JINST / SiC_Photons (same epi spec, 4 mm2): "full depletion at about
+    10 V", W ~9.5 um at -10 V; the Phys. Med. sentence "approximately -30 V" (which the
+    preset followed as 3.0575e14 until 2026-10-17) is the over-depleted operating point.
+    """
     r = etna.run_cv(etna.microdosimeter_config(p_plus), 0.0, -60.0, 121)
     assert r.metadata["solver"] == "batched"
-    assert r.metadata["reach_through_V"] == pytest.approx(30.0, abs=0.05)
-    # 25 mm2 plateau, small-signal C = dQ/dV (2026-10-17; it was eps*A/W_edge =
-    # 2.160e-10, -0.50 %); 4 mm2-equivalent 3.44e-11 F vs the paper's Fig. 3b 3.46e-11
-    assert r.y[-1] == pytest.approx(2.1493e-10, rel=2e-3)
+    assert r.metadata["reach_through_V"] == pytest.approx(9.0, abs=0.05)
+    W = np.array(r.metadata["W_from_C"]) * 1e4
+    assert W[20] > 9.5  # -10 V
+    # 25 mm2 plateau, small-signal C = dQ/dV; 4 mm2-equivalent 3.44e-11 F vs the paper's
+    # Fig. 3b 3.46e-11 (that figure is the 4 mm2 dosimeter's curve)
+    assert r.y[-1] == pytest.approx(2.1485e-10, rel=2e-3)
 
 
 def test_tilted_generation_geometry():
@@ -78,22 +90,34 @@ def test_tilted_cce_vs_bias_pins_lab_numbers():
     V = np.round(r.x, 6)
     n = r.y / r.y[V == -50.0][0]
     at = lambda v: n[V == v][0]
-    # default: epi-only generation (p+ = dead layer), bragg shape, no metal
-    # hole mobility at the epi doping since 2026-10-17 (was N_A, audit-v7 A-03): 0.9488 -> 0.9668 (moves AWAY from the digitised 0.9083; not tuned)
-    assert at(0.0) == pytest.approx(0.9668, abs=5e-4)
-    assert at(-10.0) == pytest.approx(0.9993, abs=3e-4)
-    # documented model limitation: flat from -20 V (data: 0.9904 -> 1.000 to -50 V)
+    # default: epi-only generation (p+ = dead layer), bragg shape, no metal. N_D 1e14:
+    # W(0 V) = 5.4 um, the depletion edge passes the track end (7.6 um) by -3 V, so the
+    # steady-state DD curve is flat to 0.6 % from 0 V. Fig. 4b (0.908 at 0 V, +1 % from
+    # -20 to -50 V) is NOT reproduced by the DD model at any doping (LOG.md section 9).
+    assert at(0.0) == pytest.approx(0.9945, abs=5e-4)
+    assert at(-10.0) == pytest.approx(0.9998, abs=3e-4)
     assert at(-20.0) > 0.999
     assert np.all(np.diff(r.y) >= -1e-6)
     assert r.y[V == -50.0][0] == pytest.approx(0.9999, abs=2e-4)
     # relative to E0/E_pair: the 3.1 % deposited in the 0.3 um p+ is lost
-    assert r.metadata["cce_vs_E0"][V == -50.0][0] == pytest.approx(0.9688, abs=5e-4)
+    assert r.metadata["cce_vs_E0"][V == -50.0][0] == pytest.approx(0.9689, abs=5e-4)
     assert r.metadata["projected_end_um"] == pytest.approx(7.607, abs=1e-3)
-    assert r.metadata["reach_through_V"] == pytest.approx(30.0, abs=0.05)
+    assert r.metadata["reach_through_V"] == pytest.approx(9.0, abs=0.05)
     p = etna.run_cce_tilted_alpha(
         etna.microdosimeter_config(), -50.0, -50.0, 1, generation_in_p_plus=True
     )
     assert p.y[0] == pytest.approx(0.9845, abs=5e-4)  # p+ pairs: electron L_n ~ 0.3 um
+
+
+def test_old_30V_fit_doping_is_still_simulable_but_not_the_preset():
+    """The pre-2026-10-17 value (3.0575e14, V_fd 30 V) remains a valid override; its
+    CCE(V) shape (0.967 at 0 V, flat from -12 V) is what LOG.md section 3 compared."""
+    c = etna.microdosimeter_config(N_D=3.0575e14)
+    r = etna.run_cce_tilted_alpha(c, 0.0, -50.0, 11)
+    assert r.metadata["reach_through_V"] == pytest.approx(30.0, abs=0.05)
+    n = r.y / r.y[-1]
+    assert n[0] == pytest.approx(0.9668, abs=5e-4)
+    assert n[2] > 0.999  # -10 V
 
 
 def test_tilted_cce_refuses_outside_engine_domain():
@@ -106,7 +130,7 @@ def test_tilted_cce_refuses_outside_engine_domain():
 
 
 def test_run_cce_cold_start_at_minus_50V_stays_on_the_engine():
-    """A cold 0 -> -50 V Poisson jump does not converge on the preset (uniform 3.06e14):
+    """A cold 0 -> -50 V Poisson jump does not converge on low-doped uniform devices:
     run_cce used to fall back to devsim silently. The sweeps now walk 0 V in <= 10 V
     Poisson sub-steps (as run_cce_tilted_alpha)."""
     from etna.api import simulation as sim
@@ -115,7 +139,7 @@ def test_run_cce_cold_start_at_minus_50V_stays_on_the_engine():
     r = etna.run_cce(c, -50.0, -60.0, 3)
     assert r.metadata["solver"] == "batched"
     assert "fallback_reason" not in r.metadata
-    assert r.metadata["reach_through_V"] == pytest.approx(30.0, abs=0.05)
+    assert r.metadata["reach_through_V"] == pytest.approx(9.0, abs=0.05)
     d = sim._run_cce_devsim(c, np.array([-50.0, -55.0, -60.0]))
     np.testing.assert_allclose(r.y, d.y, atol=1e-6)
     cv = etna.run_cv(c, -50.0, -60.0, 3)
