@@ -405,3 +405,29 @@ Post-phase-4 checks:
   in n+, 5 um 0.946929 / 0.947792 / 0.947922; 20 um 0.976105 / 0.977040 / 0.977178;
   50 um 0.977322 / 0.978260 / 0.978398 (n+ inherits epi tau_p 0.6 us -> L_p ~11 um);
   no collection from the n+: 0.999819 * 1.591911/1.922426 = 0.8279 (-50 V).
+
+## 2D engine with n+ (feat/engine2d-nplus, 2026-10-17)
+
+### Experiment: engine internals on the n+ mesh vs devsim
+`uv run python lab/solver2d/bench/nplus2d_parity.py START STOP [csv]` (3 chunks in parallel, load ~6)
+-> notes/nplus2d_parity.csv. Engine side = Device2D on grid_from_devsim(..., nplus_thickness_cm,
+N_D_nplus, nplus_generation) (public gate bypassed), generation as cce_lateral_scan
+(confine_generation_to_epi unless nplus_generation); devsim side = create_2d_dd_device +
+dark dump + cce_lateral_scan (balanced extract_steady_state_current), 10 lateral points.
+No engine physics change was needed: doping and mesh come from devsim's evaluated node
+models, the ohmic BCs from NetDoping at the contact rows (n+ at the cathode), and the
+engine's cathode current was already the balanced form (electrons = interior volume
+balance + anode minority flux, holes = direct cathode minority flux) -- the same identity
+as extract_steady_state_current.
+
+21 configs: hw 25/50/100/150; epi 5/7.5/10/15/20 um; N_D_bulk 5e13/8.8e13/5e14; n+ 1/2/3/5 um;
+N_D_nplus 1e18/3e18/1e19; V 5-100; nplus_generation False (16) / True (5).
+| quantity | max over the 21 configs |
+|---|---|
+| W (column x=0, n/Donors >= 0.5 rule) | 2.8e-14 um (dW 0 in 17/21) |
+| Potential | 1.4e-13 V |
+| log10 n, log10 p (nodes with n, p > 1 cm^-3 in both) | 7.5e-13, 8.3e-13 |
+| CCE, every lateral point | 1.2e-12 (partially depleted 20 um/5e14/10 V); <= 3.4e-13 elsewhere |
+| Gummel iterations per stripe | <= 4 |
+devsim converged at every point (no wall with n+ up to 100 V). Engine times in the CSV are
+from a loaded machine incl. per-process JIT and are NOT speed-up evidence.
