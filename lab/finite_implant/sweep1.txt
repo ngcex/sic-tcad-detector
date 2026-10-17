@@ -1,0 +1,10 @@
+tox05 t_ox_um=0.5
+tox5 t_ox_um=5
+qp5e11 Qf=5e11
+qp1e12 Qf=1e12
+qm5e11 Qf=-5e11
+qm1e12 Qf=-1e12
+fp5 fp_um=5
+fp20 fp_um=20
+meshfine edge_ps_um=0.01 far_ps_um=2
+wide x_edge_um=100 x_out_um=200
