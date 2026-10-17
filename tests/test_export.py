@@ -138,6 +138,14 @@ def test_spec_other_config_does_not_claim_measurement():
     assert "measured_W_minus30V_um" not in spec["cv"]
 
 
+def test_spec_dark_calibration_only_for_calibrated_n_t():
+    cfg = DeviceConfig(N_t=1e13)
+    dk = build_spec(cfg, _fake_report(cfg))["dark_current"]
+    assert dk["N_t_used"] == 1e13 and "does not apply" in dk["note"]
+    md = spec_to_markdown(build_spec(cfg, _fake_report(cfg)))
+    assert "cross-check box" in md and "not a validation against measurement" in md
+
+
 def test_spec_legacy_definitions():
     cfg = etna.legacy_config()
     spec = build_spec(cfg, None)
