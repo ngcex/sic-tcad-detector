@@ -39,7 +39,7 @@ import devsim.python_packages.simple_physics as simple_physics
 import numpy as np
 
 from etna.core.device import create_sic_device
-from etna.core.poisson import setup_poisson, solve_equilibrium
+from etna.core.poisson import region_contacts, setup_poisson, solve_equilibrium
 
 logger = logging.getLogger(__name__)
 
@@ -169,7 +169,7 @@ def setup_sic_drift_diffusion(device_info):
     )
 
     # --- Step 8: Contact equations for drift-diffusion ---
-    for contact in ("anode", "cathode"):
+    for contact in region_contacts(device_info):
         simple_physics.CreateSiliconDriftDiffusionAtContact(
             device, region, contact, is_circuit=False
         )
@@ -213,16 +213,22 @@ def extract_contact_current(device_info, contact="cathode"):
     return I_e + I_h
 
 
-# Carrier that is the majority at each contact: its direct contact current is a small
-# difference of two huge Scharfetter-Gummel terms (n ~ N_D at the cathode, p ~ N_A at the
-# anode), so it is the one evaluated in the balanced form.
-_MAJORITY_EQUATION = {
-    "cathode": ("ElectronContinuityEquation", "ElectronGeneration"),
-    "anode": ("HoleContinuityEquation", "HoleGeneration"),
-}
-_MINORITY_EQUATION = {
-    "cathode": "HoleContinuityEquation",
-    "anode": "ElectronContinuityEquation",
+# Sign conventions measured on a 2D device (probe_edges.py):
+#   interior node residual: sum_{edges n0=i} F - sum_{edges n1=i} F + NodeVolume_i*Gen_i = 0,
+#   F = J_edge * EdgeCouple (flux in the n0->n1 direction)
+#   devsim.get_contact_current(c) = -(net F from interior into the contact nodes)
+# Hence summing over a node set S (no contact nodes):
+#   I_c = sum_S vol*gen + sum_{edges leaving S, not into c} F_out
+# and with S = all interior nodes this is the old formula I_maj = vol_term - sum_other I_maj(other).
+
+# Continuity equation, its node (generation) model and its edge (current) model per carrier.
+_CARRIER_MODELS = {
+    "electrons": (
+        "ElectronContinuityEquation",
+        "ElectronGeneration",
+        "ElectronCurrent",
+    ),
+    "holes": ("HoleContinuityEquation", "HoleGeneration", "HoleCurrent"),
 }
 
 
@@ -235,62 +241,190 @@ def _contact_node_indices(device, region, contact):
     return nodes
 
 
-def extract_steady_state_current(device_info, contact="cathode"):
+def _global_model_name(parameter, default):
+    """Name of the geometry model devsim assembles with (Cartesian default, or the
+    cylindrical one while ``_activate_cylindrical_coords`` is in effect)."""
+    try:
+        return devsim.get_parameter(name=parameter)
+    except devsim.error:
+        return default
+
+
+def node_volume_model_name():
+    """Node volume model the equations are assembled with ("NodeVolume", or
+    "CylindricalNodeVolume" for an axisymmetric device)."""
+    return _global_model_name("node_volume_model", "NodeVolume")
+
+
+def edge_couple_model_name():
+    """Edge coupling model (dual edge length in 2D) the equations are assembled with."""
+    return _global_model_name("edge_couple_model", "EdgeCouple")
+
+
+def contacts_on_region(device, region):
+    """Contacts of ``device`` that lie on ``region`` (a multi-region device has others)."""
+    out = []
+    for c in devsim.get_contact_list(device=device):
+        if region in devsim.get_region_list(device=device, contact=c):
+            out.append(c)
+    return out
+
+
+def contact_majority_carrier(device, region, contact):
+    """ "electrons" if the net doping at the contact nodes is n-type, else "holes".
+
+    The majority carrier is the one whose direct contact current is a small difference
+    of huge Scharfetter-Gummel terms (see :func:`extract_steady_state_current`); it is
+    read from the doping rather than from the contact's name so that a guard ring
+    ("guard_ring_anode", p+) or the 3D electrode (n+ column "cathode" on top) are handled.
+    """
+    nodes = sorted(_contact_node_indices(device, region, contact))
+    if not nodes:
+        raise ValueError(f"contact {contact!r} has no nodes on region {region!r}")
+    net = np.array(
+        devsim.get_node_model_values(device=device, region=region, name="NetDoping")
+    )[nodes]
+    return "electrons" if float(np.mean(net)) > 0 else "holes"
+
+
+def _edge_node_indices(device, region):
+    """(n0, n1) node index arrays of every edge of the region (devsim edge order)."""
+    if "node_index@n0" not in devsim.get_edge_model_list(device=device, region=region):
+        devsim.edge_from_node_model(
+            device=device, region=region, node_model="node_index"
+        )
+    n0 = np.array(
+        devsim.get_edge_model_values(device=device, region=region, name="node_index@n0")
+    ).astype(int)
+    n1 = np.array(
+        devsim.get_edge_model_values(device=device, region=region, name="node_index@n1")
+    ).astype(int)
+    return n0, n1
+
+
+def extract_steady_state_current(device_info, contact="cathode", node_set=None):
     """Steady-state terminal current at ``contact`` in the balanced (well-conditioned) form.
 
     Same quantity as :func:`extract_contact_current` (A/cm^2 in 1D, A/cm in 2D, same
-    sign convention) at a converged DC state, evaluated without its round-off floor.
+    sign convention: positive = conventional current from the contact into the device) at
+    a converged DC state, evaluated without its round-off floor. Works for any number of
+    contacts and for axisymmetric devices (the node volume / edge coupling models are the
+    ones devsim assembles with).
 
-    devsim's contact current of the contact's MAJORITY carrier (electrons at the cathode,
-    holes at the anode) is the edge flux into the contact node, a small difference of two
-    huge SG drift/diffusion terms when the carrier density there is high (n ~ N_D at the
-    cathode; with an n+ layer under the epi, n ~ 1e19). Its absolute noise floor is
-    ~3e-13 A/cm^2 on the default 1D device (measured: independent of N_t, random sign),
-    i.e. 2e-3 of the -10 V dark current, and it makes the n+ cathode current unusable.
-    Summing the continuity equation over every non-contact node (internal edge fluxes
-    cancel) gives the exact discrete identity
+    devsim's contact current of the contact's MAJORITY carrier (electrons at an n contact,
+    holes at a p+ contact; read from NetDoping, :func:`contact_majority_carrier`) is the
+    edge flux into the contact nodes, a small difference of two huge SG drift/diffusion
+    terms when the carrier density there is high (n ~ N_D at the cathode; with an n+
+    layer under the epi, n ~ 1e19). Its absolute noise floor is ~3e-13 A/cm^2 on the
+    default 1D device (measured: independent of N_t, random sign), i.e. 2e-3 of the -10 V
+    dark current, and it makes the n+ cathode current unusable. Summing the discretised
+    continuity equation of that carrier over a set S of non-contact nodes (internal edge
+    fluxes cancel) gives the exact discrete identity
 
-        I_maj(contact) = sum_{non-contact nodes} NodeVolume * Generation_maj
-                         - sum_{other contacts} I_maj(other contact)
+        I_maj(contact) = sum_{S} NodeVolume * Generation_maj
+                         + sum_{edges leaving S, not into `contact`} F_maj
 
-    in which both terms are well conditioned: a volume integral, and the contact current
-    of a carrier that is the MINORITY at the other contact (electrons at the p+ anode,
-    holes at the n cathode). The minority carrier at ``contact`` is taken directly.
+    with F = J_edge * EdgeCouple the flux leaving S. S must contain every non-contact
+    neighbour of ``contact`` (its edges are the unknown). Both terms are well conditioned
+    as long as the edges leaving S lie where that carrier is a minority or the region is
+    depleted. The minority carrier at ``contact`` is taken directly.
+
+    ``node_set=None`` takes S = all non-contact nodes: the edges leaving S then end on the
+    OTHER contacts and their flux sum is minus that contact's direct current, which is
+    well conditioned only if the carrier is a minority there. That is the two-terminal
+    diode (p+ anode, n cathode) and the guard-ring cathode (anode and guard are both p+),
+    but NOT a p+ contact next to another p+ contact (anode vs guard ring: only the SUM of
+    their hole currents is well conditioned this way), so that case raises ValueError.
+
+    ``node_set`` (boolean mask over the region nodes, or node indices) chooses S
+    explicitly: for the guard-ring anode, the nodes above a cut through the depleted
+    n- epi on the anode side of the gap; for the guard, the other side. The cut edges
+    carry a minority/depleted-region flux and the split between the two p+ contacts is
+    recovered to round-off (test: the three contact currents sum to zero). Contact nodes
+    are always removed from S.
 
     Valid for steady state only (no dn/dt term): transient extraction keeps using
     :func:`extract_contact_current`.
     """
     device = device_info["device_name"]
     region = device_info["region_name"]
-    if contact not in _MAJORITY_EQUATION:
-        raise ValueError(f"contact must be 'anode' or 'cathode' (got {contact!r})")
-    contacts = list(devsim.get_contact_list(device=device))
-    if sorted(contacts) != ["anode", "cathode"]:
+    contacts = contacts_on_region(device, region)
+    if contact not in contacts:
         raise ValueError(
-            f"balanced extraction needs exactly anode+cathode contacts, got {contacts}"
+            f"contact must be one of {contacts} on region {region!r} (got {contact!r})"
         )
-    eq_maj, gen_maj = _MAJORITY_EQUATION[contact]
-    other = "anode" if contact == "cathode" else "cathode"
+    carrier = contact_majority_carrier(device, region, contact)
+    eq_maj, gen_maj, cur_maj = _CARRIER_MODELS[carrier]
+    eq_min = _CARRIER_MODELS["holes" if carrier == "electrons" else "electrons"][0]
 
-    excluded = _contact_node_indices(device, region, contact) | _contact_node_indices(
-        device, region, other
-    )
+    contact_nodes = {c: _contact_node_indices(device, region, c) for c in contacts}
+    all_contact_nodes = set().union(*contact_nodes.values())
     vol = np.array(
-        devsim.get_node_model_values(device=device, region=region, name="NodeVolume")
+        devsim.get_node_model_values(
+            device=device, region=region, name=node_volume_model_name()
+        )
     )
     gen = np.array(
         devsim.get_node_model_values(device=device, region=region, name=gen_maj)
     )
-    mask = np.ones(vol.size, dtype=bool)
-    mask[list(excluded)] = False
-    volume_term = float(np.sum((vol * gen)[mask]))
-    I_maj_other = devsim.get_contact_current(
-        device=device, contact=other, equation=eq_maj
-    )
-    I_maj = volume_term - I_maj_other
-    I_min = devsim.get_contact_current(
-        device=device, contact=contact, equation=_MINORITY_EQUATION[contact]
-    )
+    S = np.ones(vol.size, dtype=bool)
+    if node_set is not None:
+        node_set = np.asarray(node_set)
+        if node_set.dtype == bool:
+            if node_set.size != vol.size:
+                raise ValueError("node_set mask must have one entry per region node")
+            S = node_set.copy()
+        else:
+            S = np.zeros(vol.size, dtype=bool)
+            S[node_set.astype(int)] = True
+    S[list(all_contact_nodes)] = False
+    volume_term = float(np.sum((vol * gen)[S]))
+
+    n0, n1 = _edge_node_indices(device, region)
+    own = np.zeros(vol.size, dtype=bool)
+    own[list(contact_nodes[contact])] = True
+    # every non-contact neighbour of `contact` must be in S
+    neighbours = np.concatenate([n1[own[n0]], n0[own[n1]]])
+    neighbours = neighbours[~np.isin(neighbours, list(all_contact_nodes))]
+    if not np.all(S[neighbours]):
+        raise ValueError(
+            f"node_set must contain every non-contact neighbour of contact {contact!r}"
+        )
+
+    if node_set is None:
+        # Edges leaving S end on the other contacts: their flux sum is minus the direct
+        # contact current, well conditioned only where the carrier is a minority.
+        same = [
+            c
+            for c in contacts
+            if c != contact and contact_majority_carrier(device, region, c) == carrier
+        ]
+        if same:
+            raise ValueError(
+                f"contact {contact!r} and {same} share the majority carrier ({carrier}): "
+                "the balanced form needs an explicit node_set (cut through the depleted "
+                "region separating them)"
+            )
+        I_maj = volume_term - sum(
+            devsim.get_contact_current(device=device, contact=c, equation=eq_maj)
+            for c in contacts
+            if c != contact
+        )
+    else:
+        J = np.array(
+            devsim.get_edge_model_values(device=device, region=region, name=cur_maj)
+        )
+        couple = np.array(
+            devsim.get_edge_model_values(
+                device=device, region=region, name=edge_couple_model_name()
+            )
+        )
+        F = J * couple  # flux in the n0 -> n1 direction (A/cm in 2D)
+        leaving = S[n0] & ~S[n1] & ~own[n1]  # out of S, not into `contact`
+        entering = S[n1] & ~S[n0] & ~own[n0]
+        I_maj = volume_term + float(np.sum(F[leaving]) - np.sum(F[entering]))
+
+    I_min = devsim.get_contact_current(device=device, contact=contact, equation=eq_min)
     return I_maj + I_min
 
 
