@@ -1,6 +1,7 @@
 # PERF-05: follow-ups after the default-stack flip and core cleanup (2026-10-17)
 
 From the independent review of 72beb9b (no blockers):
+
 - `calibrate_graded_doping` (device.py) and `calibrate_graded_doping_2d` (device2d.py) default
   to p+ 1 um and do not pass nplus, so they now build p+ 1 um + default n+ (neither model).
   Callers: notebook 02, scripts/run_calibration_2d.py. Decide: calibrate against legacy
@@ -16,6 +17,7 @@ From the independent review of 72beb9b (no blockers):
 - `cce_heatmap_2d` counts the n+ layer as active epi (assigned to the estimator agent).
 
 ## n+ mesh coarsening (lab, 2026-10-17): gate failed, production unchanged
+
 The 2x node count is in the EPI (devsim grades 1 nm cells at the epi/n+ line back to the 50 nm
 epi spacing, ~330 extra rows on a 10 um epi), not in the n+. Candidates move W by 2.4e-5
 (k3, -14 % nodes, 0.80x devsim) to 3.5e-4 (e05n02, -39 %, 0.51x); the fine mesh itself is only
@@ -24,6 +26,7 @@ point; devsim is the fallback/validation path): keep the fine mesh. Revisit if d
 builds become a bottleneck. Data: lab/solver2d/notes/nplus_mesh_gate.csv, LOG.md.
 
 ## -30 V C-V gap (+2.56 %): fringe test (lab/finite_implant, 2026-10-17)
+
 2D finite p+ implant slice (devsim): fringe capacitance is ~1.5 % of the plane C at -30 V
 (2.2 % peak at reach-through), not 0.1-1 %. Refitting 0/-10 V with it closes 60 % of the gap
 with no charge; it closes it exactly only with oxide charge Qf ~ +2e12 cm^-2 (high for
@@ -33,3 +36,15 @@ they separate only with the full measured C-V (knee -5..-15 V; eps*A/C at -5 V: 
 9.75 um epi 6.36, fringe 7.08 um) and C-V on two die sizes. Needs data from the owner.
 Also open: temperature_sweep.py:116-119 and charge_collection.py:135 still use N_ref*0.001 for
 mobility doping; figures/cv_validation_bruzzi2023.png stale.
+
+## -30 V C-V gap: the full measured curve (lab/cv_gap, 2026-10-18)
+
+Photons Fig. 4b digitised at every 250 mV (0.02 um; Microdosimetry Fig. 3b is the same data
+set, agrees to 0.02 um). The knee is at -1..-4 V, not -8..-10: W(-2 V) = 7.18 um (production
+2.99), W(-5 V) = 9.27 (5.93). All four 3-point candidates and the production stack are excluded
+(chi2 1e5-2.7e5 for 230 points); after refitting the epi profile none of the single knobs
+(fringe, buffer-to-1e19, area, epi thickness) fits the -10..-60 V creep either (chi2 >= 1900).
+What fits (chi2 198/224): junction layer ~8e15 / L 0.46 um, bulk ~3.4e13, and a graded n-/n+
+transition still at only ~1e16 at 10 um. The production doping FORM cannot represent the data;
+proposal (not applied) in lab/cv_gap/notes/LOG.md section 6. Bruzzi & Verroi: different wafer,
+no constraint on N_D_bulk; its +3.1 % is the Schottky-vs-pn V_bi.
