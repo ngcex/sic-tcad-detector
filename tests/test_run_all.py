@@ -77,7 +77,7 @@ def test_sweep_is_opt_in_and_reports_rows():
     rep = etna.run_all(etna.DeviceConfig(), ("sweep",))
     sec = rep.get("sweep")
     assert sec.status == "ok" and sec.solver == "engine2d", sec.reason
-    assert "valid" in sec.summary and "no n+" in sec.title
+    assert "valid" in sec.summary and "no n+" in sec.summary
     assert len(sec.result.metadata["table"]) == 6
     json.loads(rep.to_json())
 
@@ -88,11 +88,19 @@ def test_sweep_outside_engine_box_is_skipped_not_run():
     assert "epi_thickness_cm" in rep.get("sweep").reason
 
 
-def test_sweep_skipped_when_config_has_nplus():
+def test_sweep_runs_on_the_engine_when_config_has_nplus():
     rep = etna.run_all(etna.DeviceConfig(nplus_thickness_um=1.0), ("sweep",))
-    assert rep.get("sweep").status == "skipped" and "n+" in rep.get("sweep").reason
+    sec = rep.get("sweep")
+    assert sec.status == "ok", sec
+    df = sec.result.metadata["table"]
+    assert set(df["solver"]) == {"engine2d"} and "n+ 1 um" in sec.result.metadata["summary"]
 
 
-def test_run_field_2d_with_nplus_uses_devsim():
+def test_sweep_skipped_when_nplus_outside_engine_box():
+    rep = etna.run_all(etna.DeviceConfig(nplus_thickness_um=10.0), ("sweep",))
+    assert rep.get("sweep").status == "skipped" and "nplus" in rep.get("sweep").reason
+
+
+def test_run_field_2d_with_nplus_uses_engine():
     res = etna.run_field(etna.DeviceConfig(half_width_um=25.0, nplus_thickness_um=1.0), bias_V=-20.0)
-    assert res.metadata["solver"] == "devsim", res.metadata
+    assert res.metadata["solver"] == "engine2d", res.metadata
