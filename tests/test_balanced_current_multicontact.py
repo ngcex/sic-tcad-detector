@@ -83,20 +83,20 @@ def test_contacts_and_majority_carriers(guard_device):
 def test_three_balanced_currents_sum_to_zero(guard_device):
     info, I_gen = guard_device
     ns = guard_ring_node_sets(info)
-    I = {
+    cur = {
         c: extract_steady_state_current(info, c, node_set=ns.get(c))
         for c in info["contacts"]
     }
     assert I_gen > 0
     # the anode collects most of an edge event, the guard a visible share, nothing is lost
-    assert I["cathode"] > 0.5 * I_gen
-    assert I["anode"] < 0 and I["guard_ring_anode"] < 0
-    assert abs(sum(I.values())) < 1e-6 * I_gen
+    assert cur["cathode"] > 0.5 * I_gen
+    assert cur["anode"] < 0 and cur["guard_ring_anode"] < 0
+    assert abs(sum(cur.values())) < 1e-6 * I_gen
     # the direct form carries the p+ majority-hole floor at the two p+ contacts
     I_direct = {c: extract_contact_current(info, c) for c in info["contacts"]}
-    assert abs(I_direct["cathode"] - I["cathode"]) < 1e-6 * I_gen  # n- cathode: fine
+    assert abs(I_direct["cathode"] - cur["cathode"]) < 1e-6 * I_gen  # n- cathode: fine
     for c in ("anode", "guard_ring_anode"):
-        assert I_direct[c] == pytest.approx(I[c], rel=1e-2)
+        assert I_direct[c] == pytest.approx(cur[c], rel=1e-2)
 
 
 def test_contact_current_sharing_conserves_and_restores(guard_device):
@@ -144,6 +144,39 @@ def test_contact_current_sharing_conserves_and_restores(guard_device):
     }
     for c in info["contacts"]:
         assert restored[c] == pytest.approx(before[c], rel=1e-6)
+
+
+def test_zero_on_contacts_removes_the_never_injected_generation(guard_device):
+    """Generation on contact nodes is counted by the box-rule I_gen but never injected
+    (contact equation = Dirichlet). zero_on_contacts=True drops exactly that share:
+    the collected current is unchanged, so CCE scales by 1 / (1 - share)."""
+    info, _ = guard_device
+    d, r = info["device_name"], info["region_name"]
+    x0 = info["sv_half_width_cm"]
+    G0 = alpha_stripe_generation(info, x0, stripe_sigma_cm=1e-4)
+    G1 = alpha_stripe_generation(info, x0, stripe_sigma_cm=1e-4, zero_on_contacts=True)
+    contact_nodes = set()
+    for c in info["contacts"]:
+        contact_nodes |= _contact_node_indices(d, r, c)
+    idx = sorted(contact_nodes)
+    assert np.all(G1[idx] == 0.0)
+    mask = np.ones(G0.size, dtype=bool)
+    mask[idx] = False
+    assert np.array_equal(G0[mask], G1[mask])
+    I0, I1 = integrate_nodes_box_2d(info, G0), integrate_nodes_box_2d(info, G1)
+    share = 1.0 - I1 / I0
+    assert 1e-4 < share < 2e-2  # cathode half-cell of this coarse 5 um epi
+    # fixture state: its own stripe is injected; go dark, measure both, re-inject
+    add_generation_to_dd(info, np.zeros_like(G0))
+    _robust_dc_solve()
+    try:
+        ns = guard_ring_node_sets(info)
+        f0, _ = contact_current_sharing(info, G0, node_sets=ns)
+        f1, _ = contact_current_sharing(info, G1, node_sets=ns)
+        assert f1["cathode"] == pytest.approx(f0["cathode"] / (1.0 - share), rel=1e-9)
+    finally:
+        add_generation_to_dd(info, G0)
+        _robust_dc_solve()
 
 
 def test_edge_based_path_matches_contact_current_path(guard_device):

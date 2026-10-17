@@ -23,7 +23,6 @@ References:
     - reference experimental microdosimeter geometry
 """
 
-from etna.core.solver_tol import DC_REL_ERROR
 import logging
 import uuid
 
@@ -35,6 +34,7 @@ from etna.core.poisson import setup_poisson, solve_equilibrium
 from etna.core.drift_diffusion import (
     _AGGRESSIVE,
     _RAMP_TIERS,
+    _contact_node_indices,
     setup_sic_drift_diffusion,
     contacts_on_region,
     extract_steady_state_current,
@@ -279,7 +279,12 @@ def compute_cce_2d(device_info, generation_values, contact="cathode", node_set=N
 
 
 def alpha_stripe_generation(
-    device_info, x_pos_cm, gen_rate=1e18, stripe_sigma_cm=2e-4, depth_from=None
+    device_info,
+    x_pos_cm,
+    gen_rate=1e18,
+    stripe_sigma_cm=2e-4,
+    depth_from=None,
+    zero_on_contacts=False,
 ):
     """Alpha-like generation stripe entering the epi at lateral position ``x_pos_cm``.
 
@@ -290,6 +295,17 @@ def alpha_stripe_generation(
     when the device has an n+ layer (``confine_generation_to_epi``). ``depth_from``
     overrides the entry depth (default: the junction, ``substrate_thickness_cm``). For
     an axisymmetric device x is the radius and the stripe is a cylindrical shell.
+
+    ``zero_on_contacts=True`` zeroes G on the contact nodes. The contact equation
+    replaces the continuity equation there (Dirichlet carrier densities), so pairs
+    assigned to those nodes are never injected into the device, while the box-rule
+    ``I_generated`` of :func:`compute_cce_2d` counts them: the CCE then carries a
+    purely mesh-dependent deficit equal to the contact nodes' share of the generation
+    (measured at 50 V on the legacy planar diode: 1.3e-3 with the 50 nm device2d mesh
+    at the cathode, 4.6e-3 with the coarser alternative-structure mesh; the physical
+    loss left after removing it is ~1e-4-2e-4). The default keeps the historical
+    normalisation (frozen v3 baselines); the structure comparison of notebook 19 uses
+    True so that the meshes of its five builders are comparable.
 
     AUDIT Mj-5 (v5): the scan previously used a monotonically DECAYING exponential
     exp(-y/alpha), backwards for an alpha (energy loss per unit path RISES toward the
@@ -322,7 +338,12 @@ def alpha_stripe_generation(
         gen_rate * shape * np.exp(-0.5 * ((x_nodes - x_pos_cm) / stripe_sigma_cm) ** 2)
     )
     generation[y_from_entry < 0] = 0.0
-    return confine_generation_to_epi(device_info, y_nodes, generation)
+    generation = confine_generation_to_epi(device_info, y_nodes, generation)
+    if zero_on_contacts:
+        generation = np.array(generation, dtype=float, copy=True)
+        for c in contacts_on_region(device, region):
+            generation[sorted(_contact_node_indices(device, region, c))] = 0.0
+    return generation
 
 
 def cce_with_generation(device_info, generation, contacts=("cathode",), node_sets=None):
@@ -377,7 +398,7 @@ def contact_current_sharing(device_info, generation, node_sets=None):
     )
     if I_gen <= 0:
         raise ValueError("generation integrates to zero")
-    fractions = {c: I / I_gen for c, I in currents.items()}
+    fractions = {c: cur / I_gen for c, cur in currents.items()}
     return fractions, sum(currents.values()) / I_gen
 
 
@@ -406,6 +427,7 @@ def cce_lateral_scan(
     contact="cathode",
     node_set=None,
     x_max_cm=None,
+    zero_on_contacts=False,
 ):
     """Compute CCE at multiple lateral positions from center to edge.
 
@@ -431,6 +453,10 @@ def cce_lateral_scan(
         guard-ring anode needs one; two-terminal devices do not).
     x_max_cm : float, optional
         Last lateral position (default ``device_info["half_width_cm"]``).
+    zero_on_contacts : bool
+        Passed to :func:`alpha_stripe_generation` (default False: historical
+        normalisation, which includes the never-injected contact-node generation in
+        ``I_generated``).
 
     Returns
     -------
@@ -459,7 +485,11 @@ def cce_lateral_scan(
 
     for i, x_pos in enumerate(x_positions):
         generation = alpha_stripe_generation(
-            device_info, x_pos, gen_rate=gen_rate, stripe_sigma_cm=stripe_sigma_cm
+            device_info,
+            x_pos,
+            gen_rate=gen_rate,
+            stripe_sigma_cm=stripe_sigma_cm,
+            zero_on_contacts=zero_on_contacts,
         )
 
         # Inject generation, solve, extract CCE
