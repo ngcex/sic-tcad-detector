@@ -21,7 +21,7 @@ from etna.core.devsim_lock import serialized
 from etna.core.device2d import create_sic_2d_device
 from etna.core.drift_diffusion import create_dd_device, setup_sic_drift_diffusion
 from etna.core.poisson import setup_poisson, solve_equilibrium
-from etna.core.device import DEFAULT_STACK, LEGACY_STACK
+from etna.core.device import DEFAULT_STACK, LEGACY_STACK, MEASURED_CV_STACK
 
 
 def _um(cm):
@@ -60,6 +60,13 @@ class DeviceConfig:
     # E_t (eV below Ec). Used by run_dark_current only; not device-builder keywords.
     N_t: float = DEFAULT_STACK["N_t"]
     E_t: float = DEFAULT_STACK["E_t"]
+    # Optional GRADED n-/n+ transition ("buffer") over the last buffer_thickness_um of
+    # the epi: donors rise log-linearly from the local epi value to buffer_end_doping
+    # (cm^-3) at the epi end, the n+ step follows. Both None (default) = today's abrupt
+    # epi/n+ model, bit-identical. The pair fitted on the full digitised measured C-V is
+    # measured_cv_config() (etna.core.device.MEASURED_CV_STACK); NOT the default.
+    buffer_thickness_um: Optional[float] = None
+    buffer_end_doping: Optional[float] = None
 
     def __post_init__(self) -> None:
         """Reject physically meaningless values early, with a clear message.
@@ -91,6 +98,21 @@ class DeviceConfig:
         if self.nplus_thickness_um is not None:
             _positive("nplus_thickness_um", self.nplus_thickness_um)
             _positive("N_D_nplus", self.N_D_nplus)
+        if (self.buffer_thickness_um is None) != (self.buffer_end_doping is None):
+            problems.append(
+                "buffer_thickness_um and buffer_end_doping must be given together "
+                f"(got {self.buffer_thickness_um!r}, {self.buffer_end_doping!r})"
+            )
+        elif self.buffer_thickness_um is not None:
+            _positive("buffer_thickness_um", self.buffer_thickness_um)
+            _positive("buffer_end_doping", self.buffer_end_doping)
+            if self.epi_thickness_um is not None and not (
+                self.buffer_thickness_um < self.epi_thickness_um
+            ):
+                problems.append(
+                    f"buffer_thickness_um={self.buffer_thickness_um!r} must be below "
+                    f"epi_thickness_um={self.epi_thickness_um!r}"
+                )
         if not (self.N_A >= 1e17):
             problems.append(f"N_A must be >= 1e17 cm^-3 (p+ anode; got {self.N_A!r})")
         if not problems:
@@ -136,6 +158,13 @@ def device_kwargs(config: DeviceConfig) -> dict:
         )
     else:
         kw.update(nplus_thickness_cm=None)
+    # The buffer keys appear only when set (the builders default to none), so the
+    # kwargs of a config without a buffer are unchanged.
+    if config.buffer_thickness_um is not None:
+        kw.update(
+            buffer_thickness_cm=config.buffer_thickness_um * 1e-4,
+            buffer_end_doping=config.buffer_end_doping,
+        )
     return kw
 
 
@@ -152,12 +181,48 @@ LEGACY_PRESET = {
     "L_transition_um": _um(LEGACY_STACK["L_transition"]),
     "N_t": LEGACY_STACK["N_t"],
     "E_t": LEGACY_STACK["E_t"],
+    "buffer_thickness_um": None,  # no graded n-/n+ transition
+    "buffer_end_doping": None,
 }
 
 
 def legacy_config(**overrides) -> DeviceConfig:
     """DeviceConfig of the LEGACY model (pre-flip default, no n+), plus ``overrides``."""
     return DeviceConfig(**{**LEGACY_PRESET, **overrides})
+
+
+# MEASURED C-V PROFILE preset (opt-in, NOT the default): the doping form fitted on the full
+# digitised Photons Fig. 4b eps*A/C curve (lab/cv_gap/notes/LOG.md; record and provenance in
+# etna.core.device.MEASURED_CV_STACK): junction layer 8.2e15 / L 0.46 um, bulk 3.4e13, and
+# a graded n-/n+ transition over the last 1.14 um of the epi rising to 4.5e16 at the epi
+# end, 1e19 n+ beyond. Same geometry as the default stack (p+ 0.3 um, 10 um epi, 1 um n+).
+# Reproduces the measured plateau to 0.013 um rms (-5..-59 V) and the knee at -1..-4 V
+# that the default's abrupt form puts at -8..-10 V; N_t refitted to the 18 pA bound.
+MEASURED_CV_PRESET = {
+    "substrate_thickness_um": _um(MEASURED_CV_STACK["substrate_thickness_cm"]),
+    "nplus_thickness_um": _um(MEASURED_CV_STACK["nplus_thickness_cm"]),
+    "N_D_nplus": MEASURED_CV_STACK["N_D_nplus"],
+    "doping_profile": "graded",
+    "N_D_junction": MEASURED_CV_STACK["N_D_junction"],
+    "N_D_bulk": MEASURED_CV_STACK["N_D_bulk"],
+    "L_transition_um": _um(MEASURED_CV_STACK["L_transition"]),
+    "buffer_thickness_um": _um(MEASURED_CV_STACK["buffer_thickness_cm"]),
+    "buffer_end_doping": MEASURED_CV_STACK["buffer_end_doping"],
+    "N_t": MEASURED_CV_STACK["N_t"],
+    "E_t": MEASURED_CV_STACK["E_t"],
+}
+
+
+def measured_cv_config(**overrides) -> DeviceConfig:
+    """DeviceConfig of the measured-C-V profile preset (graded n-/n+ transition), plus
+    ``overrides``. Opt-in: ``DeviceConfig()`` stays the 3-point-calibrated default stack.
+    """
+    return DeviceConfig(**{**MEASURED_CV_PRESET, **overrides})
+
+
+def has_buffer(config) -> bool:
+    """True when ``config`` carries the graded n-/n+ transition (buffer fields set)."""
+    return getattr(config, "buffer_thickness_um", None) is not None
 
 
 # MICRODOSIMETER preset (Petringa et al. 2025, Physica Medica 140, 105675, pp.2-3): 5x5 mm2
@@ -184,6 +249,8 @@ MICRODOSIMETER_PRESET = {
     "area_cm2": 0.25,  # 5 x 5 mm2
     "nplus_thickness_um": _um(DEFAULT_STACK["nplus_thickness_cm"]),
     "N_D_nplus": DEFAULT_STACK["N_D_nplus"],
+    "buffer_thickness_um": None,  # no graded n-/n+ transition
+    "buffer_end_doping": None,
 }
 
 

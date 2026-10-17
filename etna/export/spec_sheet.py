@@ -25,13 +25,16 @@ from etna.export.labels import (
     CV_SYSTEMATIC_NOTE,
     CV_SYSTEMATIC_OTHER,
     DARK_CALIBRATION_NOTE,
+    MEASURED_CV_NOTE,
     MEASURED_W_30V_UM,
     VALIDATION_LABEL,
     VFD_DEFINITION,
     analytic_vfd,
     doping_formula,
     epi_donor_profile,
+    has_buffer,
     has_nplus,
+    is_measured_cv_device,
     is_reference_device,
     reach_through_definition,
 )
@@ -112,9 +115,14 @@ def build_spec(config, report=None) -> dict:
         raise ValueError("report was computed for a different DeviceConfig")
     nplus = has_nplus(config)
     ref = is_reference_device(config)
+    measured_cv = is_measured_cv_device(config)
     layers = stack_layers(config)
     t_e = config.epi_thickness_um
-    depths = [d for d in _DOPING_DEPTHS_UM if d < t_e] + [t_e]
+    depths = [d for d in _DOPING_DEPTHS_UM if d < t_e]
+    if has_buffer(config):  # sample the transition too (start, middle)
+        t0 = t_e - config.buffer_thickness_um
+        depths = sorted(set(depths) | {round(t0, 6), round((t0 + t_e) / 2, 6)})
+    depths = [d for d in depths if d < t_e] + [t_e]
     profile = [
         dict(
             depth_below_junction_um=float(d),
@@ -122,16 +130,25 @@ def build_spec(config, report=None) -> dict:
         )
         for d in depths
     ]
+    if has_buffer(config):
+        model = (
+            "measured C-V profile preset (graded n-/n+ transition, digitised Fig. 4b fit)"
+            if measured_cv
+            else "stack with a graded n-/n+ transition (buffer)"
+        ) + (" + n+ layer" if nplus else ", no n+ layer")
+    else:
+        model = (
+            "default stack (n+ layer)"
+            if nplus
+            else "legacy model (no n+, cathode on the n- epi)"
+        )
 
     spec = {
         "label": VALIDATION_LABEL,
         "generator": f"etna {__version__}",
-        "model": (
-            "default stack (n+ layer)"
-            if nplus
-            else "legacy model (no n+, cathode on the n- epi)"
-        ),
+        "model": model,
         "reference_device": ref,
+        "measured_cv_preset": measured_cv,
         "dimension": "1D" if config.half_width_um is None else "2D",
         "config": asdict(config),
         "area_cm2": config.area_cm2,
@@ -157,6 +174,8 @@ def build_spec(config, report=None) -> dict:
             "N_D_junction_cm3": config.N_D_junction,
             "N_D_bulk_cm3": config.N_D_bulk,
             "L_transition_um": config.L_transition_um,
+            "buffer_thickness_um": config.buffer_thickness_um,
+            "buffer_end_doping_cm3": config.buffer_end_doping,
             "samples": profile,
         },
     }
@@ -208,12 +227,22 @@ def build_spec(config, report=None) -> dict:
             w=w30, d=100.0 * (w30 - MEASURED_W_30V_UM) / MEASURED_W_30V_UM
         )
         cvd["measured_W_minus30V_um"] = MEASURED_W_30V_UM
+    elif measured_cv:
+        cvd["systematic"] = (
+            "No out-of-fit C-V comparison: the whole digitised curve is a fit input "
+            "(see cv.calibration)."
+        )
+        cvd["measured_W_minus30V_um"] = MEASURED_W_30V_UM
     else:
         cvd["systematic"] = CV_SYSTEMATIC_OTHER
     cvd["calibration"] = (
         CALIBRATION_NOTE
         if ref
-        else ("Calibration at 0 / -10 V applies to the reference device only.")
+        else (
+            MEASURED_CV_NOTE
+            if measured_cv
+            else "Calibration at 0 / -10 V applies to the reference device only."
+        )
     )
     spec["cv"] = cvd
 
@@ -234,13 +263,18 @@ def build_spec(config, report=None) -> dict:
     spec["cce"] = ccd
 
     dark = _ok_result(report, "dark")
-    from etna.core.device import DEFAULT_STACK
+    from etna.core.device import DEFAULT_STACK, MEASURED_CV_STACK
 
     n_t = (
         float(dark.metadata.get("N_t", config.N_t)) if dark is not None else config.N_t
     )
     calibrated = (
         ref and n_t == DEFAULT_STACK["N_t"] and config.E_t == DEFAULT_STACK["E_t"]
+    )
+    calibrated_measured = (
+        measured_cv
+        and n_t == MEASURED_CV_STACK["N_t"]
+        and config.E_t == MEASURED_CV_STACK["E_t"]
     )
     dd = {
         "available": dark is not None,
@@ -250,11 +284,18 @@ def build_spec(config, report=None) -> dict:
             DARK_CALIBRATION_NOTE
             if calibrated
             else (
-                f"N_t = {n_t:.4g}, E_t = {config.E_t:g} eV on this device: the dark-current "
-                "calibration (default stack, N_t = "
-                f"{DEFAULT_STACK['N_t']:.7g}, E_t = {DEFAULT_STACK['E_t']:g} eV, fitted to the "
-                "measured < 18 pA bound at -60 V on 4 mm2) does not apply; uncalibrated "
-                "estimate."
+                (
+                    DARK_CALIBRATION_NOTE
+                    + f" (N_t = {n_t:.7g} refitted on the measured-C-V profile preset.)"
+                )
+                if calibrated_measured
+                else (
+                    f"N_t = {n_t:.4g}, E_t = {config.E_t:g} eV on this device: the dark-current "
+                    "calibration (default stack, N_t = "
+                    f"{DEFAULT_STACK['N_t']:.7g}, E_t = {DEFAULT_STACK['E_t']:g} eV, fitted to the "
+                    "measured < 18 pA bound at -60 V on 4 mm2) does not apply; uncalibrated "
+                    "estimate."
+                )
             )
         ),
     }
@@ -280,7 +321,9 @@ def build_spec(config, report=None) -> dict:
                 peak_E_V_per_cm=pk[0],
                 peak_depth_um=pk[1],
                 peak_note=(
-                    "excl. the nm-scale spikes at the abrupt doping steps (mesh/estimator dependent)" if pk[2] else ""
+                    "excl. the nm-scale spikes at the abrupt doping steps (mesh/estimator dependent)"
+                    if pk[2]
+                    else ""
                 ),
             )
         elif field.mesh is not None and "ElectricField" in field.mesh.node_values:
@@ -299,7 +342,13 @@ def build_spec(config, report=None) -> dict:
             "C-V eps*A/C at -30 V vs Photons Fig. 4b (see cv.systematic; 0 / -10 V are "
             "calibration inputs); dark current is a calibration to the measured bound."
             if ref
-            else "none for this config " "(they apply to the reference device only)."
+            else (
+                "the full digitised Photons Fig. 4b C-V is a FIT INPUT of this preset "
+                "(see cv.calibration), not a validation; dark current is a calibration "
+                "to the measured bound."
+                if measured_cv
+                else "none for this config (they apply to the reference device only)."
+            )
         ),
         "No GDSII layout: guard ring / pad dimensions are not available and are not invented.",
     ]
@@ -369,6 +418,13 @@ def spec_to_markdown(spec: dict) -> str:
     ed = spec["epi_doping"]
     L.append("")
     L.append(f"Epi doping ({ed['profile']}): `{ed['formula']}`")
+    if ed.get("buffer_thickness_um") is not None:
+        L.append("")
+        L.append(
+            f"Graded n-/n+ transition: last {ed['buffer_thickness_um']:g} um of the epi, "
+            f"N_D -> {ed['buffer_end_doping_cm3']:.3g} cm^-3 at the epi end (fitted form, "
+            "not a measured profile)."
+        )
     L.append("")
     L.append("| depth below junction (um) | N_D (cm^-3) |")
     L.append("|---|---|")

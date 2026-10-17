@@ -81,6 +81,44 @@ def _failure_reason(exc):
     return f"error: {type(exc).__name__}: {exc}"
 
 
+def analytic_vfd_from_info(params, V_bi):
+    """Analytic graded V_fd (V) of a built device's resolved doping (device_info dict).
+
+    Closed form (``full_depletion_voltage_graded``) for the plain exponential profile.
+    With the graded n-/n+ transition (``buffer_thickness_cm`` set) the sensitive,
+    low-doped epi ends where the transition starts, so V_fd is the moment integral of
+    the actual profile (``donor_profile``) from the junction to the TRANSITION START
+    (epi end - buffer thickness), via ``full_depletion_voltage_profile``: the same
+    convention as the engine's reach-through rule (etna.api.simulation._reach_through_V).
+    Depleting the transition itself (N_D up to buffer_end_doping) would take ~130 V on
+    the measured-C-V preset and is not "full depletion" of the detector; it is the
+    -10..-60 V creep of the measured C-V.
+    """
+    from etna.core.analytical import full_depletion_voltage_profile
+    from etna.core.device import donor_profile
+
+    t = params["epi_thickness_cm"]
+    if params.get("buffer_thickness_cm") is None:
+        return full_depletion_voltage_graded(
+            epi_thickness=t,
+            N_D_bulk=params["N_D_bulk"],
+            N_D_junction=params["N_D_junction"],
+            L_transition=params["L_transition"],
+            V_bi=V_bi,
+        )
+    t_low = t - params["buffer_thickness_cm"]
+    y = np.linspace(0.0, t_low, 20001)
+    nd = donor_profile(
+        y,
+        0.0,
+        params["N_D_junction"],
+        params["N_D_bulk"],
+        params["L_transition"],
+        buffer=(t, params["buffer_thickness_cm"], params["buffer_end_doping"]),
+    )
+    return full_depletion_voltage_profile(y, nd, V_bi)
+
+
 def _sweep_one(task):
     """One configuration of ``microdosimetric_sweep`` (module level so it can be pickled)."""
     i, total, hw, epi, nd, vb, n_lateral_points, *rest = task
@@ -98,8 +136,12 @@ def _sweep_one(task):
     t_np = dkw.get("nplus_thickness_cm", DEFAULT_STACK["nplus_thickness_cm"])
     stack = {
         "nplus_thickness_um": np.nan if t_np is None else round(t_np * 1e4, 12),
-        "N_D_nplus": np.nan if t_np is None else dkw.get("N_D_nplus", DEFAULT_N_D_NPLUS),
-        "nplus_generation": bool(t_np is not None and dkw.get("nplus_generation", False)),
+        "N_D_nplus": (
+            np.nan if t_np is None else dkw.get("N_D_nplus", DEFAULT_N_D_NPLUS)
+        ),
+        "nplus_generation": bool(
+            t_np is not None and dkw.get("nplus_generation", False)
+        ),
     }
     try:
         scan = None
@@ -113,7 +155,9 @@ def _sweep_one(task):
                 lateral_cce_scan_2d,
             )
 
-            reason = engine2d_unsupported_reason(hw, vb, epi, nd, n_lateral_points, **dkw)
+            reason = engine2d_unsupported_reason(
+                hw, vb, epi, nd, n_lateral_points, **dkw
+            )
             if reason is None:
                 try:
                     used = "engine2d"
@@ -132,13 +176,21 @@ def _sweep_one(task):
                     raise
                 except Engine2DFallback as e:
                     used = "devsim"
-                    logger.info(f"Sweep {i + 1}/{total}: engine2d declined ({e}); using devsim")
-                except Exception as e:  # any other engine error must not become a quiet NaN row
+                    logger.info(
+                        f"Sweep {i + 1}/{total}: engine2d declined ({e}); using devsim"
+                    )
+                except (
+                    Exception
+                ) as e:  # any other engine error must not become a quiet NaN row
                     used = "devsim"
                     scan = None
-                    logger.warning(f"Sweep {i + 1}/{total}: engine2d error ({e!r}); using devsim")
+                    logger.warning(
+                        f"Sweep {i + 1}/{total}: engine2d error ({e!r}); using devsim"
+                    )
             else:
-                logger.info(f"Sweep {i + 1}/{total}: engine2d unsupported ({reason}); using devsim")
+                logger.info(
+                    f"Sweep {i + 1}/{total}: engine2d unsupported ({reason}); using devsim"
+                )
         if scan is None:
             try:
                 device_info = create_2d_dd_device(
@@ -169,13 +221,7 @@ def _sweep_one(task):
             params["N_D_junction"],
             params["n_i"],
         )
-        V_fd = full_depletion_voltage_graded(
-            epi_thickness=params["epi_thickness_cm"],
-            N_D_bulk=params["N_D_bulk"],
-            N_D_junction=params["N_D_junction"],
-            L_transition=params["L_transition"],
-            V_bi=V_bi,
-        )
+        V_fd = analytic_vfd_from_info(params, V_bi)
         raw_center_cce = cce_vals[0]
         raw_edge_cce = cce_vals[-1]
         # Depletion margin (V_FD_MARGIN = 1.2): covers the +/-20 % doping tolerance.
@@ -193,50 +239,46 @@ def _sweep_one(task):
             center_cce = float(raw_center_cce)
             edge_cce = float(raw_edge_cce)
             passes_cce_floor = center_cce >= CCE_FLOOR and edge_cce >= CCE_FLOOR
-        record = (
-            {
-                "half_width_um": hw,
-                "epi_thickness_cm": epi,
-                "N_D_bulk": nd,
-                "V_bias": vb,
-                "center_cce": center_cce,
-                "edge_cce": edge_cce,
-                "edge_center_ratio": float(scan["edge_to_center_ratio"]),
-                "cce_std": float(np.std(cce_vals)),
-                "V_fd": float(V_fd),
-                "is_fully_depleted": bool(is_fully_depleted),
-                "passes_cce_floor": bool(passes_cce_floor),
-                "is_valid": bool(is_fully_depleted and passes_cce_floor),
-                "solver": used,
-                "failure_reason": "",
-                **stack,
-            }
-        )
+        record = {
+            "half_width_um": hw,
+            "epi_thickness_cm": epi,
+            "N_D_bulk": nd,
+            "V_bias": vb,
+            "center_cce": center_cce,
+            "edge_cce": edge_cce,
+            "edge_center_ratio": float(scan["edge_to_center_ratio"]),
+            "cce_std": float(np.std(cce_vals)),
+            "V_fd": float(V_fd),
+            "is_fully_depleted": bool(is_fully_depleted),
+            "passes_cce_floor": bool(passes_cce_floor),
+            "is_valid": bool(is_fully_depleted and passes_cce_floor),
+            "solver": used,
+            "failure_reason": "",
+            **stack,
+        }
     except Exception as e:
         failure_reason = _failure_reason(e)
         logger.warning(
             f"Sweep {i + 1}/{total} failed (hw={hw}, epi={epi}, "
             f"nd={nd:.1e}, vb={vb}): {failure_reason}"
         )
-        record = (
-            {
-                "half_width_um": hw,
-                "epi_thickness_cm": epi,
-                "N_D_bulk": nd,
-                "V_bias": vb,
-                "center_cce": np.nan,
-                "edge_cce": np.nan,
-                "edge_center_ratio": np.nan,
-                "cce_std": np.nan,
-                "V_fd": np.nan,
-                "is_fully_depleted": False,
-                "passes_cce_floor": False,
-                "is_valid": False,
-                "solver": used,
-                "failure_reason": failure_reason,
-                **stack,
-            }
-        )
+        record = {
+            "half_width_um": hw,
+            "epi_thickness_cm": epi,
+            "N_D_bulk": nd,
+            "V_bias": vb,
+            "center_cce": np.nan,
+            "edge_cce": np.nan,
+            "edge_center_ratio": np.nan,
+            "cce_std": np.nan,
+            "V_fd": np.nan,
+            "is_fully_depleted": False,
+            "passes_cce_floor": False,
+            "is_valid": False,
+            "solver": used,
+            "failure_reason": failure_reason,
+            **stack,
+        }
         # Reset devsim global state after failure to prevent
         # contamination of subsequent configurations (a failed
         # ramp_bias can leave solver state that causes all later
@@ -267,6 +309,8 @@ def microdosimetric_sweep(
     substrate_thickness_cm=DEFAULT_STACK["substrate_thickness_cm"],
     N_D_junction=None,
     L_transition=None,
+    buffer_thickness_cm=None,
+    buffer_end_doping=None,
 ):
     """Sweep SV geometry and doping parameters with a validity gate and operating-point ranking.
 
@@ -318,6 +362,10 @@ def microdosimetric_sweep(
         p+ anode thickness (cm; default the stack's 0.3 um) and graded epi doping of
         every config (None = create_sic_2d_device default = DEFAULT_STACK doping),
         forwarded with the n+ keywords.
+    buffer_thickness_cm, buffer_end_doping :
+        Optional graded n-/n+ transition of every config (create_sic_2d_device
+        keywords; both None = none). The V_fd gate then integrates the actual profile
+        (``analytic_vfd_from_info``). "auto" serves it inside ENGINE2D_BUFFER_BOX.
 
     Returns
     -------
@@ -363,6 +411,8 @@ def microdosimetric_sweep(
         ("substrate_thickness_cm", substrate_thickness_cm),
         ("N_D_junction", N_D_junction),
         ("L_transition", L_transition),
+        ("buffer_thickness_cm", buffer_thickness_cm),
+        ("buffer_end_doping", buffer_end_doping),
     ):
         if value is not None:
             dkw[key] = value
@@ -379,7 +429,8 @@ def microdosimetric_sweep(
         from concurrent.futures import ProcessPoolExecutor
 
         with ProcessPoolExecutor(
-            max_workers=min(n_jobs, total), mp_context=multiprocessing.get_context("spawn")
+            max_workers=min(n_jobs, total),
+            mp_context=multiprocessing.get_context("spawn"),
         ) as pool:
             records = list(pool.map(_sweep_one, tasks))
     else:

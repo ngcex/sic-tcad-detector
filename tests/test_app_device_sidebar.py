@@ -28,6 +28,8 @@ ALL_FIELDS_VALUES = {
     "N_D_nplus": 5e18,
     "N_t": 3e12,  # dark-current fit fields, added with the n+ default flip
     "E_t": 0.66,
+    "buffer_thickness_um": 1.0,  # graded n-/n+ transition (opt-in measured-C-V preset)
+    "buffer_end_doping": 1e17,
 }
 
 
@@ -105,12 +107,28 @@ def test_sidebar_default_is_the_nplus_stack():
     # the sidebar models the 4 mm2 dosimeter; DeviceConfig keeps its 1e-4 cm2 default
     import dataclasses
 
-    assert at.session_state["device_config"] == dataclasses.replace(DeviceConfig(), area_cm2=0.04)
+    assert at.session_state["device_config"] == dataclasses.replace(
+        DeviceConfig(), area_cm2=0.04
+    )
     assert not at.sidebar.checkbox(key="cfg_legacy_on").value
     texts = " ".join(c.value for c in at.sidebar.caption)
     assert "Inside the 1D engine/devsim cross-check domain" in texts
     at.sidebar.checkbox(key="cfg_legacy_on").check()
     at.run()
-    from etna import legacy_config
+    from etna import legacy_config, measured_cv_config
 
-    assert at.session_state["device_config"] == dataclasses.replace(legacy_config(), area_cm2=0.04)
+    assert at.session_state["device_config"] == dataclasses.replace(
+        legacy_config(), area_cm2=0.04
+    )
+    # the measured-C-V profile checkbox is opt-in too, and labelled as a fit
+    at.sidebar.checkbox(key="cfg_legacy_on").uncheck()
+    assert not at.sidebar.checkbox(key="cfg_measured_cv_on").value
+    at.sidebar.checkbox(key="cfg_measured_cv_on").check()
+    at.run()
+    assert at.session_state["device_config"] == dataclasses.replace(
+        measured_cv_config(), area_cm2=0.04
+    )
+    infos = " ".join(c.value for c in at.sidebar.info)
+    assert "fitted on the digitised" in infos and "not the default" in infos
+    texts = " ".join(c.value for c in at.sidebar.caption)
+    assert "Inside the 1D engine/devsim cross-check domain" in texts

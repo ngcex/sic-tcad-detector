@@ -5,9 +5,11 @@ from __future__ import annotations
 from etna._version import __version__
 from etna.api.device import (
     LEGACY_PRESET,
+    MEASURED_CV_PRESET,
     MICRODOSIMETER_PRESET,
     DeviceConfig,
     legacy_config,
+    measured_cv_config,
     microdosimeter_config,
 )
 from etna.api.results import MeshData, SimResult
@@ -34,6 +36,8 @@ __all__ = [
     "legacy_config",
     "MICRODOSIMETER_PRESET",
     "microdosimeter_config",
+    "MEASURED_CV_PRESET",
+    "measured_cv_config",
     "SimResult",
     "MeshData",
     "run_cv",
