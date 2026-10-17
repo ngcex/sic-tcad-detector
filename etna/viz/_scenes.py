@@ -61,6 +61,7 @@ class StackScene(Scene):
         title = Text("Device stack (depth to scale)", font_size=30).to_edge(
             UP, buff=0.25
         )
+        self.add(_footer(d))  # validation label on screen from the first frame
         self.play(Write(title), run_time=0.8)
         # depth axis
         ax = Line(
@@ -121,7 +122,7 @@ class StackScene(Scene):
             font_size=14,
             color="#bbbbbb",
         ).next_to([x_left, y_top - H, 0], DOWN, buff=0.15, aligned_edge=LEFT)
-        self.play(FadeIn(note), FadeIn(_footer(d)), run_time=0.6)
+        self.play(FadeIn(note), run_time=0.6)
         self.wait(1.5)
 
 
@@ -247,6 +248,7 @@ class DepletionScene(Scene):
             return t.next_to(title, DOWN, buff=0.18)
 
         clipped = any(max(fr["E_V_per_cm"]) > ymax for fr in frames)
+        self.add(_footer(d, extra))  # validation label on screen from the first frame
         self.play(Write(title), FadeIn(bar), FadeIn(names), run_time=0.8)
         self.play(
             Create(axes),
@@ -255,7 +257,6 @@ class DepletionScene(Scene):
             FadeIn(xlab),
             FadeIn(ylab),
             FadeIn(guides),
-            FadeIn(_footer(d, extra)),
             run_time=0.8,
         )
         if clipped:

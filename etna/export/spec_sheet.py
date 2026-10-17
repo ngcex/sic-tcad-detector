@@ -225,7 +225,30 @@ def build_spec(config, report=None) -> dict:
     spec["cce"] = ccd
 
     dark = _ok_result(report, "dark")
-    dd = {"available": dark is not None, "note": DARK_CALIBRATION_NOTE}
+    from etna.core.device import DEFAULT_STACK
+
+    n_t = (
+        float(dark.metadata.get("N_t", config.N_t)) if dark is not None else config.N_t
+    )
+    calibrated = (
+        ref and n_t == DEFAULT_STACK["N_t"] and config.E_t == DEFAULT_STACK["E_t"]
+    )
+    dd = {
+        "available": dark is not None,
+        "N_t_used": n_t,
+        "E_t_eV": config.E_t,
+        "note": (
+            DARK_CALIBRATION_NOTE
+            if calibrated
+            else (
+                f"N_t = {n_t:.4g}, E_t = {config.E_t:g} eV on this device: the dark-current "
+                "calibration (default stack, N_t = "
+                f"{DEFAULT_STACK['N_t']:.7g}, E_t = {DEFAULT_STACK['E_t']:g} eV, fitted to the "
+                "measured < 18 pA bound at -60 V on 4 mm2) does not apply; uncalibrated "
+                "estimate."
+            )
+        ),
+    }
     if dark is not None:
         I60 = _interp_at(dark.x, np.abs(dark.y), _DARK_BIAS_V)
         dd.update(
@@ -411,12 +434,21 @@ def spec_to_markdown(spec: dict) -> str:
     L.append("")
     L.append("## Solver provenance and validity")
     L.append("")
-    L.append("| section | status | solver | validated domain | domain note | reason |")
+    L.append(
+        "| section | status | solver | inside engine/devsim cross-check box "
+        "| domain note | reason |"
+    )
     L.append("|---|---|---|---|---|---|")
     for p in spec["provenance"]:
         L.append(
             f"| {p['section']} | {p['status']} | {p['solver']} | {p['validated_domain']} | {p['domain_note']} | {p['reason']} |"
         )
+    L.append("")
+    L.append(
+        "Inside the cross-check box (JSON key `validated_domain`) the batched / 2D "
+        "engines and devsim agree; it is a solver cross-check, not a validation "
+        "against measurement."
+    )
     L.append("")
     L.append("## Statements")
     L.append("")
