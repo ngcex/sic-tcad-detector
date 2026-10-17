@@ -1139,7 +1139,7 @@ def run_cce_tilted_alpha(
     alpha_range_um: float = 18.0,
     dead_layer_um: float = 0.0,
     shape: str = "bragg",
-    generation_in_p_plus: bool = True,
+    generation_in_p_plus: bool = False,
 ) -> SimResult:
     """CCE vs reverse bias for an alpha track tilted ``theta_deg`` from the normal.
 
@@ -1148,14 +1148,17 @@ def run_cce_tilted_alpha(
     Pair with ``microdosimeter_config()``. Generation from
     ``etna.core.generation_profiles.tilted_alpha_generation`` with depth measured from
     the SiC surface: a front dead layer ``dead_layer_um`` (metal contact, SiC-equivalent;
-    the papers give no thickness) is crossed first, generation in the p+ is kept unless
-    ``generation_in_p_plus=False``, none in the n+ (the track never reaches it).
+    the papers give no thickness) is crossed first; by default the p+ is part of the
+    dead layer too (epi-only generation, the ``run_cce`` convention); with
+    ``generation_in_p_plus=True`` the p+ pairs are generated and may be collected by
+    electron diffusion (a sensitivity variant). None in the n+ (never reached).
     ``shape``: "bragg" (QUALITATIVE Bragg curve, not ASTAR/SRIM data) or "box".
 
     Batched engine only (the devsim path has no custom generation): raises
     ``OutsideModelValidity`` for configs or bias grids outside the engine's validated
     domain, and RuntimeError if the engine does not converge. Steady-state, low-injection
-    1D model (as run_cce): CCE = J_cathode / (q * pairs generated in SiC). It does NOT
+    1D model (as run_cce): CCE = J_cathode / (q * pairs generated), i.e. relative to the
+    pairs generated in the epi (plus the p+ if ``generation_in_p_plus``). It does NOT
     model track plasma / columnar recombination, trapping within the shaping time,
     ballistic deficit or 2D edges; compared with the paper's Fig. 4b it plateaus from
     ~-20 V where the data still rise ~1 % to -50 V (lab/microdosimeter/notes/LOG.md), and
@@ -1194,11 +1197,21 @@ def run_cce_tilted_alpha(
         G[x > epi_end + 1e-12] = 0.0
     if not generation_in_p_plus:
         G[x < sub] = 0.0
-    pairs_in_sic = float(np.trapezoid(G, x))
-    if not pairs_in_sic > 0:
+    pairs_generated = float(np.trapezoid(G, x))
+    if not pairs_generated > 0:
         raise ValueError("run_cce_tilted_alpha: the track deposits nothing in the SiC")
     G_rate = G * (1e18 / G.max())  # cm^-3 s^-1, low injection as run_cce
-    res = cce_sweep(pb, bias_array, sub, G_rate, T=config.T, N_A=config.N_A, N_D=nd)
+    # Solve on a grid that walks from 0 V in steps <= 10 V (a cold Gummel start at
+    # e.g. -50 V does not converge); report only the requested points.
+    grid = [0.0]
+    for v in bias_array:
+        n = max(1, int(np.ceil(abs(v - grid[-1]) / 10.0)))
+        grid.extend(np.linspace(grid[-1], v, n + 1)[1:])
+    grid = np.array(grid[1:] if bias_array[0] == 0.0 else grid)
+    pick = []
+    for v in bias_array:  # last occurrence of each requested bias, in request order
+        pick.append(int(np.flatnonzero(np.isclose(grid, v, rtol=0, atol=1e-12))[-1]))
+    res = cce_sweep(pb, grid, sub, G_rate, T=config.T, N_A=config.N_A, N_D=nd)
     if not res.converged[:, 0].all():
         raise RuntimeError("run_cce_tilted_alpha: batched engine did not converge")
     dark = reverse_sweep(pb, bias_array, sub, kws[0]["epi_thickness_cm"])
@@ -1207,16 +1220,16 @@ def run_cce_tilted_alpha(
         rt = _refine_reach_through(
             config, _reach_through_V(dark.W[:, 0], bias_array, config), bias_array
         )
-    cce = res.cce[:, 0]
+    cce = res.cce[pick, 0]
     return SimResult(
         config=config,
         sim_type="cce",
         x=bias_array.copy(),
         y=cce,
         metadata={
-            "I_collected": res.J_collected[:, 0],
+            "I_collected": res.J_collected[pick, 0],
             "I_generated": res.J_generated,
-            "cce_vs_E0": cce * pairs_in_sic / (E0 / E_PAIR_SIC_EV),
+            "cce_vs_E0": cce * pairs_generated / (E0 / E_PAIR_SIC_EV),
             "dead_layer_energy_fraction": lost,
             "projected_end_um": alpha_range_um * np.cos(np.radians(theta_deg))
             - dead_layer_um,

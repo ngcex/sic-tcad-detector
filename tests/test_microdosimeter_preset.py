@@ -77,14 +77,21 @@ def test_tilted_cce_vs_bias_pins_lab_numbers():
     V = np.round(r.x, 6)
     n = r.y / r.y[V == -50.0][0]
     at = lambda v: n[V == v][0]
-    assert at(0.0) == pytest.approx(0.9494, abs=5e-4)
-    assert at(-10.0) == pytest.approx(0.9992, abs=3e-4)
+    # default: epi-only generation (p+ = dead layer), bragg shape, no metal
+    assert at(0.0) == pytest.approx(0.9488, abs=5e-4)
+    assert at(-10.0) == pytest.approx(0.9993, abs=3e-4)
     # documented model limitation: flat from -20 V (data: 0.9904 -> 1.000 to -50 V)
     assert at(-20.0) > 0.999
     assert np.all(np.diff(r.y) >= -1e-6)
-    assert r.y[V == -50.0][0] == pytest.approx(0.9845, abs=5e-4)
+    assert r.y[V == -50.0][0] == pytest.approx(0.9999, abs=2e-4)
+    # relative to E0/E_pair: the 3.1 % deposited in the 0.3 um p+ is lost
+    assert r.metadata["cce_vs_E0"][V == -50.0][0] == pytest.approx(0.9688, abs=5e-4)
     assert r.metadata["projected_end_um"] == pytest.approx(7.607, abs=1e-3)
     assert r.metadata["reach_through_V"] == pytest.approx(30.0, abs=0.05)
+    p = etna.run_cce_tilted_alpha(
+        etna.microdosimeter_config(), -50.0, -50.0, 1, generation_in_p_plus=True
+    )
+    assert p.y[0] == pytest.approx(0.9845, abs=5e-4)  # p+ pairs: electron L_n ~ 0.3 um
 
 
 def test_tilted_cce_refuses_outside_engine_domain():
