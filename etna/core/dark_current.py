@@ -47,6 +47,8 @@ from etna.core.drift_diffusion import (
     extract_steady_state_current,
     ramp_bias,
 )
+from etna.core.device import DEFAULT_STACK as _STACK
+
 
 logger = logging.getLogger(__name__)
 
@@ -789,15 +791,16 @@ def dark_current_vs_fluence(
     V_bias=-30.0,
     area=0.04,
     epi_thickness_cm=10e-4,
-    N_D_junction=2.90e15,
-    N_D_bulk=8.50e13,
-    L_transition=1.0e-4,
+    N_D_junction=_STACK["N_D_junction"],
+    N_D_bulk=_STACK["N_D_bulk"],
+    L_transition=_STACK["L_transition"],
     energy_MeV=62.0,
     lifetime_model="linear",
     damage_params=None,
     N_t=None,
     S_n=None,
     S_p=None,
+    device_kwargs=None,
 ):
     """Compute dark current vs proton fluence at fixed reverse bias.
 
@@ -819,11 +822,11 @@ def dark_current_vs_fluence(
     epi_thickness_cm : float
         Epitaxial layer thickness (cm).  Default 10 um.
     N_D_junction : float
-        Junction-side donor concentration (cm^-3).  Default: 2.90e15.
+        Junction-side donor concentration (cm^-3).  Default: DEFAULT_STACK (2.974271e15).
     N_D_bulk : float
-        Bulk-side donor concentration (cm^-3).  Default: 8.50e13.
+        Bulk-side donor concentration (cm^-3).  Default: DEFAULT_STACK (6.335936e13).
     L_transition : float
-        Doping transition length (cm).  Default: 1.0e-4 (1 um).
+        Doping transition length (cm).  Default: DEFAULT_STACK (0.987 um).
     energy_MeV : float
         Proton energy (MeV).  Default 62.0.
     lifetime_model : str
@@ -836,6 +839,13 @@ def dark_current_vs_fluence(
         Electron surface recombination velocity (cm/s).
     S_p : float or None
         Hole surface recombination velocity (cm/s).
+
+    device_kwargs : dict or None
+        Extra create_sic_device keywords (geometry: substrate_thickness_cm,
+        nplus_thickness_cm, N_D_nplus, ...; or doping), overriding the defaults.
+        None = the default stack (DEFAULT_STACK); nplus_thickness_cm=None and
+        substrate_thickness_cm=1e-4 (or etna.api.device.device_kwargs(legacy_config()))
+        give the legacy geometry.
 
     Returns
     -------
@@ -853,6 +863,14 @@ def dark_current_vs_fluence(
           fluence is 0.0
         - ``V_bias``, ``energy_MeV``, ``lifetime_model``: echo-back scalars
     """
+    dev_kw = dict(
+        epi_thickness_cm=epi_thickness_cm,
+        doping_profile="graded",
+        N_D_junction=N_D_junction,
+        N_D_bulk=N_D_bulk,
+        L_transition=L_transition,
+    )
+    dev_kw.update(device_kwargs or {})
     import uuid
 
     import devsim.python_packages.simple_physics as simple_physics
@@ -874,11 +892,7 @@ def dark_current_vs_fluence(
     ref_name = f"dc_fluence_ref_{ref_id}"
     ref_info = create_sic_device(
         device_name=ref_name,
-        epi_thickness_cm=epi_thickness_cm,
-        doping_profile="graded",
-        N_D_junction=N_D_junction,
-        N_D_bulk=N_D_bulk,
-        L_transition=L_transition,
+        **dev_kw,
     )
     try:
         ref_x = np.array(
@@ -932,11 +946,7 @@ def dark_current_vs_fluence(
             # Staged device creation
             device_info = create_sic_device(
                 device_name=dev_name,
-                epi_thickness_cm=epi_thickness_cm,
-                doping_profile="graded",
-                N_D_junction=N_D_junction,
-                N_D_bulk=N_D_bulk,
-                L_transition=L_transition,
+                **dev_kw,
             )
 
             # Apply damage BEFORE Poisson setup
@@ -1036,6 +1046,7 @@ def dark_current_post_anneal(
     N_t=None,
     S_n=None,
     S_p=None,
+    device_kwargs=None,
 ) -> dict:
     """Compute dark current for an irradiated + annealed device.
 
@@ -1072,6 +1083,13 @@ def dark_current_post_anneal(
     S_p : float or None
         Hole surface recombination velocity (cm/s).
 
+    device_kwargs : dict or None
+        Extra create_sic_device keywords (geometry: substrate_thickness_cm,
+        nplus_thickness_cm, N_D_nplus, ...; or doping), overriding the defaults.
+        None = the default stack (DEFAULT_STACK); nplus_thickness_cm=None and
+        substrate_thickness_cm=1e-4 (or etna.api.device.device_kwargs(legacy_config()))
+        give the legacy geometry.
+
     Returns
     -------
     result : dict
@@ -1079,6 +1097,14 @@ def dark_current_post_anneal(
         f_Z12, f_EH67, f_EH4, I_SRH, I_TAT, I_SRV, valid (bool), reason (str,
         "" when valid; NaN currents at full donor compensation or solver failure).
     """
+    dev_kw = dict(
+        epi_thickness_cm=epi_thickness_cm,
+        doping_profile="graded",
+        N_D_junction=_STACK["N_D_junction"],
+        N_D_bulk=_STACK["N_D_bulk"],
+        L_transition=_STACK["L_transition"],
+    )
+    dev_kw.update(device_kwargs or {})
     import uuid
 
     import devsim.python_packages.simple_physics as simple_physics
@@ -1100,11 +1126,7 @@ def dark_current_post_anneal(
     ref_name = f"dc_anneal_ref_{ref_id}"
     ref_info = create_sic_device(
         device_name=ref_name,
-        epi_thickness_cm=epi_thickness_cm,
-        doping_profile="graded",
-        N_D_junction=2.90e15,
-        N_D_bulk=8.50e13,
-        L_transition=1.0e-4,
+        **dev_kw,
     )
     try:
         ref_x = np.array(
@@ -1168,11 +1190,7 @@ def dark_current_post_anneal(
         # Staged device creation
         device_info = create_sic_device(
             device_name=dev_name,
-            epi_thickness_cm=epi_thickness_cm,
-            doping_profile="graded",
-            N_D_junction=2.90e15,
-            N_D_bulk=8.50e13,
-            L_transition=1.0e-4,
+            **dev_kw,
         )
 
         # Apply annealed params before Poisson

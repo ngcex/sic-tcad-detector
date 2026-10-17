@@ -157,13 +157,18 @@ class TestTATGeneration:
         """TAT device dark current should be >> SRH-only at -30V."""
         srh_dev = srh_only_device
         ramp_bias(srh_dev, V_target=-30.0, contact="anode", V_step=1.0)
-        I_srh = abs(extract_contact_current(srh_dev, contact="cathode"))
+        # Balanced steady-state current: the default devices carry the stack's n+ layer
+        # (builder default since 2026-10-17), where the direct cathode current is the
+        # 1e19 majority term, round-off ~1e-8 A/cm^2 (it made both currents equal here).
+        from etna.core.dark_current import _refresh_and_resolve
+        from etna.core.drift_diffusion import extract_steady_state_current
+
+        I_srh = abs(extract_steady_state_current(srh_dev, contact="cathode"))
 
         tat_dev = create_dark_current_device(device_name=_unique_name("tat_cmp"))
         ramp_bias(tat_dev, V_target=-30.0, contact="anode", V_step=1.0)
-        _compute_node_efield(tat_dev["device_name"], tat_dev["region_name"])
-        _compute_gamma_factors(tat_dev["device_name"], tat_dev["region_name"])
-        I_tat = abs(extract_contact_current(tat_dev, contact="cathode"))
+        _refresh_and_resolve(tat_dev["device_name"], tat_dev["region_name"])
+        I_tat = abs(extract_steady_state_current(tat_dev, contact="cathode"))
 
         # TAT current should dominate SRH by a large factor
         assert (
