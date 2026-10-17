@@ -3,7 +3,7 @@ Verroi 2023 device parameters) vs the paper's reported W(V) endpoints and Vbi.
 
 See .planning/VALIDATION_LITERATURE.md for the full writeup and caveats.
 Panel 1 (W vs bias) is the genuine independent check: high-bias agreement
-(2%) confirms correct absolute C-V scale for an independently-fabricated
+(+3.1 % at -40 V) confirms correct absolute C-V scale for an independently-fabricated
 device; the low-bias offset is an expected p-n vs Schottky Vbi difference,
 not a discrepancy. Panel 2 (1/C^2 slope) is a solver self-consistency
 round-trip -- N_D was a simulation INPUT (set to match the paper's device),
@@ -25,7 +25,9 @@ cfg = DeviceConfig(
     area_cm2=np.pi * (0.1) ** 2,
     T=293.15,
 )
-result = run_cv(cfg)
+# 1 V grid so -40 V is a solved point: the default linspace(0, -50, 40) has no -40 V
+# (nearest -39.74 V, which read +2.8 % instead of +3.1 %; audit-v7 A-01).
+result = run_cv(cfg, v_start=0.0, v_stop=-50.0, n_points=51)
 
 eps0 = 8.854e-14
 eps_r = 9.7
@@ -56,7 +58,7 @@ ax.legend(fontsize=8, loc="lower right")
 ax.grid(alpha=0.3)
 ax.annotate(
     "Junction-type offset\n(V$_{bi}$ differs: p-n vs Schottky)",
-    xy=(0, 1.117),
+    xy=(0, 1.127),
     xytext=(8, 2.3),
     fontsize=8,
     color="darkred",
@@ -64,7 +66,7 @@ ax.annotate(
 )
 ax.annotate(
     "Converges at high |V|\n(V$_R \\gg V_{bi}$ for both)",
-    xy=(40, 4.284),
+    xy=(40, 4.330),
     xytext=(15, 4.6),
     fontsize=8,
     color="darkgreen",
