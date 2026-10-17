@@ -103,3 +103,20 @@ def test_tilted_cce_refuses_outside_engine_domain():
         etna.run_cce_tilted_alpha(etna.microdosimeter_config(), 1.0, -10.0, 3)
     with pytest.raises(NotImplementedError):
         etna.run_cce_tilted_alpha(etna.microdosimeter_config(half_width_um=50.0))
+
+
+def test_run_cce_cold_start_at_minus_50V_stays_on_the_engine():
+    """A cold 0 -> -50 V Poisson jump does not converge on the preset (uniform 3.06e14):
+    run_cce used to fall back to devsim silently. The sweeps now walk 0 V in <= 10 V
+    Poisson sub-steps (as run_cce_tilted_alpha)."""
+    from etna.api import simulation as sim
+
+    c = etna.microdosimeter_config()
+    r = etna.run_cce(c, -50.0, -60.0, 3)
+    assert r.metadata["solver"] == "batched"
+    assert "fallback_reason" not in r.metadata
+    assert r.metadata["reach_through_V"] == pytest.approx(30.0, abs=0.05)
+    d = sim._run_cce_devsim(c, np.array([-50.0, -55.0, -60.0]))
+    np.testing.assert_allclose(r.y, d.y, atol=1e-6)
+    cv = etna.run_cv(c, -50.0, -60.0, 3)
+    assert cv.metadata["solver"] == "batched"
