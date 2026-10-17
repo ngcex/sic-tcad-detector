@@ -63,15 +63,26 @@ def _run_sweep(config: DeviceConfig) -> SimResult:
     from etna.core.optimization import microdosimetric_sweep
 
     epi_cm = config.epi_thickness_um * 1e-4
-    # the n+ layer (if any) goes to the sweep; the engine serves it inside its n+ parity box
+    # the p+ anode, graded doping and n+ layer (if any) go to the sweep; the engine serves
+    # them inside its parity box
     nplus = {}
     if config.nplus_thickness_um is not None:
         nplus = dict(
             nplus_thickness_cm=config.nplus_thickness_um * 1e-4, N_D_nplus=config.N_D_nplus
         )
+    nplus.update(
+        substrate_thickness_cm=config.substrate_thickness_um * 1e-4,
+        N_D_junction=config.N_D_junction,
+        L_transition=config.L_transition_um * 1e-4,
+    )
     for hw in _SWEEP_HALF_WIDTHS:
         for vb in _SWEEP_BIASES:
-            why = engine2d_unsupported_reason(hw, vb, epi_cm, config.N_D_bulk, 10, **nplus)
+            # the sweep builds graded, N_A 1e19, 300 K devices: the gate sees the config's
+            # values so a config the sweep would not represent is reported, not re-labelled
+            why = engine2d_unsupported_reason(
+                hw, vb, epi_cm, config.N_D_bulk, 10,
+                doping_profile=config.doping_profile, N_A=config.N_A, T=config.T, **nplus,
+            )
             if why:
                 raise _SweepUnsupported(why)
     df = microdosimetric_sweep(
@@ -85,7 +96,7 @@ def _run_sweep(config: DeviceConfig) -> SimResult:
     n_valid = int(df["is_valid"].sum())
     best = df.iloc[0]
     summary = f"{n_valid}/{len(df)} valid"
-    if nplus:
+    if config.nplus_thickness_um is not None:
         summary += f" (n+ {config.nplus_thickness_um:g} um, {config.N_D_nplus:.1e} cm^-3)"
     else:
         summary += " (no n+ substrate)"

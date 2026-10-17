@@ -253,6 +253,9 @@ def microdosimetric_sweep(
     nplus_thickness_cm=None,
     N_D_nplus=None,
     nplus_generation=False,
+    substrate_thickness_cm=None,
+    N_D_junction=None,
+    L_transition=None,
 ):
     """Sweep SV geometry and doping parameters with a validity gate and operating-point ranking.
 
@@ -296,6 +299,9 @@ def microdosimetric_sweep(
         the n+ and there is no contact-on-epi wall. "auto" serves n+ configs inside
         etna.core.engine2d.ENGINE2D_NPLUS_BOX (parity vs devsim:
         lab/solver2d/notes/LOG.md "2D engine with n+"); outside it, devsim.
+    substrate_thickness_cm, N_D_junction, L_transition :
+        p+ anode thickness (cm) and graded epi doping of every config (None =
+        create_sic_2d_device default), forwarded with the n+ keywords.
 
     Returns
     -------
@@ -334,6 +340,14 @@ def microdosimetric_sweep(
         dkw = dict(nplus_thickness_cm=nplus_thickness_cm, nplus_generation=bool(nplus_generation))
         if N_D_nplus is not None:
             dkw["N_D_nplus"] = N_D_nplus
+    # p+ anode / graded doping of every config (None = create_sic_2d_device default)
+    for key, value in (
+        ("substrate_thickness_cm", substrate_thickness_cm),
+        ("N_D_junction", N_D_junction),
+        ("L_transition", L_transition),
+    ):
+        if value is not None:
+            dkw[key] = value
     tasks = [
         (i, total, hw, epi, nd, vb, n_lateral_points, solver) + ((dkw,) if dkw else ())
         for i, (hw, epi, nd, vb) in enumerate(grid)
