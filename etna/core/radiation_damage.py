@@ -966,25 +966,17 @@ def cce_uncertainty_envelope(
     """
     import itertools
 
-    from etna.core.charge_collection import cce_vs_fluence
+    from etna.core.charge_collection import _cce_vs_fluence_multi
 
     if damage_params is None:
         damage_params = RadiationDamageParams()
 
     fluence_range = np.asarray(fluence_range, dtype=float)
 
-    # Nominal CCE (unscaled)
-    nominal_result = cce_vs_fluence(
-        fluence_range,
-        V_bias=V_bias,
-        epi_thickness_cm=epi_thickness_cm,
-        energy_MeV=energy_MeV,
-        damage_params=damage_params,
-    )
-    cce_nominal = nominal_result["cce_values"]
-
-    # All 8 combinations of low/high scaling for 3 defects
-    all_cce = [cce_nominal]
+    # Nominal (unscaled) set first, then all 8 low/high combinations for the 3
+    # defects; all 9 * len(fluence_range) points go through one cce_vs_fluence
+    # batch (one reference device, one batched engine solve).
+    param_sets = [damage_params]
     for scales in itertools.product([scale_low, scale_high], repeat=3):
         s_Z12, s_EH67, s_EH4 = scales
         scaled_params = RadiationDamageParams(
@@ -1003,16 +995,17 @@ def cce_uncertainty_envelope(
             # Carrier removal tracks Z1/2
             eta_removal=damage_params.eta_removal * s_Z12,
         )
-        result = cce_vs_fluence(
-            fluence_range,
-            V_bias=V_bias,
-            epi_thickness_cm=epi_thickness_cm,
-            energy_MeV=energy_MeV,
-            damage_params=scaled_params,
-        )
-        all_cce.append(result["cce_values"])
+        param_sets.append(scaled_params)
 
-    all_cce = np.array(all_cce)
+    results = _cce_vs_fluence_multi(
+        fluence_range,
+        param_sets,
+        V_bias=V_bias,
+        epi_thickness_cm=epi_thickness_cm,
+        energy_MeV=energy_MeV,
+    )
+    all_cce = np.array([r["cce_values"] for r in results])
+    cce_nominal = all_cce[0]
 
     return {
         "cce_min": np.min(all_cce, axis=0),
