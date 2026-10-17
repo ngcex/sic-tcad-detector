@@ -21,7 +21,11 @@ from etna.core.dark_current import (
     _compute_node_efield,
     _compute_gamma_factors,
 )
-from etna.core.drift_diffusion import create_dd_device, ramp_bias, extract_contact_current
+from etna.core.drift_diffusion import (
+    create_dd_device,
+    ramp_bias,
+    extract_contact_current,
+)
 from etna.core.sic_material import SiC4H_Parameters, intrinsic_concentration
 
 
@@ -248,7 +252,9 @@ class TestDarkCurrentCalibration:
         finally:
             devsim.delete_device(device=dev["device_name"])
         I_60 = abs(res["I_total"][-1])
-        assert I_60 == pytest.approx(18e-12, rel=0.1), f"I(-60 V, 0.04 cm2) = {I_60:.3e} A"
+        assert I_60 == pytest.approx(
+            18e-12, rel=0.1
+        ), f"I(-60 V, 0.04 cm2) = {I_60:.3e} A"
         # Bias shape is the f_depl = min(E/3.5e4, 1) heuristic, not saturation at full
         # depletion: -30 V is lower than -60 V but the same order.
         assert 0.3 * I_60 < abs(res["I_total"][0]) < I_60
@@ -612,3 +618,53 @@ class TestDarkCurrentPostAnneal:
             f"Zero-fluence post-anneal ({I_annealed:.3e} A) should match "
             f"pristine ({I_pristine:.3e} A)"
         )
+
+
+def test_sweep_reports_truncation(monkeypatch):
+    """A sweep cut short says so: requested vs reached range and truncated=True."""
+    import etna.core.dark_current as dc
+
+    info = create_dark_current_device(device_name=_unique_name("trunc"))
+    try:
+        full = dark_current_sweep(info, np.array([-0.5]), area=0.04)
+        assert full["truncated"] is False and full["reached_v_stop"] == -0.5
+        real = dc._refresh_and_resolve
+        calls = {"n": 0}
+
+        def fail_second(device, region):
+            calls["n"] += 1
+            if calls["n"] == 2:
+                raise devsim.error("synthetic non-convergence")
+            return real(device, region)
+
+        monkeypatch.setattr(dc, "_refresh_and_resolve", fail_second)
+        cut = dark_current_sweep(info, np.array([-1.0, -1.5, -2.0]), area=0.04)
+    finally:
+        devsim.delete_device(device=info["device_name"])
+    assert cut["truncated"] is True
+    assert (cut["requested_v_start"], cut["requested_v_stop"]) == (-1.0, -2.0)
+    assert cut["reached_v_stop"] == -1.0 and list(cut["voltages"]) == [-1.0]
+
+
+def test_run_dark_current_carries_the_truncation_record(monkeypatch):
+    import etna.api.simulation as sim
+    from etna.api.device import DeviceConfig
+
+    def fake_sweep(device_info, V_range, area):
+        return {
+            "voltages": np.array([0.0, -10.0]),
+            "I_total": np.array([1e-12, 2e-12]),
+            "I_SRH": np.zeros(2),
+            "I_TAT": np.zeros(2),
+            "I_SRV": np.zeros(2),
+            "truncated": True,
+            "requested_v_start": 0.0,
+            "requested_v_stop": -100.0,
+            "reached_v_stop": -10.0,
+        }
+
+    monkeypatch.setattr(sim, "dark_current_sweep", fake_sweep)
+    r = sim.run_dark_current(DeviceConfig(), 0.0, -100.0, 3)
+    md = r.metadata
+    assert md["truncated"] is True and md["reached_v_stop"] == -10.0
+    assert (md["requested_v_start"], md["requested_v_stop"]) == (0.0, -100.0)

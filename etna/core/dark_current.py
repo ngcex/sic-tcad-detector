@@ -523,7 +523,9 @@ def dark_current_sweep(device_info, V_range, area=0.05, V_step=0.5):
     -------
     dict
         Dictionary with arrays: voltages, I_total, I_SRH, I_TAT, I_SRV,
-        J_total, J_SRH, J_TAT, J_SRV.
+        J_total, J_SRH, J_TAT, J_SRV; plus "truncated" (bool: the sweep stopped
+        before the end of V_range), "requested_v_start", "requested_v_stop" and
+        "reached_v_stop" (last converged bias, None if none).
     """
     import devsim.python_packages.simple_physics as simple_physics
 
@@ -579,9 +581,7 @@ def dark_current_sweep(device_info, V_range, area=0.05, V_step=0.5):
                         logger.warning(
                             f"dark_current_sweep: failed at V={V_int:.3f}V: {e}"
                         )
-                        for key in results:
-                            results[key] = np.array(results[key])
-                        return results
+                        return _finish_sweep(results, V_range)
 
             current_V = V_target
 
@@ -591,9 +591,7 @@ def dark_current_sweep(device_info, V_range, area=0.05, V_step=0.5):
             _refresh_and_resolve(device, region)
         except devsim.error as e:
             logger.warning(f"dark_current_sweep: final re-solve failed at V={V_target:.3f}V: {e}")
-            for key in results:
-                results[key] = np.array(results[key])
-            return results
+            return _finish_sweep(results, V_range)
 
         components = extract_dark_current_components(device_info, area=area)
         results["voltages"].append(V_target)
@@ -609,9 +607,24 @@ def dark_current_sweep(device_info, V_range, area=0.05, V_step=0.5):
         ):
             results[key].append(components[key])
 
-    for key in results:
-        results[key] = np.array(results[key])
+    return _finish_sweep(results, V_range)
 
+
+def _finish_sweep(results, V_range):
+    """Arrays + truncation metadata for dark_current_sweep (every return path).
+
+    "truncated": fewer points than requested (devsim stopped converging);
+    "requested_v_start" / "requested_v_stop": first / last requested bias;
+    "reached_v_stop": last converged bias (None if no point converged).
+    """
+    for key in list(results):
+        results[key] = np.array(results[key])
+    V_range = np.asarray(V_range, dtype=float)
+    n = len(results["voltages"])
+    results["truncated"] = bool(n < len(V_range))
+    results["requested_v_start"] = float(V_range[0]) if len(V_range) else None
+    results["requested_v_stop"] = float(V_range[-1]) if len(V_range) else None
+    results["reached_v_stop"] = float(results["voltages"][-1]) if n else None
     return results
 
 
