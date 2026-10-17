@@ -1441,7 +1441,10 @@ def run_dark_current(
     -------
     SimResult
         sim_type="dark_current", x=bias voltages (V), y=total dark current
-        (A), metadata contains "I_SRH", "I_TAT", "I_SRV", and "area_cm2".
+        (A), metadata contains "I_SRH", "I_TAT", "I_SRV", "area_cm2", and the
+        truncation record: "truncated" (True if the sweep stopped before
+        v_stop), "requested_v_start", "requested_v_stop", "reached_v_stop"
+        (last converged bias, None if no point converged).
 
     Warning
     -------
@@ -1484,6 +1487,11 @@ def run_dark_current(
                 "area_cm2": config.area_cm2,
                 "N_t": config.N_t if N_t is None else N_t,
                 "E_t": config.E_t,
+                # requested vs reached range: devsim may stop converging before v_stop
+                "truncated": result["truncated"],
+                "requested_v_start": result["requested_v_start"],
+                "requested_v_stop": result["requested_v_stop"],
+                "reached_v_stop": result["reached_v_stop"],
                 **_provenance(config, "devsim"),
             },
             mesh=None,

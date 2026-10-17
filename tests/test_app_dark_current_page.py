@@ -139,6 +139,39 @@ def test_partial_temperature_failure_shows_warning_not_crash(monkeypatch):
     assert len(result.x) == n_requested - 1
 
 
+def test_truncated_temperature_point_is_reported(monkeypatch):
+    calls = {"n": 0}
+
+    def _fake_truncated(cfg, v_start, v_stop, n_points=1, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            return SimResult(
+                config=cfg,
+                sim_type="dark_current",
+                x=np.array([]),
+                y=np.array([]),
+                metadata={
+                    "truncated": True,
+                    "requested_v_stop": v_stop,
+                    "reached_v_stop": None,
+                },
+            )
+        return _fake_run_dark_current(cfg, v_start, v_stop, n_points, **kwargs)
+
+    monkeypatch.setattr(etna, "run_dark_current", _fake_truncated)
+    at = AppTest.from_function(_run_dark_current_page)
+    at.session_state["device_config"] = DeviceConfig()
+    at.run()
+    at.button[0].click()
+    at.run()
+
+    assert at.exception == []
+    errors = at.session_state["dark_current_errors"]
+    assert len(errors) == 1 and "sweep truncated, reached no bias point" in errors[0]
+    assert "-20.00 V" in errors[0]
+    assert any("truncated" in (w.value or "") for w in at.warning)
+
+
 def test_first_call_runtime_error_shows_error_not_crash(monkeypatch):
     def _raise_run_dark_current(cfg, v_start, v_stop, n_points=1, **kwargs):
         raise RuntimeError("dark_current_sweep: failed to converge")
