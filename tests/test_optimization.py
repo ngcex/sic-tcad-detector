@@ -308,8 +308,10 @@ class TestMicrodosimetricSweepEndToEnd:
             half_widths_um=(25,),
             epi_thicknesses_cm=(10e-4,),
             N_D_bulks=(5e13, 5e14),
-            V_biases=(20, 80),  # (5e13, 80) fails to converge
+            V_biases=(20, 80),  # (5e13, 80) fails to converge on the legacy device
             n_lateral_points=3,
+            nplus_thickness_cm=None,  # legacy: cathode on the n- epi (the wall)
+            substrate_thickness_cm=1e-4,
         )
         serial = microdosimetric_sweep(**kw, n_jobs=1)
         parallel = microdosimetric_sweep(**kw, n_jobs=4)

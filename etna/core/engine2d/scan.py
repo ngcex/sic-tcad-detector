@@ -39,6 +39,7 @@ from etna.core.device2d import (
     _L_TRANSITION_DEFAULT,
     _N_D_BULK_DEFAULT,
     _N_D_JUNCTION_DEFAULT,
+    _SUBSTRATE_DEFAULT_CM,
 )
 from etna.core.generation_profiles import alpha_depth_shape
 
@@ -46,6 +47,9 @@ from .device import Device2D, EngineNotConverged
 from .grid import NotLaterallyUniform, grid_from_devsim
 
 # Validated envelope (parity vs devsim: tests/test_engine2d.py, lab/solver2d/notes/LOG.md).
+# p+ anode thickness and the graded doping (N_D_junction, L_transition): parity grid on the
+# recalibrated stack, lab/solver2d/bench/stack2d_parity.py (LOG.md "stack box"); the same
+# ranges as ENGINE2D_DARK_BOX. A None keyword means create_sic_2d_device's default.
 ENGINE2D_BOX = {
     "half_width_um": (25.0, 150.0),
     "epi_thickness_cm": (
@@ -55,14 +59,20 @@ ENGINE2D_BOX = {
     "N_D_bulk": (5e13, 5e14),
     "V_bias": (5.0, 80.0),
     "n_lateral_points": (2, 50),
+    "substrate_thickness_cm": (0.3e-4, 1e-4),
+    "N_D_junction": (1e15, 1e16),
+    "L_transition": (0.3e-4, 3e-4),
 }
-# Device keywords the engine accepts, with the only value it accepts (create_sic_2d_device defaults).
+# Device keywords the engine accepts with one value only (create_sic_2d_device defaults).
 _FIXED_KWARGS = {
     "doping_profile": "graded",
     "N_A": 1e19,
     "T": 300,
-    "substrate_thickness_cm": 1e-4,
     "N_D": None,
+}
+# create_sic_2d_device defaults of the boxed device keywords (used when a keyword is None).
+_BOXED_DEFAULTS = {
+    "substrate_thickness_cm": _SUBSTRATE_DEFAULT_CM,
     "N_D_junction": _N_D_JUNCTION_DEFAULT,
     "L_transition": _L_TRANSITION_DEFAULT,
 }
@@ -79,6 +89,17 @@ ENGINE2D_NPLUS_BOX = {
     "V_bias": (5.0, 100.0),
 }
 _NPLUS_KEYS = ("nplus_thickness_cm", "N_D_nplus", "nplus_generation")
+# Relative tolerance of the box bounds: a value given in um and converted to cm (e.g.
+# L_transition_um=3.0 -> 3.0 * 1e-4 = 3.0000000000000003e-4) must not fall outside a
+# bound it equals.
+_BOX_RTOL = 1e-9
+
+
+def _in_box(value, lo, hi):
+    """lo <= value <= hi up to _BOX_RTOL (False for None / non-finite values)."""
+    if value is None or not np.isfinite(value):
+        return False
+    return lo * (1.0 - _BOX_RTOL) <= value <= hi * (1.0 + _BOX_RTOL)
 
 
 def _nplus_reason(device_kwargs, allow_generation=True):
@@ -98,7 +119,7 @@ def _nplus_reason(device_kwargs, allow_generation=True):
         nd = DEFAULT_N_D_NPLUS
     for name, value in (("nplus_thickness_cm", t), ("N_D_nplus", nd)):
         lo, hi = ENGINE2D_NPLUS_BOX[name]
-        if value is None or not np.isfinite(value) or not lo <= value <= hi:
+        if not _in_box(value, lo, hi):
             return f"{name}={value} outside [{lo:g}, {hi:g}] (n+ parity box)", True
     return None, True
 
@@ -113,7 +134,11 @@ def _nplus_reason(device_kwargs, allow_generation=True):
 #   (10, 5e13) 4.745e4 / 4.795e4   (10, 8.5e13) 4.627e4 / 4.677e4
 # and reached 80 V without failing at (15, 5e13) 4.476e4, (20, 5e13) 2.95e4, (20, 8.5e13) 2.31e4,
 # (10, 5e14) 3.20e4. Every failure is above 4.685e4 and every converged point below 4.83e4,
-# for every epi. Below FIELD_ENGINE_MAX the engine answers; above FIELD_NAN_MIN it reports
+# for every epi. Off device2d's old doping (stack2d_parity.py wall, hw 25, epi 10 um):
+#   p+ 0.3 um, 2.974271e15 / 6.335936e13 / L 0.987 um: 55.0 V 4.666e4 / 55.5 V 4.716e4
+#   p+ 1 um,   2.93e15 / 8.82e13 / L 0.987 um:          56.0 V 4.549e4 / 56.5 V 4.598e4
+# (the last failure is below 4.685e4 but still above FIELD_ENGINE_MAX: devsim decides there,
+# the rule holds). Below FIELD_ENGINE_MAX the engine answers; above FIELD_NAN_MIN it reports
 # devsim's failure; in between devsim decides (its adaptive create_2d_dd_device ramp can fail
 # below the 0.5 V-step wall, e.g. epi 5 um, 5e14, 37 V).
 FIELD_ENGINE_MAX = 4.45e4
@@ -153,13 +178,16 @@ def engine2d_unsupported_reason(
     np_reason, has_nplus = _nplus_reason(device_kwargs)
     if np_reason is not None:
         return np_reason
+    boxed = dict(_BOXED_DEFAULTS)
     for key, value in device_kwargs.items():
+        if key in _BOXED_DEFAULTS:
+            if value is not None:  # None means "use the default"
+                boxed[key] = value
+            continue
         if key not in _FIXED_KWARGS:
             return f"unsupported device keyword {key}"
         ref = _FIXED_KWARGS[key]
-        if value is None and ref is None:
-            continue
-        if value is None:  # None means "use the default" for the graded parameters
+        if value is None:
             continue
         if ref is None or value != ref:
             return f"{key}={value!r} (engine validated only for {ref!r})"
@@ -170,13 +198,16 @@ def engine2d_unsupported_reason(
         N_D_bulk=nd,
         V_bias=V_bias,
         n_lateral_points=n_lateral_points,
+        **boxed,
     )
     for name, value in vals.items():
         lo, hi = (
             ENGINE2D_NPLUS_BOX if has_nplus and name == "V_bias" else ENGINE2D_BOX
         )[name]
-        if value is None or not np.isfinite(value) or not lo <= value <= hi:
+        if not _in_box(value, lo, hi):
             return f"{name}={value} outside [{lo:g}, {hi:g}]"
+    if nd >= boxed["N_D_junction"]:
+        return "N_D_bulk >= N_D_junction"
     return None
 
 
@@ -246,7 +277,7 @@ def lateral_cce_scan_2d(
             field = dev.dark(float(V_bias), stop_field=FIELD_NAN_MIN)
         if not has_nplus and field > FIELD_NAN_MIN:
             raise Engine2DOutsideValidity(
-                f"outside model validity: cathode contact on the n- epi (no n+ substrate), "
+                f"outside model validity: cathode contact on the n- epi (legacy model, no n+ layer), "
                 f"cathode-cell field {field:.3g} V/cm; devsim does not converge here (~4.7e4)"
             )
         if not has_nplus and field > FIELD_ENGINE_MAX:
@@ -293,13 +324,13 @@ ENGINE2D_DARK_BOX = {
     "N_D_bulk": (5e13, 5e14),
     "N_D_junction": (1e15, 1e16),
     "L_transition": (0.3e-4, 3e-4),
+    "substrate_thickness_cm": (0.3e-4, 1e-4),  # p+ anode (stack2d_parity.py)
     "V_cathode": (5.0, 80.0),
 }
 _DARK_FIXED = {
     "doping_profile": "graded",
     "N_A": 1e19,
     "T": 300,
-    "substrate_thickness_cm": 1e-4,
     "N_D": None,
 }
 # n+ layer: ENGINE2D_NPLUS_BOX (thickness, N_D_nplus) and V_cathode up to its V_bias limit.
@@ -334,7 +365,7 @@ def engine2d_dark_unsupported_reason(half_width_um, V_cathode, **device_kwargs):
         lo, hi = ENGINE2D_DARK_BOX[name]
         if has_nplus and name == "V_cathode":
             lo, hi = ENGINE2D_NPLUS_BOX["V_bias"]
-        if value is None or not np.isfinite(value) or not lo <= value <= hi:
+        if not _in_box(value, lo, hi):
             return f"{name}={value} outside [{lo:g}, {hi:g}]"
     if vals.get("N_D_bulk", 0.0) >= vals.get("N_D_junction", np.inf):
         return "N_D_bulk >= N_D_junction"
@@ -363,7 +394,9 @@ def dark_state_2d(half_width_um, V_cathode, **device_kwargs):
     has_nplus = info.get("nplus_thickness_cm") is not None
     try:
         # with n+ the cathode-cell field rule does not apply (no contact-cell wall)
-        field = dev.dark(float(V_cathode), stop_field=None if has_nplus else FIELD_ENGINE_MAX)
+        field = dev.dark(
+            float(V_cathode), stop_field=None if has_nplus else FIELD_ENGINE_MAX
+        )
     except EngineNotConverged as e:
         raise Engine2DFallback(str(e)) from e
     if not has_nplus and field > FIELD_ENGINE_MAX:

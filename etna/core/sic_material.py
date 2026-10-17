@@ -63,18 +63,23 @@ class SiC4H_Parameters:
     tau_p: float = 6.0e-7  # s, hole lifetime in n-type (Ioffe NSM)
 
     # --- Z1/2 center trap parameters (for Hurkx TAT dark current) ---
-    E_t: float = 0.65  # eV, trap level below Ec (Z1/2 center)
+    # eV, trap level below Ec: Z1/2 level of radiation_damage (Burin et al. Table I).
+    # 0.65 before the n+ default flip (LEGACY_STACK in etna/core/device.py).
+    E_t: float = 0.67
     m_t: float = 0.25  # m0, tunneling effective mass
     # cm^-3/s, eff. generation rate. CALIBRATION INPUT, not a prediction: fitted so that
     # the model leakage at 300 K, -60 V, 4 mm2 equals the experimental UPPER BOUND
-    # "< 18 pA up to -60 V" (17.96 pA; conservative: bound used as equality). The bias
+    # "< 18 pA up to -60 V" (conservative: bound used as equality). The bias
     # shape is the f_depl = min(E/3.5e4, 1) heuristic (dark_current.py), not saturation
     # past full depletion; "TAT" is an effective field-weighted generation (Hurkx Gamma
     # = 1 below ~4.5 MV/cm); the SRH/TAT/SRV split is not physically meaningful; and
     # N_t(T) ∝ n_i(T) is an assumption (dark_current.nt_temperature_scale).
     # (The earlier 2.2e13 was fitted on a path with a stale TAT field, B-01; leakage is
     # linear in N_t, 2.2e13 gave 141 pA on the corrected path.)
-    N_t: float = 2.8e12
+    # Refitted on the default stack (p+ 0.3 um / graded epi / n+, NPLUS calibration):
+    # I(300 K, -60 V, 4 mm2) = 18.000 pA. 2.8e12 before the n+ flip (17.957 pA on the
+    # legacy no-n+ model; LEGACY_STACK in etna/core/device.py).
+    N_t: float = 2.805349e12
     S_n: float = 1e3  # cm/s, electron surface recombination velocity
     S_p: float = 1e3  # cm/s, hole surface recombination velocity
 

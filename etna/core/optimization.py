@@ -39,6 +39,7 @@ from etna.core.devsim_reset import reset_devsim_fully
 from etna.core.drift_diffusion import extract_steady_state_current
 from etna.core.microdosimetry import mean_chord_length
 from etna.core.sic_material import SiC4H_Parameters
+from etna.core.device import DEFAULT_N_D_NPLUS, DEFAULT_STACK
 
 # AUDIT Mj-3 (v5): minimum CCE for a config to be a trustworthy microdosimeter.
 # Below this, edge/center uniformity is meaningless (both-low CCE looks uniform).
@@ -64,7 +65,7 @@ class _DevsimNonConvergence(RuntimeError):
 
 
 _OUTSIDE_VALIDITY = (
-    "outside model validity: cathode contact on the n- epi (no n+ substrate), "
+    "outside model validity: cathode contact on the n- epi (legacy model, no n+ layer), "
     "devsim does not converge here"
 )
 
@@ -92,6 +93,13 @@ def _sweep_one(task):
     device_info = None
     used = "devsim"
     failure_reason = ""
+    # stack columns of the row (the n+ layer of this config; NaN / False = no n+)
+    t_np = dkw.get("nplus_thickness_cm")
+    stack = {
+        "nplus_thickness_um": np.nan if t_np is None else round(t_np * 1e4, 12),
+        "N_D_nplus": np.nan if t_np is None else dkw.get("N_D_nplus", DEFAULT_N_D_NPLUS),
+        "nplus_generation": bool(t_np is not None and dkw.get("nplus_generation", False)),
+    }
     try:
         scan = None
         if solver == "auto":
@@ -200,6 +208,7 @@ def _sweep_one(task):
                 "is_valid": bool(is_fully_depleted and passes_cce_floor),
                 "solver": used,
                 "failure_reason": "",
+                **stack,
             }
         )
     except Exception as e:
@@ -224,6 +233,7 @@ def _sweep_one(task):
                 "is_valid": False,
                 "solver": used,
                 "failure_reason": failure_reason,
+                **stack,
             }
         )
         # Reset devsim global state after failure to prevent
@@ -250,9 +260,12 @@ def microdosimetric_sweep(
     max_configs=None,
     n_jobs=1,
     solver="auto",
-    nplus_thickness_cm=None,
+    nplus_thickness_cm=DEFAULT_STACK["nplus_thickness_cm"],
     N_D_nplus=None,
     nplus_generation=False,
+    substrate_thickness_cm=DEFAULT_STACK["substrate_thickness_cm"],
+    N_D_junction=None,
+    L_transition=None,
 ):
     """Sweep SV geometry and doping parameters with a validity gate and operating-point ranking.
 
@@ -291,11 +304,19 @@ def microdosimetric_sweep(
         fixed contact-cell field, which is not physical punch-through) are reported as
         the same failed (NaN) row, with ``failure_reason`` set.
     nplus_thickness_cm, N_D_nplus, nplus_generation :
-        Optional n+ layer under the epi for every config (create_sic_2d_device
-        keywords; None = no n+, the historical device). With n+ the cathode sits on
+        n+ layer under the epi for every config (create_sic_2d_device keywords).
+        Default: the default stack (1 um, N_D_nplus None = 1e19, epi-only generation:
+        matches the measurement geometry, alphas tilted 65 deg with projected depth
+        ~7.6 um never reach the n+). nplus_thickness_cm=None = the LEGACY device
+        (cathode on the n- epi, non-convergence wall; pass substrate_thickness_cm=1e-4
+        for the legacy p+). With n+ the cathode sits on
         the n+ and there is no contact-on-epi wall. "auto" serves n+ configs inside
         etna.core.engine2d.ENGINE2D_NPLUS_BOX (parity vs devsim:
         lab/solver2d/notes/LOG.md "2D engine with n+"); outside it, devsim.
+    substrate_thickness_cm, N_D_junction, L_transition :
+        p+ anode thickness (cm; default the stack's 0.3 um) and graded epi doping of
+        every config (None = create_sic_2d_device default = DEFAULT_STACK doping),
+        forwarded with the n+ keywords.
 
     Returns
     -------
@@ -334,6 +355,14 @@ def microdosimetric_sweep(
         dkw = dict(nplus_thickness_cm=nplus_thickness_cm, nplus_generation=bool(nplus_generation))
         if N_D_nplus is not None:
             dkw["N_D_nplus"] = N_D_nplus
+    # p+ anode / graded doping of every config (None = create_sic_2d_device default)
+    for key, value in (
+        ("substrate_thickness_cm", substrate_thickness_cm),
+        ("N_D_junction", N_D_junction),
+        ("L_transition", L_transition),
+    ):
+        if value is not None:
+            dkw[key] = value
     tasks = [
         (i, total, hw, epi, nd, vb, n_lateral_points, solver) + ((dkw,) if dkw else ())
         for i, (hw, epi, nd, vb) in enumerate(grid)

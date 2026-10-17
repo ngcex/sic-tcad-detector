@@ -484,3 +484,83 @@ L 0.3-3 um), `bench/nplus2d_sweep_parity.py field doping`:
 | 25 | 1e16 / 1.0 / 2e14 / 5 | 2 um 1e19 | -100 | 0.16 s | 10.6 s | 2.8e-14 V | 1.0e-11 |
 x/y order and NetDoping identical in every case. (Pre-existing edge, not n+: L_transition_um=3.0
 is rejected by the dark gate because 3.0*1e-4 > 3e-4 in floating point -> devsim.)
+
+## Stack box: p+ 0.3-1 um and graded doping in the 2D engine gate (feat/nplus-default, 2026-10-17)
+
+Probe: the recalibrated stack (NPLUS_CALIBRATION: p+ 0.3 um, n+ 1 um 1e19, 2.974271e15 /
+6.335936e13 / L 0.987 um) was rejected by both 2D gates: `_FIXED_KWARGS` / `_DARK_FIXED` pinned
+substrate_thickness_cm = 1e-4 and (scan gate) N_D_junction / L_transition to device2d's
+2.931417e15 / 9.872267e-5 by exact equality, so even the old DeviceConfig doping (2.93e15 /
+0.987 um) went to devsim. No engine change needed (mesh and doping come from devsim's mesh-only
+build; the junction position is info["substrate_thickness_cm"]).
+
+`uv run python lab/solver2d/bench/stack2d_parity.py parity A B` (3 chunks in parallel, load ~4.5)
+-> notes/stack2d_parity.csv. 16 configs: hw 25/50/100/150; epi 5/7.5/10/15/20 um; p+ 0.3/0.5/0.7/1 um;
+N_D_junction 1e15-1e16, L 0.3-3 um, N_D_bulk 5e13-5e14 (calibrated, legacy 2.93e15/8.82e13 and
+corners); with n+ (10, 2 with nplus_generation) and without (6); 10-100 V.
+| quantity | max over the 16 configs |
+|---|---|
+| W (column x=0) | 2.1e-14 um |
+| Potential | 1.4e-13 V |
+| log10 n / log10 p | 1.7e-11 (no-n+ rows near the cathode, n ~ 1e2) / 7.2e-13 |
+| CCE, every lateral point | 6.3e-12 (partially depleted 20 um / 5e13 / 10 V); <= 3.6e-14 elsewhere |
+| Gummel iterations per stripe | <= 5 |
+
+Field rule off the old doping (`stack2d_parity.py wall`, devsim 0.5 V ramp, no n+, hw 25, epi 10):
+- p+ 0.3, calibrated doping: last converged 55.0 V field 4.666e4, failed 55.5 V field 4.716e4.
+- p+ 1, legacy 2.93e15 / 8.82e13 / 0.987: last converged 56.0 V 4.549e4, failed 56.5 V 4.598e4.
+The second failure is below the old "every failure above 4.685e4" but above FIELD_ENGINE_MAX
+(4.45e4): devsim decides in that band, so the rule (engine below 4.45e4, NaN above 5e4) holds.
+
+Gate: ENGINE2D_BOX += substrate_thickness_cm 0.3e-4-1e-4, N_D_junction 1e15-1e16, L_transition
+0.3e-4-3e-4 (= the dark box ranges); ENGINE2D_DARK_BOX += substrate_thickness_cm 0.3e-4-1e-4;
+None = create_sic_2d_device default. microdosimetric_sweep takes substrate_thickness_cm /
+N_D_junction / L_transition (forwarded with the n+ keys); run_all's sweep section forwards the
+config's p+ / doping (it used to drop them: the 2D sweep ran on device2d's doping whatever the
+sidebar said) and gates on the config's doping_profile / N_A / T (a 310 K config used to be
+swept at 300 K under its label).
+
+Production path (`stack2d_parity.py sweep`, `_sweep_one` auto vs devsim, 6 configs incl. the
+calibrated stack with/without n+, legacy, two corners): every row engine2d; |dCCE| centre
+<= 1.4e-14, edge <= 1.2e-14, |dratio| <= 1.6e-14; is_valid / is_fully_depleted / V_fd identical.
+Calibrated stack V_fd (analytic graded) = 8.208 V (legacy doping: 10.40 V).
+`stack2d_parity.py field` (run_field engine vs forced devsim):
+| hw | stack | bias | engine | devsim | x/y, NetDoping | dPotential | rel dE |
+|---|---|---|---|---|---|---|---|
+| 25 | calibrated + n+ | -20 | 0.53 s | 5.7 s | identical | 4.4e-15 V | 5.1e-12 |
+| 50 | calibrated + n+ | -50 | 0.34 s | 23.5 s | identical | 2.1e-14 V | 1.4e-11 |
+| 25 | calibrated + n+ | -100 | 0.21 s | 13.3 s | identical | 1.4e-14 V | 9.7e-12 |
+| 25 | calibrated, no n+ | -30 | 0.15 s | 3.1 s | identical | 5.3e-15 V | 3.8e-14 |
+| 50 | legacy, no n+ | -20 | 0.21 s | 7.0 s | identical | 5.3e-15 V | 4.5e-13 |
+
+## Default flip: the n+ stack is the default model (feat/nplus-default, 2026-10-17)
+
+One constant, etna.core.device.DEFAULT_STACK (= NPLUS_CALIBRATION): p+ 0.3 um, n+ 1 um 1e19,
+2.974271e15 / 6.335936e13 / L 0.987 um, N_t 2.805349e12, E_t 0.67 (N_t / E_t live in
+SiC4H_Parameters and are read back). Read by DeviceConfig (now also carries N_t / E_t, used by
+run_dark_current only), create_sic_device / create_sic_2d_device graded fallbacks (builder
+geometry defaults unchanged: p+ 1 um, no n+), cce_vs_bias, cce_vs_fluence, device2d and the
+engine2d gate. microdosimetric_sweep defaults to the stack (nplus_thickness_cm=None = legacy).
+LEGACY_STACK / etna.legacy_config(): no n+, p+ 1 um, 2.93e15 / 8.82e13 / 0.987, N_t 2.8e12,
+E_t 0.65; reproduces the pre-flip DeviceConfig() numbers to <= 1e-9 (tests/test_default_stack.py).
+
+Before (DeviceConfig() at f60be71 = legacy) -> after (DeviceConfig(), scratch baseline.py):
+| quantity | before | after |
+|---|---|---|
+| CCE -10 / -30 / -50 V | 0.963266 / 0.997719 / 0.998474 | 0.999021 / 0.999706 / 0.999819 |
+| dark -10 / -30 / -60 V (4 mm2) | 5.962 / 14.564 / 17.957 pA | 6.132 / 14.873 / 18.000 pA |
+| W 0 / -10 / -30 V | 1.697 / 9.515 / 9.984 um | 1.700 / 9.500 / 9.899 um |
+| reach_through_V | 17.0 V (mesh rule) | 10.30 V (Debye rule; L_D 0.47 um) |
+| dark sweep to -100 V | 20/20 points | 20/20 points (E_t 0.67 with n+: no -89.5 V stop) |
+| run_all flash (20-230 Gy/s, -30 V) | 0.997534 | 0.999703 (balanced extraction, unchanged code) |
+| run_all damage (1e13 p/cm2) | 0.996445, then NaN x5 | 0.997907, then NaN x5 (Phi_c 5.04e13 -> 3.62e13) |
+| run_transient (cathode -> anode with n+) | 0.997534 (spread 3e-8) | 0.99969-0.99987 (spread 1.8e-4) |
+| run_all 2D sweep (hw 25/50, 20/40/60 V) | 4/6 valid, 60 V rows devsim NaN, 35.4 s* | 6/6 valid, all engine2d, 0.91 s |
+| run_field hw 50, -50 V | 0.48 s (engine2d) | 0.34 s (engine2d) |
+(*55.8 s before the stack-box commit, load ~3.4; 35.4 s at load ~2.)
+Transient: the direct cathode current on the n+ is 1e19 majority current (round-off):
+0.983 / 0.996 / 1.0 / 0.998 / 0.999 / 1.0 (clipped) on the default; the anode gives
+0.99973 / 0.99987 / 0.99973 / 0.99969 / 0.99973 / 0.99970 (balanced steady state 0.999703).
+transient_cce_vs_dose_rate(contact=None) -> anode with n+, cathode without (legacy unchanged).
+Sweep is_fully_depleted uses the analytic graded V_fd = 8.21 V (1.2 x = 9.85 V), looser than
+the Debye reach-through 10.30 V; no 20/40/60 V row changes.

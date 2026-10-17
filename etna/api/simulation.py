@@ -148,9 +148,12 @@ def _reach_through_V(W, bias_array, config: DeviceConfig) -> "float | None":
     With an n+ layer the n/N_D >= 0.5 edge approaches the epi end only
     asymptotically (electron tail of the n-/n+ high-low junction), so full
     depletion is taken as the edge within one Debye length L_D of the epi end,
-    L_D = sqrt(eps V_t / (q N_D_epi_end)) (0.40 um on the default device). A
-    definition, not a measurement; on the default device without n+ it would give
-    10.25 V against the mesh rule's 17.0 V.
+    L_D = sqrt(eps V_t / (q N_D_epi_end)) (0.47 um on the default device). A
+    definition, not a measurement: 10.30 V on the default stack (paper: ~10 V; the
+    legacy model's mesh rule gave 17.0 V, and the pre-recalibration doping with n+
+    12.85 V). The 2D sweep's is_fully_depleted gate uses the analytic graded V_fd
+    instead (8.21 V on the default stack, |V| >= 1.2 V_fd = 9.85 V): the looser of the
+    two definitions.
     """
     epi_cm = config.epi_thickness_um * 1e-4
     if config.nplus_thickness_um is not None:
@@ -564,14 +567,15 @@ def run_cv(
     ``"devsim"``; ``metadata["validated_domain"]`` / ``"domain_note"`` say
     whether the device lies in the cross-checked parameter box.
 
-    Full depletion: ``metadata["reach_through_V"]`` is the smallest |V| on the
-    grid at which W reaches the epi thickness (to within the last mesh
-    interval), or None if not reached. Beyond it C saturates and the result
-    depends on the cathode model (ohmic contact directly on the n- epi, no n+
-    substrate). devsim's non-convergence at deep bias (about -64 V for the
-    default device, well past its full depletion at about -17 V) is an artefact
-    of that model and of solver robustness (beyond full depletion, outside the
-    validated domain), not a physical device limit.
+    Full depletion: ``metadata["reach_through_V"]`` is the smallest |V| at which
+    the epi is fully depleted (default stack: depletion edge within one Debye
+    length of the n-/n+ step, 10.30 V -- a definition; see ``_reach_through_V``),
+    or None if not reached. Known C-V systematic: W(-30 V) = 9.90 um vs the
+    measured 9.73 um (+1.7 %, ~2 %): edge/fringe capacitance of the die falling with
+    bias (paper study), not representable in 1D; not refitted. Legacy model (no n+,
+    ``legacy_config()``): W reaches the epi end to within the last mesh interval
+    (17.0 V) and devsim stops converging at about -64 V, an artefact of the ohmic
+    cathode directly on the n- epi, not a physical device limit.
     Batched results carry ``metadata["cross_checked_to_V"]``, the deepest |V|
     at which the engine is pinned against devsim by the parity tests.
 
@@ -583,9 +587,8 @@ def run_cv(
         Starting bias (V). Default 0.0.
     v_stop : float
         Ending bias (V, conventional reverse-bias sign i.e. negative).
-        Default -50.0 — inside the devsim path's convergence range for the
-        default DeviceConfig (devsim stops converging around -64 V; see
-        metadata["truncated"] / "requested_v_stop").
+        Default -50.0. (The legacy model without n+ stops converging on the
+        devsim path around -64 V; see metadata["truncated"] / "requested_v_stop".)
     n_points : int
         Number of bias points in the sweep. Default 40.
 
@@ -815,10 +818,10 @@ def run_field(config: DeviceConfig, bias_V: float = -50.0) -> SimResult:
         None); a float builds a 2D device (mesh.y_coords is populated).
     bias_V : float
         Reverse bias (V, conventional-negative sign, e.g. -50 means 50 V
-        reverse bias). Default -50.0 — inside the devsim convergence range
-        for the default DeviceConfig (devsim stops converging around -64 V;
-        this is an artefact of the ohmic cathode on the n- epi / solver
-        robustness beyond full depletion, not a physical device limit). A 1D
+        reverse bias). Default -50.0. The default stack (n+ layer) has no
+        convergence wall (checked to -150 V); the legacy model (no n+) stops
+        converging around -64 V, an artefact of its ohmic cathode on the n- epi /
+        solver robustness beyond full depletion, not a physical device limit. A 1D
         `bias_V` beyond that
         range raises RuntimeError (or devsim.error) from
         the underlying `ramp_bias` call (single-target ramp — unlike
@@ -878,7 +881,7 @@ def run_field(config: DeviceConfig, bias_V: float = -50.0) -> SimResult:
                     raise OutsideModelValidity(
                         f"{-bias_V:g} V reverse bias is outside the validity of the "
                         "device model for this device: the cathode contact sits "
-                        "directly on the n- epi (no n+ substrate) and the field in "
+                        "directly on the n- epi (legacy model, no n+ layer) and the field in "
                         f"its last mesh cell would reach at least {field:.3g} V/cm, above "
                         f"{_field_nan_min():.3g} V/cm where devsim does not converge "
                         "(measured). Use a smaller reverse bias or a thicker epi."
@@ -1048,6 +1051,10 @@ def run_cce(
     double-delete. (The batched path only builds and deletes a mesh-probe
     device once per geometry, under the devsim lock.)
 
+    Alpha generation is confined to the n- epi (none in the n+ layer): this matches the
+    measurement geometry (alphas tilted 65 deg, projected depth ~7.6 um, never reach the
+    n+). CCE is relative to that in-epi generation.
+
     Solver selection mirrors ``run_cv``: inside the validated domain the
     batched engine runs (``metadata["solver"] == "batched"``, no deep-bias
     ``truncated`` wall, full requested grid); otherwise or on non-convergence
@@ -1065,10 +1072,9 @@ def run_cce(
         Default -10.0.
     v_stop : float
         Ending bias (V, conventional-negative reverse-bias sign).
-        Default -40.0 — inside the devsim path's convergence range for the
-        default DeviceConfig. The plain devsim DD solve (run_cv/run_field)
-        stops converging around -64 V (a model/solver artefact beyond full
-        depletion, not a physical device limit), but cce_vs_bias additionally
+        Default -40.0. On the legacy model (no n+) the plain devsim DD solve
+        (run_cv/run_field) stops converging around -64 V (a model/solver
+        artefact beyond full depletion, not a physical device limit), and cce_vs_bias additionally
         applies a generation profile at each bias point (alpha-particle
         irradiation), which is a stiffer solve that empirically stops
         converging around -50 to -60V — hence the extra margin vs run_cv/
@@ -1426,7 +1432,7 @@ def run_dark_current(
         Number of bias points in the sweep. Default 20.
     N_t : float or None
         Effective TAT trap generation rate (cm^-3 s^-1). Default None
-        (core default).
+        (= config.N_t). The trap level is config.E_t.
     S_n, S_p : float or None
         Electron/hole surface recombination velocities (cm/s). Default None
         (core defaults).
@@ -1454,7 +1460,11 @@ def run_dark_current(
     # geometry/doping via **kwargs to create_dd_device (D-01).
     reset_devsim_fully()
     device_info = create_dark_current_device(
-        N_t=N_t, S_n=S_n, S_p=S_p, **device_kwargs(config)
+        N_t=config.N_t if N_t is None else N_t,
+        E_t=config.E_t,
+        S_n=S_n,
+        S_p=S_p,
+        **device_kwargs(config),
     )
 
     try:
@@ -1472,6 +1482,8 @@ def run_dark_current(
                 "I_TAT": result["I_TAT"],
                 "I_SRV": result["I_SRV"],
                 "area_cm2": config.area_cm2,
+                "N_t": config.N_t if N_t is None else N_t,
+                "E_t": config.E_t,
                 **_provenance(config, "devsim"),
             },
             mesh=None,
@@ -1565,7 +1577,13 @@ def run_transient(
         sim_type="transient",
         x=x,
         y=y,
-        metadata={"V_bias": V_bias},
+        metadata={
+            "V_bias": V_bias,
+            # integrated contact current: anode with an n+ layer (the direct cathode
+            # current on the n+ is round-off), cathode without (core docstring)
+            "current_contact": df.attrs.get("contact", "cathode"),
+            **_provenance(config, "devsim"),
+        },
         mesh=None,
     )
 

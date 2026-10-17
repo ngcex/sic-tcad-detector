@@ -347,7 +347,9 @@ class TestCCEDDvsHecht:
         """At high bias where Hecht assumptions are valid,
         DD and Hecht CCE agree within 10%."""
         V = np.array([-30.0, -40.0, -60.0])
-        result = compare_cce_hecht_vs_dd(V, epi_thickness_cm=10e-4)
+        stack = dict(substrate_thickness_cm=0.3e-4, nplus_thickness_cm=1e-4)
+        result = compare_cce_hecht_vs_dd(V, epi_thickness_cm=10e-4, device_kwargs=stack)
+        assert not result["truncated"]
 
         cce_dd = result["cce_dd"]
         cce_hecht = result["cce_hecht"]
