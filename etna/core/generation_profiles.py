@@ -211,6 +211,117 @@ def alpha_generation_profile(
 
 
 # ---------------------------------------------------------------------------
+# Tilted alpha track (microdosimeter alpha test, Petringa 2025 Phys. Med. 140)
+# ---------------------------------------------------------------------------
+
+# Qualitative Bragg-curve parameters for a 5.5 MeV alpha (see alpha_path_stopping).
+ALPHA_PEAK_TO_ENTRANCE = (
+    2.3  # S(E_peak)/S(E0): ASTAR-Si-like ORDER OF MAGNITUDE, not data
+)
+ALPHA_E_PEAK_EV = (
+    0.75e6  # eV, energy of the stopping-power maximum (order of magnitude)
+)
+ALPHA_STRAGGLE_FRAC = 0.02  # range straggling sigma / range
+
+
+def alpha_path_stopping(
+    s_cm,
+    alpha_range_cm=18e-4,
+    shape="bragg",
+    E0_eV=5.5e6,
+    peak_to_entrance=ALPHA_PEAK_TO_ENTRANCE,
+    E_peak_eV=ALPHA_E_PEAK_EV,
+    straggle_frac=ALPHA_STRAGGLE_FRAC,
+):
+    """Energy loss per unit PATH length dE/ds (eV/cm) along an alpha track.
+
+    ``s_cm`` must be a uniform, ascending grid starting at 0 (the convolution below
+    assumes it). The result integrates to ``E0_eV`` when the grid covers the track.
+
+    shape="bragg": two-power-law stopping power S(E) ~ (E/E_pk)^-a above E_pk and
+    ~ (E/E_pk)^0.5 below, with a fixed by ``peak_to_entrance`` = S(E_pk)/S(E0);
+    s(E) = int_E^E0 dE'/S scaled to ``alpha_range_cm``; Gaussian range straggling
+    (sigma = straggle_frac * range) smears the track end. QUALITATIVE: the 2.3 ratio
+    and 0.75 MeV peak are literature orders of magnitude for alphas in Si, not a
+    tabulated ASTAR/SRIM 4H-SiC curve (none is available offline; data/srim/README.md).
+    After smoothing the peak/entrance ratio is ~2.1.
+    shape="box": ``alpha_depth_shape`` (flat to 0.8 R, erfc roll-off) along the path,
+    the profile ``run_cce`` uses at normal incidence.
+    """
+    s = np.asarray(s_cm, dtype=float)
+    R = float(alpha_range_cm)
+    if shape == "box":
+        f = alpha_depth_shape(s, alpha_range_cm=R)
+    elif shape == "bragg":
+        a = np.log(peak_to_entrance) / np.log(E0_eV / E_peak_eV)
+        E = np.geomspace(1.0, E0_eV, 20001)
+        S = np.where(E > E_peak_eV, (E / E_peak_eV) ** (-a), (E / E_peak_eV) ** 0.5)
+        inv = 1.0 / S
+        from_end = np.concatenate(
+            [[0.0], np.cumsum(0.5 * (inv[1:] + inv[:-1]) * np.diff(E))]
+        )
+        scale = R / from_end[-1]
+        s_of_E = (
+            R - from_end * scale
+        )  # path travelled when the energy is E (descending)
+        f = np.interp(s, s_of_E[::-1], (S / scale)[::-1], right=0.0)
+        f[s > R] = 0.0
+        if len(s) > 1:
+            sig = straggle_frac * R
+            ds = s[1] - s[0]
+            k = np.arange(-int(5 * sig / ds), int(5 * sig / ds) + 1) * ds
+            ker = np.exp(-0.5 * (k / sig) ** 2)
+            ker /= ker.sum()
+            m = len(k) // 2
+            # straggling smears the track END only: pad the entrance side with its value
+            padded = np.concatenate([np.full(m, f[0]), f, np.zeros(m)])
+            f = np.convolve(padded, ker, mode="valid")
+    else:
+        raise ValueError(f"shape must be 'bragg' or 'box' (got {shape!r})")
+    total = np.trapezoid(f, s)
+    return f * (E0_eV / total) if total > 0 else f
+
+
+def tilted_alpha_generation(
+    x_cm,
+    theta_deg=65.0,
+    alpha_range_cm=18e-4,
+    dead_layer_cm=0.0,
+    shape="bragg",
+    E0_eV=5.5e6,
+    E_pair_eV=E_PAIR_SIC_EV,
+    n_path=20001,
+):
+    """e-h pairs per cm of DEPTH per alpha, for a track tilted ``theta_deg`` from the normal.
+
+    Depth ``x_cm`` is measured from the SiC surface (x = 0, the anode side of the p+);
+    any order is accepted. A front dead layer (metal contact) of SiC-equivalent normal
+    thickness ``dead_layer_cm`` is crossed first: depth x corresponds to path
+    s = (x + dead_layer)/cos(theta), and G(x) = (dE/ds)(s) / cos(theta) / E_pair.
+    The track ends at depth range*cos(theta) - dead_layer (18 um at 65 deg: 7.61 um).
+
+    Returns ``(G, dead_layer_fraction)``: G (cm^-1, same shape as x; integrates to
+    the pairs generated in SiC) and the fraction of E0 lost in the dead layer.
+    """
+    if not (0.0 <= theta_deg < 90.0):
+        raise ValueError(f"theta_deg must be in [0, 90) (got {theta_deg!r})")
+    if dead_layer_cm < 0:
+        raise ValueError(f"dead_layer_cm must be >= 0 (got {dead_layer_cm!r})")
+    c = np.cos(np.radians(theta_deg))
+    s = np.linspace(0.0, 1.3 * alpha_range_cm, n_path)
+    f = alpha_path_stopping(s, alpha_range_cm, shape, E0_eV)
+    path = (np.asarray(x_cm, dtype=float) + dead_layer_cm) / c
+    G = np.interp(path, s, f, right=0.0) / c / E_pair_eV
+    s_dead = dead_layer_cm / c
+    if s_dead > 0:
+        sd = np.linspace(0.0, s_dead, 2001)
+        lost = float(np.trapezoid(np.interp(sd, s, f), sd) / E0_eV)
+    else:
+        lost = 0.0
+    return G, lost
+
+
+# ---------------------------------------------------------------------------
 # Proton Bragg peak generation profile
 # ---------------------------------------------------------------------------
 
@@ -317,7 +428,9 @@ def confine_generation_to_epi(device_info, depth, generation):
     ``depth`` is the node coordinate along the stack (x in 1D, y in 2D), same order as
     ``generation``. The epi-end node itself is kept.
     """
-    if device_info.get("nplus_thickness_cm") is None or device_info.get("nplus_generation", False):
+    if device_info.get("nplus_thickness_cm") is None or device_info.get(
+        "nplus_generation", False
+    ):
         return generation
     out = np.array(generation, dtype=float, copy=True)
     out[np.asarray(depth, dtype=float) > device_info["epi_end"] + 1e-12] = 0.0
