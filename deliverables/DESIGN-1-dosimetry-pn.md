@@ -36,11 +36,12 @@ junction field.
 | Junction type                          | p⁺/n⁻, one-sided                                        | —                             | design choice                                   |
 | Epi thickness (biased clinical device) | **10 µm**                                               | ±1 µm                         | calibrated config                               |
 | Graded epi donor profile N_D(y)        | N_D(y) = N_D_bulk + (N_D_junction − N_D_bulk)·exp(−y/L) | see below                     | calibrated (Phase 26)                           |
-| → N_D_junction (near junction)         | **2.93 × 10¹⁵ cm⁻³**                                    | ±20 %                         | Nelder-Mead C-V fit                             |
-| → N_D_bulk (deep epi)                  | **8.82 × 10¹³ cm⁻³**                                    | ±20 %                         | Nelder-Mead C-V fit                             |
-| → L (grading length)                   | **0.99 µm**                                             | ±0.3 µm                       | Nelder-Mead C-V fit                             |
+| → N_D_junction (near junction)         | **2.97 × 10¹⁵ cm⁻³**                                    | ±20 %                         | exact solve on W(0 V), W(−10 V), n⁺ stack       |
+| → N_D_bulk (deep epi)                  | **6.34 × 10¹³ cm⁻³**                                    | ±20 %                         | exact solve on W(0 V), W(−10 V), n⁺ stack       |
+| → L (grading length)                   | **0.99 µm**                                             | ±0.3 µm                       | held (not fitted)                               |
+| n⁺ substrate (cathode side)            | 10¹⁹ cm⁻³ (1 µm modelled)                               | —                             | device stack (owner-confirmed)                  |
 | p⁺ anode doping N_A (total)            | 1 × 10¹⁹ cm⁻³                                           | fab implant/anneal            | active ≈ 1.3 × 10¹⁸ cm⁻³ (≈13 % ionized, model) |
-| Junction depth (p⁺ emitter)            | ~1 µm                                                   | ±0.3 µm                       | calibrated config                               |
+| Junction depth (p⁺ emitter)            | ~0.3 µm                                                 | 0.3-1 µm (no effect on W)     | Petringa 2025 Fig. 1                            |
 | Relative permittivity ε_r              | 9.7                                                     | —                             | 4H-SiC literature                               |
 | Guard ring                             | required                                                | geometry per fab design rules | edge termination                                |
 
@@ -51,20 +52,27 @@ measured values the profile was fitted to — fit inputs, not TCAD predictions):
 | ------------ | ----------------- | -------------------------------------------------------------------- |
 | 0 V          | **1.70 µm**       | built-in depletion (self-powered drift region)                       |
 | −10 V        | ~9.5 µm           | fit input; **epi essentially fully depleted (~9 µm)**                |
-| −30 V        | 9.73 µm (full)    | fit input; fully depleted (V_fd ≈ 10.5 V); more bias adds field only |
+| −30 V        | 9.73 µm measured  | model 9.90 µm (+1.7 %): known C-V systematic, see below; not refitted |
 
-> The 2D solver converges to about −50 V and its C-V agrees with the 1D twin
-> (a mesh/implementation consistency check — laterally uniform mesh — not a
-> validation). The ~−50 V limit is a **model/solver artefact**: the modelled
-> ohmic cathode sits directly on the n⁻ epi (no n⁺ substrate), and past
-> reach-through (at V_fd) the field at that contact grows until devsim stops
-> converging. It is **not** physical punch-through, **not** a rated voltage and
-> **not** a breakdown limit — see §5.
+> **Known ~2 % C-V systematic at −30 V.** Past full depletion the model W saturates
+> at the epi end (9.90 µm), so the measured 9.73 µm is unreachable for any graded
+> profile; the paper study attributes the gap to edge/fringe capacitance of the die
+> falling with bias, which a 1D model cannot carry. Not refitted.
 
-**Full-depletion voltage V_fd (calibrated profile):** ~4.1 V (5 µm epi),
-**~10.5 V (10 µm epi)**, ~35 V (20 µm epi). Operate at **≥ 1.2 × V_fd** for the
-chosen epi (the 20 % margin covers the ±20 % doping tolerance of §2): ≥ ~5 V,
-**≥ ~13 V**, ≥ ~42 V respectively. This is the validity gate used by the sweep code.
+> The model is the p⁺ / graded n⁻ epi / n⁺ substrate stack: the cathode sits on the
+> n⁺, and devsim converges to ≥ −150 V (1D) / −100 V (2D, the parity-checked range).
+> The old ~−50 V "solver wall" existed only in the legacy model (ohmic cathode
+> directly on the n⁻ epi, `etna.legacy_config()`); it was a contact artefact, never
+> punch-through or breakdown. There is still **no rated voltage and no breakdown
+> model** — see §5.
+
+**Full-depletion voltage V_fd (analytic, graded profile):** ~3.6 V (5 µm epi),
+**~8.2 V (10 µm epi)**, ~26 V (20 µm epi) (legacy profile: 4.0 / 10.4 / 35 V).
+Operate at **≥ 1.2 × V_fd** for the chosen epi (the 20 % margin covers the ±20 %
+doping tolerance of §2): ≥ ~4.3 V, **≥ ~9.9 V**, ≥ ~31 V respectively. This is the
+validity gate used by the sweep code. The drift-diffusion reach-through
+(`reach_through_V`, edge within one Debye length of the n⁻/n⁺ step) is 10.3 V for
+the 10 µm epi: a stricter *definition* of the same transition (paper: ~10 V).
 
 **Charge collection (reverse bias, TCAD-model, consistent with the 1D twin):**
 CCE → 1 (> 0.96) once the device is fully depleted. This is a drift-diffusion
@@ -114,10 +122,10 @@ target and quote its model W(0 V).
 
 ## 5. Caveats — do NOT read these as committed specs
 
-- **Dark current / leakage: ESTIMATE ONLY.** N_t = 2.8 × 10¹² cm⁻³ s⁻¹ is
-  **fitted** so that the model equals the experimental upper bound
-  "< 18 pA up to −60 V" at −60 V, 4 mm², 300 K (17.96 pA) — a calibration input,
-  not a prediction or validation. The bias shape (5.9 / 14.6 / 18.0 pA at
+- **Dark current / leakage: ESTIMATE ONLY.** N_t = 2.805 × 10¹² cm⁻³ s⁻¹
+  (E_t = 0.67 eV) is **fitted** so that the model equals the experimental upper bound
+  "< 18 pA up to −60 V" at −60 V, 4 mm², 300 K (18.000 pA) — a calibration input,
+  not a prediction or validation. The bias shape (6.1 / 14.9 / 18.0 pA at
   −10 / −30 / −60 V) comes from a heuristic depletion weight min(E / 3.5 × 10⁴ V/cm, 1);
   the "TAT" term is an effective field-weighted generation (the Hurkx field
   enhancement is inactive below ~4.5 MV/cm, i.e. at all fields here); the
@@ -127,9 +135,9 @@ target and quote its model W(0 V).
   on the corrected path the unscaled default gave ~141 pA, i.e. 7.8× over the bound.)
   Use only as a budget estimate; the fab must measure. Do **not** treat it as a
   leakage limit/guarantee.
-- **No rated breakdown voltage.** The ~−50 V limit is a model/solver artefact
-  (ohmic cathode on the n⁻ epi with no n⁺ substrate; devsim stops converging), not
-  a rated or physical limit; there is no impact-ionization/breakdown model.
+- **No rated breakdown voltage.** There is no impact-ionization/breakdown model.
+  (The ~−50 V convergence limit of earlier versions belonged to the legacy model with
+  the cathode on the n⁻ epi; it was a solver artefact, not a rated or physical limit.)
 - **Edge/guard-ring performance not modeled** — our mesh is a laterally-uniform
   1D-twin; it cannot predict edge field crowding or termination breakdown.
 - **CCE figures** are DD-model results for the simulated junction, checked for

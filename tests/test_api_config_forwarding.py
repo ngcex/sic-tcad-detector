@@ -158,7 +158,8 @@ def test_cce_vs_fluence_merges_device_kwargs(monkeypatch):
             [0.0], device_kwargs={"T": 350.0, "N_A": 5e18, "doping_profile": "uniform"}
         )
     assert (got["T"], got["N_A"], got["doping_profile"]) == (350.0, 5e18, "uniform")
-    assert got["N_D_junction"] == 2.90e15  # untouched defaults survive the merge
+    # untouched defaults survive the merge (DEFAULT_STACK since the n+ flip; was 2.90e15)
+    assert got["N_D_junction"] == 2.974271e15
 
 
 def test_cce_vs_fluence_uses_device_temperature_for_lifetimes(monkeypatch):

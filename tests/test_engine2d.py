@@ -152,7 +152,7 @@ def test_outside_validity_row_has_failure_reason():
     assert row["solver"] == "engine2d" and math.isnan(row["center_cce"])
     assert not row["is_valid"]
     assert "outside model validity" in row["failure_reason"]
-    assert "n+ substrate" in row["failure_reason"]
+    assert "no n+" in row["failure_reason"]  # legacy (no n+) task
 
 
 def test_devsim_ramp_failure_has_failure_reason(monkeypatch):

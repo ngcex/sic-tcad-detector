@@ -277,7 +277,7 @@ def lateral_cce_scan_2d(
             field = dev.dark(float(V_bias), stop_field=FIELD_NAN_MIN)
         if not has_nplus and field > FIELD_NAN_MIN:
             raise Engine2DOutsideValidity(
-                f"outside model validity: cathode contact on the n- epi (no n+ substrate), "
+                f"outside model validity: cathode contact on the n- epi (legacy model, no n+ layer), "
                 f"cathode-cell field {field:.3g} V/cm; devsim does not converge here (~4.7e4)"
             )
         if not has_nplus and field > FIELD_ENGINE_MAX:

@@ -20,7 +20,7 @@ from app.components.page_utils import (
     solver_badge_text,
 )
 from app.components.results import build_cce_figure, to_csv_bytes
-from etna import DeviceConfig, ParametricSweep, SimResult
+from etna import DeviceConfig, ParametricSweep, SimResult, legacy_config
 from etna.api import simulation as sim
 
 # --- DeviceConfig validation ---------------------------------------------------
@@ -235,8 +235,8 @@ def test_cv_and_cce_report_reach_through_and_domain():
     cv = sim.run_cv(DeviceConfig(), v_stop=-50.0, n_points=51)
     assert cv.metadata["solver"] == "batched"
     assert cv.metadata["validated_domain"] is True
-    # Default graded device fully depletes near -17 V (measured), well before
-    # devsim's deep-bias non-convergence (~-64 V).
+    # Default stack: full depletion at 10.3 V (Debye-length rule, a definition; the legacy
+    # mesh rule gave 17 V); no deep-bias wall with the n+ layer.
     assert 10.0 <= cv.metadata["reach_through_V"] <= 20.0
     cce = sim.run_cce(DeviceConfig(), n_points=7)
     assert cce.metadata["reach_through_known"] is True
@@ -246,7 +246,7 @@ def test_cv_and_cce_report_reach_through_and_domain():
     assert "# solver: batched" in text
     assert "# validated_domain: True" in text
     assert "# reach_through_V:" in text
-    assert "# cross_checked_to_V: 40.0" in text
+    assert "# cross_checked_to_V: 100.0" in text  # n+ default: parity to -100 V (was 40)
 
 
 def test_badge_and_reach_through_texts():
@@ -294,14 +294,15 @@ def test_badge_and_reach_through_texts():
 @pytest.mark.parametrize(
     "cfg",
     [
-        DeviceConfig(epi_thickness_um=5.0),
-        DeviceConfig(epi_thickness_um=30.0),
-        DeviceConfig(doping_profile="uniform", N_D=1e16, epi_thickness_um=5.0),
+        legacy_config(epi_thickness_um=5.0),
+        legacy_config(epi_thickness_um=30.0),
+        legacy_config(doping_profile="uniform", N_D=1e16, epi_thickness_um=5.0),
     ],
 )
 def test_reach_through_found_at_box_edges(cfg):
-    """The mesh-based threshold finds full depletion on 5 and 30 um meshes too
-    (W saturates half a cathode cell short of the epi thickness)."""
+    """Legacy model (no n+): the mesh-based threshold finds full depletion on 5 and 30 um
+    meshes too (W saturates half a cathode cell short of the epi thickness). With n+ the
+    edge approaches the epi end only asymptotically (Debye rule, next test)."""
     res = sim.run_cv(cfg, v_stop=-300.0, n_points=61)
     v_rt = res.metadata["reach_through_V"]
     assert v_rt is not None and 0 < v_rt < 300
@@ -313,10 +314,18 @@ def test_reach_through_found_at_box_edges(cfg):
 # --- radiation damage: full-compensation guard forwarded by the facade ------------
 
 
+@pytest.mark.parametrize("epi", [5.0, 30.0])
+def test_reach_through_found_with_nplus(epi):
+    res = sim.run_cv(DeviceConfig(epi_thickness_um=epi), v_stop=-300.0, n_points=61)
+    v_rt = res.metadata["reach_through_V"]
+    assert v_rt is not None and 0 < v_rt < 300
+
+
 def test_run_radiation_damage_forwards_valid_and_reason():
     cfg = DeviceConfig()
     phi_c = sim.compensation_fluence(cfg, 62)
-    assert 4.5e13 < phi_c < 5.5e13  # N_D_bulk 8.82e13 / (eta 5 * kappa(62 MeV))
+    # N_D_bulk / (eta 5 * kappa(62 MeV)): 6.335936e13 -> 3.62e13 (legacy 8.82e13 -> 5.04e13)
+    assert 3.4e13 < phi_c < 3.9e13
     res = sim.run_radiation_damage(
         cfg, fluences=np.array([0.5 * phi_c, 2.0 * phi_c]), V_bias=-20.0,
         proton_energy_MeV=62,
@@ -364,7 +373,7 @@ def test_field_page_2d_run_and_outside_validity_message():
     assert at.exception == [] and len(at.error) == 0
     assert "Solver: 2D engine" in " ".join(c.value for c in at.caption)
 
-    at.session_state["device_config"] = DeviceConfig(
+    at.session_state["device_config"] = legacy_config(  # the wall is legacy-only
         half_width_um=50.0, epi_thickness_um=5.0
     )
     at.run()
@@ -379,8 +388,8 @@ def test_run_field_outside_validity_raises_without_devsim(monkeypatch):
         raise AssertionError("devsim must not run here")
 
     monkeypatch.setattr(sim, "build_device", _no_devsim)
-    with pytest.raises(sim.OutsideModelValidity, match="no n\\+ substrate"):
-        sim.run_field(DeviceConfig(half_width_um=50.0, epi_thickness_um=5.0), -50.0)
+    with pytest.raises(sim.OutsideModelValidity, match="no n\\+ layer"):
+        sim.run_field(legacy_config(half_width_um=50.0, epi_thickness_um=5.0), -50.0)
     assert issubclass(sim.OutsideModelValidity, RuntimeError)
 
 

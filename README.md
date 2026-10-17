@@ -174,20 +174,27 @@ reported value. In the interest of honesty, the current limitations are:
   graded-doping 2D model (converges to −50 V; 2D C–V matches the 1D twin,
   R² ≥ 0.99 over 0…−50 V).
 - ⚠️ **Calibration, not prediction:** dark current is a calibration input: one
-  trap density N_t fitted to the experimental bound < 18 pA up to −60 V (4 mm²);
-  quote it as a budget estimate only.
+  trap density N_t fitted to the experimental bound < 18 pA up to −60 V (4 mm²;
+  N_t = 2.805349e12 on the default stack, E_t = 0.67 eV); quote it as a budget
+  estimate only.
 - ⚠️ **FLASH dose-rate:** the high-injection _plasma-recombination_ physics is
   **not implemented** — FLASH dose-rate outputs are exploratory sensitivity
   bounds, not a validated mechanistic prediction.
-- ⚠️ **Deep reverse bias:** the 1D model puts the ohmic cathode directly on the
-  n⁻ epi (no n⁺ substrate). The default device is fully depleted from
-  |V| ≈ 17 V (`metadata["reach_through_V"]`, 0.05 V resolution; C saturates there).
-  The devsim path stops converging at deeper bias (≈ −64 V for the default
-  device) — an artefact of the missing n⁺ substrate and of solver robustness,
-  **not** a physical device limit. The batched engine keeps converging, but it
-  is cross-checked against devsim only down to −40 V
-  (`metadata["cross_checked_to_V"]`); the UI flags deeper engine points as not
-  validated, and every result shows which solver ran.
+- ✅ **Device stack (default since the n⁺ flip):** p⁺ anode 0.3 µm / 10 µm graded
+  n⁻ epi / n⁺ substrate (1 µm modelled, 10¹⁹ cm⁻³, cathode on its far end), doping
+  re-solved on the 0 / −10 V C-V points (`etna.core.device.DEFAULT_STACK`). There is
+  no deep-bias convergence wall (devsim converges to ≥ −150 V; the engine is
+  cross-checked to −100 V). Reach-through is **10.3 V** by a *definition*: the
+  depletion edge within one Debye length of the n⁻/n⁺ step (`metadata["reach_through_V"]`;
+  paper: ~10 V; 17 V under the legacy mesh rule).
+- ⚠️ **Known C-V systematic:** W(−30 V) is 9.90 µm vs the measured 9.73 µm (+1.7 %,
+  ~2 %; Photons Fig. 4b labels 1.68 / 9.52 / 9.73 µm). Attributed (paper study) to
+  edge/fringe capacitance falling with bias, which a 1D model cannot carry;
+  deliberately **not** refitted.
+- ⚠️ **Legacy model:** `etna.legacy_config()` (UI: "historical model") reproduces the
+  pre-flip numbers: cathode directly on the n⁻ epi, p⁺ 1 µm, 2.93e15 / 8.82e13 /
+  0.987 µm, N_t 2.8e12, E_t 0.65. Only there does devsim stop converging at deep bias
+  (≈ −64 V) — an artefact of the missing n⁺ substrate, **not** a physical limit.
 - 🔧 **Data-blocked (machinery ready, real data needed):**
   - Tissue-equivalence κ(E): the Bragg-additivity machinery is in place
     (`compute_kappa_table(source="bragg")`) but `data/srim/*.csv` are placeholders
