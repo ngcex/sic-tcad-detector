@@ -35,7 +35,13 @@ from etna.core.sic_material import (
     srh_lifetime,
 )
 from etna.core.incomplete_ionization import ionized_acceptor_concentration
-from etna.core.device import DEFAULT_N_D_NPLUS, DEFAULT_STACK, _check_nplus, _nplus_term
+from etna.core.device import (
+    DEFAULT_N_D_NPLUS,
+    DEFAULT_STACK,
+    _check_nplus,
+    _nplus_term,
+    mobility_doping,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -382,9 +388,10 @@ def create_sic_2d_device(
     # sensitive volume; holes are the minority carriers collected there). Before 2026-10-17
     # mu_p was evaluated at the p+ doping N_A (1e19: 75.7 vs 121 cm2/Vs at 1.07e15;
     # .issues/audit-v7 A-03). Scalar per region: the p+ and n+ inherit the epi values.
-    # For graded profiles N_D is the uniform fallback (DEFAULT_N_D) when not given.
-    mu_n = mobility_caughey_thomas_T(N_D, T, "electron", params)
-    mu_p = mobility_caughey_thomas_T(N_D, T, "hole", params)
+    # Graded profiles: the bulk epi doping N_D_bulk (mobility_doping; was DEFAULT_N_D).
+    N_D_mobility = mobility_doping(N_D, doping_profile, N_D_bulk)
+    mu_n = mobility_caughey_thomas_T(N_D_mobility, T, "electron", params)
+    mu_p = mobility_caughey_thomas_T(N_D_mobility, T, "hole", params)
     devsim.set_parameter(
         device=device_name,
         region=region_name,
@@ -483,6 +490,7 @@ def create_sic_2d_device(
         "params": params,
         "mu_n": mu_n,
         "mu_p": mu_p,
+        "N_D_mobility": N_D_mobility,
         "num_nodes": num_nodes,
         "doping_profile": doping_profile,
         "N_D_junction": _N_D_junction,  # resolved defaults (audit B-03), never None

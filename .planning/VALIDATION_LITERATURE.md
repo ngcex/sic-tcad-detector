@@ -70,16 +70,16 @@ DeviceConfig(doping_profile="uniform", N_D=2.46e15, epi_thickness_um=30.0,
 
 | Check               | ETNA (p-n junction) | Bruzzi & Verroi 2023 (Schottky) | Note                                                                              |
 | ------------------- | ------------------- | ------------------------------- | --------------------------------------------------------------------------------- |
-| W at 0 V            | 1.117 µm            | 0.7 µm                          | Offset — see caveat above (expected: p-n V_bi ≫ Schottky V_bi)                    |
-| W at −40 V          | 4.284 µm            | 4.2 µm                          | 2.0% deviation from the paper's reported endpoint                                 |
-| N_D from 1/C² slope | 2.473×10¹⁵ cm⁻³     | 2.460×10¹⁵ cm⁻³ (input to sim)  | Solver self-consistency round-trip, see caveat below — not a comparison to Bruzzi |
+| W at 0 V            | 1.127 µm            | 0.7 µm                          | Offset — see caveat above (expected: p-n V_bi ≫ Schottky V_bi)                    |
+| W at −40 V          | 4.330 µm            | 4.2 µm                          | +3.1 % deviation from the paper's reported endpoint (W = ε·A/C, as measured)       |
+| N_D from 1/C² slope | 2.455×10¹⁵ cm⁻³     | 2.460×10¹⁵ cm⁻³ (input to sim)  | Solver self-consistency round-trip, see caveat below — not a comparison to Bruzzi |
 
 ![C-V validation vs Bruzzi & Verroi 2023](../figures/cv_validation_bruzzi2023.png)
 
 **Second caveat — what the N_D-recovery check actually shows.** `N_D=2.46e15`
 was an _input_ to the simulation (fed in via `DeviceConfig(N_D=2.46e15, ...)`
 to match the paper's device), not something extracted from Bruzzi's raw data.
-The 1/C² slope inverting back to 2.473×10¹⁵ is therefore an input→output
+The 1/C² slope inverting back to 2.455×10¹⁵ is therefore an input→output
 round-trip through the solver's own electrostatics — it confirms ETNA's DD
 solver reproduces the analytic abrupt-junction Mott-Schottky relation to high
 precision, which it should. **This is a solver self-consistency check, not an
@@ -87,8 +87,15 @@ independent validation against Bruzzi & Verroi** (their paper does not
 supply raw C(V) points, only the same derived quantities — W-range, N_D,
 V_bi — extracted using the same textbook depletion model ETNA implements).
 
-**Verdict:** the high-bias depletion width (4.284 µm vs the paper's reported
-4.2 µm endpoint, 2% deviation) confirms ETNA produces a C-V curve of the
+**Observable and grid (2026-10-17).** ETNA's W here is ε·A/C of the small-signal
+capacitance C = dQ/dV, the same quantity Bruzzi & Verroi derive from their 1 kHz LCR
+measurement (not the simulated depletion edge, 4.311 µm at −40 V). The comparison is
+read at a solved −40 V point (1 V grid). The previous table (4.284 µm, 2.0 %) predates
+the small-signal C (C = dQ/dV since 2026-10-17); an intermediate +2.8 % was read at
+−39.74 V, the nearest point of the default `linspace(0, -50, 40)` grid.
+
+**Verdict:** the high-bias depletion width (4.330 µm vs the paper's reported
+4.2 µm endpoint, +3.1 % deviation) confirms ETNA produces a C-V curve of the
 correct **absolute magnitude and shape** for a real, independently-fabricated
 device of known geometry and doping that the simulator was never calibrated
 to. The low-bias offset is the correctly predicted consequence of comparing a
@@ -158,7 +165,7 @@ from this document.
 
 | Observable                        | Status                                     | Confidence                    |
 | --------------------------------- | ------------------------------------------ | ----------------------------- |
-| C-V depletion width (high-bias)   | **Validated — absolute-scale sanity check** | 2% deviation from paper's endpoint |
+| C-V depletion width (high-bias)   | **Validated — absolute-scale sanity check** | +3.1 % deviation from paper's endpoint (−40 V) |
 | Doping recovery from 1/C² slope   | Solver self-consistency round-trip (N_D was a sim input) | Not independent validation |
 | C-V depletion width (low-bias)    | Structural offset, explained               | N/A (not a discrepancy)       |
 | CCE-vs-bias (matched device)      | Not validatable — no matched dataset found | —                             |

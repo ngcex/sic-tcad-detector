@@ -511,7 +511,7 @@ try:
 
     # Ramp bias on de_anode
     from etna.core.poisson import ramp_voltage
-    ramp_voltage(dee_info, V_target=V_BIAS, contact="de_anode", V_step=5.0)
+    ramp_voltage(dee_info, contact_name="de_anode", V_start=0.0, V_end=V_BIAS, V_step=5.0)
     print(f"  Bias ramped to {V_BIAS}V on de_anode.")
 
     # Compute CCE for each layer using generation in the delta-E region

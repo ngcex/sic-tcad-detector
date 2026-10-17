@@ -84,15 +84,17 @@ def test_legacy_preset_reproduces_the_pre_flip_numbers():
     assert cv.metadata["reach_through_V"] == 17.0
     cce = sim.run_cce(c, -10.0, -50.0, 5)
     # hole mobility at the epi doping since 2026-10-17 (was N_A, audit-v7 A-03); pre-flip values were
-    # 0.9632660166 0.9961156665 0.9977188375 0.9982665005 0.9984736379
+    # 0.9632660166 0.9961156665 0.9977188375 0.9982665005 0.9984736379; both mobilities at
+    # N_D_bulk (was DEFAULT_N_D 1.07e15) since 2026-10-17: 0.9636306340 0.9962744523
+    # 0.9978247277 0.9983467119 0.9985384182 before
     np.testing.assert_allclose(
         cce.y,
         [
-            0.9636306340144812,
-            0.9962744522711638,
-            0.997824727685318,
-            0.9983467119335777,
-            0.9985384181663796,
+            0.9636418771662469,
+            0.9962794936625294,
+            0.9978281262365173,
+            0.9983493034607709,
+            0.998540520801036,
         ],
         rtol=1e-9,
     )
@@ -100,8 +102,9 @@ def test_legacy_preset_reproduces_the_pre_flip_numbers():
     np.testing.assert_allclose(
         d.y * 1e12,
         # hole mobility at the epi doping (2026-10-17, A-03); pre-flip:
-        # 1.5958223017 5.9621516945 10.4615603668 14.5641749059
-        [1.5988415042362203, 5.962211102014076, 10.461563123788121, 14.564175690068323],
+        # 1.5958223017 5.9621516945 10.4615603668 14.5641749059; mobilities at N_D_bulk
+        # (2026-10-17): 1.5988415042 5.9622111020 10.4615631238 14.5641756901 before
+        [1.5989592488465492, 5.962238289889233, 10.461588518070496, 14.564200940400156],
         rtol=1e-9,
     )
     assert d.metadata["N_t"] == 2.8e12 and d.metadata["E_t"] == 0.65
@@ -124,21 +127,33 @@ def test_default_numbers_are_the_calibration_record():
     # Debye-length reach-through rule on the depletion edge (a definition; paper: ~10 V)
     assert cv.metadata["reach_through_V"] == pytest.approx(12.3)
     cce = sim.run_cce(c, -10.0, -50.0, 3)
-    # hole mobility at the epi doping since 2026-10-17 (was N_A, audit-v7 A-03): 0.998899 / 0.999707 / 0.999820 before
-    np.testing.assert_allclose(cce.y, [0.999303, 0.999812, 0.999884], atol=1e-6)
+    # hole mobility at the epi doping since 2026-10-17 (was N_A, audit-v7 A-03): 0.998899 / 0.999707 / 0.999820 before;
+    # both mobilities at N_D_bulk (was DEFAULT_N_D 1.07e15) since 2026-10-17: 0.999303 / 0.999812 / 0.999884 before
+    np.testing.assert_allclose(cce.y, [0.999316, 0.999816, 0.999887], atol=1e-6)
     d = sim.run_dark_current(dataclasses.replace(c, area_cm2=0.04), 0.0, -60.0, 7)
     np.testing.assert_allclose(
         d.y[[1, 3, 6]] * 1e12, [6.077, 14.720, 18.000], atol=1e-3
     )
 
 
-@pytest.mark.parametrize(
-    "cfg", [DeviceConfig(), legacy_config()], ids=["default", "legacy"]
-)
-def test_dark_sweep_reaches_minus_100V(cfg):
-    d = sim.run_dark_current(cfg, 0.0, -100.0, 20)
+def test_dark_sweep_reaches_minus_100V():
+    d = sim.run_dark_current(DeviceConfig(), 0.0, -100.0, 20)
     assert len(d.x) == 20 and d.x[-1] == pytest.approx(-100.0)
     assert np.all(np.isfinite(d.y))
+
+
+def test_legacy_dark_sweep_truncates_honestly_at_the_wall():
+    """Legacy (cathode on the n- epi): the contact-artefact wall stops devsim near -60 V.
+
+    Until 2026-10-17 this sweep reached -100 V, but only with both mobilities at
+    DEFAULT_N_D = 1.07e15: at N_D_bulk (8.82e13, the legacy epi doping) it fails at
+    -60.77 V, and so do 1.2e14 / 2e14 / 5e14 (-52.6 to -63.2 V reached). The contract is
+    an honest truncation, not a reach."""
+    d = sim.run_dark_current(legacy_config(), 0.0, -100.0, 20)
+    assert d.metadata["truncated"] and d.metadata["requested_v_stop"] == -100.0
+    assert d.metadata["reached_v_stop"] == pytest.approx(d.x[-1])
+    assert -100.0 < d.x[-1] <= -50.0
+    assert np.all(np.isfinite(d.y)) and len(d.y) == len(d.x)
 
 
 class _Spy:
@@ -237,7 +252,8 @@ def test_transient_uses_the_anode_with_nplus():
     r = sim.run_transient(legacy_config(), np.array([20.0]))
     assert r.metadata["current_contact"] == "cathode"
     # pre-flip value 0.9975336675676356; hole mobility at the epi doping since 2026-10-17 (was N_A, audit-v7 A-03)
-    assert r.y[0] == pytest.approx(0.9976403048899449, rel=1e-9)
+    # 0.9976403048899449; both mobilities at N_D_bulk (was DEFAULT_N_D) since 2026-10-17
+    assert r.y[0] == pytest.approx(0.9976437322922994, rel=1e-9)
 
 
 def test_run_all_default_every_section_ok():
