@@ -517,7 +517,9 @@ def iv_sweep(
     """Sweep voltage and extract I-V curve from drift-diffusion solution.
 
     Ramps the contact bias through V_range, solving the coupled DD equations
-    at each point and extracting the total contact current.
+    at each point and extracting the total contact current (balanced steady-state
+    form, see :func:`extract_steady_state_current`; the direct anode edge current is
+    round-off at 300 K reverse bias).
 
     For convergence stability, voltages are applied incrementally from the
     current bias state using small internal steps (V_step_forward for V>0,
@@ -601,7 +603,7 @@ def iv_sweep(
                         }
 
         # Extract current at the target voltage
-        I_total = extract_contact_current(device_info, contact=contact)
+        I_total = extract_steady_state_current(device_info, contact=contact)
         voltages_out.append(V_target)
         currents_out.append(I_total)
         current_V = V_target
