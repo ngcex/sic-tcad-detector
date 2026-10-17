@@ -171,3 +171,27 @@ def test_devsim_ac_solve_agrees_with_both_paths():
     eng = sim.run_cv(cfg, 0.0, -30.0, 4)  # 0 / -10 / -20 / -30 V
     for i, V in ((0, "0.0"), (1, "-10.0"), (3, "-30.0")):
         assert eng.y[i] / cfg.area_cm2 == pytest.approx(ac[V], rel=1e-6)
+def test_cv_sweep_truncates_when_the_small_signal_side_solve_fails(monkeypatch):
+    """A failing +-1 mV side solve (e.g. at the legacy model's ~-64 V wall) truncates the
+    sweep there, like a failing main solve, instead of raising."""
+    from etna.core import cv_analysis
+
+    real = cv_analysis.small_signal_capacitance
+    calls = {"n": 0}
+
+    def flaky(info, *a, **k):
+        calls["n"] += 1
+        if calls["n"] >= 3:  # 0 V, -2 V ok; -4 V fails
+            raise devsim.error("forced side-solve failure")
+        return real(info, *a, **k)
+
+    reset_devsim_fully()
+    info = build_device(DeviceConfig())
+    try:
+        monkeypatch.setattr(cv_analysis, "small_signal_capacitance", flaky)
+        r = cv_analysis.cv_sweep(info, [0.0, -2.0, -4.0, -6.0])
+    finally:
+        reset_devsim_fully()
+    assert r["truncated"] is True
+    np.testing.assert_array_equal(r["voltages"], [0.0, -2.0])
+    assert len(r["capacitance"]) == len(r["depletion_widths"]) == 2
