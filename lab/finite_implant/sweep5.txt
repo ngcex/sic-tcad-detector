@@ -1,0 +1,2 @@
+rc_qp2e12_curve NJ=2996210319643403.0 NB=50089213905339.52 Qf=2e12 surf_ps_um=0.001 qcont=0.25
+rc_qp2e12_ref NJ=2996210319643403.0 NB=50089213905339.52 x_edge_um=1 x_out_um=0 surf_ps_um=0.001

@@ -31,10 +31,10 @@ WL = {0.0: 1.7e-4, 10.0: 9.5e-4}
 _k = [0]
 
 
-def plane_C(NJ, NB, volts=(0.0, 10.0, 30.0), dv=0.05):
+def plane_C(NJ, NB, volts=(0.0, 10.0, 30.0), dv=0.05, **pkw):
     reset_devsim_fully()
     _k[0] += 1
-    info = fi2d.build(name=f"r{_k[0]}", x_edge_um=1, x_out_um=0, NJ=NJ, NB=NB)
+    info = fi2d.build(name=f"r{_k[0]}", x_edge_um=1, x_out_um=0, NJ=NJ, NB=NB, **pkw)
     fi2d.solve()
     out, vnow = {}, 0.0
     for V in volts:
@@ -49,11 +49,11 @@ def plane_C(NJ, NB, volts=(0.0, 10.0, 30.0), dv=0.05):
     return out
 
 
-def solve_plane(Cf, x0):
+def solve_plane(Cf, x0, **pkw):
     tgt = {V: EPS / WL[V] - Cf[V] * P / A for V in WL}
 
     def res(z):
-        c = plane_C(np.exp(z[0]), np.exp(z[1]), volts=(0.0, 10.0))
+        c = plane_C(np.exp(z[0]), np.exp(z[1]), volts=(0.0, 10.0), **pkw)
         return [c[V] / tgt[V] - 1 for V in (0.0, 10.0)]
 
     z = fsolve(res, np.log(x0), xtol=1e-7, epsfcn=1e-6)
@@ -79,12 +79,14 @@ def run2d(tag, NJ, NB, extra):
 
 def main():
     tag, extra = sys.argv[1], sys.argv[2:]
+    # plane reference must share the y-lines of the 2D run
+    pkw = {k: float(v) for k, v in (a.split("=") for a in extra) if k in ("surf_ps_um", "epi_um")}
     NJ, NB = S["N_D_junction"], S["N_D_bulk"]
     hist = []
     Cf_prev = None
     for it in range(5):
         C2, xe = run2d(f"{tag}_it{it}", NJ, NB, extra)
-        cp = plane_C(NJ, NB)
+        cp = plane_C(NJ, NB, **pkw)
         Cf = {V: C2[V] - cp[V] * xe for V in C2}
         Wm = {V: EPS * A / (cp[V] * A + Cf[V] * P) * 1e4 for V in C2}
         row = dict(
@@ -106,7 +108,7 @@ def main():
         ):
             break
         Cf_prev = Cf
-        NJ, NB = solve_plane(Cf, (NJ, NB))
+        NJ, NB = solve_plane(Cf, (NJ, NB), **pkw)
     json.dump(hist, open(HERE / "notes" / f"{tag}_recal.json", "w"), indent=1)
 
 
