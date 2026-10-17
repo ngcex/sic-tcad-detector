@@ -219,6 +219,9 @@ def _summarize(res: SimResult) -> str:
     if res.metadata.get("summary"):
         return res.metadata["summary"]
     x, y = np.asarray(res.x, dtype=float), np.asarray(res.y, dtype=float)
+    if not x.size and res.mesh is not None and "ElectricField" in res.mesh.node_values:
+        E = np.asarray(res.mesh.node_values["ElectricField"], dtype=float)
+        return f"2D map, {E.size} nodes, max |E| {np.nanmax(E):.3g} V/cm"
     if not x.size or not y.size:
         return "no data"
     finite = y[np.isfinite(y)]

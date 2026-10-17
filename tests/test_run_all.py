@@ -104,3 +104,8 @@ def test_sweep_skipped_when_nplus_outside_engine_box():
 def test_run_field_2d_with_nplus_uses_engine():
     res = etna.run_field(etna.DeviceConfig(half_width_um=25.0, nplus_thickness_um=1.0), bias_V=-20.0)
     assert res.metadata["solver"] == "engine2d", res.metadata
+
+
+def test_2d_field_summary_reports_the_map():
+    rep = etna.run_all(etna.DeviceConfig(half_width_um=25.0), ("field",))
+    assert "2D map" in rep.get("field").summary and "max |E|" in rep.get("field").summary
