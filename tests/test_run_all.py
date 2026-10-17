@@ -109,3 +109,10 @@ def test_run_field_2d_with_nplus_uses_engine():
 def test_2d_field_summary_reports_the_map():
     rep = etna.run_all(etna.DeviceConfig(half_width_um=25.0), ("field",))
     assert "2D map" in rep.get("field").summary and "max |E|" in rep.get("field").summary
+
+
+def test_1d_field_summary_excludes_the_nplus_interface_spike():
+    rep = etna.run_all(etna.DeviceConfig(), ("field",))
+    res, summ = rep.get("field").result, rep.get("field").summary
+    assert "excl. epi/n+ interface spike" in summ
+    assert float(summ.split("peak |E| ")[1].split(" ")[0]) < 0.7 * float(res.y.max())
