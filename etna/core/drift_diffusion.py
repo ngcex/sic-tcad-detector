@@ -470,6 +470,17 @@ _RAMP_SOLVE_COARSE = dict(
 _RAMP_SOLVE_RELAXED = dict(
     type="dc", absolute_error=1e12, relative_error=1e-8, maximum_iterations=100
 )
+# Third tier, same as solve_equilibrium's. Needed where the n- epi reaches a zero-flux
+# surface beyond a p+ implant edge (guard-ring gap, epi overhang, 3D-electrode top
+# gap): there the hole continuity equation limit-cycles at RelError ~5e-8 (AbsError
+# ~1e2, the normal p+ round-off floor, p ~ 1e-35 in the deep-depleted strip), so
+# devsim.solve at rel 1e-8 "fails" between 5 and 48 V depending on the mesh although
+# the physics is converged to ~1e-7. A point accepted here is converged to 1e-6
+# relative; check it a posteriori with the balanced contact-current sum (should be
+# ~0 relative to the generated current).
+_RAMP_SOLVE_AGGRESSIVE = dict(
+    type="dc", absolute_error=1e14, relative_error=1e-6, maximum_iterations=200
+)
 _RAMP_MODELS = ("Potential", "Electrons", "Holes")
 
 
@@ -495,6 +506,39 @@ def _note_relaxed_retry(device_info, V):
     )
 
 
+def _note_aggressive_retry(device_info, V):
+    """Log and count a ramp point that only converged with aggressive tolerances."""
+    device_info["ramp_aggressive_retries"] = (
+        device_info.get("ramp_aggressive_retries", 0) + 1
+    )
+    logger.warning(
+        f"ramp_bias: V={V:.3f}V converged only with aggressive tolerances "
+        f"(abs 1e14, rel 1e-6); device {device_info.get('device_name')!r} "
+        f"ramp_aggressive_retries={device_info['ramp_aggressive_retries']}"
+    )
+
+
+def _solve_ramp_point_fallbacks(device_info, bias_name, V, snap):
+    """Retry a ramp point whose strict solve failed: relaxed, then aggressive
+    tolerances, each from the last converged state ``snap`` (the failed Newton
+    iterate is discarded). Raises RuntimeError when both fail."""
+    device = device_info["device_name"]
+    region = device_info["region_name"]
+    devsim.set_parameter(device=device, name=bias_name, value=V)
+    try:
+        devsim.solve(**_RAMP_SOLVE_RELAXED)
+    except devsim.error:
+        _restore_solution(device, region, snap)
+        devsim.set_parameter(device=device, name=bias_name, value=V)
+        try:
+            devsim.solve(**_RAMP_SOLVE_AGGRESSIVE)
+        except devsim.error as e:
+            raise RuntimeError(f"ramp_bias: failed to converge at V={V:.3f}V: {e}")
+        _note_aggressive_retry(device_info, V)
+        return
+    _note_relaxed_retry(device_info, V)
+
+
 def _ramp_bias_adaptive(device_info, bias_name, V_from, V_to, h_min, h_max):
     """Adaptive-step bias ramp (see ``ramp_bias``, ``V_step_max``).
 
@@ -504,10 +548,12 @@ def _ramp_bias_adaptive(device_info, bias_name, V_from, V_to, h_min, h_max):
     bias step saves most of the iterations (2D 50 um / -50 V: 28 -> ~8 per 2 V).
     Carriers keep the previous solution: extrapolating them too gained nothing.
 
-    When a step at the minimum size ``h_min`` still fails, the point is retried once
-    with relaxed tolerances (_RAMP_SOLVE_RELAXED: absolute 1e12, relative 1e-8). Such a
-    point is less tightly converged; each use is logged (warning) and counted in
-    ``device_info["ramp_relaxed_retries"]``.
+    When a step at the minimum size ``h_min`` still fails, the point is retried with
+    relaxed tolerances (_RAMP_SOLVE_RELAXED: absolute 1e12, relative 1e-8), then with
+    aggressive ones (_RAMP_SOLVE_AGGRESSIVE: absolute 1e14, relative 1e-6, 200
+    iterations), always from the last converged state. Such a point is less tightly
+    converged; each use is logged (warning) and counted in
+    ``device_info["ramp_relaxed_retries"]`` / ``["ramp_aggressive_retries"]``.
     """
     device = device_info["device_name"]
     region = device_info["region_name"]
@@ -539,14 +585,7 @@ def _ramp_bias_adaptive(device_info, bias_name, V_from, V_to, h_min, h_max):
             if step > h_min * (1 + 1e-9):
                 h = max(h_min, step / 2)
                 continue
-            devsim.set_parameter(device=device, name=bias_name, value=V_next)
-            try:
-                devsim.solve(**_RAMP_SOLVE_RELAXED)
-            except devsim.error as e:
-                raise RuntimeError(
-                    f"ramp_bias: failed to converge at V={V_next:.3f}V: {e}"
-                )
-            _note_relaxed_retry(device_info, V_next)
+            _solve_ramp_point_fallbacks(device_info, bias_name, V_next, snap)
         V = V_next
         hist = [hist[-1], (V, _snapshot_solution(device, region))]
         h = min(h * 2, h_max)
@@ -579,7 +618,10 @@ def ramp_bias(device_info, V_target, contact="anode", V_step=0.5, V_step_max=Non
         tolerance). ``None`` keeps fixed steps of ``V_step``.
 
     Every point that converges only on the relaxed-tolerance retry is logged as a
-    warning and counted in ``device_info["ramp_relaxed_retries"]`` (absent = none).
+    warning and counted in ``device_info["ramp_relaxed_retries"]`` (absent = none);
+    likewise the aggressive third tier (abs 1e14, rel 1e-6, 200 iterations) in
+    ``device_info["ramp_aggressive_retries"]``. Both retries start from the last
+    converged state.
 
     Returns
     -------
@@ -589,7 +631,7 @@ def ramp_bias(device_info, V_target, contact="anode", V_step=0.5, V_step_max=Non
     Raises
     ------
     RuntimeError
-        If ramping fails to converge even with relaxed tolerances.
+        If ramping fails to converge even with aggressive tolerances.
     """
     device = device_info["device_name"]
     bias_name = simple_physics.GetContactBiasName(contact)
@@ -614,28 +656,15 @@ def ramp_bias(device_info, V_target, contact="anode", V_step=0.5, V_step_max=Non
     n_steps = max(1, int(np.ceil(abs(delta) / V_step)))
     V_intermediates = np.linspace(current_V, V_target, n_steps + 1)[1:]
 
+    region = device_info["region_name"]
     for V_int in V_intermediates:
+        snap = _snapshot_solution(device, region)
         devsim.set_parameter(device=device, name=bias_name, value=V_int)
         try:
-            devsim.solve(
-                type="dc",
-                absolute_error=1e10,
-                relative_error=DC_REL_ERROR,
-                maximum_iterations=40,
-            )
+            devsim.solve(**_RAMP_SOLVE)
         except devsim.error:
-            try:
-                devsim.solve(
-                    type="dc",
-                    absolute_error=1e12,
-                    relative_error=1e-8,
-                    maximum_iterations=100,
-                )
-                _note_relaxed_retry(device_info, V_int)
-            except devsim.error as e:
-                raise RuntimeError(
-                    f"ramp_bias: failed to converge at V={V_int:.3f}V: {e}"
-                )
+            _restore_solution(device, region, snap)
+            _solve_ramp_point_fallbacks(device_info, bias_name, V_int, snap)
 
     logger.debug(f"ramp_bias: ramped {contact} to {V_target:.3f}V")
     return True

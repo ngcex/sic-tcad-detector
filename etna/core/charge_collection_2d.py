@@ -76,7 +76,14 @@ def in_mesh_generation_fraction(
 
 
 def _robust_dc_solve():
-    """Solve DC with fallback to relaxed tolerances on convergence failure."""
+    """Solve DC with fallback to relaxed, then aggressive tolerances.
+
+    Same three tiers as ``solve_equilibrium`` and ``ramp_bias`` (strict: abs 1e10 /
+    rel DC_REL_ERROR / 40 it; relaxed: 1e12 / 1e-8 / 100; aggressive: 1e14 / 1e-6 /
+    200). The third tier is the one the lateral p+ implant edges need (see
+    ``drift_diffusion._RAMP_SOLVE_AGGRESSIVE``); its use is logged as a warning, and a
+    state accepted there should be checked with the balanced contact-current sum.
+    """
     try:
         devsim.solve(
             type="dc",
@@ -85,13 +92,24 @@ def _robust_dc_solve():
             maximum_iterations=40,
         )
     except devsim.error:
-        devsim.solve(
-            type="dc",
-            absolute_error=1e12,
-            relative_error=1e-8,
-            maximum_iterations=100,
-        )
-        logger.info("DC solve converged with relaxed tolerances")
+        try:
+            devsim.solve(
+                type="dc",
+                absolute_error=1e12,
+                relative_error=1e-8,
+                maximum_iterations=100,
+            )
+            logger.info("DC solve converged with relaxed tolerances")
+        except devsim.error:
+            devsim.solve(
+                type="dc",
+                absolute_error=1e14,
+                relative_error=1e-6,
+                maximum_iterations=200,
+            )
+            logger.warning(
+                "DC solve converged only with aggressive tolerances (abs 1e14, rel 1e-6)"
+            )
 
 
 def integrate_nodes_box_2d(device_info, node_values):
