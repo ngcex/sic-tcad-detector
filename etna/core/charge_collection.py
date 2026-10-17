@@ -36,6 +36,9 @@ from etna.core.sic_material import (
 logger = logging.getLogger(__name__)
 
 
+# graded-doping defaults of the fluence sweeps = cce_vs_bias = the default stack
+from etna.core.device import DEFAULT_STACK as _STACK  # noqa: E402
+
 def full_compensation_reason(damaged):
     """Reason string if carrier removal fully compensates the epi donors, else "".
 
@@ -509,14 +512,18 @@ def cce_vs_bias(
     dev_id = uuid.uuid4().hex[:8]
     dev_name = f"cce_sweep_{dev_id}"
 
-    # Calibrated graded doping from Phase 2
+    # graded doping of the default stack (etna.core.device.DEFAULT_STACK); was a
+    # fourth set 2.90e15 / 8.50e13 / 1.0e-4 before the n+ flip. Geometry (p+, n+) comes
+    # from device_kwargs (the facades pass the full DeviceConfig stack).
+    from etna.core.device import DEFAULT_STACK
+
     kwargs = dict(
         device_name=dev_name,
         epi_thickness_cm=epi_thickness_cm,
         doping_profile="graded",
-        N_D_junction=2.90e15,
-        N_D_bulk=8.50e13,
-        L_transition=1.0e-4,
+        N_D_junction=DEFAULT_STACK["N_D_junction"],
+        N_D_bulk=DEFAULT_STACK["N_D_bulk"],
+        L_transition=DEFAULT_STACK["L_transition"],
     )
     if device_kwargs:
         kwargs.update(device_kwargs)
@@ -655,9 +662,9 @@ def cce_vs_fluence(
     fluence_range,
     V_bias=-40.0,
     epi_thickness_cm=10e-4,
-    N_D_junction=2.90e15,
-    N_D_bulk=8.50e13,
-    L_transition=1.0e-4,
+    N_D_junction=_STACK["N_D_junction"],
+    N_D_bulk=_STACK["N_D_bulk"],
+    L_transition=_STACK["L_transition"],
     alpha_range_cm=15e-4,
     generation_rate=1e18,
     energy_MeV=62.0,
@@ -867,9 +874,9 @@ def cce_vs_bias_at_fluence(
     V_range,
     fluence,
     epi_thickness_cm=10e-4,
-    N_D_junction=2.90e15,
-    N_D_bulk=8.50e13,
-    L_transition=1.0e-4,
+    N_D_junction=_STACK["N_D_junction"],
+    N_D_bulk=_STACK["N_D_bulk"],
+    L_transition=_STACK["L_transition"],
     alpha_range_cm=15e-4,
     generation_rate=1e18,
     energy_MeV=62.0,
@@ -1560,6 +1567,8 @@ def compare_cce_hecht_vs_dd(V_range, epi_thickness_cm=10e-4, **kwargs):
     # DD-computed CCE
     dd_result = cce_vs_bias(V_range, epi_thickness_cm=epi_thickness_cm, **kwargs)
     cce_dd = dd_result["cce_values"]
+    # compare on the biases the DD sweep reached (a truncated sweep is shorter)
+    V_range = np.asarray(dd_result["voltages"], dtype=float)
 
     # Hecht equation CCE (fully depleted approximation, d = epi thickness)
     cce_hecht = hecht_cce(V_range, d=epi_thickness_cm)
@@ -1603,6 +1612,7 @@ def compare_cce_hecht_vs_dd(V_range, epi_thickness_cm=10e-4, **kwargs):
 
     return {
         "voltages": V_range,
+        "truncated": bool(dd_result.get("truncated", False)),
         "cce_dd": cce_dd,
         "cce_hecht": np.asarray(cce_hecht, dtype=float),
         "cce_hecht_partial": np.asarray(cce_hecht_partial, dtype=float),

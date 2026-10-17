@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 import etna.api.simulation as sim
-from etna.api.device import DeviceConfig
+from etna.api.device import DeviceConfig, legacy_config
 
 
 def _devsim(monkeypatch, cfg, bias):
@@ -29,7 +29,7 @@ class TestEligibility:
             (DeviceConfig(), -20.0),  # 1D
             (DeviceConfig(half_width_um=25.0), 5.0),  # forward
             (DeviceConfig(half_width_um=25.0), -2.0),  # below the validated 5 V
-            (DeviceConfig(half_width_um=25.0), -100.0),
+            (legacy_config(half_width_um=25.0), -100.0),  # no n+: 80 V box
             (DeviceConfig(half_width_um=25.0, T=350.0), -20.0),
             (
                 DeviceConfig(half_width_um=25.0, doping_profile="uniform", N_D=1e15),
@@ -82,3 +82,22 @@ def test_engine_error_falls_back_to_devsim(monkeypatch):
     monkeypatch.setattr(sim, "_run_field_2d_engine", boom)
     res = sim.run_field(DeviceConfig(half_width_um=25.0), -10.0)
     assert res.metadata["solver"] == "devsim"
+
+
+def test_box_bounds_tolerate_um_to_cm_rounding():
+    """L_transition_um=3.0 is ON the dark box bound (3.0 * 1e-4 = 3.0000000000000003e-4
+    in floating point used to be rejected); a value clearly outside is still rejected."""
+    from etna.core.engine2d import engine2d_dark_unsupported_reason
+
+    def reason(L_um):
+        return sim._field_engine_unsupported_reason(
+            DeviceConfig(half_width_um=25.0, L_transition_um=L_um), -20.0
+        )
+
+    assert 3.0 * 1e-4 > 3e-4  # the rounding this guards against
+    assert reason(3.0) is None
+    assert reason(0.3) is None
+    assert "L_transition" in reason(3.01)
+    assert "L_transition" in reason(0.29)
+    # the same tolerance in the CCE-scan / n+ gates (shared helper)
+    assert engine2d_dark_unsupported_reason(25.0, 20.0, nplus_thickness_cm=5.0 * 1e-4) is None

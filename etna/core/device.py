@@ -35,33 +35,54 @@ DEFAULT_N_D = 1.07e15  # cm^-3
 # ionized. 1e18 and 1e19 give the same W/CCE/dark current to <1e-3 (lab spike).
 DEFAULT_N_D_NPLUS = 1e19  # cm^-3
 
-# Calibration record for the n+ stack (p+ 0.3 um / 10 um graded n- epi / n+), NOT the
-# default model. Reproduce: lab/solver2d/bench/nplus_calibrate.py; pinned by
-# tests/test_nplus_calibration.py; notes in lab/solver2d/notes/LOG.md.
-# C-V: the three W targets (1.7 / 9.5 / 9.73 um at 0 / -10 / -30 V, W = eps*A/C, A = 4 mm2)
-# have NO exact solution for (N_D_junction, N_D_bulk, L) in this model (nor in the
-# historical no-n+ model): past full depletion (~10 V) W saturates at the epi end
-# (n+: 9.90 um at -30 V; no n+: 9.98 um), so 9.73 um is unreachable (+1.7 % / +2.6 %).
-# Least squares on all three drives N_D_bulk to its 1e12 bound (unphysical; paper:
-# 0.5-1e14). Hence: L_transition held at the previous value (0.987 um) and
-# (N_D_junction, N_D_bulk) solved EXACTLY on the 0 V and -10 V points (2 equations,
-# 2 unknowns; residuals < 3e-15); -30 V residual +1.74 %. The -30 V gap (effective epi
-# ~9.8 um? ~1.5 % stray/fringe C on the 2x2 mm2 die? measurement?) is for the device
-# owner. N_t: rescaled (leakage linear in N_t) so that I(300 K, -60 V, 4 mm2) = 18 pA,
-# the bound "< 18 pA up to -60 V" used as equality; N_t is the fitted magnitude of the
+# DEFAULT DEVICE STACK (single source of truth): p+ anode 0.3 um / 10 um graded n- epi /
+# n+ substrate (1 um modelled, cathode on its far end), confirmed by the device owner.
+# Read by DeviceConfig, create_sic_device / create_sic_2d_device (graded-doping fallbacks),
+# cce_vs_bias and the 2D engine gate; SiC4H_Parameters holds N_t / E_t (read back here).
+# Core builders keep their historical GEOMETRY defaults (p+ 1 um, no n+) and take the
+# stack explicitly; the default model is DeviceConfig().
+# Calibration (lab/solver2d/bench/nplus_calibrate.py; pinned by
+# tests/test_nplus_calibration.py; notes in lab/solver2d/notes/LOG.md):
+# C-V: the three W targets (1.7 / 9.5 / 9.73 um at 0 / -10 / -30 V, W = eps*A/C, A = 4 mm2;
+# Photons Fig. 4b labels 1.68 / 9.52 / 9.73 um) have NO exact solution for
+# (N_D_junction, N_D_bulk, L) in this model (nor in the legacy no-n+ model): past full
+# depletion W saturates at the epi end (n+: 9.90 um at -30 V; no n+: 9.98 um), so 9.73 um
+# is unreachable (+1.7 % / +2.6 %). Least squares on all three drives N_D_bulk to its 1e12
+# bound (unphysical; paper: 0.5-1e14). Hence: L_transition held at the previous value
+# (0.987 um) and (N_D_junction, N_D_bulk) solved EXACTLY on the 0 V and -10 V points
+# (2 equations, 2 unknowns; residuals < 3e-15). Known C-V systematic: -30 V residual
+# +1.74 % (~2 %), attributed (paper study) to edge/fringe capacitance of the 2x2 mm2 die
+# falling with bias, which a 1D model cannot carry; deliberately NOT refitted.
+# N_t: rescaled (leakage linear in N_t) so that I(300 K, -60 V, 4 mm2) = 18 pA, the bound
+# "< 18 pA up to -60 V" used as equality; N_t is the fitted magnitude of the
 # f_depl = min(E/3.5e4, 1) effective-generation PROXY, not a trap density.
-NPLUS_CALIBRATION = {
+# E_t = 0.67 eV: Z1/2 level of radiation_damage (Burin et al. Table I).
+DEFAULT_STACK = {
     "substrate_thickness_cm": 0.3e-4,  # p+ anode layer (Petringa 2025 Fig. 1)
     "nplus_thickness_cm": 1e-4,
-    "N_D_nplus": 1e19,
+    "N_D_nplus": DEFAULT_N_D_NPLUS,
     "N_D_junction": 2.974271e15,
     "N_D_bulk": 6.335936e13,
     "L_transition": 0.987e-4,  # held, not fitted
-    "N_t": 2.805349e12,
-    # Z1/2 level of radiation_damage (Burin et al. Table I). SiC4H_Parameters.E_t is still
-    # 0.65: changing it alone moved the leakage by <= 5e-5 but made the default (no n+)
-    # dark sweep stop at -89.5 V instead of -100 V (fragile no-n+ wall). Apply with the flip.
-    "E_t": 0.67,
+    "N_t": SiC4H_Parameters.N_t,  # 2.805349e12
+    "E_t": SiC4H_Parameters.E_t,  # 0.67
+}
+# Historical name of the same record (it was the opt-in calibration before the flip).
+NPLUS_CALIBRATION = DEFAULT_STACK
+
+# LEGACY model (the default before the n+ flip), kept so old numbers stay reproducible:
+# cathode contact directly on the n- epi (no n+; non-convergence wall at deep reverse bias,
+# a contact artefact), p+ 1 um, the old DeviceConfig doping, N_t 2.8e12, E_t 0.65.
+# etna.api.device.legacy_config() builds the DeviceConfig; pinned by tests/test_default_stack.py.
+LEGACY_STACK = {
+    "substrate_thickness_cm": 1e-4,
+    "nplus_thickness_cm": None,
+    "N_D_nplus": DEFAULT_N_D_NPLUS,
+    "N_D_junction": 2.93e15,
+    "N_D_bulk": 8.82e13,
+    "L_transition": 0.987e-4,
+    "N_t": 2.8e12,
+    "E_t": 0.65,
 }
 
 # Physical constants (CGS)
@@ -305,10 +326,10 @@ def create_sic_device(
     N_A_ionized = ionized_acceptor_concentration(N_A, T)
 
     if doping_profile == "graded":
-        # Calibrated defaults for graded profile (from calibrate_graded_doping)
-        _N_D_junction = N_D_junction if N_D_junction is not None else 2.9e15
-        _N_D_bulk = N_D_bulk if N_D_bulk is not None else 8.5e13
-        _L_transition = L_transition if L_transition is not None else 1e-4
+        # graded-doping fallbacks: the default stack (DEFAULT_STACK)
+        _N_D_junction = N_D_junction if N_D_junction is not None else DEFAULT_STACK["N_D_junction"]
+        _N_D_bulk = N_D_bulk if N_D_bulk is not None else DEFAULT_STACK["N_D_bulk"]
+        _L_transition = L_transition if L_transition is not None else DEFAULT_STACK["L_transition"]
         set_graded_doping_profile(
             device_name,
             region_name,

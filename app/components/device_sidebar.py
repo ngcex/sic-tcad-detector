@@ -47,9 +47,12 @@ def assemble_config(values: dict) -> DeviceConfig:
         L_transition_um=values["L_transition_um"],
         T=values["T"],
         area_cm2=values["area_cm2"],
-        # n+ layer keys are optional (older callers/tests pass the original 11 fields)
+        # n+ layer and dark-current fit keys are optional (older callers/tests pass the
+        # original 11 fields; the defaults are the default stack)
         nplus_thickness_um=values.get("nplus_thickness_um", DeviceConfig.nplus_thickness_um),
         N_D_nplus=values.get("N_D_nplus", DeviceConfig.N_D_nplus),
+        N_t=values.get("N_t", DeviceConfig.N_t),
+        E_t=values.get("E_t", DeviceConfig.E_t),
     )
 
 
@@ -67,6 +70,8 @@ FIELD_LABELS = {
     "area_cm2": "Area (cm²)",
     "nplus_thickness_um": "n+ layer thickness (µm)",
     "N_D_nplus": "N_D n+ (cm⁻³)",
+    "N_t": "N_t dark-current fit (cm⁻³ s⁻¹)",
+    "E_t": "E_t trap level (eV)",
 }
 
 
@@ -116,23 +121,24 @@ def render_device_sidebar() -> None:
     )
     substrate_thickness_um = st.sidebar.number_input(
         "Substrate thickness (µm)",
-        value=1.0,
-        step=0.5,
+        value=DeviceConfig.substrate_thickness_um,
+        step=0.1,
         format="%.2f",
         key="cfg_substrate_thickness_um",
         help="p+ anode layer (not the n+ substrate, see 'n+ layer under the epi').",
     )
-    nplus_on = st.sidebar.checkbox(
-        "n+ stack preset (uncalibrated, owner unconfirmed)",
+    legacy_on = st.sidebar.checkbox(
+        "historical model (cathode directly on n- epi)",
         value=False,
-        key="cfg_nplus_on",
-        help="Applies the whole recorded n+ stack together: 1 um n+ (1e19) under the "
-        "epi, 0.3 um p+ anode, N_D_junction 2.974e15, N_D_bulk 6.336e13 (overrides the "
-        "fields above). Off = historical model with the cathode directly on the n- epi. "
-        "The preset is not validated against measurement and the device stack is not "
-        "yet confirmed; the 2D engine does not support it (devsim, slower).",
+        key="cfg_legacy_on",
+        help="Applies the legacy preset (the default before the n+ stack): no n+ layer, "
+        "cathode contact directly on the n- epi, p+ 1 um, N_D_junction 2.93e15, N_D_bulk "
+        "8.82e13, L 0.987 um, N_t 2.8e12, E_t 0.65 (overrides the fields above). It "
+        "reproduces the old numbers; its non-convergence wall at deep reverse bias is a "
+        "contact artefact. Off = the default stack: p+ / graded n- epi / 1 um n+ (1e19).",
     )
-    nplus_thickness_um, N_D_nplus = None, DeviceConfig.N_D_nplus
+    nplus_thickness_um = DeviceConfig.nplus_thickness_um
+    N_D_nplus = DeviceConfig.N_D_nplus
     if dim == "2D":
         half_width_um = st.sidebar.number_input(
             "Half-width (µm)",
@@ -170,21 +176,21 @@ def render_device_sidebar() -> None:
     else:  # graded
         N_D_junction = st.sidebar.number_input(
             "N_D junction (cm⁻³)",
-            value=2.93e15,
-            step=1e13,
+            value=DeviceConfig.N_D_junction,
+            step=1e9,  # the 7-digit exact-solve value must lie on the step grid
             format="%.3e",
             key="cfg_N_D_junction",
         )
         N_D_bulk = st.sidebar.number_input(
             "N_D bulk (cm⁻³)",
-            value=8.82e13,
-            step=1e11,
+            value=DeviceConfig.N_D_bulk,
+            step=1e7,  # idem
             format="%.3e",
             key="cfg_N_D_bulk",
         )
         L_transition_um = st.sidebar.number_input(
             "Transition length (µm)",
-            value=0.987,
+            value=DeviceConfig.L_transition_um,
             step=0.001,
             format="%.3f",
             key="cfg_L_transition_um",
@@ -229,19 +235,14 @@ def render_device_sidebar() -> None:
         "N_D_nplus": N_D_nplus,
     }
 
-    if nplus_on:
-        from etna.core.device import NPLUS_CALIBRATION as _C
+    if legacy_on:
+        from etna import LEGACY_PRESET
 
-        values.update(
-            substrate_thickness_um=_C["substrate_thickness_cm"] * 1e4,
-            nplus_thickness_um=_C["nplus_thickness_cm"] * 1e4,
-            N_D_nplus=_C["N_D_nplus"],
-            doping_profile="graded",
-            N_D_junction=_C["N_D_junction"],
-            N_D_bulk=_C["N_D_bulk"],
-            L_transition_um=_C["L_transition"] * 1e4,
+        values.update(LEGACY_PRESET)
+        st.sidebar.info(
+            "Historical model active: cathode directly on the n- epi (no n+ layer), "
+            "pre-flip doping and dark-current fit."
         )
-        st.sidebar.warning("n+ preset active: uncalibrated stack, owner unconfirmed.")
 
     try:
         st.session_state["device_config"] = assemble_config(values)

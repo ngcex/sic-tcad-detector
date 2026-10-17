@@ -33,25 +33,27 @@ that forms the collecting contact — Schottky (FBK) or junction-barrier-Schottk
 | ----------------------------------- | ------------------------------------------------- | ----------------------------------------------------------------------- |
 | SV depth (epi thickness)            | **10 µm** (baseline)                              | calibrated config (profile fitted to measured W)                        |
 | SV half-width                       | **50 µm** (→ 100 µm SV)                           | baseline choice only; NOT discriminated by the model (no edge physics)  |
-| Graded epi donor profile N_D(y)     | N_D_junction 2.93e15, N_D_bulk 8.82e13, L 0.99 µm | calibrated (Phase 26)                                                   |
-| Operating reverse bias              | **−15 to −20 V**                                  | ≥ 1.2 × V_fd (≈ 13 V); see note on the ~−50 V model limit below        |
-| Full-depletion voltage V_fd (10 µm) | **≈ 10.5 V**                                      | calibrated profile (assumes p-n electrostatics)                         |
+| Graded epi donor profile N_D(y)     | N_D_junction 2.97e15, N_D_bulk 6.34e13, L 0.99 µm | n⁺-stack calibration (DEFAULT_STACK)                                    |
+| Device stack                        | p⁺ 0.3 µm / n⁻ epi / n⁺ substrate                 | owner-confirmed; cathode on the n⁺                                      |
+| Operating reverse bias              | **−15 to −20 V**                                  | ≥ 1.2 × V_fd (≈ 9.9 V), above reach-through (10.3 V)                    |
+| Full-depletion voltage V_fd (10 µm) | **≈ 8.2 V**                                       | analytic graded profile (assumes p-n electrostatics)                    |
 | Validity gate                       | \|V_bias\| ≥ 1.2 × V_fd and CCE ≥ 0.95             | Mj-3 validity gate; 20 % margin = ±20 % doping tolerance (DESIGN-1)     |
 
 **Alternative SV depths (model V_fd, p-n electrostatics):**
 
 | Epi thickness | V_fd        | Recommended operating bias | Note                                         |
 | ------------- | ----------- | -------------------------- | -------------------------------------------- |
-| 5 µm          | ~4.1 V      | ≥ −10 V                    | lowest-bias option; epi holds ~42 % of the alpha's pairs |
-| **10 µm**     | **~10.5 V** | **−15 to −20 V**           | **baseline (calibrated profile)**            |
-| 20 µm         | ~35 V       | ≥ −42 V (1.2 × V_fd)       | converges; closer to the model's ~−50 V solver wall |
+| 5 µm          | ~3.6 V      | ≥ −10 V                    | lowest-bias option; epi holds ~42 % of the alpha's pairs |
+| **10 µm**     | **~8.2 V**  | **−15 to −20 V**           | **baseline (calibrated profile)**            |
+| 20 µm         | ~26 V       | ≥ −31 V (1.2 × V_fd)       | converges (no wall with the n⁺ substrate)    |
 
-> **The ~−50 V limit is a model/solver artefact, not a rated or physical limit.**
-> The modelled ohmic cathode sits directly on the n⁻ epi (no n⁺ substrate); past
-> reach-through (at V_fd) the field at that contact grows until devsim stops
-> converging (at a fixed contact-cell field ≈ 4.7 × 10⁴ V/cm). Configurations
-> beyond it are reported as NaN with `failure_reason` "outside model validity". It
-> is not punch-through (reach-through is at V_fd) and not breakdown.
+> **No solver wall on the default stack.** The cathode sits on the n⁺ substrate and
+> devsim converges to ≥ −100 V in 2D. The ~−50 V limit of earlier versions belonged to
+> the legacy model (ohmic cathode directly on the n⁻ epi, `etna.legacy_config()` /
+> `microdosimetric_sweep(nplus_thickness_cm=None)`): there the contact-cell field grows
+> past reach-through until devsim stops converging (≈ 4.7 × 10⁴ V/cm) and such rows are
+> NaN with `failure_reason` "outside model validity". Never punch-through, never
+> breakdown.
 
 > **Validity gate (audit Mj-3):** only configurations that are _fully depleted with
 > margin_ (|V_bias| ≥ 1.2 × V_fd, covering the ±20 % doping tolerance) **and** above
@@ -103,8 +105,8 @@ Specifically NOT provided and to be supplied/measured by the fab:
   Hurkx enhancement inactive below ~4.5 MV/cm; assumed n_i(T) temperature scaling)
   and does not apply to a Schottky/JBS junction. The fab must measure leakage for
   its junction type.
-- **No rated breakdown / max voltage.** The ~−50 V limit is a model/solver artefact
-  (cathode contact on the n⁻ epi, no n⁺ substrate), not breakdown and not a rating.
+- **No rated breakdown / max voltage.** No breakdown model. (The ~−50 V convergence
+  limit of the legacy model, cathode on the n⁻ epi, was a solver artefact, not a rating.)
 - **Tissue-equivalence (κ) and microdosimetric spectra are NOT in this spec.**
   The tissue-equivalence correction depends on stopping-power data we have flagged
   as not foundry-ready (Phase 27 work). This document is geometry only; it makes

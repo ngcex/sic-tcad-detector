@@ -1,4 +1,4 @@
-"""Pins the n+ calibration record (etna.core.device.NPLUS_CALIBRATION); not the default model.
+"""Pins the n+ calibration record (etna.core.device.NPLUS_CALIBRATION = DEFAULT_STACK, the default model).
 
 C-V: 0 V and -10 V depletion widths are solved exactly at the held L_transition; the -30 V
 target (9.73 um) is unreachable (W saturates at the epi end past full depletion), which is
@@ -32,12 +32,12 @@ def _W(NJ, NB, L):
 
 
 def test_trap_level_reconciled_in_the_record():
-    """The record uses the radiation-damage Z1/2 level (Burin et al. Table I). The default
-    SiC4H_Parameters.E_t stays 0.65 until the default flip: moving it alone changed the
-    default (no n+) dark sweep (run_dark_current stopped at -89.5 V instead of -100 V, the
-    no-n+ convergence wall is that fragile)."""
+    """The record uses the radiation-damage Z1/2 level (Burin et al. Table I), applied to
+    SiC4H_Parameters with the default flip (0.65 -> 0.67). On the no-n+ model it made the
+    dark sweep stop at -89.5 V, so the legacy preset keeps 0.65; with n+ the default reaches
+    -100 V (tests/test_default_stack.py)."""
     assert CAL["E_t"] == RadiationDamageParams().E_Z12 == 0.67
-    assert SiC4H_Parameters().E_t == 0.65
+    assert SiC4H_Parameters().E_t == 0.67
 
 
 def test_record_solves_the_0V_and_10V_points_exactly():

@@ -153,8 +153,8 @@ def cross_check_text(result) -> str:
         f"{beyond} of {x.size} {'point lies' if beyond == 1 else 'points lie'} "
         f"beyond |V| = {v_cc:.0f} V, the deepest "
         "bias at which the batched engine is cross-checked against devsim. devsim "
-        "itself may not converge there (default device: about −64 V), so these "
-        "values are not validated."
+        "itself may not converge there (legacy model without n+: about −64 V), so "
+        "these values are not validated."
     )
 
 

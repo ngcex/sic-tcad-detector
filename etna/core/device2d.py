@@ -35,14 +35,17 @@ from etna.core.sic_material import (
     srh_lifetime,
 )
 from etna.core.incomplete_ionization import ionized_acceptor_concentration
-from etna.core.device import DEFAULT_N_D_NPLUS, _check_nplus, _nplus_term
+from etna.core.device import DEFAULT_N_D_NPLUS, DEFAULT_STACK, _check_nplus, _nplus_term
 
 logger = logging.getLogger(__name__)
 
-# Calibrated graded doping defaults (same as device.py)
-_N_D_JUNCTION_DEFAULT = 2.931417e+15  # cm^-3, calibrated Plan 26-03
-_N_D_BULK_DEFAULT = 8.823059e+13  # cm^-3, calibrated Plan 26-03
-_L_TRANSITION_DEFAULT = 9.872267e-05  # cm, calibrated Plan 26-03
+# Graded-doping fallbacks: the default stack (etna.core.device.DEFAULT_STACK). Before the
+# n+ flip these were 2.931417e15 / 8.823059e13 / 9.872267e-5 (Plan 26-03), a third set that
+# disagreed with DeviceConfig (2.93e15 / 8.82e13 / 0.987 um) and create_sic_device.
+_N_D_JUNCTION_DEFAULT = DEFAULT_STACK["N_D_junction"]  # cm^-3
+_N_D_BULK_DEFAULT = DEFAULT_STACK["N_D_bulk"]  # cm^-3
+_L_TRANSITION_DEFAULT = DEFAULT_STACK["L_transition"]  # cm
+_SUBSTRATE_DEFAULT_CM = 1e-4  # cm, p+ anode (builder geometry default; the stack: 0.3e-4)
 
 # Physical constants (CGS)
 EPS_0 = 8.854e-14  # F/cm, vacuum permittivity
@@ -158,7 +161,7 @@ def create_sic_2d_device(
     region_name="sic",
     half_width_um=50.0,
     epi_thickness_cm=10e-4,
-    substrate_thickness_cm=1e-4,
+    substrate_thickness_cm=_SUBSTRATE_DEFAULT_CM,
     N_A=1e19,
     N_D=None,
     T=300,

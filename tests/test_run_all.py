@@ -77,7 +77,7 @@ def test_sweep_is_opt_in_and_reports_rows():
     rep = etna.run_all(etna.DeviceConfig(), ("sweep",))
     sec = rep.get("sweep")
     assert sec.status == "ok" and sec.solver == "engine2d", sec.reason
-    assert "valid" in sec.summary and "no n+" in sec.summary
+    assert "valid" in sec.summary and "n+ 1 um" in sec.summary  # default stack
     assert len(sec.result.metadata["table"]) == 6
     json.loads(rep.to_json())
 

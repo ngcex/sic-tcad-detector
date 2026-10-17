@@ -63,15 +63,36 @@ def _run_sweep(config: DeviceConfig) -> SimResult:
     from etna.core.optimization import microdosimetric_sweep
 
     epi_cm = config.epi_thickness_um * 1e-4
-    # the n+ layer (if any) goes to the sweep; the engine serves it inside its n+ parity box
-    nplus = {}
+    # the p+ anode, graded doping and n+ layer (if any) go to the sweep; the engine serves
+    # them inside its parity box
+    # nplus_thickness_cm always explicit: None (legacy config) must not fall back to the
+    # sweep's default n+ layer
+    nplus = dict(nplus_thickness_cm=None)
     if config.nplus_thickness_um is not None:
         nplus = dict(
-            nplus_thickness_cm=config.nplus_thickness_um * 1e-4, N_D_nplus=config.N_D_nplus
+            nplus_thickness_cm=config.nplus_thickness_um * 1e-4,
+            N_D_nplus=config.N_D_nplus,
         )
+    nplus.update(
+        substrate_thickness_cm=config.substrate_thickness_um * 1e-4,
+        N_D_junction=config.N_D_junction,
+        L_transition=config.L_transition_um * 1e-4,
+    )
     for hw in _SWEEP_HALF_WIDTHS:
         for vb in _SWEEP_BIASES:
-            why = engine2d_unsupported_reason(hw, vb, epi_cm, config.N_D_bulk, 10, **nplus)
+            # the sweep builds graded, N_A 1e19, 300 K devices: the gate sees the config's
+            # values so a config the sweep would not represent is reported, not re-labelled
+            why = engine2d_unsupported_reason(
+                hw,
+                vb,
+                epi_cm,
+                config.N_D_bulk,
+                10,
+                doping_profile=config.doping_profile,
+                N_A=config.N_A,
+                T=config.T,
+                **nplus,
+            )
             if why:
                 raise _SweepUnsupported(why)
     df = microdosimetric_sweep(
@@ -85,10 +106,12 @@ def _run_sweep(config: DeviceConfig) -> SimResult:
     n_valid = int(df["is_valid"].sum())
     best = df.iloc[0]
     summary = f"{n_valid}/{len(df)} valid"
-    if nplus:
-        summary += f" (n+ {config.nplus_thickness_um:g} um, {config.N_D_nplus:.1e} cm^-3)"
+    if config.nplus_thickness_um is not None:
+        summary += (
+            f" (n+ {config.nplus_thickness_um:g} um, {config.N_D_nplus:.1e} cm^-3)"
+        )
     else:
-        summary += " (no n+ substrate)"
+        summary += " (legacy model: no n+ layer)"
     if best["is_valid"]:
         summary += (
             f"; best: half-width {best['half_width_um']:g} um at "
@@ -100,7 +123,7 @@ def _run_sweep(config: DeviceConfig) -> SimResult:
         sim_type="sweep",
         x=per_v.index.to_numpy(dtype=float),
         y=per_v.to_numpy(dtype=float),
-        metadata={"solver": "engine2d", "summary": summary, "table": df},
+        metadata={"solver": "+".join(sorted(set(df["solver"]))), "summary": summary, "table": df},
     )
 
 
@@ -241,7 +264,9 @@ def run_all(config: DeviceConfig, sections: "tuple[str, ...] | None" = None) -> 
             res = runner(config)
         except _SweepUnsupported as exc:
             done.append(
-                SectionResult(name, title, "skipped", reason=f"not available here: {exc}")
+                SectionResult(
+                    name, title, "skipped", reason=f"not available here: {exc}"
+                )
             )
         except Exception as exc:  # a section never aborts the run
             done.append(
