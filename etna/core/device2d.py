@@ -43,6 +43,7 @@ logger = logging.getLogger(__name__)
 _N_D_JUNCTION_DEFAULT = 2.931417e+15  # cm^-3, calibrated Plan 26-03
 _N_D_BULK_DEFAULT = 8.823059e+13  # cm^-3, calibrated Plan 26-03
 _L_TRANSITION_DEFAULT = 9.872267e-05  # cm, calibrated Plan 26-03
+_SUBSTRATE_DEFAULT_CM = 1e-4  # cm, p+ anode layer (create_sic_2d_device default)
 
 # Physical constants (CGS)
 EPS_0 = 8.854e-14  # F/cm, vacuum permittivity
@@ -158,7 +159,7 @@ def create_sic_2d_device(
     region_name="sic",
     half_width_um=50.0,
     epi_thickness_cm=10e-4,
-    substrate_thickness_cm=1e-4,
+    substrate_thickness_cm=_SUBSTRATE_DEFAULT_CM,
     N_A=1e19,
     N_D=None,
     T=300,

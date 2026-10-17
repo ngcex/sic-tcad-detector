@@ -484,3 +484,51 @@ L 0.3-3 um), `bench/nplus2d_sweep_parity.py field doping`:
 | 25 | 1e16 / 1.0 / 2e14 / 5 | 2 um 1e19 | -100 | 0.16 s | 10.6 s | 2.8e-14 V | 1.0e-11 |
 x/y order and NetDoping identical in every case. (Pre-existing edge, not n+: L_transition_um=3.0
 is rejected by the dark gate because 3.0*1e-4 > 3e-4 in floating point -> devsim.)
+
+## Stack box: p+ 0.3-1 um and graded doping in the 2D engine gate (feat/nplus-default, 2026-10-17)
+
+Probe: the recalibrated stack (NPLUS_CALIBRATION: p+ 0.3 um, n+ 1 um 1e19, 2.974271e15 /
+6.335936e13 / L 0.987 um) was rejected by both 2D gates: `_FIXED_KWARGS` / `_DARK_FIXED` pinned
+substrate_thickness_cm = 1e-4 and (scan gate) N_D_junction / L_transition to device2d's
+2.931417e15 / 9.872267e-5 by exact equality, so even the old DeviceConfig doping (2.93e15 /
+0.987 um) went to devsim. No engine change needed (mesh and doping come from devsim's mesh-only
+build; the junction position is info["substrate_thickness_cm"]).
+
+`uv run python lab/solver2d/bench/stack2d_parity.py parity A B` (3 chunks in parallel, load ~4.5)
+-> notes/stack2d_parity.csv. 16 configs: hw 25/50/100/150; epi 5/7.5/10/15/20 um; p+ 0.3/0.5/0.7/1 um;
+N_D_junction 1e15-1e16, L 0.3-3 um, N_D_bulk 5e13-5e14 (calibrated, legacy 2.93e15/8.82e13 and
+corners); with n+ (10, 2 with nplus_generation) and without (6); 10-100 V.
+| quantity | max over the 16 configs |
+|---|---|
+| W (column x=0) | 2.1e-14 um |
+| Potential | 1.4e-13 V |
+| log10 n / log10 p | 1.7e-11 (no-n+ rows near the cathode, n ~ 1e2) / 7.2e-13 |
+| CCE, every lateral point | 6.3e-12 (partially depleted 20 um / 5e13 / 10 V); <= 3.6e-14 elsewhere |
+| Gummel iterations per stripe | <= 5 |
+
+Field rule off the old doping (`stack2d_parity.py wall`, devsim 0.5 V ramp, no n+, hw 25, epi 10):
+- p+ 0.3, calibrated doping: last converged 55.0 V field 4.666e4, failed 55.5 V field 4.716e4.
+- p+ 1, legacy 2.93e15 / 8.82e13 / 0.987: last converged 56.0 V 4.549e4, failed 56.5 V 4.598e4.
+The second failure is below the old "every failure above 4.685e4" but above FIELD_ENGINE_MAX
+(4.45e4): devsim decides in that band, so the rule (engine below 4.45e4, NaN above 5e4) holds.
+
+Gate: ENGINE2D_BOX += substrate_thickness_cm 0.3e-4-1e-4, N_D_junction 1e15-1e16, L_transition
+0.3e-4-3e-4 (= the dark box ranges); ENGINE2D_DARK_BOX += substrate_thickness_cm 0.3e-4-1e-4;
+None = create_sic_2d_device default. microdosimetric_sweep takes substrate_thickness_cm /
+N_D_junction / L_transition (forwarded with the n+ keys); run_all's sweep section forwards the
+config's p+ / doping (it used to drop them: the 2D sweep ran on device2d's doping whatever the
+sidebar said) and gates on the config's doping_profile / N_A / T (a 310 K config used to be
+swept at 300 K under its label).
+
+Production path (`stack2d_parity.py sweep`, `_sweep_one` auto vs devsim, 6 configs incl. the
+calibrated stack with/without n+, legacy, two corners): every row engine2d; |dCCE| centre
+<= 1.4e-14, edge <= 1.2e-14, |dratio| <= 1.6e-14; is_valid / is_fully_depleted / V_fd identical.
+Calibrated stack V_fd (analytic graded) = 8.208 V (legacy doping: 10.40 V).
+`stack2d_parity.py field` (run_field engine vs forced devsim):
+| hw | stack | bias | engine | devsim | x/y, NetDoping | dPotential | rel dE |
+|---|---|---|---|---|---|---|---|
+| 25 | calibrated + n+ | -20 | 0.53 s | 5.7 s | identical | 4.4e-15 V | 5.1e-12 |
+| 50 | calibrated + n+ | -50 | 0.34 s | 23.5 s | identical | 2.1e-14 V | 1.4e-11 |
+| 25 | calibrated + n+ | -100 | 0.21 s | 13.3 s | identical | 1.4e-14 V | 9.7e-12 |
+| 25 | calibrated, no n+ | -30 | 0.15 s | 3.1 s | identical | 5.3e-15 V | 3.8e-14 |
+| 50 | legacy, no n+ | -20 | 0.21 s | 7.0 s | identical | 5.3e-15 V | 4.5e-13 |
