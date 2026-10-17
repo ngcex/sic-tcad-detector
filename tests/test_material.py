@@ -300,9 +300,10 @@ class TestRegressionT300K:
         from etna.core.device import create_sic_device
 
         dev = create_sic_device(device_name=f"reg300_mu_{uuid.uuid4().hex[:6]}", T=300)
-        # v1.0 uses mobility_caughey_thomas(N_D) with N_D=1.07e15
+        # v1.0 uses mobility_caughey_thomas(N_D) with N_D=1.07e15; hole mobility at the epi doping since 2026-10-17 (was N_A, audit-v7 A-03):
+        # mu_p 75.68 -> 121.12 cm2/Vs
         mu_n_v1 = mobility_caughey_thomas(1.07e15, "electron")
-        mu_p_v1 = mobility_caughey_thomas(1e19, "hole")
+        mu_p_v1 = mobility_caughey_thomas(1.07e15, "hole")
         assert dev["mu_n"] == pytest.approx(mu_n_v1, rel=1e-10)
         assert dev["mu_p"] == pytest.approx(mu_p_v1, rel=1e-10)
 

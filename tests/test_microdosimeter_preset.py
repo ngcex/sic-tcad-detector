@@ -79,7 +79,8 @@ def test_tilted_cce_vs_bias_pins_lab_numbers():
     n = r.y / r.y[V == -50.0][0]
     at = lambda v: n[V == v][0]
     # default: epi-only generation (p+ = dead layer), bragg shape, no metal
-    assert at(0.0) == pytest.approx(0.9488, abs=5e-4)
+    # hole mobility at the epi doping since 2026-10-17 (was N_A, audit-v7 A-03): 0.9488 -> 0.9668 (moves AWAY from the digitised 0.9083; not tuned)
+    assert at(0.0) == pytest.approx(0.9668, abs=5e-4)
     assert at(-10.0) == pytest.approx(0.9993, abs=3e-4)
     # documented model limitation: flat from -20 V (data: 0.9904 -> 1.000 to -50 V)
     assert at(-20.0) > 0.999

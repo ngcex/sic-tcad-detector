@@ -276,7 +276,7 @@ def _engine_batch(kws):
     """Engine batch for devices sharing one mesh geometry.
 
     ``kws`` is a list of ``device_kwargs(config)`` dicts. Returns the batch, the
-    mesh nodes and the per-device N_D used for the electron mobility (as in
+    mesh nodes and the per-device N_D used for both mobilities (as in
     ``cce_vs_bias``: ``DEFAULT_N_D`` when unset, whatever the profile).
     """
     col = lambda key: np.array([k[key] for k in kws], dtype=float)
@@ -460,7 +460,7 @@ def _cce_batch(configs, v_start, v_stop, n_points, capture):
             else None
         )
         G = alpha_generation(x, sub, 15e-4, 1e18, epi_end=epi_end)
-        # Mobility inputs mirror cce_vs_bias exactly (electrons from N_D, holes from N_A).
+        # Mobility inputs mirror cce_vs_bias exactly (both carriers at the epi N_D).
         res = cce_sweep(
             pb,
             bias_array,

@@ -238,3 +238,19 @@ solve is NOT used in production: in devsim 2.10 a circuit cannot be removed agai
 with a circuit present -> Newton UNEXPECTED on the next device). It stays as an own-process
 pin (tests/test_cv_small_signal.py::test_devsim_ac_solve_agrees_with_both_paths).
 Recalibration of DEFAULT_STACK on eps*A/C: lab/solver2d/notes/LOG.md (end).
+## 7. Hole mobility at the epi doping (feat/cv-observable, .issues/audit-v7 A-03)
+
+Both engines evaluated the scalar mu_p at N_A = 1e19 (75.7 cm2/Vs); holes are the minority
+carriers collected in the n- epi. Now mu_p(N_D) identically in device.py / device2d.py /
+alternative_structures.py and the batched cce_sweep (121.1 at 1.07e15; the preset's 3.06e14
+for the microdosimeter). Engine vs devsim CCE 0..-10 V: 1.3e-11. Not tuned to data.
+
+| quantity                                         | mu_p(N_A)                                 | mu_p(N_D)                                 |
+| ------------------------------------------------ | ----------------------------------------- | ----------------------------------------- |
+| default run_cce 0/-2/-4/-6/-8/-10 V              | 0.7715 0.8978 0.9668 0.9914 0.9977 0.9989 | 0.8384 0.9320 0.9787 0.9946 0.9986 0.9993 |
+| default run_cce -30 / -50 V                      | 0.999707 / 0.999820                       | 0.999812 / 0.999884                       |
+| microdosimeter tilted CCE 0 V (normalised -50 V) | 0.9488                                    | 0.9668 (data 0.9083: further away)        |
+| microdosimeter tilted raw 0 / -5 / -10 V         | 0.9486 / 0.9905 / 0.9992                  | 0.9667 / 0.9940 / 0.9995                  |
+| microdosimeter p+ 1 um, raw 0 V                  | 0.9598                                    | 0.9740                                    |
+| dark 4 mm2 -10 / -60 V (pA)                      | 6.07738 / 18.000001                       | 6.07754 / 18.000001 (N_t not re-fitted)   |
+| microdosimeter dark 25 mm2 -60 V (pA)            | 112.4886                                  | 112.4886                                  |

@@ -183,9 +183,10 @@ def cce_sweep(
     """CCE vs reverse bias, as ``etna.core.charge_collection.cce_vs_bias``.
 
     Per bias: dark Poisson, then Gummel with generation ``G`` (N,) and
-    CCE = |J_cathode| / (q * trapz(G)). Like the devsim path, mobility is
-    taken from the uniform ``N_D`` (default ``DEFAULT_N_D``) for electrons and
-    from ``N_A`` for holes, and lifetimes from ``srh_lifetime(T)``.
+    CCE = |J_cathode| / (q * trapz(G)). Like the devsim path, BOTH mobilities are
+    taken at the epi doping ``N_D`` (default ``DEFAULT_N_D``; holes at ``N_A`` before
+    2026-10-17, .issues/audit-v7 A-03), and lifetimes from ``srh_lifetime(T)``.
+    ``N_A`` is accepted for backward compatibility and no longer used.
     """
     from etna.core.device import DEFAULT_N_D
 
@@ -197,7 +198,7 @@ def cce_sweep(
     cb = ContinuityBatch(
         pb,
         _per_device(lambda n, t: mobility_caughey_thomas_T(n, t, "electron", PARAMS), N_D, T),
-        _per_device(lambda n, t: mobility_caughey_thomas_T(n, t, "hole", PARAMS), N_A, T),
+        _per_device(lambda n, t: mobility_caughey_thomas_T(n, t, "hole", PARAMS), N_D, T),
         _per_device(lambda t: srh_lifetime(t, "electron", PARAMS), T),
         _per_device(lambda t: srh_lifetime(t, "hole", PARAMS), T),
     )
