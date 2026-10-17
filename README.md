@@ -228,3 +228,9 @@ INFN-LNS Catania.
 Notebook outputs are stripped on commit (`.gitattributes` + `nbstripout`). After cloning run
 `uv run nbstripout --install --attributes .gitattributes` once so your local git applies the filter.
 Re-run a notebook (`jupyter nbconvert --execute`) to regenerate its outputs locally.
+
+## Development environment
+
+`uv sync --extra dev --extra viz` installs the test tools (pytest-xdist: `pytest -n auto --dist loadfile`) and the optional
+animation dependency (manim, needs `pkg-config`, `cairo`, `pango`; on macOS `brew install pkgconf cairo pango`). A plain
+`uv sync --extra dev` removes manim again; the Export page then simply hides the animation section.
