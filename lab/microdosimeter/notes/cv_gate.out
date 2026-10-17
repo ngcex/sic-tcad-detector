@@ -1,0 +1,24 @@
+== (a) batched engine, DEFAULT_STACK, W = eps / (dQ/dV) in um ==
+lab W_C (buffer_w.py, plane x0 = 0.5 um, DV 0.25): [1.708 9.764 9.981]
+V = +0 V   W_edge = 1.7000
+   electrons        DV 0.05:   1.7106  DV 0.10:   1.7103  DV 0.25:   1.7081
+   holes            DV 0.05:   1.7106  DV 0.10:   1.7103  DV 0.25:   1.7081
+   nside_x0         DV 0.05:   1.7106  DV 0.10:   1.7103  DV 0.25:   1.7081
+   nside_junction   DV 0.05:   4.6748  DV 0.10:   4.6747  DV 0.25:   4.6734
+   field_x0         DV 0.05:   1.7106  DV 0.10:   1.7103  DV 0.25:   1.7081
+V = -10 V   W_edge = 9.5000
+   electrons        DV 0.05:   9.7644  DV 0.10:   9.7643  DV 0.25:   9.7637
+   holes            DV 0.05:   9.7644  DV 0.10:   9.7643  DV 0.25:   9.7637
+   nside_x0         DV 0.05:   9.7644  DV 0.10:   9.7643  DV 0.25:   9.7637
+   nside_junction   DV 0.05:  18.8992  DV 0.10:  18.8991  DV 0.25:  18.8980
+   field_x0         DV 0.05:   9.7644  DV 0.10:   9.7643  DV 0.25:   9.7637
+V = -30 V   W_edge = 9.8995
+   electrons        DV 0.05:   9.9807  DV 0.10:   9.9807  DV 0.25:   9.9807
+   holes            DV 0.05:   9.9807  DV 0.10:   9.9807  DV 0.25:   9.9807
+   nside_x0         DV 0.05:   9.9807  DV 0.10:   9.9807  DV 0.25:   9.9807
+   nside_junction   DV 0.05:  15.5926  DV 0.10:  15.5926  DV 0.25:  15.5926
+   field_x0         DV 0.05:   9.9807  DV 0.10:   9.9807  DV 0.25:   9.9807
+== (b) devsim small-signal AC (cathode on V1, acreal = 1) ==
+V = +0 V  W_edge 1.7000  f 1 Hz: W_C 1.7107 um (Re I 1.41e-05)  f 1000 Hz: W_C 1.7107 um (Re I 1.41e-05)
+V = -10 V  W_edge 9.5000  f 1 Hz: W_C 9.7644 um (Re I -1.47e-05)  f 1000 Hz: W_C 9.7644 um (Re I -1.47e-05)
+V = -30 V  W_edge 9.8995  f 1 Hz: W_C 9.9807 um (Re I 1.95e-06)  f 1000 Hz: W_C 9.9807 um (Re I 1.95e-06)

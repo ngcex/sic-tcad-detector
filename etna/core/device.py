@@ -46,16 +46,21 @@ DEFAULT_N_D_NPLUS = 1e19  # cm^-3
 # 2.90e15 / 8.50e13 / 1.0e-4 (a third doping set), so direct core calls mixed models.
 # Calibration (lab/solver2d/bench/nplus_calibrate.py; pinned by
 # tests/test_nplus_calibration.py; notes in lab/solver2d/notes/LOG.md):
-# C-V: the three W targets (1.7 / 9.5 / 9.73 um at 0 / -10 / -30 V, W = eps*A/C, A = 4 mm2;
-# Photons Fig. 4b labels 1.68 / 9.52 / 9.73 um) have NO exact solution for
-# (N_D_junction, N_D_bulk, L) in this model (nor in the legacy no-n+ model): past full
-# depletion W saturates at the epi end (n+: 9.90 um at -30 V; no n+: 9.98 um), so 9.73 um
-# is unreachable (+1.7 % / +2.6 %). Least squares on all three drives N_D_bulk to its 1e12
-# bound (unphysical; paper: 0.5-1e14). Hence: L_transition held at the previous value
-# (0.987 um) and (N_D_junction, N_D_bulk) solved EXACTLY on the 0 V and -10 V points
-# (2 equations, 2 unknowns; residuals < 3e-15). Known C-V systematic: -30 V residual
-# +1.74 % (~2 %), attributed (paper study) to edge/fringe capacitance of the 2x2 mm2 die
-# falling with bias, which a 1D model cannot carry; deliberately NOT refitted.
+# C-V: the three W targets (1.7 / 9.5 / 9.73 um at 0 / -10 / -30 V, A = 4 mm2; Photons
+# Fig. 4b labels 1.68 / 9.52 / 9.73 um) are W = eps*A/C of a MEASURED C, so the model
+# observable is eps*A/C of the small-signal C = dQ/dV that run_cv returns (NOT the
+# n/N_D = 0.5 depletion edge; before 2026-10-17 the calibration matched that edge and
+# missed its own -10 V point by +2.8 % in eps*A/C: lab/microdosimeter/notes/LOG.md
+# sections 4 and 6). The three targets have NO exact solution for (N_D_junction,
+# N_D_bulk, L) in this 1D model (3-parameter least squares: residual ~3 %). Hence:
+# L_transition held at 0.987 um and (N_D_junction, N_D_bulk) solved EXACTLY on eps*A/C
+# at 0 V and -10 V (2 equations, 2 unknowns; residuals < 1e-14 engine, < 3e-8 devsim).
+# These two points are therefore CALIBRATION INPUTS, not reproduced validation points.
+# The -30 V point is out of fit: +2.56 % (9.979 vs 9.73 um). Three points cannot tell
+# apart a ~0.5 um graded n-/n+ buffer, an epi ~2.5 % thinner than nominal (9.75 um, inside
+# typical tolerance) and lateral edge/fringe capacitance falling with bias (LOG.md
+# section 4: each alone closes the gap); the C-V knee (-5..-15 V) or a SIMS profile could.
+# Not picked, not refitted. Previous record (edge calibration): 2.974271e15 / 6.335936e13.
 # N_t: rescaled (leakage linear in N_t) so that I(300 K, -60 V, 4 mm2) = 18 pA, the bound
 # "< 18 pA up to -60 V" used as equality; N_t is the fitted magnitude of the
 # f_depl = min(E/3.5e4, 1) effective-generation PROXY, not a trap density.
@@ -64,10 +69,10 @@ DEFAULT_STACK = {
     "substrate_thickness_cm": 0.3e-4,  # p+ anode layer (Petringa 2025 Fig. 1)
     "nplus_thickness_cm": 1e-4,
     "N_D_nplus": DEFAULT_N_D_NPLUS,
-    "N_D_junction": 2.974271e15,
-    "N_D_bulk": 6.335936e13,
+    "N_D_junction": 2.958237e15,
+    "N_D_bulk": 8.252732e13,
     "L_transition": 0.987e-4,  # held, not fitted
-    "N_t": SiC4H_Parameters.N_t,  # 2.805349e12
+    "N_t": SiC4H_Parameters.N_t,  # 2.805336e12
     "E_t": SiC4H_Parameters.E_t,  # 0.67
 }
 # Historical name of the same record (it was the opt-in calibration before the flip).
@@ -285,9 +290,13 @@ def create_sic_device(
         value=V_t,
     )
 
-    # Doping- and temperature-dependent mobility
+    # Doping- and temperature-dependent mobility, both carriers at the EPI doping N_D (the
+    # sensitive volume; holes are the minority carriers collected there). Before 2026-10-17
+    # mu_p was evaluated at the p+ doping N_A (1e19: 75.7 vs 121 cm2/Vs at 1.07e15;
+    # .issues/audit-v7 A-03). Scalar per region: the p+ and n+ inherit the epi values.
+    # For graded profiles N_D is the uniform fallback (DEFAULT_N_D) when not given.
     mu_n = mobility_caughey_thomas_T(N_D, T, "electron", params)
-    mu_p = mobility_caughey_thomas_T(N_A, T, "hole", params)
+    mu_p = mobility_caughey_thomas_T(N_D, T, "hole", params)
     devsim.set_parameter(
         device=device_name,
         region=region_name,

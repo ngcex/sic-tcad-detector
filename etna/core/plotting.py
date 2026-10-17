@@ -422,7 +422,8 @@ def plot_cv_comparison(cv_sim, cv_exp=None, ax=None):
         fig, ax = plt.subplots()
 
     V_sim = np.asarray(cv_sim["voltages"])
-    W_sim_um = np.asarray(cv_sim["depletion_widths"]) * 1e4  # cm -> um
+    # eps*A/C (as the measured W) when available, else the given widths
+    W_sim_um = np.asarray(cv_sim.get("W_from_C", cv_sim["depletion_widths"])) * 1e4
 
     ax.plot(V_sim, W_sim_um, "b-", linewidth=1.5, label="Simulation")
 

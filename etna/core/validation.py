@@ -183,8 +183,10 @@ def validate_cv(cv_data):
     Parameters
     ----------
     cv_data : dict
-        Dictionary with "voltages" and "depletion_widths" arrays (cm).
-        Can be output from cv_sweep() or manually constructed.
+        Dictionary with "voltages" and "W_from_C" (eps*A/C, cm; cv_sweep output) or,
+        for manually constructed data, "depletion_widths" (cm). The experimental W are
+        eps*A/C of a measured C, so "W_from_C" is used when present (the depletion edge
+        "depletion_widths" is not eps*A/C near full depletion).
 
     Returns
     -------
@@ -197,7 +199,7 @@ def validate_cv(cv_data):
         - "per_point_error": relative error at each experimental voltage
     """
     V_sim = np.asarray(cv_data["voltages"])
-    W_sim = np.asarray(cv_data["depletion_widths"])
+    W_sim = np.asarray(cv_data.get("W_from_C", cv_data["depletion_widths"]))
 
     V_exp = np.array(EXPERIMENTAL_CV["voltages"])
     W_exp = np.array(EXPERIMENTAL_CV["depletion_widths_cm"])

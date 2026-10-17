@@ -1,8 +1,11 @@
 """Capacitance-voltage (C-V) analysis for 4H-SiC p+/n- diode.
 
-Computes junction capacitance from depletion width using the parallel-plate
-approximation C = eps * A / W, and provides a C-V sweep function that
-uses the numerical Poisson/DD solver to extract W(V) at each bias point.
+C-V sweeps return the small-signal capacitance C = dQ/dV (devsim AC solve on the
+devsim path, an exact linearisation on the batched engine: they agree to ~1e-8) --
+the observable of a measured C-V -- together with the depletion EDGE W(V)
+(n/N_D = 0.5) as metadata. eps*A/C equals W_edge only at partial depletion. The
+parallel-plate helpers (junction_capacitance, depletion_width_from_capacitance)
+convert between C and an equivalent width eps*A/C.
 
 The 1/C^2 vs V (Mott-Schottky) analysis enables extraction of doping
 concentration and built-in potential from the linear fit slope/intercept.
@@ -120,12 +123,82 @@ def compute_cv_from_depletion(voltages, depletion_widths, eps_r=9.7, area=1.0):
     }
 
 
+# Bias step of the devsim small-signal C (V, central difference). Measured on the default
+# stack against the engine's exact linearisation: 2.5e-8 (0 V) .. 1.5e-12 (-30 V); the
+# truncation error scales as step^2, round-off is ~1e-11 (lab/microdosimeter/notes/LOG.md).
+_SS_STEP_V = 1e-3
+
+
+def small_signal_capacitance(device_info, step_V=_SS_STEP_V):
+    """devsim small-signal capacitance dQ/dV (F/cm^2 in 1D) at the current DC state.
+
+    Q is the terminal charge. In the dark reverse-biased diode holes enter/leave only
+    through the anode (electrons only through the cathode; generation-recombination is
+    negligible in the quasi-static limit), so dQ/dV = q d(sum NodeVolume * Holes)/dV.
+    It is evaluated by a central difference of two DC solves at V_cathode +- step_V
+    (warm-started from, and afterwards restored to, the current state). The nodewise
+    difference of the hole density keeps the neutral p+ holes out of the round-off.
+
+    This is the C of a measured (low-frequency) C-V; it is NOT eps/W_edge. It equals a
+    devsim small-signal AC solve to 1e-7 and the batched engine's exact linearisation
+    to <= 3e-8 (lab/microdosimeter/bench/cv_gate.py; tests/test_cv_small_signal.py).
+    The AC solve itself is not used here: devsim 2.10's delete_circuit() / reset_devsim()
+    leave the Newton bookkeeping corrupted (fatal CIRCUIT_UNEXPECTED / UNEXPECTED on the
+    next DC solve), so a transient circuit cannot be removed again.
+
+    Valid for a DD-initialised 1D device (create_dd_device / build_device).
+    """
+    from etna.core.drift_diffusion import _restore_solution, _snapshot_solution
+
+    device = device_info["device_name"]
+    region = device_info["region_name"]
+    bias_name = simple_physics.GetContactBiasName("cathode")
+    Vc = float(devsim.get_parameter(device=device, name=bias_name))
+    vol = np.array(
+        devsim.get_node_model_values(device=device, region=region, name="NodeVolume")
+    )
+    snap = _snapshot_solution(device, region)
+    holes = {}
+    try:
+        for sign in (+1, -1):
+            devsim.set_parameter(
+                device=device, name=bias_name, value=Vc + sign * step_V
+            )
+            try:
+                devsim.solve(
+                    type="dc",
+                    absolute_error=1e10,
+                    relative_error=DC_REL_ERROR,
+                    maximum_iterations=40,
+                )
+            except devsim.error:
+                _restore_solution(device, region, snap)
+                devsim.solve(
+                    type="dc",
+                    absolute_error=1e12,
+                    relative_error=1e-8,
+                    maximum_iterations=100,
+                )
+            holes[sign] = np.array(
+                devsim.get_node_model_values(device=device, region=region, name="Holes")
+            )
+    finally:
+        devsim.set_parameter(device=device, name=bias_name, value=Vc)
+        _restore_solution(device, region, snap)
+    return Q * float(np.sum(vol * (holes[-1] - holes[+1]))) / (2.0 * step_V)
+
+
 def cv_sweep(device_info, V_range, eps_r=9.7, area=1.0):
-    """Sweep reverse bias and compute C-V from numerical depletion widths.
+    """Sweep reverse bias: small-signal C-V plus the depletion edge W.
 
     At each voltage, ramps bias using the DD/Poisson solver, extracts the
-    depletion width numerically from the carrier profile, and computes
-    capacitance via the parallel-plate approximation.
+    depletion EDGE numerically from the carrier profile (n/N_D = 0.5) and the
+    small-signal capacitance C = dQ/dV from a devsim AC solve
+    (:func:`small_signal_capacitance`). C is the observable of a measured C-V
+    (W = eps*A/C of a measurement refers to it). eps*A/C is NOT W_edge: they
+    agree at partial depletion and part near full depletion (default stack before
+    2026-10-17: 9.764 vs 9.500 um at -10 V). Before 2026-10-17 this returned
+    C = eps*A/W_edge.
 
     Reverse bias convention: negative V_range values mean reverse bias on
     the diode. Internally, these are applied as positive cathode bias in
@@ -138,7 +211,8 @@ def cv_sweep(device_info, V_range, eps_r=9.7, area=1.0):
     V_range : array_like
         Array of reverse bias voltages (V, should be <= 0 for reverse bias).
     eps_r : float
-        Relative permittivity. Default 9.7.
+        Relative permittivity, used only for "W_from_C" (C itself comes from the
+        device's own Permittivity). Default 9.7.
     area : float
         Junction area (cm^2). Default 1.0.
 
@@ -150,10 +224,10 @@ def cv_sweep(device_info, V_range, eps_r=9.7, area=1.0):
           conventional form — shorter than the requested V_range if the DD
           solver hit a convergence wall (typically full depletion /
           punch-through) partway through the sweep; see "truncated".
-        - "depletion_widths": numpy array of W values (cm), same length as
-          "voltages"
-        - "capacitance": numpy array of C values (F or F/cm^2), same length
-          as "voltages"
+        - "depletion_widths": depletion-edge W (cm), same length as "voltages"
+        - "capacitance": small-signal C = dQ/dV (F, or F/cm^2 for area=1),
+          same length as "voltages"
+        - "W_from_C": eps*area/C (cm), the width a measured C implies
         - "truncated": True if the solver failed to converge before reaching
           the end of V_range (a partial result is returned instead of
           raising); False if the full requested sweep converged
@@ -169,14 +243,21 @@ def cv_sweep(device_info, V_range, eps_r=9.7, area=1.0):
     solved_voltages = []
     truncated = False
 
-    # Extract W at 0V first (current equilibrium state)
+    capacitances = []
+    # Extract W (and C) at 0V first (current equilibrium state)
     W0 = extract_depletion_width_numerical(device_info)
+    C0 = (
+        small_signal_capacitance(device_info)
+        if np.any(np.abs(V_range) < 1e-12)
+        else None
+    )
     current_V_cathode = 0.0
 
     for V_target in V_range:
         if abs(V_target) < 1e-12:
             # Use equilibrium W
             depletion_widths.append(W0)
+            capacitances.append(C0)
             solved_voltages.append(0.0)
             continue
 
@@ -216,8 +297,18 @@ def cv_sweep(device_info, V_range, eps_r=9.7, area=1.0):
                     break
 
         if converged:
+            try:
+                # the +-step side solves can fail at a convergence wall: truncate there
+                C = small_signal_capacitance(device_info)
+            except devsim.error as e:
+                logger.warning(
+                    f"cv_sweep: small-signal C failed at V={V_target:.2f}V: {e}"
+                )
+                converged = False
+        if converged:
             W = extract_depletion_width_numerical(device_info)
             depletion_widths.append(W)
+            capacitances.append(C)
             solved_voltages.append(V_target)
             current_V_cathode = V_cathode_target
         else:
@@ -234,12 +325,13 @@ def cv_sweep(device_info, V_range, eps_r=9.7, area=1.0):
 
     voltages = np.array(solved_voltages)
     W_arr = np.array(depletion_widths)
-    C_arr = junction_capacitance(W_arr, eps_r=eps_r, area=area)
+    C_arr = np.array(capacitances, dtype=float) * area
 
     return {
         "voltages": voltages,
         "depletion_widths": W_arr,
         "capacitance": C_arr,
+        "W_from_C": depletion_width_from_capacitance(C_arr, eps_r=eps_r, area=area),
         "truncated": truncated,
         "requested_v_stop": float(V_range.min()) if len(V_range) else 0.0,
     }
@@ -275,7 +367,8 @@ def _cv_engine(x, donors, acceptors, info, V_range, area):
     Electrostatics as the devsim path (reverse-bias currents do not move psi):
     quasi-Fermi Poisson on the devsim mesh with the given donors/acceptors, walked
     up in |V| (steps <= _CV_ENGINE_STEP_V), W extracted as
-    extract_depletion_width_numerical (n/Donors >= 0.5) and C as cv_sweep.
+    extract_depletion_width_numerical (n/Donors >= 0.5) and C = dQ/dV as cv_sweep
+    (PoissonBatch.small_signal_capacitance; devsim AC on the devsim path).
     """
     from etna.core.batched.extract import depletion_width
     from etna.core.batched.material import thermal_voltage
@@ -292,23 +385,28 @@ def _cv_engine(x, donors, acceptors, info, V_range, area):
     )
     ramp = _Ramp(pb, 1e-8)
     targets = np.unique(-V_range)  # cathode voltages >= 0, increasing
-    W_at = {}
+    W_at, C_at = {}, {}
     if targets[0] == 0.0:
-        W_at[0.0] = W_of(pb.solve(ramp.psi, tol=1e-8).n)
+        res0 = pb.solve(ramp.psi, tol=1e-8)
+        W_at[0.0] = W_of(res0.n)
+        C_at[0.0] = float(pb.small_signal_capacitance(res0)[0])
     Vc_prev = 0.0
     for Vc in targets[targets > 0]:
         n_sub = max(1, int(np.ceil((Vc - Vc_prev) / _CV_ENGINE_STEP_V - 1e-9)))
         for V in np.linspace(Vc_prev, Vc, n_sub + 1)[1:]:
             res = ramp.to(V)
         W_at[Vc] = W_of(res.n)
+        C_at[Vc] = float(pb.small_signal_capacitance(res)[0])
         Vc_prev = Vc
     if not ramp.converged.all():
         return None
     W = np.array([W_at[-v + 0.0] for v in V_range])
+    C = np.array([C_at[-v + 0.0] for v in V_range]) * area
     return {
         "voltages": V_range.copy(),
         "depletion_widths": W,
-        "capacitance": junction_capacitance(W, area=area),
+        "capacitance": C,
+        "W_from_C": depletion_width_from_capacitance(C, area=area),
         "truncated": False,
         "requested_v_stop": float(V_range.min()),
         "solver": "batched",
@@ -350,9 +448,9 @@ def cv_at_fluence(
     epi_thickness_cm : float
         Epitaxial layer thickness (cm). Default 10 um.
     N_D_junction : float
-        Junction-side donor concentration (cm^-3). Default: DEFAULT_STACK (2.974271e15).
+        Junction-side donor concentration (cm^-3). Default: DEFAULT_STACK (2.958237e15).
     N_D_bulk : float
-        Bulk-side donor concentration (cm^-3). Default: DEFAULT_STACK (6.335936e13).
+        Bulk-side donor concentration (cm^-3). Default: DEFAULT_STACK (8.252732e13).
     L_transition : float
         Doping transition length (cm). Default: DEFAULT_STACK (0.987 um).
     energy_MeV : float

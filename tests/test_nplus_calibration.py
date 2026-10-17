@@ -1,8 +1,10 @@
 """Pins the n+ calibration record (etna.core.device.NPLUS_CALIBRATION = DEFAULT_STACK, the default model).
 
-C-V: 0 V and -10 V depletion widths are solved exactly at the held L_transition; the -30 V
-target (9.73 um) is unreachable (W saturates at the epi end past full depletion), which is
-pinned too. N_t: I(300 K, -60 V, 4 mm2) = 18 pA. See lab/solver2d/bench/nplus_calibrate.py.
+C-V (since 2026-10-17): the targets are W = eps*A/C of a measured C, so the model
+observable is eps/C of the small-signal C = dQ/dV (reverse_sweep's C), not the depletion
+edge. 0 V and -10 V are solved exactly at the held L_transition (calibration inputs); the
+-30 V target (9.73 um) is out of fit (+2.56 %), pinned too. N_t: I(300 K, -60 V, 4 mm2) =
+18 pA. See lab/solver2d/bench/nplus_calibrate.py (cal-c).
 """
 
 import uuid
@@ -13,6 +15,7 @@ import pytest
 import scipy.optimize
 
 from etna.core.batched import make_batch, node_positions, reverse_sweep
+from etna.core.batched.material import EPS
 from etna.core.device import NPLUS_CALIBRATION as CAL
 from etna.core.radiation_damage import RadiationDamageParams
 from etna.core.sic_material import SiC4H_Parameters
@@ -28,7 +31,7 @@ def _W(NJ, NB, L):
     pb = make_batch(x, sub, 1e19, NJ, NB, L, 300.0, nplus=(sub + EPI, CAL["N_D_nplus"]))
     r = reverse_sweep(pb, V_T, sub, EPI)
     assert r.converged.all()
-    return r.W[:, 0]
+    return EPS / r.C[:, 0]  # eps*A/C, what the measured W targets are
 
 
 def test_trap_level_reconciled_in_the_record():
@@ -43,8 +46,8 @@ def test_trap_level_reconciled_in_the_record():
 def test_record_solves_the_0V_and_10V_points_exactly():
     W = _W(CAL["N_D_junction"], CAL["N_D_bulk"], CAL["L_transition"])
     np.testing.assert_allclose(W[:2], W_T[:2], rtol=2e-6)  # record rounded to 7 digits
-    # -30 V: unreachable, W saturates at the epi end (+1.74 %)
-    assert (W[2] - W_T[2]) / W_T[2] == pytest.approx(0.0174, abs=5e-4)
+    # -30 V: out of fit, +2.56 % (buffer / thinner epi / fringe: not separable, LOG.md)
+    assert (W[2] - W_T[2]) / W_T[2] == pytest.approx(0.0256, abs=5e-4)
     assert (
         0.5e14 <= CAL["N_D_bulk"] <= 1e14
     )  # paper: epi 0.5-1e14 cm^-3 (independent check)
@@ -57,7 +60,7 @@ def test_two_point_solve_reproduces_the_record():
         return ((_W(np.exp(z[0]), np.exp(z[1]), L) - W_T) / W_T)[:2]
 
     r = scipy.optimize.least_squares(
-        res, np.log([2.9e15, 8.5e13]), xtol=1e-15, ftol=1e-15, gtol=1e-15
+        res, np.log([2.974271e15, 6.335936e13]), xtol=1e-15, ftol=1e-15, gtol=1e-15
     )
     np.testing.assert_allclose(
         np.exp(r.x), [CAL["N_D_junction"], CAL["N_D_bulk"]], rtol=1e-6
@@ -65,16 +68,16 @@ def test_two_point_solve_reproduces_the_record():
 
 
 def test_three_point_system_has_no_exact_solution():
-    """Least squares on all three targets: the -30 V residual stays above 1 % and N_D_bulk
-    runs to its lower bound (why the record does not use it)."""
+    """Least squares on all three targets: a residual of ~3 % remains (why the record
+    holds L and solves only 0 / -10 V). On the old edge observable N_D_bulk also ran to
+    its 1e12 bound; on eps/C it does not (lab/microdosimeter/notes/buffer_w.out)."""
     lo, hi = np.log([1e14, 1e12, 0.05e-4]), np.log([1e17, 1e15, 5e-4])
     r = scipy.optimize.least_squares(
         lambda z: (_W(*np.exp(z)) - W_T) / W_T,
         np.log([2.9e15, 8.5e13, 1e-4]),
         bounds=(lo, hi),
     )
-    assert abs(r.fun[2]) > 0.01
-    assert np.exp(r.x[1]) < 1.01e12
+    assert np.abs(r.fun).max() > 0.01
 
 
 @pytest.mark.slow

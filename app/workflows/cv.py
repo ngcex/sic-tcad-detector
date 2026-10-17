@@ -92,10 +92,29 @@ def render() -> None:
         with st.expander("Depletion width vs V"):
             import plotly.graph_objects as go
 
+            st.caption(
+                "ε·A/C uses the small-signal C = dQ/dV (what a measured W = ε·A/C is); "
+                "the depletion edge (n/N_D = 0.5) is a different quantity near full "
+                "depletion."
+            )
             depletion_um = result.metadata["depletion_widths"] * 1e4
             fig = go.Figure(
-                data=go.Scatter(x=result.x, y=depletion_um, mode="lines+markers")
+                data=go.Scatter(
+                    x=result.x,
+                    y=depletion_um,
+                    mode="lines+markers",
+                    name="depletion edge (n/N_D = 0.5)",
+                )
             )
+            if "W_from_C" in result.metadata:
+                fig.add_trace(
+                    go.Scatter(
+                        x=result.x,
+                        y=result.metadata["W_from_C"] * 1e4,
+                        mode="lines+markers",
+                        name="ε·A/C",
+                    )
+                )
             fig.update_layout(
                 title="Depletion Width vs Bias",
                 xaxis_title="Voltage (V)",

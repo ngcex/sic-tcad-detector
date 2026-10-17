@@ -101,7 +101,7 @@ def _set_sic_material_params(device_name, region_name, N_D, N_A, T):
     )
 
     mu_n = mobility_caughey_thomas_T(N_D, T, "electron", params)
-    mu_p = mobility_caughey_thomas_T(N_A, T, "hole", params)
+    mu_p = mobility_caughey_thomas_T(N_D, T, "hole", params)  # epi doping (A-03)
     devsim.set_parameter(
         device=device_name,
         region=region_name,

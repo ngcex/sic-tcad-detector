@@ -23,7 +23,7 @@ from etna.core.batched import (
     node_positions,
     reverse_sweep,
 )
-from etna.core.batched.extract import capacitance
+from etna.core.batched.material import EPS
 from etna.core.charge_collection import cce_vs_bias, cce_vs_fluence
 from etna.core.cv_analysis import cv_sweep
 from etna.core.dark_current import create_dark_current_device, dark_current_sweep
@@ -148,12 +148,12 @@ def _reach_through_V(W, bias_array, config: DeviceConfig) -> "float | None":
     With an n+ layer the n/N_D >= 0.5 edge approaches the epi end only
     asymptotically (electron tail of the n-/n+ high-low junction), so full
     depletion is taken as the edge within one Debye length L_D of the epi end,
-    L_D = sqrt(eps V_t / (q N_D_epi_end)) (0.47 um on the default device). A
-    definition, not a measurement: 10.30 V on the default stack (paper: ~10 V; the
-    legacy model's mesh rule gave 17.0 V, and the pre-recalibration doping with n+
-    12.85 V). The 2D sweep's is_fully_depleted gate uses the analytic graded V_fd
-    instead (8.21 V on the default stack, |V| >= 1.2 V_fd = 9.85 V): the looser of the
-    two definitions.
+    L_D = sqrt(eps V_t / (q N_D_epi_end)) (0.41 um on the default device). A
+    definition, not a measurement: 12.30 V on the default stack (paper: ~10 V; 10.30 V
+    with the doping calibrated on the depletion edge before 2026-10-17; the legacy
+    model's mesh rule gave 17.0 V). The 2D sweep's is_fully_depleted gate uses the
+    analytic graded V_fd instead (9.93 V on the default stack, |V| >= 1.2 V_fd =
+    11.92 V): the looser of the two definitions.
     """
     epi_cm = config.epi_thickness_um * 1e-4
     if config.nplus_thickness_um is not None:
@@ -227,7 +227,11 @@ def _refine_reach_through(
         kws = [device_kwargs(config)]
         pb, _, _ = _engine_batch(kws)
         res = reverse_sweep(
-            pb, -lattice, kws[0]["substrate_thickness_cm"], kws[0]["epi_thickness_cm"]
+            pb,
+            -lattice,
+            kws[0]["substrate_thickness_cm"],
+            kws[0]["epi_thickness_cm"],
+            capacitance=False,
         )
     except Exception as e:  # pragma: no cover - defensive
         logger.info("reach-through refinement failed (%s); using the grid value", e)
@@ -272,7 +276,7 @@ def _engine_batch(kws):
     """Engine batch for devices sharing one mesh geometry.
 
     ``kws`` is a list of ``device_kwargs(config)`` dicts. Returns the batch, the
-    mesh nodes and the per-device N_D used for the electron mobility (as in
+    mesh nodes and the per-device N_D used for both mobilities (as in
     ``cce_vs_bias``: ``DEFAULT_N_D`` when unset, whatever the profile).
     """
     col = lambda key: np.array([k[key] for k in kws], dtype=float)
@@ -331,7 +335,7 @@ def _reject_2d(configs, why):
             raise NotImplementedError(why)
 
 
-_CV_EMPTY = dict(arrays=("depletion_widths", "one_over_C_squared"))
+_CV_EMPTY = dict(arrays=("depletion_widths", "W_from_C", "one_over_C_squared"))
 _CCE_EMPTY = dict(arrays=("I_collected",), scalars={"I_generated": float("nan")})
 _ENGINE_FALLBACK = "batched engine did not converge"
 
@@ -368,7 +372,7 @@ def _cv_batch(configs, v_start, v_stop, n_points, capture):
                 fell_back.add(i)
                 continue
             W = res.W[:, j]
-            C = capacitance(W, configs[i].area_cm2)
+            C = res.C[:, j] * configs[i].area_cm2
             results[i] = SimResult(
                 config=configs[i],
                 sim_type="cv",
@@ -376,6 +380,7 @@ def _cv_batch(configs, v_start, v_stop, n_points, capture):
                 y=C,
                 metadata={
                     "depletion_widths": W,
+                    "W_from_C": EPS * configs[i].area_cm2 / C,
                     "one_over_C_squared": 1.0 / C**2,
                     "area_cm2": configs[i].area_cm2,
                     "truncated": False,
@@ -438,7 +443,9 @@ def _cce_batch(configs, v_start, v_stop, n_points, capture):
         sub = kws[0]["substrate_thickness_cm"]
         # Full-depletion voltage from a dark Poisson sweep on the same grid
         # (CCE carries no W of its own); cheap, does not touch the CCE numbers.
-        dark = reverse_sweep(pb, bias_array, sub, kws[0]["epi_thickness_cm"])
+        dark = reverse_sweep(
+            pb, bias_array, sub, kws[0]["epi_thickness_cm"], capacitance=False
+        )
         for j, i in enumerate(idxs):
             if dark.converged[:, j].all():
                 reach[i] = _refine_reach_through(
@@ -453,7 +460,7 @@ def _cce_batch(configs, v_start, v_stop, n_points, capture):
             else None
         )
         G = alpha_generation(x, sub, 15e-4, 1e18, epi_end=epi_end)
-        # Mobility inputs mirror cce_vs_bias exactly (electrons from N_D, holes from N_A).
+        # Mobility inputs mirror cce_vs_bias exactly (both carriers at the epi N_D).
         res = cce_sweep(
             pb,
             bias_array,
@@ -551,7 +558,8 @@ def run_cv(
     Builds a DD-initialized 1D devsim device from `config`, sweeps the bias
     range [v_start, v_stop] via `etna.core.cv_analysis.cv_sweep`, and
     wraps the result as `SimResult(sim_type="cv")` with bias on `x`,
-    capacitance on `y`, and depletion widths + 1/C^2 in `metadata`.
+    small-signal capacitance dQ/dV on `y`, and depletion edges, eps*A/C and
+    1/C^2 in `metadata`.
 
     Only 1D devices (`config.half_width_um is None`) are supported — core
     `cv_sweep` operates on the 1D DD device returned by `create_dd_device`.
@@ -569,10 +577,12 @@ def run_cv(
 
     Full depletion: ``metadata["reach_through_V"]`` is the smallest |V| at which
     the epi is fully depleted (default stack: depletion edge within one Debye
-    length of the n-/n+ step, 10.30 V -- a definition; see ``_reach_through_V``),
-    or None if not reached. Known C-V systematic: W(-30 V) = 9.90 um vs the
-    measured 9.73 um (+1.7 %, ~2 %): edge/fringe capacitance of the die falling with
-    bias (paper study), not representable in 1D; not refitted. Legacy model (no n+,
+    length of the n-/n+ step, 12.30 V -- a definition; see ``_reach_through_V``),
+    or None if not reached. C-V calibration: the default doping is solved exactly on
+    eps*A/C at 0 / -10 V (calibration inputs, not validation points). Known C-V
+    residual: eps*A/C(-30 V) = 9.98 um vs the measured 9.73 um (+2.6 %); a graded
+    n-/n+ buffer, a ~2.5 % thinner epi or edge/fringe capacitance each close it and
+    three points cannot separate them (none picked; not refitted). Legacy model (no n+,
     ``legacy_config()``): W reaches the epi end to within the last mesh interval
     (17.0 V) and devsim stops converging at about -64 V, an artefact of the ohmic
     cathode directly on the n- epi, not a physical device limit.
@@ -598,8 +608,13 @@ def run_cv(
         sim_type="cv", x=bias voltages actually reached (V) — shorter than
         the requested [v_start, v_stop] sweep if the DD solver hit a
         convergence wall (devsim path only, deep reverse bias) partway
-        through, y=capacitance (F) for the same points, metadata contains
-        "depletion_widths" (cm), "one_over_C_squared", "area_cm2",
+        through, y=small-signal capacitance C = dQ/dV (F) for the same
+        points (the observable of a measured C-V; engine: exact linearisation,
+        devsim: central difference of the terminal charge, parity <= 1e-6;
+        before 2026-10-17 y was eps*A/W_edge), metadata contains
+        "depletion_widths" (cm, the n/N_D = 0.5 depletion EDGE, which is not
+        eps*A/C near full depletion), "W_from_C" (cm, eps*A/C, the width a
+        measured C implies), "one_over_C_squared", "area_cm2",
         "truncated" (True if the sweep stopped before v_stop), and
         "requested_v_stop" (the originally requested v_stop, for comparison
         against x.min() when truncated).
@@ -637,6 +652,7 @@ def _run_cv_devsim(config: DeviceConfig, bias_array) -> SimResult:
 
         metadata = {
             "depletion_widths": cv_result["depletion_widths"],
+            "W_from_C": cv_result["W_from_C"],
             "one_over_C_squared": 1.0 / cv_result["capacitance"] ** 2,
             "area_cm2": area,
             "truncated": cv_result["truncated"],
@@ -1201,8 +1217,9 @@ def run_cce_tilted_alpha(
     if not pairs_generated > 0:
         raise ValueError("run_cce_tilted_alpha: the track deposits nothing in the SiC")
     G_rate = G * (1e18 / G.max())  # cm^-3 s^-1, low injection as run_cce
-    # Solve on a grid that walks from 0 V in steps <= 10 V (a cold Gummel start at
-    # e.g. -50 V does not converge); report only the requested points.
+    # Solve on a grid that walks from 0 V in steps <= 10 V (kept for its pinned numbers;
+    # the failure was the cold dark-Poisson jump, which cce_sweep now sub-steps itself);
+    # report only the requested points.
     grid = [0.0]
     for v in bias_array:
         n = max(1, int(np.ceil(abs(v - grid[-1]) / 10.0)))
@@ -1214,7 +1231,9 @@ def run_cce_tilted_alpha(
     res = cce_sweep(pb, grid, sub, G_rate, T=config.T, N_A=config.N_A, N_D=nd)
     if not res.converged[:, 0].all():
         raise RuntimeError("run_cce_tilted_alpha: batched engine did not converge")
-    dark = reverse_sweep(pb, bias_array, sub, kws[0]["epi_thickness_cm"])
+    dark = reverse_sweep(
+        pb, bias_array, sub, kws[0]["epi_thickness_cm"], capacitance=False
+    )
     rt = None
     if dark.converged[:, 0].all():
         rt = _refine_reach_through(

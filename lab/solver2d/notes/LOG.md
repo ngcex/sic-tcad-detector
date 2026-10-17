@@ -632,3 +632,34 @@ Decision: not applied. Options for the caller: (a) re-state the W gate against a
 reference ("no worse than the fine mesh's own envelope", ~3.5e-5) and take k3: -14% nodes /
 devsim 0.80x on 10 um, -45% on 20 um, +4% rows on 5 um (would want a per-epi line rule);
 (b) accept W ~2-4e-4 for e05n02: -39% nodes, devsim 0.51x; (c) leave it.
+
+## C-V recalibration on the small-signal C (2026-10-17, feat/cv-observable)
+
+Why: the W targets 1.7 / 9.5 / 9.73 um are eps*A/C of a MEASURED C. run_cv now returns the
+small-signal C = dQ/dV (gate: lab/microdosimeter/notes/LOG.md section 6); the previous record
+was solved on the n/N_D = 0.5 depletion edge and gave eps*A/C = 1.711 / 9.764 / 9.981 um,
+i.e. it missed its own -10 V input by +2.78 %. `nplus_calibrate.py cal-c`:
+
+| quantity                         | before (edge calibration)      | after (eps*A/C calibration)        |
+| -------------------------------- | ------------------------------ | ---------------------------------- |
+| N_D_junction / N_D_bulk (cm^-3)  | 2.974271e15 / 6.335936e13      | 2.958237e15 / 8.252732e13          |
+| L_transition                     | 0.987 um (held)                | 0.987 um (held)                    |
+| eps*A/C 0 / -10 / -30 V (um)     | 1.711 / 9.764 / 9.981          | 1.700 / 9.500 (inputs) / 9.979     |
+| -30 V residual (eps*A/C)         | +2.58 %                        | +2.56 %                            |
+| depletion edge 0 / -10 / -30 V   | 1.700 / 9.500 / 9.899          | 1.689 / 9.267 / 9.896              |
+| devsim eps*A/C residual 0/-10 V  |                                | -2.5e-8 / -3.7e-9                  |
+| N_t (18 pA @ -60 V, 4 mm2)       | 2.805349e12                    | 2.805336e12 (17.99992 -> 18.00000) |
+| dark -10 / -30 / -60 V (pA)      | 6.132 / 14.873 / 18.000        | 6.077 / 14.720 / 18.000            |
+| CCE run_cce 0 / -10 / -50 V      | 0.752969 / 0.999021 / 0.999819 | 0.771521 / 0.998899 / 0.999820     |
+| reach-through (Debye rule)       | 10.30 V (L_D 0.47 um)          | 12.30 V (L_D 0.41 um)              |
+| analytic graded V_fd, 1.2 V_fd   | 8.21 V, 9.85 V                 | 9.93 V, 11.92 V                    |
+| compensation fluence (62 MeV)    | 3.62e13                        | 4.72e13                            |
+
+The -30 V residual is essentially unchanged (+2.6 %): in eps*A/C it was never the +1.74 %
+quoted before (that was the depletion edge). A ~530 nm graded buffer, a 9.75 um epi and
+fringe capacitance each close it (microdosimeter LOG section 4); not separable with three
+points, none picked. The old wording "0 / -10 V reproduced, -30 V gap = fringe capacitance"
+is replaced everywhere (export labels, spec sheet, README, DESIGN-1, run_cv docstring).
+2D: tests/test_engine2d_stack.py lateral-scan parity (engine2d vs devsim, atol 1e-10, n+ and
+no-n+) re-run on the new record: passes; new stack inside every engine box.
+Legacy preset unchanged (pins on W_edge, which did not move).
