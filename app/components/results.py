@@ -365,6 +365,8 @@ def to_csv_bytes(result: SimResult) -> bytes:
                 "depletion_width_cm": result.metadata["depletion_widths"],
             }
         )
+        if "W_from_C" in result.metadata:  # eps*A/C of the small-signal C
+            df["W_from_C_cm"] = result.metadata["W_from_C"]
         extra_header_lines = _sweep_header_lines(result)
     elif result.sim_type == "cce":
         df = pd.DataFrame(

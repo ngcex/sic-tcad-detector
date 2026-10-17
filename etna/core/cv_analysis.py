@@ -161,7 +161,9 @@ def small_signal_capacitance(device_info, step_V=_SS_STEP_V):
     holes = {}
     try:
         for sign in (+1, -1):
-            devsim.set_parameter(device=device, name=bias_name, value=Vc + sign * step_V)
+            devsim.set_parameter(
+                device=device, name=bias_name, value=Vc + sign * step_V
+            )
             try:
                 devsim.solve(
                     type="dc",
@@ -295,9 +297,18 @@ def cv_sweep(device_info, V_range, eps_r=9.7, area=1.0):
                     break
 
         if converged:
+            try:
+                # the +-step side solves can fail at a convergence wall: truncate there
+                C = small_signal_capacitance(device_info)
+            except devsim.error as e:
+                logger.warning(
+                    f"cv_sweep: small-signal C failed at V={V_target:.2f}V: {e}"
+                )
+                converged = False
+        if converged:
             W = extract_depletion_width_numerical(device_info)
             depletion_widths.append(W)
-            capacitances.append(small_signal_capacitance(device_info))
+            capacitances.append(C)
             solved_voltages.append(V_target)
             current_V_cathode = V_cathode_target
         else:
