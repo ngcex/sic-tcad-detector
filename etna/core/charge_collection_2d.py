@@ -406,7 +406,8 @@ def cce_heatmap_2d(device_info, cce_lateral, cce_1d_depth=None):
         Result from cce_lateral_scan().
     cce_1d_depth : array_like or None
         Per-node depth CCE profile.  If None, uses step function:
-        1.0 in the epi (y > junction_pos), 0.0 in substrate.
+        1.0 in the epi (junction_pos <= y <= epi_end), 0.0 in the p+ layer and in
+        the n+ layer (default stack), which is not active volume.
 
     Returns
     -------
@@ -415,7 +416,7 @@ def cce_heatmap_2d(device_info, cce_lateral, cce_1d_depth=None):
         - "x_nodes_cm": x-coordinates of mesh nodes (cm)
         - "y_nodes_cm": y-coordinates of mesh nodes (cm)
         - "cce_map": per-node CCE values
-        - "active_fraction": fraction of epi area with CCE > 0.5
+        - "active_fraction": fraction of epi nodes (n+ excluded) with CCE > 0.5
     """
     device = device_info["device_name"]
     region = device_info["region_name"]
@@ -437,18 +438,23 @@ def cce_heatmap_2d(device_info, cce_lateral, cce_1d_depth=None):
     # Interpolate f_edge to mesh node x-positions
     f_edge = np.interp(x_nodes, x_lat, f_edge_norm)
 
+    # Epi = [junction_pos, epi_end]. With an n+ layer (default stack) the mesh goes on
+    # to the cathode below epi_end; y >= junction_pos alone counted the n+ as active
+    # epi (same bug class as compare_cce_2d_vs_1d, commit dbc01b0).
+    epi_end = device_info.get("epi_end", junction_pos + device_info["epi_thickness_cm"])
+    epi_mask = (y_nodes >= junction_pos) & (y_nodes <= epi_end + 1e-12)
+
     # f_depth(y): depth collection efficiency
     if cce_1d_depth is not None:
         f_depth = np.asarray(cce_1d_depth, dtype=float)
     else:
-        # Default: 1.0 in epi (y >= junction_pos), 0.0 in substrate
-        f_depth = np.where(y_nodes >= junction_pos, 1.0, 0.0)
+        # Default: 1.0 in the epi, 0.0 in the p+ and n+ layers
+        f_depth = np.where(epi_mask, 1.0, 0.0)
 
     # Factored 2D CCE map
     cce_map = f_edge * f_depth
 
-    # Active fraction: fraction of epi area with CCE > 0.5
-    epi_mask = y_nodes >= junction_pos
+    # Active fraction: fraction of epi nodes with CCE > 0.5
     if np.sum(epi_mask) > 0:
         active_fraction = float(np.sum(cce_map[epi_mask] > 0.5) / np.sum(epi_mask))
     else:
