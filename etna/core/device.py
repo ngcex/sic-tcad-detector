@@ -590,10 +590,14 @@ def apply_damaged_params(device_info, damaged_params):
         device=device, region=region, name="NetDoping", values=list(net_doping)
     )
 
+    # epi_mask (x >= junction_pos) also covers the n+ layer, consistently with the
+    # reference profiles the callers extract, so the n+ doping is carried through; the
+    # logged epi mean must exclude it (1e19 would dominate).
+    epi_only = epi_mask & (x_nodes <= device_info.get("epi_end", np.inf) + 1e-12)
     logger.info(
         f"Applied damaged params: tau_n={damaged_params['tau_n']:.3e}s, "
         f"tau_p={damaged_params['tau_p']:.3e}s, "
-        f"N_D_epi_mean={np.mean(donors[epi_mask]):.3e} cm^-3"
+        f"N_D_epi_mean={np.mean(donors[epi_only]):.3e} cm^-3"
     )
 
 
