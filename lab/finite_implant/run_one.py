@@ -25,6 +25,7 @@ def main():
         kw[k] = v
     dvs = [float(x) for x in kw.pop("dv", "0.05").split(",")]
     volts = [float(x) for x in kw.pop("volts", ",".join(map(str, VOLTS))).split(",")]
+    q0 = float(kw.pop("qcont", "0"))  # >0: reach each bias at qfs = q0, then continue to 1
     bkw = {k: float(v) for k, v in kw.items()}
     t0 = time.time()
     info = fi2d.build(**bkw)
@@ -32,7 +33,12 @@ def main():
     res = dict(cfg=bkw, nodes=info["nodes"], xe_cm=info["xe"], xmax_cm=info["xmax"], V=[], C_e={}, C_h={}, lateral={})
     vnow = 0.0
     for V in volts:
-        fi2d.ramp(info, vnow, V)
+        if q0 > 0 and V != vnow:
+            fi2d.qf_continue(info, 1.0, q0)
+            fi2d.ramp(info, vnow, V)
+            fi2d.qf_continue(info, q0, 1.0)
+        else:
+            fi2d.ramp(info, vnow, V)
         vnow = V
         res["V"].append(-V)
         for dv in dvs:

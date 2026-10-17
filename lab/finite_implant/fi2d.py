@@ -70,6 +70,7 @@ def build(
     epi_um=10.0,
     T=300.0,
     null=0.0,
+    surf_ps_um=0.01,
     NJ=None,
     NB=None,
 ):
@@ -115,7 +116,7 @@ def build(
 
     # ---- y lines (device2d pattern + extra epi lines) ----
     ys = [
-        (0.0, 1e-6),
+        (0.0, surf_ps_um * um),
         (yj - 5e-6, 1e-6),
         (yj, 1e-7),
         (yj + 1e-4, 2e-6),
@@ -234,8 +235,9 @@ def build(
         sel = (np.abs(yn) < 1e-12) & (xn >= xo - 1e-12)
         nfix[sel] = Qf / (h0 / 2)
     devsim.set_node_values(device=name, region="sic", name="Nfix", values=nfix.tolist())
+    devsim.set_parameter(device=name, name="qfs", value=1.0)
     devsim.node_model(
-        device=name, region="sic", name="NetDoping", equation="Donors-Acceptors+Nfix"
+        device=name, region="sic", name="NetDoping", equation="Donors-Acceptors+qfs*Nfix"
     )
 
     # ---- Poisson with two quasi-Fermi levels ----
@@ -390,3 +392,24 @@ def fields(info):
         D=g("Donors"),
         psi=g("Potential"),
     )
+
+
+def set_qfs(info, v):
+    """Scale of the fixed oxide charge (continuation in Qf at fixed bias)."""
+    devsim.set_parameter(device=info["name"], name="qfs", value=float(v))
+
+
+def qf_continue(info, q_from, q_to, n=5, depth=0):
+    """Step qfs q_from -> q_to at fixed bias, bisecting on failure."""
+    qs = np.linspace(q_from, q_to, n + 1)
+    for a, b in zip(qs[:-1], qs[1:]):
+        snap = _snap(info)
+        set_qfs(info, b)
+        try:
+            solve()
+        except devsim.error:
+            _restore(info, snap)
+            set_qfs(info, a)
+            if depth > 6:
+                raise
+            qf_continue(info, a, b, 2, depth + 1)
