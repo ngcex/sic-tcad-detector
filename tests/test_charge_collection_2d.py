@@ -85,6 +85,7 @@ class TestComputeCCE2D:
     """Tests for 2D CCE computation."""
 
     @pytest.mark.slow
+    @pytest.mark.exhaustive  # covered tighter by TestCompareCCE2Dvs1D (hw 50: CCE_1D == CCE_2D to 1e-3)
     def test_center_matches_1d(self):
         """2D center CCE should match 1D CCE within 10% for wide device.
 

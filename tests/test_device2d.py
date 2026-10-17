@@ -254,7 +254,7 @@ class TestCalibrationCV:
         reset_devsim_fully()
         dev_2d = create_2d_dd_device(
             device_name=_unique_name() + "_2d",
-            half_width_um=50.0,
+            half_width_um=25.0,  # laterally uniform, centre column only (was 50)
             V_bias=0.0,
             doping_profile="graded",
         )
@@ -317,7 +317,7 @@ class TestResetStateLeak:
         try:
             dev_ref = create_2d_dd_device(
                 device_name=_unique_name(),
-                half_width_um=50.0,
+                half_width_um=25.0,  # the canary needs a planar build, not width (was 50)
                 V_bias=10.0,
                 doping_profile="graded",
             )
@@ -344,7 +344,7 @@ class TestResetStateLeak:
         try:
             dev_after = create_2d_dd_device(
                 device_name=_unique_name(),
-                half_width_um=50.0,
+                half_width_um=25.0,  # the canary needs a planar build, not width (was 50)
                 V_bias=10.0,
                 doping_profile="graded",
             )
@@ -387,6 +387,7 @@ class TestExtractDepletionWidth2DCenter:
             doping_profile="graded",
         )
         W0 = extract_depletion_width_2d_center(dev)
+        devsim.delete_device(device=dev["device_name"])  # global solve: do not leak it
         # 1D-twin equilibrium W ~= 1.7e-4 cm; loose +/-30% band (v3.0 profile
         # is unrefitted in 2D — Plan 03 tightens it).
         assert 0.7 * 1.7e-4 <= W0 <= 1.3 * 1.7e-4, f"W0={W0}"
@@ -398,18 +399,22 @@ class TestExtractDepletionWidth2DCenter:
 
         dev0 = create_2d_dd_device(
             device_name=_unique_name(),
-            half_width_um=50.0,
+            half_width_um=25.0,
             V_bias=0.0,
             doping_profile="graded",
         )
         W0 = extract_depletion_width_2d_center(dev0)
+        # devsim.solve is global: a live dev0 would be re-solved in every step of the
+        # dev5 build (most of this test's time). Laterally uniform: hw 25 (was 50).
+        devsim.delete_device(device=dev0["device_name"])
         dev5 = create_2d_dd_device(
             device_name=_unique_name(),
-            half_width_um=50.0,
+            half_width_um=25.0,
             V_bias=5.0,
             doping_profile="graded",
         )
         W5 = extract_depletion_width_2d_center(dev5)
+        devsim.delete_device(device=dev5["device_name"])
         assert W5 > W0, f"W5={W5} should exceed W0={W0} under reverse bias"
 
 
@@ -426,7 +431,7 @@ class TestGradedDopingSmoothness:
 
         dev = create_2d_dd_device(
             device_name=_unique_name(),
-            half_width_um=50.0,
+            half_width_um=25.0,  # laterally uniform; centre column only (was 50)
             V_bias=0.0,
             doping_profile="graded",
         )
@@ -455,6 +460,7 @@ class TestGradedDopingSmoothness:
         yc, dc = yc[order], dc[order]
         in_epi = (yc > dev["junction_pos"]) & (dc > 0) & (yc < dev["epi_end"] - 1e-12)
         d_in = dc[in_epi]
+        devsim.delete_device(device=device)  # global solve: do not leak it
 
         assert len(d_in) >= 4, f"expected >=4 center-column epi nodes, got {len(d_in)}"
 

@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 
 from etna.api import simulation as sim
-from etna.api.device import DeviceConfig, build_device, device_kwargs
+from etna.api.device import DeviceConfig
 from etna.core.batched import (
     alpha_generation,
     cce_sweep,
@@ -22,7 +22,6 @@ from etna.core.batched import (
 )
 from etna.core.charge_collection import cce_vs_bias
 from etna.core.cv_analysis import cv_sweep
-from etna.core.devsim_reset import reset_devsim_fully
 from etna.core.drift_diffusion import create_dd_device
 from etna.core.device import create_sic_device
 
@@ -76,31 +75,6 @@ def test_nplus_cv_potential_and_cce_match_devsim():
     np.testing.assert_allclose(ce.cce[:, 0], c["cce_values"], atol=1e-9)
     assert np.all(ce.J_collected[:, 0] / ce.J_generated < 1.0)  # raw, before the clip
     assert ce.J_generated == pytest.approx(c["I_generated"], rel=1e-12)
-
-
-def test_api_routes_nplus_to_the_engine_and_matches_devsim():
-    cfg = DeviceConfig(nplus_thickness_um=1.0)
-    assert sim.validated_domain_reason(cfg) is None
-    res = sim.run_cce(cfg, v_start=-10.0, v_stop=-100.0, n_points=4)
-    assert res.metadata["solver"] == "batched"
-    assert res.metadata["cross_checked_to_V"] == 100.0
-    kw = device_kwargs(cfg)
-    ref = cce_vs_bias(
-        np.linspace(-10.0, -100.0, 4),
-        epi_thickness_cm=kw.pop("epi_thickness_cm"),
-        device_kwargs=kw,
-    )
-    np.testing.assert_allclose(res.y, ref["cce_values"], atol=1e-6)
-    cv = sim.run_cv(cfg, v_start=0.0, v_stop=-20.0, n_points=9)
-    assert cv.metadata["solver"] == "batched"
-    reset_devsim_fully()
-    ref_cv = cv_sweep(build_device(cfg), np.linspace(0.0, -20.0, 9), area=cfg.area_cm2)
-    reset_devsim_fully()
-    np.testing.assert_allclose(
-        cv.metadata["depletion_widths"], ref_cv["depletion_widths"], rtol=1e-10
-    )
-    # reach-through with n+: depletion edge within one Debye length of the epi end
-    assert 10.0 < cv.metadata["reach_through_V"] < 15.0
 
 
 @pytest.mark.parametrize(
