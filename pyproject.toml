@@ -24,6 +24,9 @@ dev = [
     "jupyter>=1.0",
     "pytest-xdist>=3.8.0",
 ]
+viz = [
+    "manim>=0.22.0",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["etna"]
