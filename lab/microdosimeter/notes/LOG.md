@@ -198,3 +198,33 @@ alpha_range_um=18, dead_layer_um=0, shape="bragg", generation_in_p_plus=False)`:
   there). Reproduces the lab nominal rows exactly; normal-incidence/box/15 um/epi-only limit
   matches run_cce to 9e-5 (the 0.3 um origin shift of the profile).
 - tests/test_microdosimeter_preset.py: 7 tests, ~2-3 s.
+
+## 6. GATE: independent check of W_C (`bench/cv_gate.py`, notes/cv_gate.out)
+
+Reviewer decision: verify W_C = eps/(dQ/dV) independently before any production change.
+Production DEFAULT_STACK, W in um:
+
+| method                                                         | 0 V    | -10 V  | -30 V  |
+| -------------------------------------------------------------- | ------ | ------ | ------ |
+| W_edge (production run_cv)                                     | 1.7000 | 9.5000 | 9.8995 |
+| lab W_C (plane x0 = 0.5 um, DV 0.25 V)                         | 1.708  | 9.764  | 9.981  |
+| (a) engine, q d(sum v n)/dV (electrons, no plane), DV 0.05     | 1.7106 | 9.7644 | 9.9807 |
+| (a) engine, q d(sum v p)/dV (holes), DV 0.05 / 0.10 / 0.25     | 1.7106 / 1.7103 / 1.7081 | 9.7644 / 9.7643 / 9.7637 | 9.9807 (all) |
+| (a) engine, n-side space charge from x0                        | = electrons to 1e-4 | | |
+| (b) devsim small-signal AC, Im(I_V1)/(2 pi f), f = 1 Hz, 1 kHz | 1.7107 | 9.7644 | 9.9807 |
+
+- CONFIRMED. The devsim AC solve (DD device of build_device(DeviceConfig()), cathode
+  re-attached to a voltage source with acreal = 1; quasi-static, f-independent) agrees with
+  the engine charge derivatives to 1e-4 um at all three biases; electrons, holes and the
+  plane field coincide (discrete Gauss law + carrier conservation: electrons enter only at
+  the cathode, holes only at the anode). The lab's 0 V value (1.708) is the DV = 0.25 V
+  central difference (curvature, the +DV point is forward bias); DV -> 0 gives 1.7107.
+- The n-side space charge counted from the METALLURGICAL junction is not the terminal
+  charge (4.67 / 18.9 / 15.6 um): the p+ hole Debye tail lies on the n side of x_j and moves
+  with bias; its holes leave through the anode, so it belongs to the p-side charge. This is
+  why buffer_w.py used a carrier-free plane.
+- Re(I_V1) ~ 1e-5 A/cm2 per V, f-independent, sign-random: the round-off floor of the
+  majority-carrier contact current (see extract_steady_state_current), irrelevant to Im.
+- Consequence: the observable of the paper's W (eps A / C of a measured C) is W_C; the
+  production stack calibrated on W_edge misses its own -10 V point by +2.78 % in W_C.
+  Production change follows (feat/cv-observable).
