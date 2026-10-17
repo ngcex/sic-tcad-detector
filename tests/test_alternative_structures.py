@@ -468,6 +468,19 @@ class TestGuardRingDevice:
         finally:
             devsim.delete_device(device=name)
 
+    def test_rebuild_with_same_name_after_delete(self):
+        """devsim keeps the mesh after delete_device; the builder must drop it."""
+        from etna.core.alternative_structures import create_guard_ring_device
+
+        name = _uid()
+        dev = create_guard_ring_device(device_name=name)
+        devsim.delete_device(device=name)
+        dev = create_guard_ring_device(device_name=name, with_guard=False)
+        try:
+            assert dev["contacts"] == ("anode", "cathode")
+        finally:
+            devsim.delete_device(device=name)
+
     def test_without_guard_is_an_overhang_diode(self):
         from etna.core.alternative_structures import create_guard_ring_device
 

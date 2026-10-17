@@ -60,10 +60,12 @@ logger = logging.getLogger(__name__)
 # features (implant edges, column, ring), and the direct solver's cost per Newton
 # iteration grows superlinearly with the node count (0.013 s at 4.8k nodes, 0.26 s
 # at 18k), so the depth mesh is coarser. Checked on the mesa pillar (= the planar
-# problem): centre CCE 0.9987214 with (5e-7, 2e-5), 0.9987196 with the values below;
-# (2e-6, 1e-4) is too coarse (DD equilibrium fails).
+# problem, ramp to 50 V): centre CCE 0.9987214 with (5e-7, 2e-5), 0.9987201 with the
+# values below, every ramp point on the strict tier for epi spacings up to 4e-5; at
+# 5e-5 the hole-equation update stalls at ~1e-7 relative on EVERY point (accepted on
+# the aggressive tier, CCE 0.9987196), and (2e-6, 1e-4) fails the DD equilibrium.
 ALT_JUNCTION_PS = 1e-6
-ALT_EPI_PS = 5e-5
+ALT_EPI_PS = 4e-5
 # Lateral (x) spacing at an abrupt implant edge. devsim grades ~8 %/line away from a
 # fine line (ln(coarse/fine)/0.08 lines per transition) and meshes the span between
 # two lines of EQUAL ps uniformly (a 3 um gap at 2e-6 would be 1500 lines -> always
@@ -326,6 +328,18 @@ def _build_device_info(
     return info
 
 
+def _create_fresh_2d_mesh(mesh_name):
+    """``devsim.create_2d_mesh`` after dropping a stale mesh of the same name.
+
+    ``devsim.delete_device`` keeps the mesh the device was built from, so building a
+    second device with the same ``device_name`` (the notebook's guard ring and its
+    no-ring reference, a re-run cell) failed with 'A mesh already exists'.
+    """
+    if mesh_name in devsim.get_mesh_list():
+        devsim.delete_mesh(mesh=mesh_name)
+    devsim.create_2d_mesh(mesh=mesh_name)
+
+
 def _add_depth_mesh_lines(
     mesh_name,
     junction_pos,
@@ -434,7 +448,7 @@ def create_mesa_device(
     trench_d_cm = min(trench_d_cm, total_depth)
 
     mesh_name = f"{device_name}_mesh"
-    devsim.create_2d_mesh(mesh=mesh_name)
+    _create_fresh_2d_mesh(mesh_name)
 
     # -- Lateral (x) mesh lines (device2d.py pattern) --
     # The trench carries no equations and the sidewall is a zero-flux boundary, so no
@@ -457,9 +471,11 @@ def create_mesa_device(
     # -- Depth (y) mesh lines --
     _add_depth_mesh_lines(mesh_name, junction_pos, total_depth, air_buffer)
 
-    # Add mesh line at trench bottom if it doesn't coincide with existing lines
+    # Add mesh line at trench bottom if it doesn't coincide with existing lines. The
+    # trench and sub_trench regions are inert, so this is only a region boundary: a
+    # coarse spacing (1e-6 here added ~50 fine y lines across the whole pillar).
     if trench_d_cm > 1e-8 and trench_d_cm < total_depth - 1e-8:
-        devsim.add_2d_mesh_line(mesh=mesh_name, dir="y", pos=trench_d_cm, ps=1e-6)
+        devsim.add_2d_mesh_line(mesh=mesh_name, dir="y", pos=trench_d_cm, ps=1e-5)
 
     # -- Regions --
     # Top air buffer (full width)
@@ -759,7 +775,7 @@ def create_3d_electrode_device(
         raise ValueError("3D electrode: column + top gap must fit inside the p+ wall")
 
     mesh_name = f"{device_name}_mesh"
-    devsim.create_2d_mesh(mesh=mesh_name)
+    _create_fresh_2d_mesh(mesh_name)
 
     # -- Radial (x) mesh lines --
     devsim.add_2d_mesh_line(mesh=mesh_name, dir="x", pos=0, ps=5e-5)
@@ -1024,7 +1040,7 @@ def create_delta_e_e_device(
     total_depth = e_total
 
     mesh_name = f"{device_name}_mesh"
-    devsim.create_2d_mesh(mesh=mesh_name)
+    _create_fresh_2d_mesh(mesh_name)
 
     # -- Lateral (x) mesh lines --
     devsim.add_2d_mesh_line(mesh=mesh_name, dir="x", pos=0, ps=5e-5)
@@ -1293,7 +1309,7 @@ def create_guard_ring_device(
     gap_mid = sv_hw_cm + 0.5 * gr_gap_cm
 
     mesh_name = f"{device_name}_mesh"
-    devsim.create_2d_mesh(mesh=mesh_name)
+    _create_fresh_2d_mesh(mesh_name)
 
     # -- Lateral (x) mesh lines --
     devsim.add_2d_mesh_line(mesh=mesh_name, dir="x", pos=0, ps=5e-5)
