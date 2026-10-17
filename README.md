@@ -18,7 +18,7 @@ Petringa group's 4H-SiC detector work at INFN-LNS Catania.
 - **Electrostatics & C–V** — built-in potential, depletion width, electric
   field, capacitance–voltage extraction. R² = 0.998 is fit-recovery (same
   points used to calibrate the doping profile); an independently published
-  4H-SiC device (Bruzzi & Verroi 2023) matches to within 3% at high bias —
+  4H-SiC device (Bruzzi & Verroi 2023) agrees to +3.1 % at −40 V (ε·A/C) —
   see `.planning/VALIDATION_LITERATURE.md`.
 - **Charge collection (CCE)** — drift-diffusion transport, Hecht analysis,
   CCE vs bias, single-particle and transient response.
@@ -168,7 +168,7 @@ a full v5.0 integration audit (`.planning/milestones/v5.0-MILESTONE-AUDIT.md`,
 literature validation pass (`.planning/VALIDATION_LITERATURE.md`) comparing
 simulated C–V against an independently published, open-access 4H-SiC device
 (Bruzzi & Verroi 2023) — high-bias depletion width (eps·A/C of the small-signal C)
-agrees to within 3% (+2.8 % at −40 V) of the reported value. In the interest of honesty, the current limitations are:
+agrees to +3.1 % at −40 V of the reported value. In the interest of honesty, the current limitations are:
 
 - ✅ **Solid / publishable:** electrostatics, C–V, CCE-vs-bias, the calibrated
   graded-doping 2D model (converges to −50 V; 2D C–V matches the 1D twin,
