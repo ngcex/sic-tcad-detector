@@ -366,6 +366,26 @@ class TestCCEDDvsHecht:
                 )
 
 
+def test_compare_hecht_uses_only_the_reached_biases(monkeypatch):
+    """A truncated DD sweep is compared on the biases it reached (no zero-filled tail)."""
+    import etna.core.charge_collection as cc
+
+    def truncated_sweep(V_range, epi_thickness_cm=10e-4, **kw):
+        return {
+            "voltages": np.array([-10.0, -20.0]),
+            "cce_values": np.array([0.98, 0.99]),
+            "truncated": True,
+        }
+
+    monkeypatch.setattr(cc, "cce_vs_bias", truncated_sweep)
+    r = cc.compare_cce_hecht_vs_dd(np.array([-10.0, -20.0, -30.0, -40.0]))
+    assert r["truncated"] is True
+    np.testing.assert_array_equal(r["voltages"], [-10.0, -20.0])
+    assert len(r["cce_dd"]) == len(r["cce_hecht"]) == len(r["cce_hecht_partial"]) == 2
+    expected = np.max(np.abs(r["cce_dd"] - cc.hecht_cce(r["voltages"], d=10e-4)))
+    assert r["max_deviation"] == pytest.approx(expected)
+
+
 # ===================================================================
 # Regression tests: T=300K parity (Phase 10, Plan 02)
 # ===================================================================
@@ -709,7 +729,9 @@ class TestFullCompensationGuard:
         from etna.core.charge_collection import full_compensation_reason
 
         assert full_compensation_reason({"N_D_profile": np.array([2.9e15, 1e13])}) == ""
-        r = full_compensation_reason({"N_D_profile": np.array([2.9e15, 0.0]), "fluence_neq": 2e13})
+        r = full_compensation_reason(
+            {"N_D_profile": np.array([2.9e15, 0.0]), "fluence_neq": 2e13}
+        )
         assert "full donor compensation" in r
 
     def test_cce_vs_fluence_nan_beyond_threshold(self):
@@ -739,6 +761,8 @@ class TestFullCompensationGuard:
     def test_dark_current_post_anneal_nan_beyond_threshold(self):
         from etna.core.dark_current import dark_current_post_anneal
 
-        result = dark_current_post_anneal(fluence=1e14, T_anneal=873.15, t_anneal=3600.0)
+        result = dark_current_post_anneal(
+            fluence=1e14, T_anneal=873.15, t_anneal=3600.0
+        )
         assert np.isnan(result["I_total"]) and result["valid"] is False
         assert "full donor compensation" in result["reason"]
