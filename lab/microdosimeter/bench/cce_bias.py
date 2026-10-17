@@ -27,13 +27,23 @@ for sub_um in (0.3, 1.0):
     sub = sub_um * 1e-4
     x = mdlab.mesh(sub)
     combos = list(
-        itertools.product((N_FIT, 1e14), ("bragg", "box"), (0.0, 0.3e-4), (0.1, 1.0, 10.0))
+        itertools.product(
+            (N_FIT, 1e14),
+            ("bragg", "box"),
+            (0.0, 0.3e-4),
+            (0.1, 1.0, 10.0),
+            ("epi", "p+epi"),
+        )
     )
     Gs = []
-    for N, shape, td, tau in combos:
+    for N, shape, td, tau, gen in combos:
         G, lost = mdlab.tilted_generation(
             x, t_dead_cm=td, shape=shape, epi_end=sub + mdlab.EPI_CM
         )
+        if (
+            gen == "epi"
+        ):  # p+ treated as dead layer (run_cce convention; helper default)
+            G[x < sub] = 0.0
         Gs.append(G / G.max() * PEAK)
     Gs = np.array(Gs)
     Ns = np.array([c[0] for c in combos])
@@ -57,6 +67,7 @@ for sub_um in (0.3, 1.0):
                     tdead=c[2] * 1e4,
                     tau=c[3],
                     hmob=hm,
+                    gen=c[4],
                     cce=cce[:, j],
                     conv=bool(conv[:, j].all()),
                 )
@@ -76,9 +87,9 @@ for r in rows:
     m = r["cce"][iV] / r["cce"][i50]
     rms = np.sqrt(np.mean((m - data) ** 2))
     r["rms"] = rms
-    name = f"p+{r['sub']} N{r['N']:.2e} {r['shape']} td{r['tdead']:.1f} tau{r['tau']} mu_p({r['hmob']})"
+    name = f"p+{r['sub']} N{r['N']:.2e} {r['shape']} td{r['tdead']:.1f} tau{r['tau']} mu_p({r['hmob']}) {r['gen']}"
     print(
-        f"{name:<44} {str(r['conv'])[0]}     {r['cce'][i50]:.4f}      | "
+        f"{name:<50} {str(r['conv'])[0]}     {r['cce'][i50]:.4f}      | "
         + "  ".join(f"{v:6.4f}" for v in m)
         + f" | {rms:.4f}"
     )
@@ -88,7 +99,7 @@ np.savez(
     cce=np.array([r["cce"] for r in rows]),
     labels=np.array(
         [
-            f"{r['sub']}|{r['N']:.4e}|{r['shape']}|{r['tdead']}|{r['tau']}|{r['hmob']}"
+            f"{r['sub']}|{r['N']:.4e}|{r['shape']}|{r['tdead']}|{r['tau']}|{r['hmob']}|{r['gen']}"
             for r in rows
         ]
     ),

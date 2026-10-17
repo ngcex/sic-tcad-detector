@@ -54,19 +54,41 @@ epi end, 0.05 V lattice) is 30.00 V; 25 mm2, n+ 1 um, N_A 1e19.
 ## 3. CCE vs bias (`bench/cce_bias.py`, notes/cce_bias.out)
 
 Generation: tilted track, x = 0 at the SiC surface, path s = (x + t_dead)/cos65,
-G(x) = (dE/ds)/cos65/E_pair, kept in the p+ (real), zero in the n+ (never reached).
+G(x) = (dE/ds)/cos65/E_pair; zero in the n+ (never reached). Two conventions for the p+:
+"epi" = epi-only generation, the p+ is part of the dead layer (task spec and run_cce
+convention; the DEFAULT of run_cce_tilted_alpha), "p+epi" = p+ pairs generated too (they can
+be collected by electron diffusion; sensitivity variant).
 dE/ds: (a) "bragg" = two-power-law S(E) (peak/entrance 2.3 at 0.75 MeV, ASTAR-Si-like
 ORDER OF MAGNITUDE, not data), range 18 um, straggling 2 % R -> smoothed peak/entrance 2.1,
 Bragg peak at 6.4 um projected, track end 7.6 um; (b) "box" = etna's alpha_depth_shape
 along the path. Low injection (peak 1e18 cm^-3 s^-1). Steady-state Gummel (batched engine),
-CCE = J_cathode / (q int G). 96 curves x 14 biases in 0.9 s.
+CCE = J_cathode / (q int G). 192 curves x 14 biases in 1.9 s.
 
-Normalised CCE(V)/CCE(-50 V), selected rows (all 96 in notes/cce_bias.out):
+HEADLINE (epi-only generation, normalised CCE(V)/CCE(-50 V), mu_p from N_A as production):
+
+| variant (p+ um, N_D, shape, t_dead um, tau x)              | 0      | -5     | -10    | -20    | -30    | -40    | -50 | rms   |
+| ---------------------------------------------------------- | ------ | ------ | ------ | ------ | ------ | ------ | --- | ----- |
+| DATA (digitised)                                           | 0.9083 | 0.9662 | 0.9806 | 0.9904 | 0.9932 | 0.9976 | 1   |       |
+| **nominal** 0.3, 3.06e14, bragg, 0, x1                     | 0.9488 | 0.9906 | 0.9993 | 0.9999 | 0.9999 | 1.0000 | 1   | 0.020 |
+| 1.0, 3.06e14, bragg, 0, x1                                 | 0.9599 | 0.9958 | 0.9998 | 0.9999 | 1.0000 | 1.0000 | 1   | 0.024 |
+| 0.3, 3.06e14, box, 0, x1                                   | 0.9720 | 0.9972 | 0.9997 | 0.9999 | 1.0000 | 1.0000 | 1   | 0.028 |
+| 0.3, 3.06e14, bragg, 0.3, x1                               | 0.9535 | 0.9930 | 0.9996 | 0.9999 | 0.9999 | 1.0000 | 1   | 0.022 |
+| 0.3, 3.06e14, bragg, 0, x0.1                               | 0.7452 | 0.9357 | 0.9938 | 0.9989 | 0.9995 | 0.9998 | 1   | 0.063 |
+| 0.3, 3.06e14, bragg, 0, x10                                | 0.9942 | 0.9990 | 0.9999 | 1.0000 | 1.0000 | 1.0000 | 1   | 0.036 |
+| 0.3, 3.06e14, bragg, 0, x1, mu_p from N_D                  | 0.9668 | 0.9941 | 0.9996 | 0.9999 | 1.0000 | 1.0000 | 1   | 0.026 |
+| 0.3, 1e14, bragg, 0, x1                                    | 0.9912 | 0.9994 | 0.9997 | 0.9998 | 0.9999 | 1.0000 | 1   | 0.035 |
+| best rms, epi-only: 0.3, 3.06e14, box, 0.3, x0.1, mu_p N_D | 0.9031 | 0.9903 | 0.9988 | 0.9996 | 0.9998 | 0.9999 | 1   | 0.012 |
+
+Absolute (epi-only) at -50 V: CCE 0.9999 of the epi pairs; relative to E0/E_pair 0.969
+(p+ 0.3) / 0.895 (p+ 1.0) because 3.1 % / 10.5 % of the energy is deposited in the p+.
+The rows below (first pass) are the p+epi convention; shapes are within ~6e-4 of epi-only.
+
+p+epi convention (first pass), selected rows (all in notes/cce_bias.out):
 
 | variant (p+ um, N_D, shape, t_dead um, tau x, mu_p from) | 0      | -5     | -10    | -20    | -30    | -40    | -50 | rms   |
 | -------------------------------------------------------- | ------ | ------ | ------ | ------ | ------ | ------ | --- | ----- |
 | DATA (digitised)                                         | 0.9083 | 0.9662 | 0.9806 | 0.9904 | 0.9932 | 0.9976 | 1   |       |
-| **nominal** 0.3, 3.06e14, bragg, 0, x1, N_A              | 0.9494 | 0.9907 | 0.9992 | 0.9998 | 0.9999 | 1.0000 | 1   | 0.020 |
+| 0.3, 3.06e14, bragg, 0, x1, N_A                          | 0.9494 | 0.9907 | 0.9992 | 0.9998 | 0.9999 | 1.0000 | 1   | 0.020 |
 | 1.0, 3.06e14, bragg, 0, x1, N_A                          | 0.9619 | 0.9959 | 0.9996 | 0.9998 | 0.9999 | 1.0000 | 1   | 0.025 |
 | 0.3, 3.06e14, box, 0, x1, N_A                            | 0.9724 | 0.9971 | 0.9996 | 0.9998 | 0.9999 | 0.9999 | 1   | 0.028 |
 | 0.3, 3.06e14, bragg, 0, x0.1, N_A                        | 0.7488 | 0.9365 | 0.9937 | 0.9988 | 0.9994 | 0.9998 | 1   | 0.062 |
@@ -76,7 +98,7 @@ Normalised CCE(V)/CCE(-50 V), selected rows (all 96 in notes/cce_bias.out):
 | 0.3, 1e14, bragg, 0, x1, N_A                             | 0.9912 | 0.9993 | 0.9996 | 0.9998 | 0.9999 | 0.9999 | 1   | 0.035 |
 | best rms of the 96: 0.3, 3.06e14, box, 0.3, x0.1, N_D    | 0.9050 | 0.9903 | 0.9986 | 0.9994 | 0.9997 | 0.9999 | 1   | 0.012 |
 
-Absolute CCE at -50 V (relative to pairs generated in SiC): 0.985 (p+ 0.3, bragg),
+p+epi absolute CCE at -50 V (relative to pairs generated in SiC): 0.985 (p+ 0.3, bragg),
 0.946 (p+ 1.0, bragg), 0.975 / 0.915 (box: flat box puts more charge near the surface);
 the p+ generation is the loss (electron L_n ~ 0.3 um). With E_pair 7.8 eV in the model
 and 8.4 eV in the paper's calibration the absolute number is not comparable.
@@ -84,8 +106,8 @@ and 8.4 eV in the paper's calibration the absolute number is not comparable.
 Verdict:
 
 - **-20 to -50 V: FAILS, under every variant.** Once W passes the track end (~7.6 um,
-  7.3 um below the junction for p+ 0.3, reached at ~-12 V for N_D 3.06e14) the 1D steady-state CCE is flat to <= 2e-4 (normalised >= 0.9988
-  at -20 V in all 96 variants). The data still rise by 1.0 % from -20 to -50 V (0.9904 ->
+  7.3 um below the junction for p+ 0.3, reached at ~-12 V for N_D 3.06e14) the 1D steady-state CCE is flat to <= 2e-3 (normalised >= 0.9984
+  at -20 V in all 192 variants; >= 0.9989 for tau >= x1). The data still rise by 1.0 % from -20 to -50 V (0.9904 ->
   1.000) and 0.7 % from -30 to -50 V. This is outside the model for any doping, lifetime,
   generation shape or dead layer. Not modelled (named, not claimed): plasma/funnelling of
   the dense alpha track (columnar recombination, plasma-erosion time), field-dependent
@@ -101,7 +123,7 @@ Verdict:
   recovers too fast. Steady state ignores the 3 us shaping: diffusion times over ~5 um
   (~0.1-0.4 us) are not negligible against it, a transient effect that would deepen the drop.
 - p+ 0.3 vs 1.0 um: after normalisation the thicker p+ gives a slightly SMALLER drop (the track
-  end sits 0.7 um nearer the junction in the epi frame): 0.962 vs 0.949 at 0 V. Not
+  end sits 0.7 um nearer the junction in the epi frame): 0.960 vs 0.949 at 0 V (epi-only). Not
   discriminating.
 - No variant was tuned to the data; the "best rms" row is the corner of the bracket
   (tau x0.1), not a fit.
@@ -154,3 +176,25 @@ Verdict:
   -30 V). The production -30 V residual (+1.74 %) is therefore partly a W-definition artefact
   of run_cv (C = eps A / W_edge), not only missing fringe capacitance. Production defaults NOT
   changed (task scope); flagged for a follow-up decision.
+- CAVEAT on W_C: it is a new lab derivation. etna has no independent small-signal C solver
+  (etna/core/cv_analysis.py forms C = eps A / W on both the devsim and the engine paths), so
+  W_C is checked only by (i) W_C ~ W_edge on a uniform device at partial depletion
+  (3.155 vs 3.146, 6.772 vs 6.744 um), (ii) invariance to the plane x0 and to DV. Plausibility:
+  at -10 V the default device is just short of reach-through (10.30 V) and the epi-end Debye
+  length is 0.47 um, so the electron tail is wide and the modulated-charge centroid sits
+  ~0.5 L_D past the n/N_D = 0.5 point (9.764 vs 9.500 um). An AC devsim run (or contact
+  charge) would be the independent check before acting on this.
+
+## 5. Production (after the checks)
+
+- `etna.microdosimeter_config(p_plus_um=0.3, **overrides)`, `etna.MICRODOSIMETER_PRESET`
+  (etna/api/device.py): the section-2 preset. DEFAULT_STACK untouched.
+- `etna.core.generation_profiles.tilted_alpha_generation` / `alpha_path_stopping` (lab code
+  promoted; same numbers).
+- `etna.run_cce_tilted_alpha(config, v_start=0, v_stop=-60, n_points=61, theta_deg=65,
+alpha_range_um=18, dead_layer_um=0, shape="bragg", generation_in_p_plus=False)`: engine
+  only (OutsideModelValidity outside _ENGINE_BOX); walks from 0 V in <= 10 V steps internally
+  (a cold Gummel start at -50 V does not converge -- run_cce silently falls back to devsim
+  there). Reproduces the lab nominal rows exactly; normal-incidence/box/15 um/epi-only limit
+  matches run_cce to 9e-5 (the 0.3 um origin shift of the profile).
+- tests/test_microdosimeter_preset.py: 7 tests, ~2-3 s.
