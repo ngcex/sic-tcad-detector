@@ -473,3 +473,14 @@ n+ 1 um 1e19, 60 V, 10 lateral points; engine best of 3, includes the mesh-only 
 
 Default (no n+) unchanged: notebook-20 36-config auto sweep with HEAD code (git archive) vs
 this branch: DataFrame.equals True (bit-identical).
+
+run_field with n+ AND non-default graded doping (the dark gate admits N_D_junction 1e15-1e16,
+L 0.3-3 um), `bench/nplus2d_sweep_parity.py field doping`:
+| hw | doping (N_D_junction / L um / N_D_bulk / epi um) | n+ | bias | engine | devsim | dPotential | rel dE |
+|---|---|---|---|---|---|---|---|
+| 25 | 1e16 / 0.3 / 5e13 / 10 | 5 um 1e18 | -100 | 0.30 s | 14.4 s | 2.8e-14 V | 9.9e-12 |
+| 25 | 1e15 / 2.9 / 5e14 / 10 | 1 um 1e19 | -100 | 0.19 s | 14.4 s | 1.4e-14 V | 9.0e-12 |
+| 50 | 5e15 / 2.0 / 1e14 / 20 | 3 um 3e18 | -5 | 0.65 s | 16.0 s | 1.8e-15 V | 1.1e-12 |
+| 25 | 1e16 / 1.0 / 2e14 / 5 | 2 um 1e19 | -100 | 0.16 s | 10.6 s | 2.8e-14 V | 1.0e-11 |
+x/y order and NetDoping identical in every case. (Pre-existing edge, not n+: L_transition_um=3.0
+is rejected by the dark gate because 3.0*1e-4 > 3e-4 in floating point -> devsim.)
