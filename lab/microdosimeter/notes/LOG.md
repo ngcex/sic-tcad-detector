@@ -194,7 +194,7 @@ Verdict:
 - `etna.run_cce_tilted_alpha(config, v_start=0, v_stop=-60, n_points=61, theta_deg=65,
 alpha_range_um=18, dead_layer_um=0, shape="bragg", generation_in_p_plus=False)`: engine
   only (OutsideModelValidity outside _ENGINE_BOX); walks from 0 V in <= 10 V steps internally
-  (a cold Gummel start at -50 V does not converge -- run_cce silently falls back to devsim
+  (a cold start at -50 V did not converge -- run_cce fell back to devsim; fixed, section 8
   there). Reproduces the lab nominal rows exactly; normal-incidence/box/15 um/epi-only limit
   matches run_cce to 9e-5 (the 0.3 um origin shift of the profile).
 - tests/test_microdosimeter_preset.py: 7 tests, ~2-3 s.
@@ -254,3 +254,10 @@ for the microdosimeter). Engine vs devsim CCE 0..-10 V: 1.3e-11. Not tuned to da
 | microdosimeter p+ 1 um, raw 0 V                  | 0.9598                                    | 0.9740                                    |
 | dark 4 mm2 -10 / -60 V (pA)                      | 6.07738 / 18.000001                       | 6.07754 / 18.000001 (N_t not re-fitted)   |
 | microdosimeter dark 25 mm2 -60 V (pA)            | 112.4886                                  | 112.4886                                  |
+## 8. run_cce cold start (feat/cv-observable)
+
+The section-5 failure was the dark POISSON jump 0 -> -50 V (not Gummel): the cumulative
+ramp flag went False and run_cce fell back to devsim (2.24 s). The batched _Ramp now walks
+jumps > 10 V in Poisson-only sub-steps (reverse_sweep / cce_sweep max_step_V = 10; Gummel
+only at the requested biases): run_cce(preset, -50, -60, 3) stays on the engine (0.21 s),
+matches devsim to 1e-6, reach-through 30.0 V found; run_cv likewise.

@@ -1217,8 +1217,9 @@ def run_cce_tilted_alpha(
     if not pairs_generated > 0:
         raise ValueError("run_cce_tilted_alpha: the track deposits nothing in the SiC")
     G_rate = G * (1e18 / G.max())  # cm^-3 s^-1, low injection as run_cce
-    # Solve on a grid that walks from 0 V in steps <= 10 V (a cold Gummel start at
-    # e.g. -50 V does not converge); report only the requested points.
+    # Solve on a grid that walks from 0 V in steps <= 10 V (kept for its pinned numbers;
+    # the failure was the cold dark-Poisson jump, which cce_sweep now sub-steps itself);
+    # report only the requested points.
     grid = [0.0]
     for v in bias_array:
         n = max(1, int(np.ceil(abs(v - grid[-1]) / 10.0)))

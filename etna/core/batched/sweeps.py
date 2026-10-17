@@ -39,7 +39,9 @@ def _n_a_ionized(N_A, T):
 
 def _per_device(fn, *args):
     """Apply scalar ``fn`` over scalar-or-(B,) arguments -> (B,) float array."""
-    arrays = np.broadcast_arrays(*(np.atleast_1d(np.asarray(a, dtype=float)) for a in args))
+    arrays = np.broadcast_arrays(
+        *(np.atleast_1d(np.asarray(a, dtype=float)) for a in args)
+    )
     return np.array([fn(*vals) for vals in zip(*arrays)], dtype=float)
 
 
@@ -70,12 +72,20 @@ def make_batch(
     return PoissonBatch(x, donors, acceptors, _per_device(_n_i, T), thermal_voltage(T))
 
 
+# Largest Poisson bias step of the sweeps (V): longer jumps are walked in sub-steps.
+MAX_STEP_V = 10.0
+
+
 @dataclass
 class _Ramp:
     """Walks a batch along increasing cathode bias, remembering the secant history."""
 
     pb: PoissonBatch
     tol: float = 1e-8
+    # Largest cathode step of one Newton solve (V); a longer jump is walked in equal
+    # sub-steps (None = jump directly). A cold 0 -> -50 V jump does not converge on
+    # low-doped devices (the microdosimeter preset, uniform 3.06e14).
+    max_step: "float | None" = None
 
     def __post_init__(self):
         res = self.pb.solve(self.pb.neutral_guess(), tol=self.tol)
@@ -83,7 +93,15 @@ class _Ramp:
         self.converged = res.converged.copy()
 
     def to(self, V_cathode):
-        """Solve all devices at ``V_cathode`` (V); returns the PoissonResult."""
+        """Solve all devices at ``V_cathode`` (V), via sub-steps of at most
+        ``max_step``; returns the PoissonResult of the last solve."""
+        if self.max_step is not None:
+            n = int(np.ceil(abs(V_cathode - self.Vc) / self.max_step - 1e-9))
+            for V in np.linspace(self.Vc, V_cathode, max(n, 1) + 1)[1:-1]:
+                self._to(V)
+        return self._to(V_cathode)
+
+    def _to(self, V_cathode):
         guess = self.psi
         if self._psi_prev is not None and abs(self.Vc - self._Vc_prev) > 1e-12:
             guess = self.psi + (self.psi - self._psi_prev) * (
@@ -114,6 +132,7 @@ def reverse_sweep(
     tol=1e-8,
     keep_psi=False,
     capacitance=True,
+    max_step_V=MAX_STEP_V,
 ):
     """Solve all devices at each of ``voltages`` (<= 0, in the order given).
 
@@ -121,7 +140,8 @@ def reverse_sweep(
     the observable of a measured C-V; ``W`` is the n/N_D = 0.5 depletion edge, which is
     NOT eps/C (they differ near full depletion: 9.500 vs 9.764 um at -10 V on the
     pre-2026-10-17 default stack). ``capacitance=False`` skips C (``C`` is None), for
-    callers that only need W (reach-through refinement).
+    callers that only need W (reach-through refinement). Jumps longer than
+    ``max_step_V`` (default 10 V) are walked in Poisson-only sub-steps.
 
     Jumps of ~100 V (less at low T: the Newton clamp is in V_t units) between
     consecutive points may not converge in one solve; check ``converged``
@@ -129,13 +149,15 @@ def reverse_sweep(
     for big batches).
     """
     voltages = _check_voltages(voltages)
-    ramp = _Ramp(pb, tol)
+    ramp = _Ramp(pb, tol, max_step_V)
     W, C, psis, conv = [], [], [], []
     for V in voltages:
         res = ramp.to(-V) if abs(V) > 1e-12 or ramp.Vc != 0.0 else None
         if res is None:
             res = pb.solve(ramp.psi, tol=tol)
-        W.append(depletion_width(pb.x, res.n, pb.donors, junction_pos, epi_thickness_cm))
+        W.append(
+            depletion_width(pb.x, res.n, pb.donors, junction_pos, epi_thickness_cm)
+        )
         if capacitance:
             C.append(pb.small_signal_capacitance(res))
         if keep_psi:
@@ -177,8 +199,16 @@ def alpha_generation(x, junction_pos, alpha_range_cm, generation_rate, epi_end=N
 
 @serialized
 def cce_sweep(
-    pb, voltages, junction_pos, G, T=300.0, N_A=1e19, N_D=None,
-    tol=1e-8, gummel_tol=1e-6,
+    pb,
+    voltages,
+    junction_pos,
+    G,
+    T=300.0,
+    N_A=1e19,
+    N_D=None,
+    tol=1e-8,
+    gummel_tol=1e-6,
+    max_step_V=MAX_STEP_V,
 ):
     """CCE vs reverse bias, as ``etna.core.charge_collection.cce_vs_bias``.
 
@@ -187,6 +217,9 @@ def cce_sweep(
     taken at the epi doping ``N_D`` (default ``DEFAULT_N_D``; holes at ``N_A`` before
     2026-10-17, .issues/audit-v7 A-03), and lifetimes from ``srh_lifetime(T)``.
     ``N_A`` is accepted for backward compatibility and no longer used.
+    The dark Poisson state is walked from 0 V in steps <= ``max_step_V`` (as
+    run_cce_tilted_alpha): a cold jump to e.g. -50 V does not converge on low-doped
+    devices; the Gummel solve runs only at the requested biases.
     """
     from etna.core.device import DEFAULT_N_D
 
@@ -197,13 +230,17 @@ def cce_sweep(
     N_D = np.broadcast_to(np.asarray(N_D, dtype=float), (pb.B,))
     cb = ContinuityBatch(
         pb,
-        _per_device(lambda n, t: mobility_caughey_thomas_T(n, t, "electron", PARAMS), N_D, T),
-        _per_device(lambda n, t: mobility_caughey_thomas_T(n, t, "hole", PARAMS), N_D, T),
+        _per_device(
+            lambda n, t: mobility_caughey_thomas_T(n, t, "electron", PARAMS), N_D, T
+        ),
+        _per_device(
+            lambda n, t: mobility_caughey_thomas_T(n, t, "hole", PARAMS), N_D, T
+        ),
         _per_device(lambda t: srh_lifetime(t, "electron", PARAMS), T),
         _per_device(lambda t: srh_lifetime(t, "hole", PARAMS), T),
     )
     J_gen = Q * np.trapezoid(G, pb.x)
-    ramp = _Ramp(pb, tol)
+    ramp = _Ramp(pb, tol, max_step_V)
     cce, J, conv = [], [], []
     for V in voltages:
         if abs(V) > 1e-12 or ramp.Vc != 0.0:
