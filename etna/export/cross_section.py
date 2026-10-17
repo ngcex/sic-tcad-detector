@@ -12,13 +12,15 @@ import textwrap
 from xml.sax.saxutils import escape
 
 from etna.export.labels import (
+    BUFFER_NOTE,
     NPLUS_THICKNESS_NOTE,
     VALIDATION_LABEL,
     epi_donor_profile,
+    has_buffer,
     has_nplus,
 )
 
-_COLORS = {"p+": "#d6604d", "epi": "#92c5de", "n+": "#2166ac"}
+_COLORS = {"p+": "#d6604d", "epi": "#92c5de", "buffer": "#4393c3", "n+": "#2166ac"}
 
 
 def _fmt_um(v: float) -> str:
@@ -40,12 +42,16 @@ def stack_layers(config) -> "list[dict]":
             note="",
         )
     ]
+    # with a graded n-/n+ transition the low-doped epi ends where the transition starts
+    t_b = config.buffer_thickness_um if has_buffer(config) else 0.0
+    t_low = t_e - t_b
     if config.doping_profile == "uniform":
         epi_dop = f"N_D = {float(epi_donor_profile(config, 0.0)):.3g} cm^-3 (uniform)"
     else:
         epi_dop = (
             f"graded N_D: {config.N_D_junction:.3g} at junction -> "
-            f"{float(epi_donor_profile(config, t_e)):.3g} cm^-3 at epi end "
+            f"{float(epi_donor_profile(config, t_low)):.3g} cm^-3 at "
+            f"{'the transition start' if t_b else 'epi end'} "
             f"(bulk {config.N_D_bulk:.3g}, L = {config.L_transition_um:g} µm)"
         )
     layers.append(
@@ -53,12 +59,28 @@ def stack_layers(config) -> "list[dict]":
             key="epi",
             name="n- epi",
             top_um=t_p,
-            bottom_um=t_p + t_e,
-            thickness_um=t_e,
+            bottom_um=t_p + t_low,
+            thickness_um=t_low,
             doping=epi_dop,
             note="",
         )
     )
+    if t_b:
+        layers.append(
+            dict(
+                key="buffer",
+                name="n-/n+ transition",
+                top_um=t_p + t_low,
+                bottom_um=t_p + t_e,
+                thickness_um=t_b,
+                doping=(
+                    f"N_D {float(epi_donor_profile(config, t_low)):.3g} -> "
+                    f"{config.buffer_end_doping:.3g} cm^-3 (log-linear; part of the "
+                    f"{t_e:g} µm nominal epi)"
+                ),
+                note=BUFFER_NOTE.format(n_end=config.buffer_end_doping, t=t_b),
+            )
+        )
     if has_nplus(config):
         t_n = config.nplus_thickness_um
         layers.append(
@@ -169,9 +191,9 @@ def cross_section_svg(config, width_px: int = 900) -> str:
         "depth (µm)</text>"
     )
     yb = bottom + 45
-    notes = [n["note"] for n in layers if n["note"]]
+    notes = [f"{n['key']}: {n['note']}" for n in layers if n["note"]]
     for n in notes:
-        for part in textwrap.wrap("n+: " + n, 110):
+        for part in textwrap.wrap(n, 110):
             out.append(
                 f'<text x="{left}" y="{yb:.0f}" font-size="11">{escape(part)}</text>'
             )
@@ -232,7 +254,7 @@ def _draw_cross_section(fig, config) -> None:
     ax.set_ylabel("depth (µm)  [to scale]")
     ax.set_xlabel(_lateral_note(config), fontsize=7)
     fig.suptitle("Device cross-section (depth to scale)", fontsize=11)
-    lines = [f"n+: {L['note']}" for L in layers if L["note"]]
+    lines = [f"{L['key']}: {L['note']}" for L in layers if L["note"]]
     lines = [p for ln in lines for p in textwrap.wrap(ln, 140)]
     lines.append(VALIDATION_LABEL)
     fig.text(

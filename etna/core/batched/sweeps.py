@@ -54,18 +54,35 @@ def _check_voltages(voltages):
 
 @serialized
 def make_batch(
-    x, junction_pos, N_A, N_D_junction, N_D_bulk, L_transition, T=300.0, nplus=None
+    x,
+    junction_pos,
+    N_A,
+    N_D_junction,
+    N_D_bulk,
+    L_transition,
+    T=300.0,
+    nplus=None,
+    buffer=None,
 ):
     """PoissonBatch for graded p+/n- diodes on mesh ``x`` (uniform: N_D_junction == N_D_bulk).
 
     Parameters are scalars or (B,) arrays; lengths in cm, densities in cm^-3, T in K.
     ``nplus`` = (x_epi_end, N_D_nplus) for an n+ layer under the epi (the mesh must
     come from ``node_positions(..., nplus_thickness_cm)``); None = no n+.
+    ``buffer`` = (x_epi_end, Lb, N_end) for the graded n-/n+ transition over the last
+    Lb of the epi (``etna.core.device.create_sic_device`` buffer keywords); None = none.
     """
     T = np.atleast_1d(np.asarray(T, dtype=float))
     N_A_ion = _per_device(_n_a_ionized, N_A, T)
     donors, acceptors = graded_doping(
-        x, junction_pos, N_A_ion, N_D_junction, N_D_bulk, L_transition, nplus=nplus
+        x,
+        junction_pos,
+        N_A_ion,
+        N_D_junction,
+        N_D_bulk,
+        L_transition,
+        nplus=nplus,
+        buffer=buffer,
     )
     B = donors.shape[0]
     T = np.broadcast_to(T, (B,))

@@ -38,8 +38,11 @@ from etna.core.incomplete_ionization import ionized_acceptor_concentration
 from etna.core.device import (
     DEFAULT_N_D_NPLUS,
     DEFAULT_STACK,
+    _buffer_term,
     _check_nplus,
     _nplus_term,
+    buffer_spec,
+    graded_base_expr,
     mobility_doping,
 )
 
@@ -51,8 +54,12 @@ logger = logging.getLogger(__name__)
 _N_D_JUNCTION_DEFAULT = DEFAULT_STACK["N_D_junction"]  # cm^-3
 _N_D_BULK_DEFAULT = DEFAULT_STACK["N_D_bulk"]  # cm^-3
 _L_TRANSITION_DEFAULT = DEFAULT_STACK["L_transition"]  # cm
-_SUBSTRATE_DEFAULT_CM = DEFAULT_STACK["substrate_thickness_cm"]  # cm, p+ anode (was 1e-4)
-_NPLUS_DEFAULT_CM = DEFAULT_STACK["nplus_thickness_cm"]  # cm, n+ under the epi (was None)
+_SUBSTRATE_DEFAULT_CM = DEFAULT_STACK[
+    "substrate_thickness_cm"
+]  # cm, p+ anode (was 1e-4)
+_NPLUS_DEFAULT_CM = DEFAULT_STACK[
+    "nplus_thickness_cm"
+]  # cm, n+ under the epi (was None)
 
 # Physical constants (CGS)
 EPS_0 = 8.854e-14  # F/cm, vacuum permittivity
@@ -64,7 +71,9 @@ K_B_J = 1.3806503e-23  # J/K, Boltzmann constant
 DEFAULT_N_D = 1.07e15  # cm^-3
 
 
-def set_doping_profile_2d(device_name, region_name, junction_pos, N_A_ionized, N_D, nplus=None):
+def set_doping_profile_2d(
+    device_name, region_name, junction_pos, N_A_ionized, N_D, nplus=None, buffer=None
+):
     """Set step-function (uniform) doping profile on a 2D device.
 
     Acceptors in p+ substrate (y < junction_pos), donors in n- epi (y >= junction_pos).
@@ -82,6 +91,8 @@ def set_doping_profile_2d(device_name, region_name, junction_pos, N_A_ionized, N
         Ionized acceptor concentration (cm^-3).
     N_D : float
         Donor concentration in epi (cm^-3).
+    nplus, buffer : tuple or None
+        n+ layer / graded n-/n+ transition, as the 1D ``set_doping_profile``.
     """
     devsim.node_model(
         device=device_name,
@@ -93,7 +104,9 @@ def set_doping_profile_2d(device_name, region_name, junction_pos, N_A_ionized, N
         device=device_name,
         region=region_name,
         name="Donors",
-        equation=f"{N_D}*step(y-{junction_pos})" + _nplus_term(nplus, coord="y"),
+        equation=f"{N_D}*step(y-{junction_pos})"
+        + _buffer_term(f"{N_D}", buffer, coord="y")
+        + _nplus_term(nplus, coord="y"),
     )
     devsim.node_model(
         device=device_name,
@@ -112,12 +125,15 @@ def set_graded_doping_2d(
     N_D_bulk,
     L_transition,
     nplus=None,
+    buffer=None,
 ):
     """Set exponentially graded N_D(y) doping profile on a 2D device.
 
     N_D(y) = N_D_bulk + (N_D_junction - N_D_bulk) * exp(-(y - y_j) / L)
-    for y > junction_pos (n-side).  Acceptors are a step function in the
-    p+ substrate.  Doping is laterally uniform (no x-dependence).
+    for y > junction_pos (n-side), optionally rising log-linearly to ``buffer``'s
+    N_end over the last Lb of the epi (``etna.core.device._buffer_term``). Acceptors
+    are a step function in the p+ substrate.  Doping is laterally uniform (no
+    x-dependence).
 
     Parameters
     ----------
@@ -143,11 +159,14 @@ def set_graded_doping_2d(
         equation=f"{N_A_ionized}*step({junction_pos}-y)",
     )
 
+    base = graded_base_expr(
+        junction_pos, N_D_junction, N_D_bulk, L_transition, coord="y"
+    )
     donor_expr = (
-        f"({N_D_bulk} + ({N_D_junction} - {N_D_bulk}) * "
-        f"exp(-max(y - {junction_pos}, 0) / {L_transition})) "
-        f"* step(y - {junction_pos})"
-    ) + _nplus_term(nplus, coord="y")
+        f"{base} * step(y - {junction_pos})"
+        + _buffer_term(base, buffer, coord="y")
+        + _nplus_term(nplus, coord="y")
+    )
     devsim.node_model(
         device=device_name,
         region=region_name,
@@ -179,6 +198,8 @@ def create_sic_2d_device(
     nplus_thickness_cm=_NPLUS_DEFAULT_CM,
     N_D_nplus=DEFAULT_STACK["N_D_nplus"],
     nplus_generation=False,
+    buffer_thickness_cm=None,
+    buffer_end_doping=None,
 ):
     """Create a 2D p+/n- 4H-SiC diode device in devsim.
 
@@ -219,6 +240,9 @@ def create_sic_2d_device(
         Optional n+ layer under the epi (cathode on its far end); see
         ``etna.core.device.create_sic_device``. Default DEFAULT_STACK (1 um, 1e19);
         nplus_thickness_cm=None = historical (legacy) model, cathode on the n- epi.
+    buffer_thickness_cm, buffer_end_doping :
+        Optional graded n-/n+ transition over the last ``buffer_thickness_cm`` of the
+        epi, as ``etna.core.device.create_sic_device`` (both None = none, the default).
 
     Returns
     -------
@@ -235,6 +259,9 @@ def create_sic_2d_device(
     epi_end = substrate_thickness_cm + epi_thickness_cm
     _check_nplus(nplus_thickness_cm, N_D_nplus)
     nplus = None if nplus_thickness_cm is None else (epi_end, N_D_nplus)
+    buffer = buffer_spec(
+        epi_end, epi_thickness_cm, buffer_thickness_cm, buffer_end_doping
+    )
     total_depth = epi_end + (nplus_thickness_cm or 0.0)  # cathode position
     air_buffer = 1e-8  # cm, thin buffer for contact detection
 
@@ -449,6 +476,7 @@ def create_sic_2d_device(
             _N_D_bulk,
             _L_transition,
             nplus=nplus,
+            buffer=buffer,
         )
         logger.info(
             f"Graded 2D doping: N_D_junction={_N_D_junction:.2e}, "
@@ -462,6 +490,7 @@ def create_sic_2d_device(
             N_A_ionized,
             N_D,
             nplus=nplus,
+            buffer=buffer,
         )
 
     num_nodes = len(
@@ -502,6 +531,8 @@ def create_sic_2d_device(
         "nplus_thickness_cm": nplus_thickness_cm,
         "N_D_nplus": N_D_nplus if nplus_thickness_cm is not None else None,
         "nplus_generation": bool(nplus_generation),
+        "buffer_thickness_cm": buffer_thickness_cm if buffer is not None else None,
+        "buffer_end_doping": buffer_end_doping if buffer is not None else None,
     }
 
 

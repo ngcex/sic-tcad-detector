@@ -48,7 +48,10 @@ _ENGINE_BOX = {
     "T": (250.0, 400.0),
     "N_A": (1e18, 1e19),
     "N_D_junction": (1e15, 1e16),
-    "N_D_bulk": (5e13, 2e15),
+    # N_D_bulk lower bound 5e13 -> 2e13 (2026-10-18) for the measured-C-V preset (3.4e13):
+    # lab/buffer_profile/bench/buffer_parity1d.py, with and without buffer, to -100 V
+    # (numbers in lab/buffer_profile/notes/LOG.md), tests/test_measured_cv_preset.py.
+    "N_D_bulk": (2e13, 2e15),
     "L_transition_um": (0.3, 3.0),
     "N_D_uniform": (1e14, 1e16),
     "epi_thickness_um": (5.0, 30.0),
@@ -57,6 +60,10 @@ _ENGINE_BOX = {
     "substrate_thickness_um": (0.3, 3.0),
     "nplus_thickness_um": (1.0, 5.0),
     "N_D_nplus": (1e18, 1e19),
+    # graded n-/n+ transition (buffer_thickness_um / buffer_end_doping): same parity bench
+    # as the N_D_bulk extension (buffer 0.5-2.5 um, end doping 1e16-1e19, to -100 V).
+    "buffer_thickness_um": (0.5, 2.5),
+    "buffer_end_doping": (1e16, 1e19),
 }
 # Largest single bias jump that converges in one Newton solve at 300 K (the Newton
 # clamp is in V_t units, so the limit scales with T; measured 85 V at 250 K).
@@ -84,6 +91,11 @@ def validated_domain_reason(config: DeviceConfig) -> "str | None":
     if config.nplus_thickness_um is not None:
         checks.update(
             nplus_thickness_um=config.nplus_thickness_um, N_D_nplus=config.N_D_nplus
+        )
+    if config.buffer_thickness_um is not None:
+        checks.update(
+            buffer_thickness_um=config.buffer_thickness_um,
+            buffer_end_doping=config.buffer_end_doping,
         )
     if config.doping_profile == "graded":
         checks.update(
@@ -154,9 +166,19 @@ def _reach_through_V(W, bias_array, config: DeviceConfig) -> "float | None":
     model's mesh rule gave 17.0 V). The 2D sweep's is_fully_depleted gate uses the
     analytic graded V_fd instead (9.93 V on the default stack, |V| >= 1.2 V_fd =
     11.92 V): the looser of the two definitions.
+
+    With a graded n-/n+ transition (``buffer_thickness_um``) the low-doped epi ends
+    where the transition starts, so "the epi end" of the rule is the buffer start
+    (x_epi_end - Lb) and L_D is taken at the epi doping there: the edge then creeps
+    into the transition for tens of volts (the measured -10..-60 V "creep"), which is
+    not full depletion of the sensitive volume but of the transition itself.
     """
     epi_cm = config.epi_thickness_um * 1e-4
-    if config.nplus_thickness_um is not None:
+    if config.buffer_thickness_um is not None:
+        threshold = (
+            epi_cm - config.buffer_thickness_um * 1e-4 - _debye_length_epi_end(config)
+        )
+    elif config.nplus_thickness_um is not None:
         threshold = epi_cm - _debye_length_epi_end(config)
     else:
         x = node_positions(epi_cm, config.substrate_thickness_um * 1e-4)
@@ -170,15 +192,17 @@ def _reach_through_V(W, bias_array, config: DeviceConfig) -> "float | None":
 
 
 def _debye_length_epi_end(config: DeviceConfig) -> float:
-    """Extrinsic Debye length (cm) of the epi donor density at the epi end."""
+    """Extrinsic Debye length (cm) of the epi donor density at the end of the low-doped
+    epi (the epi end, or the start of the graded n-/n+ transition when there is one)."""
     from etna.core.batched.material import EPS, Q, thermal_voltage
 
+    depth = config.epi_thickness_um - (config.buffer_thickness_um or 0.0)
     if config.doping_profile == "uniform":
         nd = DEFAULT_N_D if config.N_D is None else config.N_D
     else:
         L = config.L_transition_um * 1e-4
         nd = config.N_D_bulk + (config.N_D_junction - config.N_D_bulk) * np.exp(
-            -config.epi_thickness_um * 1e-4 / L
+            -depth * 1e-4 / L
         )
     return float(np.sqrt(EPS * thermal_voltage(config.T) / (Q * nd)))
 
@@ -283,10 +307,15 @@ def _engine_batch(kws):
     col = lambda key: np.array([k[key] for k in kws], dtype=float)
     sub = kws[0]["substrate_thickness_cm"]
     t_np = kws[0].get("nplus_thickness_cm")  # shared by the group (mesh geometry)
+    epi_end = sub + kws[0]["epi_thickness_cm"]
     x = node_positions(kws[0]["epi_thickness_cm"], sub, t_np)
     nplus = None
     if t_np is not None:
-        nplus = (sub + kws[0]["epi_thickness_cm"], col("N_D_nplus"))
+        nplus = (epi_end, col("N_D_nplus"))
+    # graded n-/n+ transition: present for the whole group or for none (_engine_groups)
+    buffer = None
+    if kws[0].get("buffer_thickness_cm") is not None:
+        buffer = (epi_end, col("buffer_thickness_cm"), col("buffer_end_doping"))
     nd = np.array([DEFAULT_N_D if k["N_D"] is None else k["N_D"] for k in kws], float)
     uniform = np.array([k["doping_profile"] == "uniform" for k in kws])
     # A uniform profile is a flat graded one; L_transition only has to be > 0.
@@ -299,6 +328,7 @@ def _engine_batch(kws):
         np.where(uniform, 1e-4, col("L_transition")),
         col("T"),
         nplus=nplus,
+        buffer=buffer,
     )
     nd_mob = np.array(
         [mobility_doping(k["N_D"], k["doping_profile"], k["N_D_bulk"]) for k in kws]
@@ -319,6 +349,7 @@ def _engine_groups(configs, bias_array, facade):
             kw["epi_thickness_cm"],
             kw["substrate_thickness_cm"],
             kw.get("nplus_thickness_cm"),
+            kw.get("buffer_thickness_cm") is not None,  # buffer values may differ
         )
         groups.setdefault(key, []).append(i)
     return groups
@@ -584,9 +615,11 @@ def run_cv(
     length of the n-/n+ step, 12.30 V -- a definition; see ``_reach_through_V``),
     or None if not reached. C-V calibration: the default doping is solved exactly on
     eps*A/C at 0 / -10 V (calibration inputs, not validation points). Known C-V
-    residual: eps*A/C(-30 V) = 9.98 um vs the measured 9.73 um (+2.6 %); a graded
-    n-/n+ buffer, a ~2.5 % thinner epi or edge/fringe capacitance each close it and
-    three points cannot separate them (none picked; not refitted). Legacy model (no n+,
+    residual: eps*A/C(-30 V) = 9.98 um vs the measured 9.73 um (+2.6 %); the full
+    digitised curve (lab/cv_gap) shows the default's abrupt epi/n+ form also puts the
+    C-V knee at -8..-10 V where the measurement has it at -1..-4 V. The opt-in
+    ``measured_cv_config()`` preset (graded n-/n+ transition, ``buffer_thickness_um``)
+    fits the whole curve (plateau rms 0.013 um); the default is unchanged. Legacy model (no n+,
     ``legacy_config()``): W reaches the epi end to within the last mesh interval
     (17.0 V) and devsim stops converging at about -64 V, an artefact of the ohmic
     cathode directly on the n- epi, not a physical device limit.

@@ -57,7 +57,10 @@ ENGINE2D_BOX = {
         5e-4,
         20e-4,
     ),  # parity grid: lab/solver2d/notes/LOG.md "box widening"
-    "N_D_bulk": (5e13, 5e14),
+    # N_D_bulk lower bound 5e13 -> 2e13 (2026-10-18, measured-C-V preset 3.4e13):
+    # lab/buffer_profile/bench/buffer_parity2d.py, dark psi + lateral CCE vs devsim with
+    # the n+ layer, with and without the graded transition (lab/buffer_profile/notes/LOG.md).
+    "N_D_bulk": (2e13, 5e14),
     "V_bias": (5.0, 80.0),
     "n_lateral_points": (2, 50),
     "substrate_thickness_cm": (0.3e-4, 1e-4),
@@ -90,6 +93,14 @@ ENGINE2D_NPLUS_BOX = {
     "V_bias": (5.0, 100.0),
 }
 _NPLUS_KEYS = ("nplus_thickness_cm", "N_D_nplus", "nplus_generation")
+# Optional graded n-/n+ transition (create_sic_2d_device buffer_thickness_cm /
+# buffer_end_doping; the engine reads the doping rows devsim evaluated, so the profile
+# itself needs no engine code). Parity vs devsim: lab/buffer_profile/bench/buffer_parity2d.py
+# (dark psi, W, lateral CCE; measured-C-V preset and the box corners), tests/test_measured_cv_preset.py.
+ENGINE2D_BUFFER_BOX = {
+    "buffer_thickness_cm": (0.5e-4, 2.5e-4),
+    "buffer_end_doping": (1e16, 1e19),
+}
 # Relative tolerance of the box bounds: a value given in um and converted to cm (e.g.
 # L_transition_um=3.0 -> 3.0 * 1e-4 = 3.0000000000000003e-4) must not fall outside a
 # bound it equals.
@@ -127,6 +138,24 @@ def _nplus_reason(device_kwargs, allow_generation=True):
         if not _in_box(value, lo, hi):
             return f"{name}={value} outside [{lo:g}, {hi:g}] (n+ parity box)", True
     return None, True
+
+
+def _buffer_reason(device_kwargs, epi_thickness_cm):
+    """Reason (or None) for the graded n-/n+ transition keywords in ``device_kwargs``
+    (popped). Both absent / None = no buffer (today's model)."""
+    t = device_kwargs.pop("buffer_thickness_cm", None)
+    nd = device_kwargs.pop("buffer_end_doping", None)
+    if t is None and nd is None:
+        return None
+    if t is None or nd is None:
+        return "buffer_thickness_cm and buffer_end_doping must be given together"
+    for name, value in (("buffer_thickness_cm", t), ("buffer_end_doping", nd)):
+        lo, hi = ENGINE2D_BUFFER_BOX[name]
+        if not _in_box(value, lo, hi):
+            return f"{name}={value} outside [{lo:g}, {hi:g}] (buffer parity box)"
+    if not t < epi_thickness_cm:
+        return f"buffer_thickness_cm={t} not below epi_thickness_cm={epi_thickness_cm}"
+    return None
 
 
 # Model-validity indicator: dark field on the last cell before the cathode (V/cm). The
@@ -183,6 +212,9 @@ def engine2d_unsupported_reason(
     np_reason, has_nplus = _nplus_reason(device_kwargs)
     if np_reason is not None:
         return np_reason
+    buf_reason = _buffer_reason(device_kwargs, epi_thickness_cm)
+    if buf_reason is not None:
+        return buf_reason
     boxed = dict(_BOXED_DEFAULTS)
     for key, value in device_kwargs.items():
         if key in _BOXED_DEFAULTS:
@@ -326,7 +358,7 @@ def lateral_cce_scan_2d(
 ENGINE2D_DARK_BOX = {
     "half_width_um": (25.0, 150.0),
     "epi_thickness_cm": (5e-4, 20e-4),
-    "N_D_bulk": (5e13, 5e14),
+    "N_D_bulk": (2e13, 5e14),  # lower bound: see ENGINE2D_BOX
     "N_D_junction": (1e15, 1e16),
     "L_transition": (0.3e-4, 3e-4),
     "substrate_thickness_cm": (0.3e-4, 1e-4),  # p+ anode (stack2d_parity.py)
@@ -348,6 +380,11 @@ def engine2d_dark_unsupported_reason(half_width_um, V_cathode, **device_kwargs):
     np_reason, has_nplus = _nplus_reason(device_kwargs, allow_generation=False)
     if np_reason is not None:
         return np_reason
+    buf_reason = _buffer_reason(
+        device_kwargs, device_kwargs.get("epi_thickness_cm", 10e-4)
+    )
+    if buf_reason is not None:
+        return buf_reason
     for key, value in device_kwargs.items():
         if key in _DARK_FIXED:
             ref = _DARK_FIXED[key]

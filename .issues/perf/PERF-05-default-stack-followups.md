@@ -50,6 +50,7 @@ proposal (not applied) in lab/cv_gap/notes/LOG.md section 6. Bruzzi & Verroi: di
 no constraint on N_D_bulk; its +3.1 % is the Schottky-vs-pn V_bi.
 
 ## Mott-Schottky cross-check of the digitised C-V (2026-10-18)
+
 1/C^2 slope of the digitised Photons Fig. 4b points (C = eps*A/W, A = 4 mm2): -3..-0.5 V: N = 3.9e13;
 -6..-2 V: 1.2e14 (this window gives the authors' "order 1e14"); -10..-3 V: 4.8e14; -30..-10 V: 5.7e15.
 So the authors' "order 1e14, consistent with nominal" is a loose slope over the knee window; the
@@ -61,3 +62,13 @@ Lb 1.14 um, N_end 4.5e16) with gates; flipping the default puts N_D_bulk below e
 doping statement and the epi/n+ position is no longer fixed by the data.
 Cheapest discriminating measurements: C-V to -100...-200 V (models predict eps*A/C 9.96-9.98 um
 at -100 V, 10.09-10.11 um at -200 V) or SIMS/SRP through the epi/n+ interface.
+
+## Opt-in measured-C-V preset implemented (feat/buffer-profile, 2026-10-18)
+
+`etna.measured_cv_config()` / `DeviceConfig(buffer_thickness_um, buffer_end_doping)`: graded
+n-/n+ transition in the devsim builders (1D/2D), the batched engine and the 2D engine
+(parity 1D dW 1.9e-15, dpsi 1.4e-14 V, dCCE 1.2e-10; 2D dpsi 7.1e-14 V, dCCE 1.4e-14), engine
+boxes widened to N_D_bulk 2e13 and the buffer keys, sidebar checkbox, export labels, N_t
+refit 2.849024e12. Plateau rms 0.013 um vs the digitised curve; the knee stays at 0.24 um rms
+(the exponential form; a tabulated profile would be needed). DEFAULT_STACK unchanged; impact
+table and open items in lab/buffer_profile/notes/LOG.md.

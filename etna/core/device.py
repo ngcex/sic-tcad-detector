@@ -78,6 +78,41 @@ DEFAULT_STACK = {
 # Historical name of the same record (it was the opt-in calibration before the flip).
 NPLUS_CALIBRATION = DEFAULT_STACK
 
+# MEASURED C-V PROFILE (opt-in preset, NOT the default): the doping form fitted on the
+# full digitised Photons Fig. 4b curve (eps*A/C at every 250 mV from 0 to -60 V, A = 4 mm2;
+# lab/cv_gap/notes/LOG.md, fit "buffer + end doping", chi2 198 / 224 dof, plateau rms
+# 0.013 um over -5..-59 V, knee rms 0.23 um). The production form above (exponential epi,
+# abrupt 1e19 n+ at the epi end, calibrated on 3 points) puts the C-V knee at -8..-10 V
+# where the measurement has it at -1..-4 V (W(-2 V) 2.99 vs 7.18 um measured, W(-5 V)
+# 5.93 vs 9.27 um). What fits: a thinner, more heavily doped junction layer, a lower bulk
+# and a GRADED n-/n+ transition ("buffer") that starts buffer_thickness_cm before the
+# nominal epi end and rises log-linearly from the local epi value to buffer_end_doping at
+# the epi end (1e19 n+ beyond): the 1e19 substrate is NOT reached at 10 um. Model
+# eps*A/C 1.655 / 9.519 / 9.750 um at 0 / -10 / -30 V (labels 1.68 / 9.52 / 9.73).
+# N_D_bulk 3.4e13 is below every documented doping statement for this epi (0.5-1e14),
+# and the epi/n+ position is no longer fixed by the data: the owner decides whether this
+# becomes the default (PERF-05). N_t: refitted on this profile to I(300 K, -60 V, 4 mm2) =
+# 18 pA like the default (tests/test_measured_cv_preset.py). Built by
+# etna.api.device.measured_cv_config(); the app sidebar has an opt-in checkbox.
+# Values: the lab fit (lab/cv_gap/notes/fits.json "fit_buffer_Nnp") rounded to 7 digits,
+# as DEFAULT_STACK; the 2-digit numbers quoted above (8.2e15 / 0.46 / 3.4e13 / 1.14 /
+# 4.5e16) move eps*A/C(0 V) by +0.04 um (the knee is that sensitive), so they are not used.
+MEASURED_CV_STACK = {
+    "substrate_thickness_cm": 0.3e-4,
+    "nplus_thickness_cm": 1e-4,
+    "N_D_nplus": DEFAULT_N_D_NPLUS,
+    "N_D_junction": 8.185880e15,
+    "N_D_bulk": 3.382506e13,
+    "L_transition": 0.4638630e-4,
+    "buffer_thickness_cm": 1.136634e-4,  # graded n-/n+ transition before the epi end
+    "buffer_end_doping": 4.516421e16,  # N_D at the epi end (log-linear rise from the epi value)
+    # N_t: I(300 K, -60 V, 4 mm2) = 18 pA on this profile (lab/buffer_profile/bench/
+    # nt_refit.py; default 2.805336e12 gives 17.724 pA here: the proxy is nearly
+    # profile-independent). E_t: the default's Z1/2 level.
+    "N_t": 2.849024e12,
+    "E_t": SiC4H_Parameters.E_t,
+}
+
 
 def mobility_doping(N_D, doping_profile, N_D_bulk):
     """Epi donor density (cm^-3) at which BOTH scalar mobilities are evaluated.
@@ -92,6 +127,7 @@ def mobility_doping(N_D, doping_profile, N_D_bulk):
     if doping_profile == "graded":
         return float(DEFAULT_STACK["N_D_bulk"] if N_D_bulk is None else N_D_bulk)
     return float(DEFAULT_N_D if N_D is None else N_D)
+
 
 # LEGACY model (the default before the n+ flip), kept so old numbers stay reproducible:
 # cathode contact directly on the n- epi (no n+; non-convergence wall at deep reverse bias,
@@ -189,10 +225,13 @@ def create_sic_device(
     nplus_thickness_cm=DEFAULT_STACK["nplus_thickness_cm"],
     N_D_nplus=DEFAULT_STACK["N_D_nplus"],
     nplus_generation=False,
+    buffer_thickness_cm=None,
+    buffer_end_doping=None,
 ):
     """Create a 1D p+/n- 4H-SiC diode device in devsim.
 
-    Structure: p+ anode layer (left, anode) | n- epitaxial layer | [n+ layer] (right, cathode)
+    Structure: p+ anode layer (left, anode) | n- epitaxial layer [| graded n-/n+
+    transition] | [n+ layer] (right, cathode)
 
     Parameters
     ----------
@@ -236,6 +275,14 @@ def create_sic_device(
         = radiation generation confined to the epi (the deposit beyond the epi end is
         dropped, as without an n+ layer); True = the profile continues into the n+.
         Whether the alpha deposit in the n+ counts is an open physics question.
+    buffer_thickness_cm, buffer_end_doping : float or None
+        Optional GRADED n-/n+ transition ("buffer") over the last ``buffer_thickness_cm``
+        of the epi: the donors rise log-linearly from the local epi value to
+        ``buffer_end_doping`` at the epi end (``max`` with the epi value, so a buffer never
+        lowers the doping); the n+ step (if any) follows at the epi end. Both None
+        (default) = today's abrupt epi/n+ model, bit-identical. Both must be given
+        together, with 0 < buffer_thickness_cm < epi_thickness_cm. The form fitted on the
+        measured C-V is ``MEASURED_CV_STACK`` (etna.api.device.measured_cv_config()).
 
     Returns
     -------
@@ -252,11 +299,18 @@ def create_sic_device(
     epi_end = substrate_thickness_cm + epi_thickness_cm
     _check_nplus(nplus_thickness_cm, N_D_nplus)
     nplus = None if nplus_thickness_cm is None else (epi_end, N_D_nplus)
+    buffer = buffer_spec(
+        epi_end, epi_thickness_cm, buffer_thickness_cm, buffer_end_doping
+    )
     total_length = epi_end + (nplus_thickness_cm or 0.0)
 
     # --- Create 1D mesh with non-uniform spacing ---
     build_diode_mesh(
-        device_name, region_name, junction_pos, epi_end, nplus_thickness_cm=nplus_thickness_cm
+        device_name,
+        region_name,
+        junction_pos,
+        epi_end,
+        nplus_thickness_cm=nplus_thickness_cm,
     )
     mesh_name = f"{device_name}_mesh"
     devsim.create_device(mesh=mesh_name, device=device_name)
@@ -357,9 +411,13 @@ def create_sic_device(
 
     if doping_profile == "graded":
         # graded-doping fallbacks: the default stack (DEFAULT_STACK)
-        _N_D_junction = N_D_junction if N_D_junction is not None else DEFAULT_STACK["N_D_junction"]
+        _N_D_junction = (
+            N_D_junction if N_D_junction is not None else DEFAULT_STACK["N_D_junction"]
+        )
         _N_D_bulk = N_D_bulk if N_D_bulk is not None else DEFAULT_STACK["N_D_bulk"]
-        _L_transition = L_transition if L_transition is not None else DEFAULT_STACK["L_transition"]
+        _L_transition = (
+            L_transition if L_transition is not None else DEFAULT_STACK["L_transition"]
+        )
         set_graded_doping_profile(
             device_name,
             region_name,
@@ -369,13 +427,22 @@ def create_sic_device(
             _N_D_bulk,
             _L_transition,
             nplus=nplus,
+            buffer=buffer,
         )
         logger.info(
             f"Graded doping: N_D_junction={_N_D_junction:.2e}, "
             f"N_D_bulk={_N_D_bulk:.2e}, L_transition={_L_transition:.2e} cm"
         )
     else:
-        set_doping_profile(device_name, region_name, junction_pos, N_A_ionized, N_D, nplus=nplus)
+        set_doping_profile(
+            device_name,
+            region_name,
+            junction_pos,
+            N_A_ionized,
+            N_D,
+            nplus=nplus,
+            buffer=buffer,
+        )
 
     num_nodes = len(
         devsim.get_node_model_values(device=device_name, region=region_name, name="x")
@@ -412,14 +479,89 @@ def create_sic_device(
         "nplus_thickness_cm": nplus_thickness_cm,
         "N_D_nplus": N_D_nplus if nplus_thickness_cm is not None else None,
         "nplus_generation": bool(nplus_generation),
+        "buffer_thickness_cm": buffer_thickness_cm if buffer is not None else None,
+        "buffer_end_doping": buffer_end_doping if buffer is not None else None,
     }
+
+
+def buffer_spec(epi_end, epi_thickness_cm, buffer_thickness_cm, buffer_end_doping):
+    """(x_epi_end, Lb, N_end) of the graded n-/n+ transition, or None without one.
+
+    Validates the pair: both None (no buffer) or both given with 0 < Lb < epi thickness
+    and N_end > 0. Shared by the 1D and 2D builders.
+    """
+    if buffer_thickness_cm is None and buffer_end_doping is None:
+        return None
+    if buffer_thickness_cm is None or buffer_end_doping is None:
+        raise ValueError(
+            "buffer_thickness_cm and buffer_end_doping must be given together "
+            f"(got {buffer_thickness_cm!r}, {buffer_end_doping!r})"
+        )
+    if not (0.0 < buffer_thickness_cm < epi_thickness_cm):
+        raise ValueError(
+            f"buffer_thickness_cm must lie in (0, epi_thickness_cm={epi_thickness_cm!r}) "
+            f"(got {buffer_thickness_cm!r})"
+        )
+    if not (buffer_end_doping > 0):
+        raise ValueError(f"buffer_end_doping must be > 0 (got {buffer_end_doping!r})")
+    return (epi_end, buffer_thickness_cm, buffer_end_doping)
+
+
+def _buffer_term(base_expr, buffer, coord="x"):
+    """Donor expression term of the graded n-/n+ transition (empty string without one).
+
+    ``buffer`` = (x_epi_end, Lb, N_end): over [x_epi_end - Lb, x_epi_end) the donors
+    become max(base, exp((1 - t) log(base) + t log(N_end))), t = (x - x0) / Lb clipped to
+    [0, 1] (log-linear rise from the local epi value ``base_expr`` to N_end). Written as
+    an additive correction to ``base_expr`` so the production expression is untouched
+    without a buffer; ``donor_profile`` is its numpy twin (same arithmetic).
+    """
+    if buffer is None:
+        return ""
+    x_end, Lb, N_end = buffer
+    x0 = x_end - Lb
+    t = f"min(max(({coord} - {x0}) / {Lb}, 0), 1)"
+    graded = f"exp((1 - {t}) * log({base_expr}) + {t} * log({N_end}))"
+    return (
+        f" + step({coord} - {x0}) * (1 - step({coord} - {x_end})) * "
+        f"(max({base_expr}, {graded}) - {base_expr})"
+    )
+
+
+def donor_profile(
+    x, junction_pos, N_D_junction, N_D_bulk, L_transition, buffer=None, n_side=True
+):
+    """numpy twin of the devsim epi donor expression (no n+ step): N_D(x) in cm^-3.
+
+    ``N_D_bulk + (N_D_junction - N_D_bulk) exp(-max(x - x_j, 0) / L)`` plus, with
+    ``buffer`` = (x_epi_end, Lb, N_end), the graded n-/n+ transition of ``_buffer_term``
+    (same operations in the same order, so devsim and the batched engine agree to
+    round-off). Uniform doping is N_D_junction == N_D_bulk. Arguments broadcast (the
+    batched engine passes (B, 1) columns against x (1, N)). ``n_side=False`` skips the
+    step(x - x_j) factor (the profile continued to x < x_j, for plots).
+    """
+    x = np.asarray(x, dtype=float)
+    base = N_D_bulk + (N_D_junction - N_D_bulk) * np.exp(
+        -np.maximum(x - junction_pos, 0.0) / L_transition
+    )
+    d = base * (x >= junction_pos) if n_side else base
+    if buffer is None:
+        return d
+    x_end, Lb, N_end = buffer
+    x0 = x_end - Lb
+    t = np.clip((x - x0) / Lb, 0.0, 1.0)
+    graded = np.exp((1.0 - t) * np.log(base) + t * np.log(N_end))
+    m = (x >= x0) & (x < x_end)
+    return d + np.where(m, np.maximum(base, graded) - base, 0.0)
 
 
 def _check_nplus(nplus_thickness_cm, N_D_nplus):
     if nplus_thickness_cm is None:
         return
     if not (nplus_thickness_cm > 0):
-        raise ValueError(f"nplus_thickness_cm must be > 0 or None (got {nplus_thickness_cm!r})")
+        raise ValueError(
+            f"nplus_thickness_cm must be > 0 or None (got {nplus_thickness_cm!r})"
+        )
     if not (N_D_nplus > 0):
         raise ValueError(f"N_D_nplus must be > 0 (got {N_D_nplus!r})")
 
@@ -432,7 +574,17 @@ def _nplus_term(nplus, coord="x"):
     return f" + {N_np} * step({coord} - {x_end})"
 
 
-def set_doping_profile(device_name, region_name, junction_pos, N_A_ionized, N_D, nplus=None):
+def graded_base_expr(junction_pos, N_D_junction, N_D_bulk, L_transition, coord="x"):
+    """devsim expression of the exponential epi profile (without the step factor)."""
+    return (
+        f"({N_D_bulk} + ({N_D_junction} - {N_D_bulk}) * "
+        f"exp(-max({coord} - {junction_pos}, 0) / {L_transition}))"
+    )
+
+
+def set_doping_profile(
+    device_name, region_name, junction_pos, N_A_ionized, N_D, nplus=None, buffer=None
+):
     """Set step-function doping profile on the device.
 
     p-side (x < junction_pos): Acceptors = N_A_ionized
@@ -453,6 +605,8 @@ def set_doping_profile(device_name, region_name, junction_pos, N_A_ionized, N_D,
         Donor concentration (cm^-3).
     nplus : tuple or None
         (x_epi_end, N_D_nplus): adds N_D_nplus * step(x - x_epi_end). None = no n+.
+    buffer : tuple or None
+        (x_epi_end, Lb, N_end): graded n-/n+ transition (``_buffer_term``). None = no buffer.
     """
     devsim.node_model(
         device=device_name,
@@ -464,7 +618,9 @@ def set_doping_profile(device_name, region_name, junction_pos, N_A_ionized, N_D,
         device=device_name,
         region=region_name,
         name="Donors",
-        equation=f"{N_D}*step(x-{junction_pos})" + _nplus_term(nplus),
+        equation=f"{N_D}*step(x-{junction_pos})"
+        + _buffer_term(f"{N_D}", buffer)
+        + _nplus_term(nplus),
     )
     devsim.node_model(
         device=device_name,
@@ -483,12 +639,14 @@ def set_graded_doping_profile(
     N_D_bulk,
     L_transition,
     nplus=None,
+    buffer=None,
 ):
     """Set exponentially graded N_D(x) doping profile in the epi layer.
 
     N_D(x) = N_D_bulk + (N_D_junction - N_D_bulk) * exp(-(x - x_j) / L)
-    for x > x_junction (n-side). Acceptors remain a step function in the
-    p+ substrate.
+    for x > x_junction (n-side), optionally rising log-linearly to ``buffer``'s
+    N_end over the last Lb of the epi (``_buffer_term``). Acceptors remain a step
+    function in the p+ substrate.
 
     Parameters
     ----------
@@ -508,6 +666,8 @@ def set_graded_doping_profile(
         Characteristic decay length of the doping gradient (cm).
     nplus : tuple or None
         (x_epi_end, N_D_nplus): adds N_D_nplus * step(x - x_epi_end). None = no n+.
+    buffer : tuple or None
+        (x_epi_end, Lb, N_end): graded n-/n+ transition (``_buffer_term``). None = no buffer.
     """
     # Acceptors: step function in p+ substrate (same as uniform)
     devsim.node_model(
@@ -520,11 +680,12 @@ def set_graded_doping_profile(
     # Donors: exponential grading in n-side epi layer
     # N_D(x) = N_D_bulk + (N_D_junction - N_D_bulk) * exp(-(x - x_j) / L)
     # Only active for x > junction_pos (n-side)
+    base = graded_base_expr(junction_pos, N_D_junction, N_D_bulk, L_transition)
     donor_expr = (
-        f"({N_D_bulk} + ({N_D_junction} - {N_D_bulk}) * "
-        f"exp(-max(x - {junction_pos}, 0) / {L_transition})) "
-        f"* step(x - {junction_pos})"
-    ) + _nplus_term(nplus)
+        f"{base} * step(x - {junction_pos})"
+        + _buffer_term(base, buffer)
+        + _nplus_term(nplus)
+    )
     devsim.node_model(
         device=device_name,
         region=region_name,

@@ -174,6 +174,8 @@ PARAM_LABELS = {
     "L_transition_um": "Transition length (µm)",
     "T": "Temperature (K)",
     "area_cm2": "Area (cm²)",
+    "buffer_thickness_um": "n-/n+ transition thickness (µm)",
+    "buffer_end_doping": "N_D at the epi end (cm⁻³)",
 }
 
 
@@ -244,7 +246,12 @@ def build_field_figures(result: SimResult) -> tuple[go.Figure, go.Figure]:
         efield_fig.update_yaxes(range=[0, 1.2 * pk[0]])
         efield_fig.add_annotation(
             text="y-axis clipped: nm-scale spikes at the abrupt doping steps not shown",
-            xref="paper", yref="paper", x=1, y=1.06, showarrow=False, xanchor="right",
+            xref="paper",
+            yref="paper",
+            x=1,
+            y=1.06,
+            showarrow=False,
+            xanchor="right",
             font=dict(size=10),
         )
 
@@ -290,9 +297,13 @@ def provenance_text(metadata: dict) -> str:
         return ENGINE2D_TEXT
     if solver is None or solver == "failed":
         return ""
-    text = DEVSIM_ONLY_TEXT if solver == "devsim" else (
-        f"{solver}; not cross-checked against the batched engine and not "
-        "validated against measurement"
+    text = (
+        DEVSIM_ONLY_TEXT
+        if solver == "devsim"
+        else (
+            f"{solver}; not cross-checked against the batched engine and not "
+            "validated against measurement"
+        )
     )
     if metadata.get("validated_domain") is False and note:
         text += f" (outside the engine parameter box: {note})"

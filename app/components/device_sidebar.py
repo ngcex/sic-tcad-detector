@@ -49,10 +49,15 @@ def assemble_config(values: dict) -> DeviceConfig:
         area_cm2=values["area_cm2"],
         # n+ layer and dark-current fit keys are optional (older callers/tests pass the
         # original 11 fields; the defaults are the default stack)
-        nplus_thickness_um=values.get("nplus_thickness_um", DeviceConfig.nplus_thickness_um),
+        nplus_thickness_um=values.get(
+            "nplus_thickness_um", DeviceConfig.nplus_thickness_um
+        ),
         N_D_nplus=values.get("N_D_nplus", DeviceConfig.N_D_nplus),
         N_t=values.get("N_t", DeviceConfig.N_t),
         E_t=values.get("E_t", DeviceConfig.E_t),
+        # graded n-/n+ transition: opt-in preset only (both None = the default model)
+        buffer_thickness_um=values.get("buffer_thickness_um"),
+        buffer_end_doping=values.get("buffer_end_doping"),
     )
 
 
@@ -75,6 +80,8 @@ FIELD_LABELS = {
     "N_D_nplus": "N_D n+ (cm⁻³)",
     "N_t": "N_t dark-current fit (cm⁻³ s⁻¹)",
     "E_t": "E_t trap level (eV)",
+    "buffer_thickness_um": "n-/n+ transition thickness (µm)",
+    "buffer_end_doping": "N_D at the epi end (cm⁻³)",
 }
 
 
@@ -139,6 +146,20 @@ def render_device_sidebar() -> None:
         "8.82e13, L 0.987 um, N_t 2.8e12, E_t 0.65 (overrides the fields above). It "
         "reproduces the old numbers; its non-convergence wall at deep reverse bias is a "
         "contact artefact. Off = the default stack: p+ / graded n- epi / 1 um n+ (1e19).",
+    )
+    measured_cv_on = st.sidebar.checkbox(
+        "measured C-V profile (digitised Fig. 4b)",
+        value=False,
+        key="cfg_measured_cv_on",
+        help="Applies the measured-C-V preset (etna.measured_cv_config): epi doping and a "
+        "graded n-/n+ transition FITTED on the full digitised Photons Fig. 4b C-V curve "
+        "(eps*A/C every 250 mV, 0 to -60 V; chi2 198/224, plateau rms 0.013 um) -- "
+        "N_D_junction 8.2e15, L 0.46 um, N_D_bulk 3.4e13, transition 1.14 um rising to "
+        "4.5e16 at the epi end, 1e19 n+ beyond, N_t refitted to 18 pA (overrides the doping "
+        "fields above). The default's abrupt epi/n+ form puts the C-V knee at -8..-10 V where "
+        "the measurement has it at -1..-4 V. NOT the default: N_D_bulk is below every "
+        "documented doping statement and the epi/n+ position is not fixed by the data "
+        "(lab/cv_gap/notes/LOG.md).",
     )
     nplus_thickness_um = DeviceConfig.nplus_thickness_um
     N_D_nplus = DeviceConfig.N_D_nplus
@@ -246,6 +267,20 @@ def render_device_sidebar() -> None:
         st.sidebar.info(
             "Historical model active: cathode directly on the n- epi (no n+ layer), "
             "pre-flip doping and dark-current fit."
+        )
+        if measured_cv_on:
+            st.sidebar.warning(
+                "Both presets checked: the historical model wins (the measured C-V "
+                "profile needs the n+ stack); untick it to apply the measured profile."
+            )
+    elif measured_cv_on:
+        from etna import MEASURED_CV_PRESET
+
+        values.update(MEASURED_CV_PRESET)
+        st.sidebar.info(
+            "Measured C-V profile active: doping fitted on the digitised Photons Fig. 4b "
+            "curve (graded n-/n+ transition over the last 1.14 um of the epi). A fit, "
+            "not the default stack."
         )
 
     try:
