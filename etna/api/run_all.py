@@ -49,7 +49,7 @@ def _sections() -> "dict[str, tuple[str, Callable, bool]]":
 
 _SWEEP_HALF_WIDTHS = (25.0, 50.0)
 _SWEEP_BIASES = (20.0, 40.0, 60.0)
-SWEEP_TITLE = "Microdosimetry sweep (current model, no n+ substrate)"
+SWEEP_TITLE = "Microdosimetry sweep (2D engine)"
 
 
 def _run_sweep(config: DeviceConfig) -> SimResult:
@@ -62,12 +62,16 @@ def _run_sweep(config: DeviceConfig) -> SimResult:
     from etna.core.engine2d import engine2d_unsupported_reason
     from etna.core.optimization import microdosimetric_sweep
 
-    if config.nplus_thickness_um is not None:
-        raise _SweepUnsupported("the sweep models the current stack without n+ substrate")
     epi_cm = config.epi_thickness_um * 1e-4
+    # the n+ layer (if any) goes to the sweep; the engine serves it inside its n+ parity box
+    nplus = {}
+    if config.nplus_thickness_um is not None:
+        nplus = dict(
+            nplus_thickness_cm=config.nplus_thickness_um * 1e-4, N_D_nplus=config.N_D_nplus
+        )
     for hw in _SWEEP_HALF_WIDTHS:
         for vb in _SWEEP_BIASES:
-            why = engine2d_unsupported_reason(hw, vb, epi_cm, config.N_D_bulk, 10)
+            why = engine2d_unsupported_reason(hw, vb, epi_cm, config.N_D_bulk, 10, **nplus)
             if why:
                 raise _SweepUnsupported(why)
     df = microdosimetric_sweep(
@@ -76,10 +80,15 @@ def _run_sweep(config: DeviceConfig) -> SimResult:
         N_D_bulks=(config.N_D_bulk,),
         V_biases=_SWEEP_BIASES,
         solver="auto",
+        **nplus,
     )
     n_valid = int(df["is_valid"].sum())
     best = df.iloc[0]
     summary = f"{n_valid}/{len(df)} valid"
+    if nplus:
+        summary += f" (n+ {config.nplus_thickness_um:g} um, {config.N_D_nplus:.1e} cm^-3)"
+    else:
+        summary += " (no n+ substrate)"
     if best["is_valid"]:
         summary += (
             f"; best: half-width {best['half_width_um']:g} um at "

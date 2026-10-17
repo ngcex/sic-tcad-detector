@@ -60,6 +60,7 @@ class Device2D:
         T = info["T"]
         prm = SiC4H_Parameters()
         self.grid = grid
+        self.info = info
         self.junction = info["substrate_thickness_cm"]
         self.Vt = K_B_J * T / Q
         self.ni = info["n_i"]
@@ -127,12 +128,13 @@ class Device2D:
         """Electric field (V/cm) on the last mesh cell before the cathode, 1-column state u.
 
         Past reach-through (V_fd) the depletion reaches the ohmic cathode, which sits
-        directly on the n- epi (no n+ substrate in the model), and the field there grows
+        directly on the n- epi when the device has no n+ layer, and the field there grows
         with bias. devsim's coupled 2D ramp stopped converging when this
         field reached 4.6-4.8e4 V/cm for N_D_bulk 5e13 and 8.5e13 (hw=25, 10 um epi;
         lab/solver2d/notes/LOG.md). The value depends on the cathode mesh cell (devsim
         ps = 0.1 um there for every epi thickness). That wall is a model-validity limit
-        of the contact-on-epi cathode, not physical punch-through.
+        of the contact-on-epi cathode, not physical punch-through. With the optional n+
+        layer the last cell lies inside the n+ (field ~0) and this indicator is not used.
         """
         return float(self.Vt * (u[-1] - u[-2]) / self.grid.hy[-1])
 
@@ -256,7 +258,20 @@ class Device2D:
             n *= e
             p /= e
             Ie, Ih = cathode_current_balanced(
-                u, n, p, G, self.ni, self.taun, self.taup, self.kn, self.kp, g.hy, g.dxd, g.dyd, g.nx, g.ny
+                u,
+                n,
+                p,
+                G,
+                self.ni,
+                self.taun,
+                self.taup,
+                self.kn,
+                self.kp,
+                g.hy,
+                g.dxd,
+                g.dyd,
+                g.nx,
+                g.ny,
             )
             I = Ie + Ih
             if not math.isfinite(I):
@@ -265,7 +280,11 @@ class Device2D:
             I_prev = I
             if np.abs(du).max() < tol and dI < tol_I:
                 self.gummel_iterations.append(it)
-                Ie, Ih = cathode_current(u, n, p, self.kn, self.kp, g.hy, g.dxd, g.nx, g.ny)
-                self.last_I_direct = Ie + Ih  # devsim's (edge-flux) evaluation, for diagnostics
+                Ie, Ih = cathode_current(
+                    u, n, p, self.kn, self.kp, g.hy, g.dxd, g.nx, g.ny
+                )
+                self.last_I_direct = (
+                    Ie + Ih
+                )  # devsim's (edge-flux) evaluation, for diagnostics
                 return I
         raise EngineNotConverged(f"Gummel did not converge in {max_iter} iterations")

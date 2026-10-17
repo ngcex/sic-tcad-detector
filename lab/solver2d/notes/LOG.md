@@ -405,3 +405,82 @@ Post-phase-4 checks:
   in n+, 5 um 0.946929 / 0.947792 / 0.947922; 20 um 0.976105 / 0.977040 / 0.977178;
   50 um 0.977322 / 0.978260 / 0.978398 (n+ inherits epi tau_p 0.6 us -> L_p ~11 um);
   no collection from the n+: 0.999819 * 1.591911/1.922426 = 0.8279 (-50 V).
+
+## 2D engine with n+ (feat/engine2d-nplus, 2026-10-17)
+
+### Experiment: engine internals on the n+ mesh vs devsim
+`uv run python lab/solver2d/bench/nplus2d_parity.py START STOP [csv]` (3 chunks in parallel, load ~6)
+-> notes/nplus2d_parity.csv. Engine side = Device2D on grid_from_devsim(..., nplus_thickness_cm,
+N_D_nplus, nplus_generation) (public gate bypassed), generation as cce_lateral_scan
+(confine_generation_to_epi unless nplus_generation); devsim side = create_2d_dd_device +
+dark dump + cce_lateral_scan (balanced extract_steady_state_current), 10 lateral points.
+No engine physics change was needed: doping and mesh come from devsim's evaluated node
+models, the ohmic BCs from NetDoping at the contact rows (n+ at the cathode), and the
+engine's cathode current was already the balanced form (electrons = interior volume
+balance + anode minority flux, holes = direct cathode minority flux) -- the same identity
+as extract_steady_state_current.
+
+21 configs: hw 25/50/100/150; epi 5/7.5/10/15/20 um; N_D_bulk 5e13/8.8e13/5e14; n+ 1/2/3/5 um;
+N_D_nplus 1e18/3e18/1e19; V 5-100; nplus_generation False (16) / True (5).
+| quantity | max over the 21 configs |
+|---|---|
+| W (column x=0, n/Donors >= 0.5 rule) | 2.8e-14 um (dW 0 in 17/21) |
+| Potential | 1.4e-13 V |
+| log10 n, log10 p (nodes with n, p > 1 cm^-3 in both) | 7.5e-13, 8.3e-13 |
+| CCE, every lateral point | 1.2e-12 (partially depleted 20 um/5e14/10 V); <= 3.4e-13 elsewhere |
+| Gummel iterations per stripe | <= 4 |
+devsim converged at every point (no wall with n+ up to 100 V). Engine times in the CSV are
+from a loaded machine incl. per-process JIT and are NOT speed-up evidence.
+
+### Promotion: gate, sweep and run_field wiring
+- etna.core.engine2d: ENGINE2D_NPLUS_BOX = n+ 1-5 um, N_D_nplus 1e18-1e19, V_bias 5-100 V
+  (with n+; without n+ the box and the field rule are unchanged: 5-80 V). Outside it ->
+  Engine2DFallback (devsim). With n+ the cathode-cell field rule (FIELD_ENGINE_MAX /
+  FIELD_NAN_MIN, calibrated on the contact-on-epi wall) is not applied and
+  Engine2DOutsideValidity is never raised: the last cell is inside the n+ and devsim
+  has no wall there. dark_state_2d / engine2d_dark_unsupported_reason: same n+ box,
+  V_cathode 5-100, nplus_generation rejected (meaningless for the dark state).
+  Lateral uniformity is still asserted on every built mesh (grid_from_arrays).
+- _sweep_one task tuple takes an optional 9th element (extra create_sic_2d_device
+  keywords, forwarded to the gate, the engine and create_2d_dd_device);
+  microdosimetric_sweep(nplus_thickness_cm=None, N_D_nplus=None, nplus_generation=False).
+  A devsim ramp failure on an n+ device is reported as a plain error, not as the
+  contact-on-epi "outside model validity" row.
+- run_all sweep: no longer skips n+ configs (engine box gate as before; summary states the
+  n+ layer or "no n+ substrate"); run_field with n+ goes to the engine via device_kwargs.
+
+Production-path parity, `bench/nplus2d_sweep_parity.py sweep 0 5` / `5 10` (2 in parallel)
+-> notes/nplus2d_sweep_parity.csv, _sweep_one auto vs devsim, 10 corner configs (hw 25-150,
+epi 5-20, 5-100 V, n+ 1/2/3/5 um, 1e18/1e19, 5 with nplus_generation): every row solver
+engine2d; max |dCCE| centre 4.2e-14, edge 9.0e-14, |dratio| 5.2e-14; is_valid identical
+(10/10); no NaN / failure rows on either side.
+`bench/nplus2d_sweep_parity.py field` (run_field engine vs forced devsim, same process):
+| hw | n+ | bias | engine | devsim | x/y order, NetDoping | max dPotential | max rel dE (floor 1e-3 Emax) |
+|---|---|---|---|---|---|---|---|
+| 25 | 1 um 1e19 | -20 | 0.29 s | 5.65 s | identical | 5.3e-15 V | 4.0e-12 |
+| 25 | 1 um 1e19 | -100 | 0.21 s | 13.6 s | identical | 1.4e-14 V | 7.7e-12 |
+| 50 | 5 um 1e18 | -60 | 0.46 s | 37.5 s | identical | 2.8e-14 V | 1.9e-11 |
+| 150 | 2 um 1e19 | -100 | 1.14 s | 160.7 s | identical | 5.7e-14 V | 1.4e-11 |
+(rel dE is 10-50x the no-n+ value 3-4e-13: |E| is the LinearNDInterpolator post-processing,
+which sees the 1 nm cells at the n-/n+ step; potential agrees to 1e-14 V.)
+
+Timing (`bench/nplus2d_bench.py`, serial, JIT warm, load 1.7-2.3; epi 10 um, 8.5e13,
+n+ 1 um 1e19, 60 V, 10 lateral points; engine best of 3, includes the mesh-only devsim build):
+| hw | devsim build+ramp | devsim total | engine | speed-up | max dCCE |
+|---|---|---|---|---|---|
+| 50 | 22.3 s | 28.8 s | 0.215 s | 134x | 8.1e-15 |
+| 150 | 84.8 s | 108.6 s | 1.41 s | 77x | 5.0e-15 |
+
+Default (no n+) unchanged: notebook-20 36-config auto sweep with HEAD code (git archive) vs
+this branch: DataFrame.equals True (bit-identical).
+
+run_field with n+ AND non-default graded doping (the dark gate admits N_D_junction 1e15-1e16,
+L 0.3-3 um), `bench/nplus2d_sweep_parity.py field doping`:
+| hw | doping (N_D_junction / L um / N_D_bulk / epi um) | n+ | bias | engine | devsim | dPotential | rel dE |
+|---|---|---|---|---|---|---|---|
+| 25 | 1e16 / 0.3 / 5e13 / 10 | 5 um 1e18 | -100 | 0.30 s | 14.4 s | 2.8e-14 V | 9.9e-12 |
+| 25 | 1e15 / 2.9 / 5e14 / 10 | 1 um 1e19 | -100 | 0.19 s | 14.4 s | 1.4e-14 V | 9.0e-12 |
+| 50 | 5e15 / 2.0 / 1e14 / 20 | 3 um 3e18 | -5 | 0.65 s | 16.0 s | 1.8e-15 V | 1.1e-12 |
+| 25 | 1e16 / 1.0 / 2e14 / 5 | 2 um 1e19 | -100 | 0.16 s | 10.6 s | 2.8e-14 V | 1.0e-11 |
+x/y order and NetDoping identical in every case. (Pre-existing edge, not n+: L_transition_um=3.0
+is rejected by the dark gate because 3.0*1e-4 > 3e-4 in floating point -> devsim.)

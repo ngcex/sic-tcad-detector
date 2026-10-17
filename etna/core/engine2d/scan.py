@@ -21,6 +21,11 @@ etna/core/device.py and device2d.py), so once the depletion reaches it the field
 last mesh cell grows with bias, and devsim stops converging when that contact-cell field
 reaches ~4.7e4 V/cm. Results there are outside the validity of the model (a real device
 has an n+ substrate that absorbs the field), not a property of the detector.
+
+With the optional n+ layer (nplus_thickness_cm, ENGINE2D_NPLUS_BOX) the cathode sits on
+the n+, the wall does not exist (devsim converges to >= 150 V), the field rule is not
+applied and Engine2DOutsideValidity is never raised; the bias range is the
+parity-checked ENGINE2D_NPLUS_BOX["V_bias"].
 """
 
 from __future__ import annotations
@@ -60,10 +65,44 @@ _FIXED_KWARGS = {
     "N_D": None,
     "N_D_junction": _N_D_JUNCTION_DEFAULT,
     "L_transition": _L_TRANSITION_DEFAULT,
-    # n+ layer under the epi: not cross-checked against devsim -> devsim (None = no n+)
-    "nplus_thickness_cm": None,
-    "N_D_nplus": None,
 }
+# Optional n+ layer under the epi (create_sic_2d_device nplus_thickness_cm / N_D_nplus /
+# nplus_generation). Parity vs devsim with n+ (dark psi/n/p, W, lateral CCE):
+# lab/solver2d/bench/nplus2d_parity.py and the _sweep_one auto-vs-devsim grid
+# nplus2d_sweep_parity.py (lab/solver2d/notes/LOG.md "2D engine with n+"). With n+
+# the cathode sits on the n+ and devsim has no contact-cell wall (>= 150 V measured),
+# so the field rule (FIELD_ENGINE_MAX / FIELD_NAN_MIN) does not apply; the bias range
+# is the parity-checked one instead.
+ENGINE2D_NPLUS_BOX = {
+    "nplus_thickness_cm": (1e-4, 5e-4),
+    "N_D_nplus": (1e18, 1e19),
+    "V_bias": (5.0, 100.0),
+}
+_NPLUS_KEYS = ("nplus_thickness_cm", "N_D_nplus", "nplus_generation")
+
+
+def _nplus_reason(device_kwargs, allow_generation=True):
+    """(reason or None, has_nplus) for the n+ keywords in ``device_kwargs`` (popped)."""
+    t = device_kwargs.pop("nplus_thickness_cm", None)
+    nd = device_kwargs.pop("N_D_nplus", None)
+    gen = device_kwargs.pop("nplus_generation", False)
+    if t is None:  # no n+ layer: N_D_nplus / nplus_generation have no effect in devsim
+        return None, False
+    if gen not in (True, False):
+        return f"nplus_generation={gen!r} (bool expected)", True
+    if gen and not allow_generation:
+        return "nplus_generation has no meaning for the dark state", True
+    if nd is None:
+        from etna.core.device import DEFAULT_N_D_NPLUS
+
+        nd = DEFAULT_N_D_NPLUS
+    for name, value in (("nplus_thickness_cm", t), ("N_D_nplus", nd)):
+        lo, hi = ENGINE2D_NPLUS_BOX[name]
+        if value is None or not np.isfinite(value) or not lo <= value <= hi:
+            return f"{name}={value} outside [{lo:g}, {hi:g}] (n+ parity box)", True
+    return None, True
+
+
 # Model-validity indicator: dark field on the last cell before the cathode (V/cm). The
 # cathode is an ohmic contact on the n- epi (no n+ substrate), so this field grows with bias
 # after reach-through; devsim stops converging at a fixed value of it (not a physical limit).
@@ -86,7 +125,8 @@ class Engine2DFallback(RuntimeError):
 
 
 class Engine2DOutsideValidity(RuntimeError):
-    """Outside model validity: cathode contact on the n- epi (no n+ substrate), devsim
+    """Outside model validity: cathode contact on the n- epi (device built without the
+    optional n+ layer), devsim
     does not converge here; report a failed (NaN) config. Not a physical limit."""
 
 
@@ -106,7 +146,13 @@ def engine2d_unsupported_reason(
 
     Lateral uniformity is additionally asserted on the built mesh in
     ``lateral_cce_scan_2d`` (raises Engine2DFallback if it does not hold).
+    An n+ layer (``nplus_thickness_cm`` not None) must lie in ENGINE2D_NPLUS_BOX and
+    then the bias range is ENGINE2D_NPLUS_BOX["V_bias"] instead of ENGINE2D_BOX's.
     """
+    device_kwargs = dict(device_kwargs)
+    np_reason, has_nplus = _nplus_reason(device_kwargs)
+    if np_reason is not None:
+        return np_reason
     for key, value in device_kwargs.items():
         if key not in _FIXED_KWARGS:
             return f"unsupported device keyword {key}"
@@ -126,19 +172,28 @@ def engine2d_unsupported_reason(
         n_lateral_points=n_lateral_points,
     )
     for name, value in vals.items():
-        lo, hi = ENGINE2D_BOX[name]
+        lo, hi = (
+            ENGINE2D_NPLUS_BOX if has_nplus and name == "V_bias" else ENGINE2D_BOX
+        )[name]
         if value is None or not np.isfinite(value) or not lo <= value <= hi:
             return f"{name}={value} outside [{lo:g}, {hi:g}]"
     return None
 
 
 def _generation(dev, x_pos, gen_rate, sigma):
+    """Stripe G (k order) as cce_lateral_scan: zero in the p+, and beyond the epi end
+    when an n+ layer exists unless nplus_generation (confine_generation_to_epi)."""
     g = dev.grid
+    info = dev.info
     yj = g.ys - dev.junction
     sh = alpha_depth_shape(np.clip(yj, 0.0, None), alpha_range_cm=_ALPHA_RANGE_CM)
     sh = sh / sh.max() if sh.max() > 0 else sh
     row = gen_rate * sh
     row[yj < 0] = 0.0
+    if info.get("nplus_thickness_cm") is not None and not info.get(
+        "nplus_generation", False
+    ):
+        row[g.ys > info["epi_end"] + 1e-12] = 0.0
     lat = np.exp(-0.5 * ((g.xs - x_pos) / sigma) ** 2)
     return (row[:, None] * lat[None, :]).ravel()
 
@@ -181,14 +236,20 @@ def lateral_cce_scan_2d(
     except NotLaterallyUniform as e:
         raise Engine2DFallback(f"device is not laterally uniform: {e}") from e
     dev = Device2D(grid, info)
+    has_nplus = info.get("nplus_thickness_cm") is not None
     try:
-        field = dev.dark(float(V_bias), stop_field=FIELD_NAN_MIN)
-        if field > FIELD_NAN_MIN:
+        if has_nplus:
+            # cathode on the n+: no contact-cell wall, the field rule does not apply
+            # (the last cell is inside the n+); bias range = ENGINE2D_NPLUS_BOX.
+            field = dev.dark(float(V_bias), stop_field=None)
+        else:
+            field = dev.dark(float(V_bias), stop_field=FIELD_NAN_MIN)
+        if not has_nplus and field > FIELD_NAN_MIN:
             raise Engine2DOutsideValidity(
                 f"outside model validity: cathode contact on the n- epi (no n+ substrate), "
                 f"cathode-cell field {field:.3g} V/cm; devsim does not converge here (~4.7e4)"
             )
-        if field > FIELD_ENGINE_MAX:
+        if not has_nplus and field > FIELD_ENGINE_MAX:
             raise Engine2DFallback(
                 f"near devsim's non-convergence wall (cathode contact on the n- epi, "
                 f"cathode-cell field {field:.3g} V/cm)"
@@ -204,7 +265,12 @@ def lateral_cce_scan_2d(
             cce[m] = float(np.clip(abs(I) / I_gen, 0.0, 1.0)) if I_gen > 0 else 0.0
     except EngineNotConverged as e:
         raise Engine2DFallback(str(e)) from e
-    f_in = in_mesh_generation_fraction(info["epi_thickness_cm"], alpha_range_cm=_ALPHA_RANGE_CM)
+    # depth over which pairs are generated, as cce_lateral_scan: the epi, plus the n+
+    # layer only if it generates (nplus_generation)
+    gen_depth = info["epi_thickness_cm"]
+    if has_nplus and info.get("nplus_generation"):
+        gen_depth += info["nplus_thickness_cm"]
+    f_in = in_mesh_generation_fraction(gen_depth, alpha_range_cm=_ALPHA_RANGE_CM)
     return {
         "x_positions_cm": x_positions,
         "x_positions_um": x_positions * 1e4,
@@ -235,23 +301,28 @@ _DARK_FIXED = {
     "T": 300,
     "substrate_thickness_cm": 1e-4,
     "N_D": None,
-    "nplus_thickness_cm": None,  # n+ layer: not cross-checked -> devsim
-    "N_D_nplus": None,
 }
+# n+ layer: ENGINE2D_NPLUS_BOX (thickness, N_D_nplus) and V_cathode up to its V_bias limit.
 
 
 def engine2d_dark_unsupported_reason(half_width_um, V_cathode, **device_kwargs):
     """Why ``dark_state_2d`` cannot serve this device/bias (None = it can)."""
     vals = dict(half_width_um=half_width_um, V_cathode=V_cathode)
+    device_kwargs = dict(device_kwargs)
+    np_reason, has_nplus = _nplus_reason(device_kwargs, allow_generation=False)
+    if np_reason is not None:
+        return np_reason
     for key, value in device_kwargs.items():
         if key in _DARK_FIXED:
             ref = _DARK_FIXED[key]
             same = (
                 value is None and ref is None
                 if value is None or ref is None
-                else value == ref
-                if isinstance(ref, str) or isinstance(value, str)
-                else math.isclose(value, ref, rel_tol=1e-9)
+                else (
+                    value == ref
+                    if isinstance(ref, str) or isinstance(value, str)
+                    else math.isclose(value, ref, rel_tol=1e-9)
+                )
             )
             if not same:
                 return f"{key}={value!r} (engine validated only for {ref!r})"
@@ -261,6 +332,8 @@ def engine2d_dark_unsupported_reason(half_width_um, V_cathode, **device_kwargs):
             return f"unsupported device keyword {key}"
     for name, value in vals.items():
         lo, hi = ENGINE2D_DARK_BOX[name]
+        if has_nplus and name == "V_cathode":
+            lo, hi = ENGINE2D_NPLUS_BOX["V_bias"]
         if value is None or not np.isfinite(value) or not lo <= value <= hi:
             return f"{name}={value} outside [{lo:g}, {hi:g}]"
     if vals.get("N_D_bulk", 0.0) >= vals.get("N_D_junction", np.inf):
@@ -287,11 +360,13 @@ def dark_state_2d(half_width_um, V_cathode, **device_kwargs):
     except NotLaterallyUniform as e:
         raise Engine2DFallback(f"device is not laterally uniform: {e}") from e
     dev = Device2D(grid, info)
+    has_nplus = info.get("nplus_thickness_cm") is not None
     try:
-        field = dev.dark(float(V_cathode), stop_field=FIELD_ENGINE_MAX)
+        # with n+ the cathode-cell field rule does not apply (no contact-cell wall)
+        field = dev.dark(float(V_cathode), stop_field=None if has_nplus else FIELD_ENGINE_MAX)
     except EngineNotConverged as e:
         raise Engine2DFallback(str(e)) from e
-    if field > FIELD_ENGINE_MAX:
+    if not has_nplus and field > FIELD_ENGINE_MAX:
         raise Engine2DFallback(
             f"near devsim's non-convergence wall (cathode contact on the n- epi, "
             f"cathode-cell field {field:.3g} V/cm)"

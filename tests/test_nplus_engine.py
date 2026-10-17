@@ -112,13 +112,3 @@ def test_nplus_outside_box_goes_to_devsim(cfg):
         cfg
     ) or "N_D_nplus" in sim.validated_domain_reason(cfg)
 
-
-def test_2d_engine_still_rejects_nplus():
-    from etna.core.engine2d import (
-        engine2d_dark_unsupported_reason,
-        engine2d_unsupported_reason,
-    )
-
-    kw = dict(NPLUS)
-    assert "nplus_thickness_cm" in engine2d_unsupported_reason(50.0, 20.0, **kw)
-    assert "nplus_thickness_cm" in engine2d_dark_unsupported_reason(50.0, 20.0, **kw)
