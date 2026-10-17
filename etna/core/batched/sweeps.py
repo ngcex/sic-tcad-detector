@@ -216,6 +216,8 @@ def cce_sweep(
     CCE = |J_cathode| / (q * trapz(G)). Like the devsim path, BOTH mobilities are
     taken at the epi doping ``N_D`` (default ``DEFAULT_N_D``; holes at ``N_A`` before
     2026-10-17, .issues/audit-v7 A-03), and lifetimes from ``srh_lifetime(T)``.
+    Callers pass ``etna.core.device.mobility_doping`` (N_D_bulk for graded devices); the
+    ``DEFAULT_N_D`` default is right only for uniform-profile batches at that doping.
     ``N_A`` is accepted for backward compatibility and no longer used.
     The dark Poisson state is walked from 0 V in steps <= ``max_step_V`` (as
     run_cce_tilted_alpha): a cold jump to e.g. -50 V does not converge on low-doped

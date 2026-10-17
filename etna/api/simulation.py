@@ -27,7 +27,7 @@ from etna.core.batched.material import EPS
 from etna.core.charge_collection import cce_vs_bias, cce_vs_fluence
 from etna.core.cv_analysis import cv_sweep
 from etna.core.dark_current import create_dark_current_device, dark_current_sweep
-from etna.core.device import DEFAULT_N_D
+from etna.core.device import DEFAULT_N_D, mobility_doping
 from etna.core.devsim_reset import reset_devsim_fully
 from etna.core.drift_diffusion import ramp_bias
 from etna.core.flash_recombination import cce_vs_dose_rate
@@ -276,8 +276,9 @@ def _engine_batch(kws):
     """Engine batch for devices sharing one mesh geometry.
 
     ``kws`` is a list of ``device_kwargs(config)`` dicts. Returns the batch, the
-    mesh nodes and the per-device N_D used for both mobilities (as in
-    ``cce_vs_bias``: ``DEFAULT_N_D`` when unset, whatever the profile).
+    mesh nodes and the per-device doping at which both mobilities are evaluated
+    (``etna.core.device.mobility_doping``, as the devsim builders: N_D for uniform,
+    N_D_bulk for graded).
     """
     col = lambda key: np.array([k[key] for k in kws], dtype=float)
     sub = kws[0]["substrate_thickness_cm"]
@@ -299,7 +300,10 @@ def _engine_batch(kws):
         col("T"),
         nplus=nplus,
     )
-    return pb, x, nd
+    nd_mob = np.array(
+        [mobility_doping(k["N_D"], k["doping_profile"], k["N_D_bulk"]) for k in kws]
+    )
+    return pb, x, nd_mob
 
 
 def _engine_groups(configs, bias_array, facade):
@@ -460,7 +464,7 @@ def _cce_batch(configs, v_start, v_stop, n_points, capture):
             else None
         )
         G = alpha_generation(x, sub, 15e-4, 1e18, epi_end=epi_end)
-        # Mobility inputs mirror cce_vs_bias exactly (both carriers at the epi N_D).
+        # Mobility inputs mirror cce_vs_bias exactly (mobility_doping, both carriers).
         res = cce_sweep(
             pb,
             bias_array,

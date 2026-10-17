@@ -39,6 +39,7 @@ from etna.core.device2d import (
     _N_D_BULK_DEFAULT,
     _L_TRANSITION_DEFAULT,
 )
+from etna.core.device import mobility_doping
 
 logger = logging.getLogger(__name__)
 
@@ -336,13 +337,8 @@ def create_mesa_device(
 
     Returns device_info with ``structure_type="mesa"``.
     """
-    N_D_resolved, _, _, _ = _resolve_doping_defaults(
-        None,
-        doping_profile,
-        N_D_junction,
-        N_D_bulk,
-        L_transition,
-    )
+    # epi doping of both mobilities (graded: N_D_bulk), same rule as create_sic_device
+    N_D_mob = mobility_doping(None, doping_profile, N_D_bulk)
     params = SiC4H_Parameters()
     pillar_hw_cm = pillar_half_width_um * 1e-4
     trench_w_cm = trench_width_um * 1e-4
@@ -479,7 +475,7 @@ def create_mesa_device(
 
     # -- Material params on main SiC region --
     N_A_ionized = ionized_acceptor_concentration(N_A, T)
-    mat_info = _set_sic_material_params(device_name, region_name, N_D_resolved, N_A, T)
+    mat_info = _set_sic_material_params(device_name, region_name, N_D_mob, N_A, T)
 
     # -- Doping on main pillar --
     N_D_used = _apply_doping(
@@ -514,11 +510,11 @@ def create_mesa_device(
         equation="0",
     )
     # Set minimal material params on trench for solver stability
-    _set_sic_material_params(device_name, "trench", N_D_resolved, N_A, T)
+    _set_sic_material_params(device_name, "trench", N_D_mob, N_A, T)
 
     # Sub-trench region gets substrate doping if it exists
     if trench_d_cm < total_depth - 1e-10:
-        _set_sic_material_params(device_name, "sub_trench", N_D_resolved, N_A, T)
+        _set_sic_material_params(device_name, "sub_trench", N_D_mob, N_A, T)
         # p+ substrate doping in sub_trench
         devsim.node_model(
             device=device_name,
@@ -650,13 +646,8 @@ def create_3d_electrode_device(
     Returns device_info with ``structure_type="3d_electrode"``,
     ``coordinate_system="cylindrical"``.
     """
-    N_D_resolved, _, _, _ = _resolve_doping_defaults(
-        None,
-        doping_profile,
-        N_D_junction,
-        N_D_bulk,
-        L_transition,
-    )
+    # epi doping of both mobilities (graded: N_D_bulk), same rule as create_sic_device
+    N_D_mob = mobility_doping(None, doping_profile, N_D_bulk)
     outer_r_cm = outer_radius_um * 1e-4
     col_r_cm = column_radius_um * 1e-4
     junction_pos = substrate_thickness_cm
@@ -742,7 +733,7 @@ def create_3d_electrode_device(
 
     # -- Material params --
     N_A_ionized = ionized_acceptor_concentration(N_A, T)
-    mat_info = _set_sic_material_params(device_name, region_name, N_D_resolved, N_A, T)
+    mat_info = _set_sic_material_params(device_name, region_name, N_D_mob, N_A, T)
 
     # -- Doping: standard p+/n- profile --
     N_D_used = _apply_doping(
@@ -911,13 +902,8 @@ def create_delta_e_e_device(
     ``region_name_de``, ``region_name_e``, ``delta_e_thickness_cm``,
     ``e_stop_thickness_cm``.
     """
-    N_D_resolved, _, _, _ = _resolve_doping_defaults(
-        None,
-        doping_profile,
-        N_D_junction,
-        N_D_bulk,
-        L_transition,
-    )
+    # epi doping of both mobilities (graded: N_D_bulk), same rule as create_sic_device
+    N_D_mob = mobility_doping(None, doping_profile, N_D_bulk)
     half_width_cm = half_width_um * 1e-4
     de_thick_cm = delta_e_thickness_um * 1e-4
     e_thick_cm = e_stop_thickness_um * 1e-4
@@ -1069,11 +1055,11 @@ def create_delta_e_e_device(
     mat_info_de = _set_sic_material_params(
         device_name,
         region_name_de,
-        N_D_resolved,
+        N_D_mob,
         N_A,
         T,
     )
-    _set_sic_material_params(device_name, region_name_e, N_D_resolved, N_A, T)
+    _set_sic_material_params(device_name, region_name_e, N_D_mob, N_A, T)
 
     # -- Doping on delta-E region --
     N_D_used = _apply_doping(
@@ -1195,13 +1181,8 @@ def create_guard_ring_device(
 
     Returns device_info with ``structure_type="guard_ring"``.
     """
-    N_D_resolved, _, _, _ = _resolve_doping_defaults(
-        None,
-        doping_profile,
-        N_D_junction,
-        N_D_bulk,
-        L_transition,
-    )
+    # epi doping of both mobilities (graded: N_D_bulk), same rule as create_sic_device
+    N_D_mob = mobility_doping(None, doping_profile, N_D_bulk)
     sv_hw_cm = sv_half_width_um * 1e-4
     gr_w_cm = guard_ring_width_um * 1e-4
     gr_gap_cm = guard_ring_gap_um * 1e-4
@@ -1315,7 +1296,7 @@ def create_guard_ring_device(
 
     # -- Material params --
     N_A_ionized = ionized_acceptor_concentration(N_A, T)
-    mat_info = _set_sic_material_params(device_name, region_name, N_D_resolved, N_A, T)
+    mat_info = _set_sic_material_params(device_name, region_name, N_D_mob, N_A, T)
 
     # -- Standard doping profile --
     N_D_used = _apply_doping(
