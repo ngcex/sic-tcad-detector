@@ -204,14 +204,14 @@ alpha_range_um=18, dead_layer_um=0, shape="bragg", generation_in_p_plus=False)`:
 Reviewer decision: verify W_C = eps/(dQ/dV) independently before any production change.
 Production DEFAULT_STACK, W in um:
 
-| method                                                         | 0 V    | -10 V  | -30 V  |
-| -------------------------------------------------------------- | ------ | ------ | ------ |
-| W_edge (production run_cv)                                     | 1.7000 | 9.5000 | 9.8995 |
-| lab W_C (plane x0 = 0.5 um, DV 0.25 V)                         | 1.708  | 9.764  | 9.981  |
-| (a) engine, q d(sum v n)/dV (electrons, no plane), DV 0.05     | 1.7106 | 9.7644 | 9.9807 |
+| method                                                         | 0 V                      | -10 V                    | -30 V        |
+| -------------------------------------------------------------- | ------------------------ | ------------------------ | ------------ |
+| W_edge (production run_cv)                                     | 1.7000                   | 9.5000                   | 9.8995       |
+| lab W_C (plane x0 = 0.5 um, DV 0.25 V)                         | 1.708                    | 9.764                    | 9.981        |
+| (a) engine, q d(sum v n)/dV (electrons, no plane), DV 0.05     | 1.7106                   | 9.7644                   | 9.9807       |
 | (a) engine, q d(sum v p)/dV (holes), DV 0.05 / 0.10 / 0.25     | 1.7106 / 1.7103 / 1.7081 | 9.7644 / 9.7643 / 9.7637 | 9.9807 (all) |
-| (a) engine, n-side space charge from x0                        | = electrons to 1e-4 | | |
-| (b) devsim small-signal AC, Im(I_V1)/(2 pi f), f = 1 Hz, 1 kHz | 1.7107 | 9.7644 | 9.9807 |
+| (a) engine, n-side space charge from x0                        | = electrons to 1e-4      |                          |              |
+| (b) devsim small-signal AC, Im(I_V1)/(2 pi f), f = 1 Hz, 1 kHz | 1.7107                   | 9.7644                   | 9.9807       |
 
 - CONFIRMED. The devsim AC solve (DD device of build_device(DeviceConfig()), cathode
   re-attached to a voltage source with acreal = 1; quasi-static, f-independent) agrees with
@@ -238,6 +238,7 @@ solve is NOT used in production: in devsim 2.10 a circuit cannot be removed agai
 with a circuit present -> Newton UNEXPECTED on the next device). It stays as an own-process
 pin (tests/test_cv_small_signal.py::test_devsim_ac_solve_agrees_with_both_paths).
 Recalibration of DEFAULT_STACK on eps*A/C: lab/solver2d/notes/LOG.md (end).
+
 ## 7. Hole mobility at the epi doping (feat/cv-observable, .issues/audit-v7 A-03)
 
 Both engines evaluated the scalar mu_p at N_A = 1e19 (75.7 cm2/Vs); holes are the minority
@@ -254,10 +255,102 @@ for the microdosimeter). Engine vs devsim CCE 0..-10 V: 1.3e-11. Not tuned to da
 | microdosimeter p+ 1 um, raw 0 V                  | 0.9598                                    | 0.9740                                    |
 | dark 4 mm2 -10 / -60 V (pA)                      | 6.07738 / 18.000001                       | 6.07754 / 18.000001 (N_t not re-fitted)   |
 | microdosimeter dark 25 mm2 -60 V (pA)            | 112.4886                                  | 112.4886                                  |
+
 ## 8. run_cce cold start (feat/cv-observable)
 
 The section-5 failure was the dark POISSON jump 0 -> -50 V (not Gummel): the cumulative
 ramp flag went False and run_cce fell back to devsim (2.24 s). The batched _Ramp now walks
 jumps > 10 V in Poisson-only sub-steps (reverse_sweep / cce_sweep max_step_V = 10; Gummel
 only at the requested biases): run_cce(preset, -50, -60, 3) stays on the engine (0.21 s),
-matches devsim to 1e-6, reach-through 30.0 V found; run_cv likewise.
+matches devsim to 1e-6, reach-through 30.0 V found (the 3.0575e14 preset of the time;
+9.0 V since section 9); run_cv likewise.
+
+## 9. What do the Fig. 4b data constrain? (lab/micro-doping, 2026-10-17)
+
+Benches: `bench/hypotheses.py` (notes/hypotheses.out), `bench/hypotheses_robust.py`
+(notes/hypotheses_robust.out), `bench/preset_1e14_numbers.py`. Judged by chi-square against
+the section-1 digitised curve, sigma 1e-3 per point (x4 for 0.0005, x0.25 for 0.002), FREE
+overall scale (the absolute "100 %" rests on a Si-detector calibration and 8.4 eV/pair).
+
+### 9.1 Constraints re-extracted from the papers
+
+- Phys. Med. p.3: 5x5 mm2 active area, "total active volume of 0.25 mm3" = 25 mm2 x 10 um
+  (consistent). C-V: 250 mV steps, -60..+2.5 V, 1 kHz; "fully depleted active region at
+  approximately -30 V, ... ~10 um"; 1/C^2 slope -> "on the order of 1e14 cm^-3, consistent
+  with nominal values". Alpha test: 3 cm, pinhole, vacuum, 65 deg, Ortec 142A + 3 us shaping,
+  "saturation of both parameters [CCE, resolution] ... exceeding -40 V".
+- Fig. 3b (same page) is the 4 mm2 DOSIMETER's C-V, not the 25 mm2 die: plateau 0.34e-10 F
+  = eps x 3.96 mm2 / 10 um; the depletion axis reads 1.7 / 9.5 / ~9.9 um at 0 / -10 / -60 V,
+  the numbers the same group prints for the 4 mm2 device (SiC_Photons sec. 3, "A = 4 mm2 ...
+  approximately 1.7 um ... about 9.5 um at -10 V ... full depletion ... at approximately
+  10 V, while operation at -30 V corresponds to a stable over-depleted regime"; JINST 20
+  C08019: epi "0.5-1e14 cm^-3", "full depletion at voltages around 10 V, with operational
+  stability ... up to 30 V"). The 25 mm2 die has no C-V of its own in any paper.
+- So "approximately -30 V" is the over-depleted operating point, not V_fd. The paper is
+  consistent once read that way: N_D ~ 1e14, V_fd ~ 9-10 V, CCE saturating at -40 V for
+  a reason other than depletion. The section-2 fit (3.0575e14 to V_fd = 30 V) rested on the
+  one sentence that the sister papers contradict.
+- Fig. 4b energy resolution (right axis, digitised by eye): 9.5 / 6.4 / 3.4 / 3.0 / 2.4 /
+  2.1 / 2.0 % at 0 / -5 / -10 / -20 / -30 / -40 / -50 V: it keeps improving with bias in
+  step with the CCE rise, as a stochastic, field-dependent loss would.
+
+### 9.2 Hypotheses vs the digitised curve
+
+| hypothesis                                                                                    | free params | best chi2 (dof)       | N_D preferred           | verdict                                                                                                                                                                            |
+| --------------------------------------------------------------------------------------------- | ----------- | --------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| DD steady state, any N_D 0.5e14-1.2e15, p+ 0.3/1, t_dead 0/0.3/0.6, tau x0.03-x3 (360 curves) | 0 (grid)    | 228 (6)               | 4-5e14 with tau x0.3    | EXCLUDED: flat once W > track end                                                                                                                                                  |
+| (a) late full depletion (N_D 8e14-1.2e15: W reaches 7.6 um at -38..-58 V)                     | 0           | 1003-1835 (6)         | --                      | EXCLUDED (diffusion collects the undepleted end; and C-V/doping statements say 1e14)                                                                                               |
+| (b) SRH lifetime x0.03..x3 (within the DD)                                                    | 0           | >= 228                | --                      | EXCLUDED (midgap SRH needs both carriers: no loss in the drift region)                                                                                                             |
+| (b-trap) Hecht trapping on the engine field, tau_h, tau_e                                     | 2           | 6.7 (4)               | 0.5-1.75e14             | fits, but needs tau_h ~3-5 ns, tau_e ~1-2 ns: N_t sigma ~ 15-30 cm^-1, i.e. N_t >~ 1e15 with sigma 1e-14 (Z1/2: sigma_n ~ 1e-15, N_t ~ 1e12-1e13 -> tau ~ 10-100 us). NOT physical |
+| (c) dead layer 0-0.6 um, p+ 0.3/1 um, tilt 60-70 deg, range 17-19 um                          | --          | no effect on verdicts | --                      | not a bias-dependent effect above V_fd; absorbed                                                                                                                                   |
+| (d) columnar/plasma loss a/(1 + E/E_c) at the generation point                                | 2           | 3.6 (4)               | 0.5-1.5e14 (Dchi2 <= 9) | fits BOTH features: a 0.13-0.34, E_c 1-4e3 V/cm                                                                                                                                    |
+| (e) edge of the 5x5 mm2 die                                                                   | --          | --                    | --                      | ring of width ~W = 0.8 % of the area; produces a tail, not a peak shift (Fig. 4a shows the tail). Not the explanation                                                              |
+
+Preset 3.0575e14, DD: chi2 2553 (free scale) / 4700 (normalised at -50 V).
+
+(d) per N_D (p+ 0.3, bragg, t_dead 0): 5e13: 4.8, 7.5e13: 6.0, 1e14: 5.1, 1.5e14: 6.0,
+2e14: 32.9, 3.06e14: 112, 4e14: 175, 6e14: 326. Robust over box/bragg, 60/65/70 deg,
+17/18/19 um, t_dead 0.3 (hypotheses_robust.out): best 3.6-10 at N_D 0.5-1.5e14; 3.06e14
+is 27-174 (Delta chi2 >= 22 in every variant); the Delta chi2 <= 9 upper bound is
+1.0-2.5e14. At N_D 1e14 the fit is a = 0.15, E_c = 3.2e3 V/cm, scale 1.007 (i.e. the
+data are still 0.7 % short of saturation at -50 V), model 0.9086 0.9672 0.9798 0.9900
+0.9946 0.9972 0.9989. (b-trap) agrees on the N_D range (0.5-1.75e14) with the
+implausible lifetimes above.
+
+Why low N_D: above V_fd the field at the back of a uniform epi is (V - V_fd)/d plus
+q N_D (d - x)/eps; the track end (7.3 um into the epi) sees 9e3 / 1.6e4 / 4.6e4 V/cm at
+-10 / -20 / -50 V for 1e14 but is undepleted until -13 V for 3.06e14 and then jumps to
+2e4 V/cm by -30 V. Any loss that falls as 1/E therefore gives the data's smooth 1/V-like
+tail only at low N_D; at 3e14 the knee is too sharp.
+
+Literature (WebSearch, 2026-10-17; abstracts only): Verzellesi et al. 2002 (4H-SiC
+Schottky, 5.48/2.00 MeV alphas, hole lifetime ~500 ns, full CCE for 2 MeV above 40 V);
+Ivanov et al. (26 um 4H-SiC, 50 % CCE at 0 V for 5.39 MeV alphas, L_p 13 um); Verbitskaya,
+Eremin, Strokan et al. NIM B 84 (1994) 51 (Si p-n alpha detectors: "recombination
+processes in alpha-particle tracks with a high electron-hole density", pulse-amplitude
+deficit measured vs reverse bias and tilt angle, Auger + surface recombination in the
+track); Tohoku 1982 (Si, protons/He: pulse-height defect ~ 1/E^2, field erosion of the
+plasma); Gsponer et al. (irradiated 4H-SiC: CCE rises with bias as the carrier velocity
+approaches saturation). No independent 4H-SiC alpha a / E_c value was found; no CCE-vs-
+bias dataset of this device family other than Fig. 4b.
+
+### 9.3 Decision
+
+- Preset N_D: 3.0575e14 -> **1.0e14** (etna/api/device.py, commit "fix(preset): ..."),
+  the paper's own 1/C^2 order, the sister papers' 0.5-1e14 / V_fd ~ 10 V, the lower edge
+  of _ENGINE_BOX["N_D_uniform"]. Numbers (preset_1e14_numbers.py): reach_through_V 9.0 V
+  (p+ 0.3 and 1.0), C(-60 V) 2.14852e-10 F (x4/25 = 3.438e-11 vs Fig. 3b 3.46e-11),
+  W_from_C 5.41 / 9.86 / 9.98 / 9.99 um at 0 / -10 / -30 / -60 V; tilted CCE raw 0.99439
+  (0 V), 0.99970 (-10), 0.99982 (-20), 0.99991 (-50), cce_vs_E0(-50) 0.96886, p+epi 0.98447;
+  run_cce engine = devsim to 3e-16 at -50..-60 V; normal-incidence box vs run_cce 2e-6.
+- The columnar loss stays LAB-ONLY: its two parameters are fitted to the same 7 points
+  and no independent SiC alpha measurement of a or E_c was found. The production DD curve
+  for the preset is flat (0.994 -> 1.000) and does not reproduce Fig. 4b; said in the
+  run_cce_tilted_alpha docstring.
+- Excluded for the record: any DD-only explanation (all N_D, lifetimes, dead layers,
+  p+ thickness, tilt, range), late full depletion, SRH lifetime, edge effects (peak), and
+  trapping with plausible 4H-SiC trap densities.
+- Limits: 7 digitised points with read-off sigma ~5e-4 (chi2 scales as 1/sigma^2; at
+  sigma 2e-3 the exclusion of 3.06e14 under (d) is Delta chi2 >= 5.5, still > 2 sigma);
+  the energy-resolution curve was not fitted; the columnar form is phenomenological; the
+  Bragg curve is qualitative (box/bragg differ by < 2 in chi2 at N_D <= 1.5e14).

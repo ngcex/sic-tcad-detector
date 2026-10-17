@@ -1,0 +1,108 @@
+chi2_min per N_D (free scale, sigma 1e-3); columns: (d) columnar | (b) trapping | DD only
+
+== bragg, theta 65, R 18 um, t_dead 0.0 um ==
+  N_D 5.000e+13: col      4.8 (a 0.340 E_c 1.12e+03, s 1.0059) | trap     19.9 (tau_h 4.6e-09 tau_e 1.5e-09) | dd    6051.5
+  N_D 7.500e+13: col      6.0 (a 0.180 E_c 2.51e+03, s 1.0069) | trap    115.9 (tau_h 6.8e-09 tau_e 1.0e-09) | dd    5913.4
+  N_D 1.000e+14: col      5.1 (a 0.150 E_c 3.16e+03, s 1.0072) | trap    130.2 (tau_h 6.8e-09 tau_e 1.0e-09) | dd    5528.4
+  N_D 1.250e+14: col      7.1 (a 0.130 E_c 3.98e+03, s 1.0079) | trap     55.2 (tau_h 4.6e-09 tau_e 1.0e-09) | dd    5053.8
+  N_D 1.500e+14: col      6.0 (a 0.120 E_c 3.98e+03, s 1.0067) | trap     48.2 (tau_h 4.6e-09 tau_e 1.0e-09) | dd    4590.2
+  N_D 1.750e+14: col     14.4 (a 0.110 E_c 3.98e+03, s 1.0057) | trap     14.6 (tau_h 4.6e-09 tau_e 1.0e-09) | dd    4167.6
+  N_D 2.000e+14: col     32.9 (a 0.110 E_c 2.82e+03, s 1.0031) | trap     34.7 (tau_h 4.6e-09 tau_e 2.2e-09) | dd    3787.6
+  N_D 2.500e+14: col     74.4 (a 0.090 E_c 2.82e+03, s 1.0016) | trap    191.3 (tau_h 4.6e-09 tau_e 3.2e-09) | dd    3135.6
+  N_D 3.058e+14: col    112.4 (a 0.080 E_c 2.00e+03, s 1.0001) | trap    200.3 (tau_h 4.6e-09 tau_e 1.5e-09) | dd    2553.2
+  N_D 4.000e+14: col    174.8 (a 0.060 E_c 2.51e+02, s 0.9961) | trap    500.2 (tau_h 3.2e-09 tau_e 4.6e-10) | dd    1835.0
+  N_D 6.000e+14: col    325.8 (a 0.040 E_c 1.00e+02, s 0.9989) | trap    607.7 (tau_h 4.6e-09 tau_e 3.2e-09) | dd    1003.7
+  col: best N_D 5.00e+13 (chi2 4.8); within Dchi2<=9: 5.00e+13 .. 1.50e+14
+  trap: best N_D 1.75e+14 (chi2 14.6); within Dchi2<=9: 5.00e+13 .. 1.75e+14
+
+== box, theta 65, R 18 um, t_dead 0.0 um ==
+  N_D 5.000e+13: col      6.6 (a 0.750 E_c 5.62e+02, s 1.0072) | trap     13.5 (tau_h 1.5e-09 tau_e 1.0e-08) | dd    6088.3
+  N_D 7.500e+13: col      5.2 (a 0.360 E_c 1.26e+03, s 1.0070) | trap     13.4 (tau_h 2.2e-09 tau_e 2.2e-09) | dd    6081.0
+  N_D 1.000e+14: col      7.6 (a 0.240 E_c 2.24e+03, s 1.0090) | trap     66.9 (tau_h 3.2e-09 tau_e 1.5e-09) | dd    5970.1
+  N_D 1.250e+14: col      5.0 (a 0.190 E_c 3.16e+03, s 1.0096) | trap     97.1 (tau_h 3.2e-09 tau_e 1.0e-09) | dd    5771.3
+  N_D 1.500e+14: col      4.0 (a 0.170 E_c 3.55e+03, s 1.0090) | trap    101.7 (tau_h 3.2e-09 tau_e 1.0e-09) | dd    5525.7
+  N_D 1.750e+14: col      4.1 (a 0.160 E_c 3.98e+03, s 1.0099) | trap    177.1 (tau_h 3.2e-09 tau_e 1.5e-09) | dd    5264.8
+  N_D 2.000e+14: col      4.4 (a 0.150 E_c 3.98e+03, s 1.0086) | trap    119.8 (tau_h 2.2e-09 tau_e 4.6e-10) | dd    5005.9
+  N_D 2.500e+14: col     17.8 (a 0.140 E_c 3.16e+03, s 1.0049) | trap     38.7 (tau_h 2.2e-09 tau_e 6.8e-10) | dd    4521.4
+  N_D 3.058e+14: col     35.9 (a 0.120 E_c 3.55e+03, s 1.0044) | trap     77.7 (tau_h 2.2e-09 tau_e 6.8e-10) | dd    4045.8
+  N_D 4.000e+14: col     74.5 (a 0.110 E_c 1.58e+03, s 0.9994) | trap    171.5 (tau_h 1.5e-09 tau_e 3.2e-10) | dd    3385.5
+  N_D 6.000e+14: col    179.4 (a 0.080 E_c 1.00e+02, s 0.9965) | trap    472.3 (tau_h 2.2e-09 tau_e 1.5e-09) | dd    2427.6
+  col: best N_D 1.50e+14 (chi2 4.0); within Dchi2<=9: 5.00e+13 .. 2.00e+14
+  trap: best N_D 7.50e+13 (chi2 13.4); within Dchi2<=9: 5.00e+13 .. 7.50e+13
+
+== bragg, theta 60, R 18 um, t_dead 0.0 um ==
+  N_D 5.000e+13: col      4.6 (a 0.180 E_c 2.24e+03, s 1.0064) | trap     14.9 (tau_h 1.0e-08 tau_e 1.0e-09) | dd    5907.8
+  N_D 7.500e+13: col      6.6 (a 0.140 E_c 3.16e+03, s 1.0073) | trap     66.1 (tau_h 1.0e-08 tau_e 6.8e-10) | dd    5448.8
+  N_D 1.000e+14: col      9.6 (a 0.130 E_c 2.82e+03, s 1.0053) | trap     54.6 (tau_h 6.8e-09 tau_e 1.5e-09) | dd    4811.4
+  N_D 1.250e+14: col     16.7 (a 0.110 E_c 3.16e+03, s 1.0045) | trap     20.5 (tau_h 6.8e-09 tau_e 2.2e-09) | dd    4199.4
+  N_D 1.500e+14: col     40.8 (a 0.100 E_c 2.51e+03, s 1.0019) | trap     48.1 (tau_h 6.8e-09 tau_e 2.2e-09) | dd    3658.5
+  N_D 1.750e+14: col     69.4 (a 0.090 E_c 2.51e+03, s 1.0017) | trap    116.8 (tau_h 6.8e-09 tau_e 1.0e-08) | dd    3186.0
+  N_D 2.000e+14: col     90.1 (a 0.080 E_c 2.24e+03, s 1.0004) | trap    161.0 (tau_h 6.8e-09 tau_e 1.0e-05) | dd    2775.3
+  N_D 2.500e+14: col    121.2 (a 0.070 E_c 7.08e+02, s 0.9974) | trap    321.1 (tau_h 6.8e-09 tau_e 1.0e-05) | dd    2112.7
+  N_D 3.058e+14: col    173.5 (a 0.060 E_c 1.00e+02, s 0.9973) | trap    264.7 (tau_h 6.8e-09 tau_e 2.2e-09) | dd    1568.7
+  N_D 4.000e+14: col    241.7 (a 0.040 E_c 2.24e+02, s 0.9982) | trap    583.0 (tau_h 6.8e-09 tau_e 3.2e-09) | dd     974.7
+  N_D 6.000e+14: col    354.9 (a 0.020 E_c 1.26e+04, s 1.0051) | trap    561.5 (tau_h 1.5e-08 tau_e 1.0e-05) | dd     484.2
+  col: best N_D 5.00e+13 (chi2 4.6); within Dchi2<=9: 5.00e+13 .. 1.00e+14
+  trap: best N_D 5.00e+13 (chi2 14.9); within Dchi2<=9: 5.00e+13 .. 1.25e+14
+
+== bragg, theta 70, R 18 um, t_dead 0.0 um ==
+  N_D 5.000e+13: col     10.0 (a 0.760 E_c 5.62e+02, s 1.0075) | trap      7.3 (tau_h 1.5e-09 tau_e 6.8e-09) | dd    6099.1
+  N_D 7.500e+13: col      4.9 (a 0.410 E_c 1.12e+03, s 1.0076) | trap     16.9 (tau_h 2.2e-09 tau_e 1.5e-09) | dd    6118.5
+  N_D 1.000e+14: col      7.2 (a 0.220 E_c 2.51e+03, s 1.0090) | trap     71.7 (tau_h 3.2e-09 tau_e 1.5e-09) | dd    6069.2
+  N_D 1.250e+14: col      6.9 (a 0.180 E_c 3.16e+03, s 1.0086) | trap     24.0 (tau_h 3.2e-09 tau_e 1.0e-09) | dd    5898.7
+  N_D 1.500e+14: col      6.5 (a 0.160 E_c 3.98e+03, s 1.0102) | trap    106.8 (tau_h 3.2e-09 tau_e 6.8e-10) | dd    5636.0
+  N_D 1.750e+14: col      6.0 (a 0.140 E_c 5.01e+03, s 1.0107) | trap    154.9 (tau_h 3.2e-09 tau_e 1.0e-09) | dd    5337.2
+  N_D 2.000e+14: col      8.2 (a 0.130 E_c 5.62e+03, s 1.0109) | trap    214.8 (tau_h 3.2e-09 tau_e 1.5e-09) | dd    5036.9
+  N_D 2.500e+14: col      6.5 (a 0.120 E_c 5.01e+03, s 1.0078) | trap     97.2 (tau_h 3.2e-09 tau_e 4.6e-09) | dd    4483.7
+  N_D 3.058e+14: col     27.2 (a 0.110 E_c 3.98e+03, s 1.0043) | trap    118.9 (tau_h 3.2e-09 tau_e 4.6e-09) | dd    3955.6
+  N_D 4.000e+14: col     92.8 (a 0.090 E_c 3.55e+03, s 1.0018) | trap    240.2 (tau_h 2.2e-09 tau_e 6.8e-10) | dd    3228.0
+  N_D 6.000e+14: col    182.1 (a 0.070 E_c 1.00e+02, s 0.9962) | trap    474.6 (tau_h 3.2e-09 tau_e 1.0e-05) | dd    2185.3
+  col: best N_D 7.50e+13 (chi2 4.9); within Dchi2<=9: 5.00e+13 .. 2.50e+14
+  trap: best N_D 5.00e+13 (chi2 7.3); within Dchi2<=9: 5.00e+13 .. 5.00e+13
+
+== bragg, theta 65, R 17 um, t_dead 0.0 um ==
+  N_D 5.000e+13: col      4.9 (a 0.470 E_c 7.94e+02, s 1.0055) | trap     10.8 (tau_h 3.2e-09 tau_e 2.2e-09) | dd    6071.3
+  N_D 7.500e+13: col      4.9 (a 0.210 E_c 2.24e+03, s 1.0078) | trap     18.3 (tau_h 4.6e-09 tau_e 1.0e-09) | dd    6009.4
+  N_D 1.000e+14: col      6.0 (a 0.160 E_c 3.16e+03, s 1.0078) | trap     28.3 (tau_h 4.6e-09 tau_e 1.0e-09) | dd    5731.1
+  N_D 1.250e+14: col      5.5 (a 0.140 E_c 3.98e+03, s 1.0088) | trap     19.1 (tau_h 4.6e-09 tau_e 1.0e-09) | dd    5326.1
+  N_D 1.500e+14: col      3.7 (a 0.130 E_c 3.98e+03, s 1.0075) | trap     74.9 (tau_h 4.6e-09 tau_e 1.0e-09) | dd    4901.6
+  N_D 1.750e+14: col      5.8 (a 0.120 E_c 4.47e+03, s 1.0080) | trap    113.5 (tau_h 4.6e-09 tau_e 1.5e-09) | dd    4502.0
+  N_D 2.000e+14: col     15.3 (a 0.110 E_c 3.98e+03, s 1.0051) | trap     87.3 (tau_h 3.2e-09 tau_e 4.6e-10) | dd    4138.1
+  N_D 2.500e+14: col     50.4 (a 0.100 E_c 3.16e+03, s 1.0028) | trap    146.4 (tau_h 3.2e-09 tau_e 4.6e-10) | dd    3507.0
+  N_D 3.058e+14: col    100.7 (a 0.090 E_c 2.51e+03, s 1.0014) | trap    198.2 (tau_h 4.6e-09 tau_e 1.0e-08) | dd    2928.2
+  N_D 4.000e+14: col    146.0 (a 0.070 E_c 7.94e+02, s 0.9971) | trap    413.1 (tau_h 3.2e-09 tau_e 6.8e-10) | dd    2190.1
+  N_D 6.000e+14: col    307.6 (a 0.040 E_c 4.47e+02, s 0.9970) | trap    584.8 (tau_h 4.6e-09 tau_e 1.0e-05) | dd    1273.4
+  col: best N_D 1.50e+14 (chi2 3.7); within Dchi2<=9: 5.00e+13 .. 1.75e+14
+  trap: best N_D 5.00e+13 (chi2 10.8); within Dchi2<=9: 5.00e+13 .. 1.25e+14
+
+== bragg, theta 65, R 19 um, t_dead 0.0 um ==
+  N_D 5.000e+13: col      4.5 (a 0.250 E_c 1.58e+03, s 1.0062) | trap      8.8 (tau_h 6.8e-09 tau_e 1.0e-09) | dd    6022.1
+  N_D 7.500e+13: col      5.7 (a 0.170 E_c 2.51e+03, s 1.0066) | trap      6.7 (tau_h 6.8e-09 tau_e 1.0e-09) | dd    5789.2
+  N_D 1.000e+14: col      5.2 (a 0.140 E_c 3.55e+03, s 1.0083) | trap     29.9 (tau_h 6.8e-09 tau_e 1.0e-09) | dd    5310.3
+  N_D 1.250e+14: col      7.0 (a 0.130 E_c 3.55e+03, s 1.0074) | trap    168.0 (tau_h 6.8e-09 tau_e 1.0e-09) | dd    4782.0
+  N_D 1.500e+14: col     12.8 (a 0.120 E_c 3.16e+03, s 1.0052) | trap    101.0 (tau_h 4.6e-09 tau_e 1.0e-09) | dd    4289.1
+  N_D 1.750e+14: col     27.2 (a 0.110 E_c 2.82e+03, s 1.0033) | trap     39.9 (tau_h 4.6e-09 tau_e 1.0e-09) | dd    3848.0
+  N_D 2.000e+14: col     51.6 (a 0.100 E_c 2.82e+03, s 1.0028) | trap     79.1 (tau_h 4.6e-09 tau_e 1.0e-09) | dd    3454.4
+  N_D 2.500e+14: col     94.6 (a 0.080 E_c 2.82e+03, s 1.0012) | trap    241.9 (tau_h 4.6e-09 tau_e 1.5e-09) | dd    2790.2
+  N_D 3.058e+14: col    125.3 (a 0.070 E_c 1.26e+03, s 0.9981) | trap    227.1 (tau_h 4.6e-09 tau_e 1.0e-09) | dd    2213.1
+  N_D 4.000e+14: col    209.8 (a 0.050 E_c 5.01e+02, s 0.9967) | trap    551.8 (tau_h 4.6e-09 tau_e 1.5e-09) | dd    1524.2
+  N_D 6.000e+14: col    334.3 (a 0.030 E_c 1.00e+02, s 0.9987) | trap    589.9 (tau_h 6.8e-09 tau_e 1.0e-05) | dd     790.8
+  col: best N_D 5.00e+13 (chi2 4.5); within Dchi2<=9: 5.00e+13 .. 1.50e+14
+  trap: best N_D 7.50e+13 (chi2 6.7); within Dchi2<=9: 5.00e+13 .. 7.50e+13
+
+== bragg, theta 65, R 18 um, t_dead 0.3 um ==
+  N_D 5.000e+13: col      4.7 (a 0.390 E_c 1.00e+03, s 1.0060) | trap     10.4 (tau_h 3.2e-09 tau_e 2.2e-09) | dd    6067.3
+  N_D 7.500e+13: col      7.7 (a 0.200 E_c 2.24e+03, s 1.0067) | trap     16.9 (tau_h 4.6e-09 tau_e 1.5e-09) | dd    5989.5
+  N_D 1.000e+14: col      4.8 (a 0.160 E_c 3.16e+03, s 1.0081) | trap     52.2 (tau_h 4.6e-09 tau_e 1.0e-09) | dd    5686.8
+  N_D 1.250e+14: col      4.6 (a 0.140 E_c 3.98e+03, s 1.0091) | trap     16.8 (tau_h 4.6e-09 tau_e 1.0e-09) | dd    5265.5
+  N_D 1.500e+14: col      3.6 (a 0.130 E_c 3.98e+03, s 1.0079) | trap     62.5 (tau_h 4.6e-09 tau_e 1.0e-09) | dd    4831.8
+  N_D 1.750e+14: col      5.7 (a 0.120 E_c 3.98e+03, s 1.0067) | trap     82.3 (tau_h 4.6e-09 tau_e 1.5e-09) | dd    4426.8
+  N_D 2.000e+14: col     15.3 (a 0.110 E_c 3.98e+03, s 1.0056) | trap     87.2 (tau_h 4.6e-09 tau_e 3.2e-09) | dd    4059.1
+  N_D 2.500e+14: col     58.7 (a 0.100 E_c 2.82e+03, s 1.0022) | trap    169.3 (tau_h 3.2e-09 tau_e 4.6e-10) | dd    3422.9
+  N_D 3.058e+14: col    101.6 (a 0.080 E_c 3.16e+03, s 1.0012) | trap    196.2 (tau_h 4.6e-09 tau_e 4.6e-09) | dd    2842.7
+  N_D 4.000e+14: col    149.8 (a 0.070 E_c 3.98e+02, s 0.9966) | trap    429.5 (tau_h 3.2e-09 tau_e 6.8e-10) | dd    2108.3
+  N_D 6.000e+14: col    306.3 (a 0.040 E_c 1.00e+02, s 0.9970) | trap    588.7 (tau_h 4.6e-09 tau_e 1.5e-06) | dd    1209.4
+  col: best N_D 1.50e+14 (chi2 3.6); within Dchi2<=9: 5.00e+13 .. 1.75e+14
+  trap: best N_D 5.00e+13 (chi2 10.4); within Dchi2<=9: 5.00e+13 .. 1.25e+14
+
+total 11.1 s
