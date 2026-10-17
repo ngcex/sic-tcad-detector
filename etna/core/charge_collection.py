@@ -26,7 +26,10 @@ from devsim.python_packages.model_create import (
 )
 import numpy as np
 
-from etna.core.generation_profiles import alpha_generation_profile, confine_generation_to_epi
+from etna.core.generation_profiles import (
+    alpha_generation_profile,
+    confine_generation_to_epi,
+)
 from etna.core.sic_material import (
     SiC4H_Parameters,
     mobility_caughey_thomas_T,
@@ -38,6 +41,7 @@ logger = logging.getLogger(__name__)
 
 # graded-doping defaults of the fluence sweeps = cce_vs_bias = the default stack
 from etna.core.device import DEFAULT_STACK as _STACK  # noqa: E402
+
 
 def full_compensation_reason(damaged):
     """Reason string if carrier removal fully compensates the epi donors, else "".
@@ -58,6 +62,7 @@ def full_compensation_reason(damaged):
         f"(Phi_neq = {damaged.get('fluence_neq', float('nan')):.3g} cm^-2); "
         "outside model validity, not solved"
     )
+
 
 # Sentinel for detecting when caller did not pass explicit values
 _UNSET = object()
@@ -671,12 +676,16 @@ def cce_vs_fluence(
     lifetime_model="linear",
     damage_params=None,
     device_kwargs=None,
+    solver="auto",
 ):
     """Compute CCE vs proton fluence at fixed reverse bias.
 
-    Creates a fresh DD device for each fluence point (fluence-as-temperature
-    pattern) using staged device creation so that damaged doping is applied
-    before Poisson equilibrium.
+    Each fluence point is a separate damaged device (damaged lifetimes and donor
+    profile applied before the Poisson equilibrium). By default all points are
+    solved together by the batched numba engine (same mesh, doping, contacts,
+    mobilities, SRH and generation as the devsim path; CCE agrees with devsim to
+    ~1e-7, tests/test_fluence_engine.py); a point the engine does not converge
+    goes through the devsim path (staged device creation, one device per point).
 
     For the internal fluence grid, np.geomspace is recommended since damage
     physics spans orders of magnitude (e.g., 1e10 to 1e14 protons/cm^2).
@@ -710,6 +719,11 @@ def cce_vs_fluence(
     device_kwargs : dict or None
         Additional keyword arguments for create_sic_device (e.g. N_A, T,
         substrate_thickness_cm, doping_profile, N_D); override the defaults.
+    solver : {"auto", "engine", "devsim"}
+        "auto" (default): batched engine when the device is in its scope (graded
+        or uniform epi, 250-400 K, reverse bias), devsim per point otherwise and
+        for unconverged points. "engine": as auto but raise if out of scope.
+        "devsim": the devsim path only (reference).
 
     Returns
     -------
@@ -720,6 +734,7 @@ def cce_vs_fluence(
         - "valid": bool array, False where the point was not solved or failed
         - "reason": list of str, "" when valid; otherwise why (full donor
           compensation -- see full_compensation_reason -- or the solver error)
+        - "solver": list of str per point: "batched", "devsim" or "" (not solved)
         - "V_bias": float, the bias voltage used
         - "energy_MeV": float
         - "lifetime_model": str
@@ -728,16 +743,234 @@ def cce_vs_fluence(
     the epi; ~4.86e13 p/cm^2 at 62 MeV for N_D_bulk 8.5e13 with the default
     placeholder kappa 0.35 and eta 5) are NOT solved: CCE is NaN with a reason.
     """
+    return _cce_vs_fluence_multi(
+        fluence_range,
+        [damage_params],
+        V_bias=V_bias,
+        epi_thickness_cm=epi_thickness_cm,
+        N_D_junction=N_D_junction,
+        N_D_bulk=N_D_bulk,
+        L_transition=L_transition,
+        alpha_range_cm=alpha_range_cm,
+        generation_rate=generation_rate,
+        energy_MeV=energy_MeV,
+        lifetime_model=lifetime_model,
+        device_kwargs=device_kwargs,
+        solver=solver,
+    )[0]
+
+
+# Batched-engine scope for the fluence sweeps: the profiles the engine was cross-checked
+# on (graded/uniform epi, with or without n+) and the T box of
+# etna.api.simulation._ENGINE_BOX. The damaged donor profile itself goes below that box
+# (carrier removal), which is why every engine point is pinned against devsim by
+# tests/test_fluence_engine.py and unconverged points fall back to devsim.
+_FLUENCE_ENGINE_PROFILES = ("graded", "uniform")
+_FLUENCE_ENGINE_T = (250.0, 400.0)
+# Largest cathode step of the engine's dark Poisson ramp to V_bias (V).
+_FLUENCE_ENGINE_STEP_V = 25.0
+# Gummel stop: relative change of the cathode current between iterations. 1e-9 keeps
+# the engine-vs-devsim CCE difference at the 1e-7 level (devsim's own DC tolerance).
+_FLUENCE_ENGINE_GUMMEL_TOL = 1e-9
+_FLUENCE_ENGINE_GUMMEL_MAX_ITER = 200
+
+
+def _fluence_reference(dev_kw):
+    """Mesh, doping and material constants of the pristine device, read from devsim.
+
+    One mesh-and-doping-only devsim device (no equations solved). The batched engine
+    takes everything from here (node positions, ionised acceptors, pristine donors,
+    n_i, mobilities), so both solvers work on the identical discretisation.
+    """
+    from etna.core.device import create_sic_device
+
+    ref_name = f"fluence_ref_{uuid.uuid4().hex[:8]}"
+    info = create_sic_device(device_name=ref_name, **dev_kw)
+    try:
+        get = lambda name: np.array(
+            devsim.get_node_model_values(
+                device=ref_name, region=info["region_name"], name=name
+            )
+        )
+        x, donors, acceptors = get("x"), get("Donors"), get("Acceptors")
+    finally:
+        try:
+            devsim.delete_device(device=ref_name)
+        except Exception:
+            pass
+    epi_mask = x >= info["junction_pos"]
+    return dict(
+        info=info,
+        x=x,
+        acceptors=acceptors,
+        epi_mask=epi_mask,
+        pristine_N_D_profile=donors[epi_mask],
+    )
+
+
+def _alpha_generation_values(device_info, x_nodes, alpha_range_cm, generation_rate):
+    """Alpha generation G(x) on the mesh nodes, as the CCE sweeps inject it."""
+    x_epi = x_nodes - device_info["junction_pos"]
+    gen_profile = alpha_generation_profile(x_epi, alpha_range_cm=alpha_range_cm)
+    max_profile = np.max(gen_profile)
+    if max_profile > 0:
+        gen_values = gen_profile * (generation_rate / max_profile)
+    else:
+        gen_values = np.zeros_like(x_nodes)
+    gen_values[x_epi < 0] = 0.0
+    return confine_generation_to_epi(device_info, x_nodes, gen_values)
+
+
+def _fluence_engine_reason(dev_kw, V_bias):
+    """Why the batched engine cannot serve this fluence sweep (None = it can)."""
+    profile = dev_kw.get("doping_profile", "graded")
+    if profile not in _FLUENCE_ENGINE_PROFILES:
+        return f"doping_profile={profile!r}"
+    T = dev_kw.get("T", 300.0)
+    lo, hi = _FLUENCE_ENGINE_T
+    if not lo <= T <= hi:
+        return f"T={T:g} outside [{lo:g}, {hi:g}]"
+    if not (np.isfinite(V_bias) and V_bias <= 0):
+        return f"V_bias={V_bias:g} is not a reverse bias"
+    return _legacy_depth_reason(dev_kw, abs(V_bias))
+
+
+def _legacy_depth_reason(dev_kw, v_max):
+    """Legacy geometry (no n+, ``nplus_thickness_cm=None``) beyond the engine's
+    devsim cross-check depth: devsim hits its punch-through wall there, so the
+    engine would return numbers devsim never produced. None = fine."""
+    from etna.api.simulation import ENGINE_CROSS_CHECKED_TO_V
+
+    if "nplus_thickness_cm" in dev_kw and dev_kw["nplus_thickness_cm"] is None:
+        if v_max > ENGINE_CROSS_CHECKED_TO_V:
+            return (
+                f"legacy geometry (no n+) beyond {ENGINE_CROSS_CHECKED_TO_V:g} V "
+                "(engine not cross-checked there)"
+            )
+    return None
+
+
+def _cce_fluence_engine(ref, damaged_list, V_bias, alpha_range_cm, generation_rate):
+    """CCE at ``V_bias`` of every damaged device in ``damaged_list``, in one batch.
+
+    Same equations, mesh, doping, contacts, mobilities and generation as the devsim
+    path of cce_vs_fluence (Poisson + SG continuity + SRH with the damaged lifetimes
+    and donors), solved by the numba engine: dark Poisson ramp to V_bias, then Gummel
+    with generation. Returns (cce, converged), both (B,).
+    """
+    from etna.core.batched.material import Q as Q_ENGINE
+    from etna.core.batched.material import thermal_voltage
+    from etna.core.batched.poisson import PoissonBatch
+    from etna.core.batched.sweeps import _Ramp
+    from etna.core.batched.transport import ContinuityBatch
+
+    info, x = ref["info"], ref["x"]
+    B, N = len(damaged_list), x.size
+    donors = np.zeros((B, N))
+    for b, damaged in enumerate(damaged_list):
+        donors[b, ref["epi_mask"]] = damaged["N_D_profile"]
+    acceptors = np.broadcast_to(ref["acceptors"], (B, N))
+    pb = PoissonBatch(x, donors, acceptors, info["n_i"], thermal_voltage(info["T"]))
+    cb = ContinuityBatch(
+        pb,
+        info["mu_n"],
+        info["mu_p"],
+        np.array([d["tau_n"] for d in damaged_list], dtype=float),
+        np.array([d["tau_p"] for d in damaged_list], dtype=float),
+    )
+    G = _alpha_generation_values(info, x, alpha_range_cm, generation_rate)
+    V_cathode = -float(V_bias)
+    ramp = _Ramp(pb, 1e-8)
+    if V_cathode > 0:
+        n_steps = max(1, int(np.ceil(V_cathode / _FLUENCE_ENGINE_STEP_V)))
+        for Vc in np.linspace(0.0, V_cathode, n_steps + 1)[1:]:
+            ramp.to(Vc)
+    tr = cb.solve(
+        ramp.psi,
+        V_cathode=V_cathode,
+        G=G,
+        tol=_FLUENCE_ENGINE_GUMMEL_TOL,
+        max_iter=_FLUENCE_ENGINE_GUMMEL_MAX_ITER,
+        poisson_tol=1e-8,
+    )
+    J_gen = Q_ENGINE * np.trapezoid(G, x)
+    if J_gen <= 0:
+        cce = np.zeros(B)
+    else:
+        cce = np.clip(np.abs(tr.J_cathode) / J_gen, 0.0, 1.0)
+    return cce, ramp.converged & tr.converged & np.isfinite(cce)
+
+
+def _cce_fluence_devsim(dev_kw, damaged, V_bias, alpha_range_cm, generation_rate):
+    """CCE of one damaged device at ``V_bias`` with devsim (staged creation)."""
     from etna.core.device import apply_damaged_params, create_sic_device
     from etna.core.drift_diffusion import ramp_bias, setup_sic_drift_diffusion
     from etna.core.poisson import setup_poisson, solve_equilibrium
+
+    dev_name = f"fluence_sweep_{uuid.uuid4().hex[:8]}"
+    try:
+        # Staged device creation; damage applied BEFORE Poisson setup
+        device_info = create_sic_device(device_name=dev_name, **dev_kw)
+        apply_damaged_params(device_info, damaged)
+        setup_poisson(device_info)
+        solve_equilibrium(device_info)
+        setup_sic_drift_diffusion(device_info)
+        device_info["dd_initialized"] = True
+
+        # Ramp bias (cathode voltage = -V_bias for reverse bias)
+        ramp_bias(device_info, -V_bias, contact="cathode", V_step=0.5, V_step_max=2.0)
+
+        x_nodes = np.array(
+            devsim.get_node_model_values(
+                device=dev_name, region=device_info["region_name"], name="x"
+            )
+        )
+        gen_values = _alpha_generation_values(
+            device_info, x_nodes, alpha_range_cm, generation_rate
+        )
+        add_generation_to_dd(device_info, gen_values)
+        devsim.solve(
+            type="dc",
+            absolute_error=1e10,
+            relative_error=DC_REL_ERROR,
+            maximum_iterations=40,
+        )
+        return compute_cce_from_dd(device_info, gen_values, contact="cathode")
+    finally:
+        try:
+            devsim.delete_device(device=dev_name)
+        except Exception:
+            pass
+
+
+def _cce_vs_fluence_multi(
+    fluence_range,
+    damage_params_list,
+    V_bias=-40.0,
+    epi_thickness_cm=10e-4,
+    N_D_junction=_STACK["N_D_junction"],
+    N_D_bulk=_STACK["N_D_bulk"],
+    L_transition=_STACK["L_transition"],
+    alpha_range_cm=15e-4,
+    generation_rate=1e18,
+    energy_MeV=62.0,
+    lifetime_model="linear",
+    device_kwargs=None,
+    solver="auto",
+):
+    """cce_vs_fluence for several damage-parameter sets on one device and bias.
+
+    One reference device and (with the engine) one batched solve for all
+    len(damage_params_list) * len(fluence_range) points. Returns one
+    cce_vs_fluence result dict per damage-parameter set, in order.
+    """
     from etna.core.radiation_damage import compute_damaged_params
 
+    if solver not in ("auto", "engine", "devsim"):
+        raise ValueError(
+            f"solver must be 'auto', 'engine' or 'devsim' (got {solver!r})"
+        )
     fluence_range = np.asarray(fluence_range, dtype=float)
-
-    # Extract pristine N_D profile from a reference device (epi-only nodes)
-    ref_id = uuid.uuid4().hex[:8]
-    ref_name = f"fluence_ref_{ref_id}"
     dev_kw = dict(
         epi_thickness_cm=epi_thickness_cm,
         doping_profile="graded",
@@ -750,124 +983,90 @@ def cce_vs_fluence(
     T_dev = dev_kw.get("T", 300.0)
     pristine_tau_n = srh_lifetime(T_dev, "electron")
     pristine_tau_p = srh_lifetime(T_dev, "hole")
-    ref_info = create_sic_device(device_name=ref_name, **dev_kw)
-    try:
-        ref_x = np.array(
-            devsim.get_node_model_values(
-                device=ref_name, region=ref_info["region_name"], name="x"
-            )
-        )
-        ref_donors = np.array(
-            devsim.get_node_model_values(
-                device=ref_name, region=ref_info["region_name"], name="Donors"
-            )
-        )
-        epi_mask_ref = ref_x >= ref_info["junction_pos"]
-        pristine_N_D_profile = ref_donors[epi_mask_ref]
-    finally:
-        try:
-            devsim.delete_device(device=ref_name)
-        except Exception:
-            pass
+    ref = _fluence_reference(dev_kw)
 
-    # --- Sweep fluence ---
-    cce_values = np.zeros(len(fluence_range))
-    valid = np.zeros(len(fluence_range), dtype=bool)
-    reasons = [""] * len(fluence_range)
-
-    for i, fluence in enumerate(fluence_range):
-        dev_id = uuid.uuid4().hex[:8]
-        dev_name = f"fluence_sweep_{dev_id}"
-
-        try:
-            # Compute damaged parameters
-            damaged = compute_damaged_params(
-                pristine_tau_n=pristine_tau_n,
-                pristine_tau_p=pristine_tau_p,
-                N_D_profile=pristine_N_D_profile,
-                fluence=fluence,
-                energy_MeV=energy_MeV,
-                damage_params=damage_params,
-                lifetime_model=lifetime_model,
-                T=T_dev,
-            )
+    P, F = len(damage_params_list), len(fluence_range)
+    cce_values = np.zeros((P, F))
+    valid = np.zeros((P, F), dtype=bool)
+    reasons = [[""] * F for _ in range(P)]
+    solvers = [[""] * F for _ in range(P)]
+    todo = []  # (p, i, damaged) to solve
+    for p, damage_params in enumerate(damage_params_list):
+        for i, fluence in enumerate(fluence_range):
+            try:
+                damaged = compute_damaged_params(
+                    pristine_tau_n=pristine_tau_n,
+                    pristine_tau_p=pristine_tau_p,
+                    N_D_profile=ref["pristine_N_D_profile"],
+                    fluence=fluence,
+                    energy_MeV=energy_MeV,
+                    damage_params=damage_params,
+                    lifetime_model=lifetime_model,
+                    T=T_dev,
+                )
+            except Exception as e:
+                logger.warning(f"cce_vs_fluence: failed at fluence={fluence:.2e}: {e}")
+                cce_values[p, i] = np.nan
+                reasons[p][i] = f"solver failure: {type(e).__name__}: {e}"
+                continue
             reason = full_compensation_reason(damaged)
             if reason:
                 logger.warning(f"cce_vs_fluence: fluence={fluence:.2e}: {reason}")
-                cce_values[i] = np.nan
-                reasons[i] = reason
+                cce_values[p, i] = np.nan
+                reasons[p][i] = reason
                 continue
+            todo.append((p, i, damaged))
 
-            # Staged device creation
-            device_info = create_sic_device(device_name=dev_name, **dev_kw)
-
-            # Apply damage BEFORE Poisson setup
-            apply_damaged_params(device_info, damaged)
-
-            # Continue staged setup
-            setup_poisson(device_info)
-            solve_equilibrium(device_info)
-            setup_sic_drift_diffusion(device_info)
-            device_info["dd_initialized"] = True
-
-            device = device_info["device_name"]
-            region = device_info["region_name"]
-
-            # Ramp bias (cathode voltage = -V_bias for reverse bias)
-            cathode_V = -V_bias
-            ramp_bias(device_info, cathode_V, contact="cathode", V_step=0.5, V_step_max=2.0)
-
-            # Prepare generation profile
-            x_nodes = np.array(
-                devsim.get_node_model_values(device=device, region=region, name="x")
-            )
-            junction_pos = device_info["junction_pos"]
-            x_epi = x_nodes - junction_pos
-
-            gen_profile = alpha_generation_profile(x_epi, alpha_range_cm=alpha_range_cm)
-            max_profile = np.max(gen_profile)
-            if max_profile > 0:
-                gen_values = gen_profile * (generation_rate / max_profile)
+    engine_reason = _fluence_engine_reason(dev_kw, V_bias)
+    if solver == "engine" and engine_reason is not None:
+        raise ValueError(
+            f"cce_vs_fluence: batched engine unavailable ({engine_reason})"
+        )
+    use_engine = solver != "devsim" and engine_reason is None
+    if not use_engine and solver == "auto":
+        logger.info("cce_vs_fluence: using devsim (%s)", engine_reason)
+    remaining = todo
+    if use_engine and todo:
+        cce_b, conv_b = _cce_fluence_engine(
+            ref, [d for _, _, d in todo], V_bias, alpha_range_cm, generation_rate
+        )
+        remaining = []
+        for (p, i, damaged), cce, ok in zip(todo, cce_b, conv_b):
+            if ok:
+                cce_values[p, i], valid[p, i], solvers[p][i] = cce, True, "batched"
             else:
-                gen_values = np.zeros_like(x_nodes)
-            gen_values[x_epi < 0] = 0.0
-            gen_values = confine_generation_to_epi(device_info, x_nodes, gen_values)
+                logger.warning(
+                    f"cce_vs_fluence: batched engine did not converge at "
+                    f"fluence={fluence_range[i]:.2e}, using devsim"
+                )
+                remaining.append((p, i, damaged))
 
-            # Add generation and solve
-            add_generation_to_dd(device_info, gen_values)
-            devsim.solve(
-                type="dc",
-                absolute_error=1e10,
-                relative_error=DC_REL_ERROR,
-                maximum_iterations=40,
+    for p, i, damaged in remaining:
+        fluence = fluence_range[i]
+        try:
+            cce = _cce_fluence_devsim(
+                dev_kw, damaged, V_bias, alpha_range_cm, generation_rate
             )
-
-            # Extract CCE
-            cce = compute_cce_from_dd(device_info, gen_values, contact="cathode")
-            cce_values[i] = cce
-            valid[i] = True
-
+            cce_values[p, i], valid[p, i], solvers[p][i] = cce, True, "devsim"
             logger.info(f"cce_vs_fluence: fluence={fluence:.2e} p/cm^2, CCE={cce:.4f}")
-
         except Exception as e:
             logger.warning(f"cce_vs_fluence: failed at fluence={fluence:.2e}: {e}")
-            cce_values[i] = np.nan
-            reasons[i] = f"solver failure: {type(e).__name__}: {e}"
-        finally:
-            try:
-                devsim.delete_device(device=dev_name)
-            except Exception:
-                pass
+            cce_values[p, i] = np.nan
+            reasons[p][i] = f"solver failure: {type(e).__name__}: {e}"
 
-    return {
-        "fluences": fluence_range,
-        "cce_values": cce_values,
-        "valid": valid,
-        "reason": reasons,
-        "V_bias": V_bias,
-        "energy_MeV": energy_MeV,
-        "lifetime_model": lifetime_model,
-    }
+    return [
+        {
+            "fluences": fluence_range,
+            "cce_values": cce_values[p],
+            "valid": valid[p],
+            "reason": reasons[p],
+            "solver": solvers[p],
+            "V_bias": V_bias,
+            "energy_MeV": energy_MeV,
+            "lifetime_model": lifetime_model,
+        }
+        for p in range(P)
+    ]
 
 
 def cce_vs_bias_at_fluence(
@@ -1051,7 +1250,9 @@ def cce_vs_bias_at_fluence(
         for idx, V_target in zip(sorted_indices, sorted_V):
             cathode_V = -V_target  # reverse bias convention
 
-            ramp_bias(device_info, cathode_V, contact="cathode", V_step=0.5, V_step_max=2.0)
+            ramp_bias(
+                device_info, cathode_V, contact="cathode", V_step=0.5, V_step_max=2.0
+            )
 
             # Add generation and solve
             add_generation_to_dd(device_info, gen_values)
@@ -1516,7 +1717,9 @@ def cce_vs_epi_thickness(
 
             # Ramp to bias (cathode voltage is -V_bias)
             cathode_V = -V_bias
-            ramp_bias(device_info, cathode_V, contact="cathode", V_step=0.5, V_step_max=2.0)
+            ramp_bias(
+                device_info, cathode_V, contact="cathode", V_step=0.5, V_step_max=2.0
+            )
 
             # Add generation and solve
             add_generation_to_dd(device_info, gen_values)
@@ -1604,7 +1807,8 @@ def compare_cce_hecht_vs_dd(V_range, epi_thickness_cm=10e-4, **kwargs):
     # hardcoded 2.90e15 / 8.50e13)
     _dk = kwargs.get("device_kwargs") or {}
     N_D_eff = np.sqrt(
-        (_dk.get("N_D_junction") or _STACK["N_D_junction"]) * (_dk.get("N_D_bulk") or _STACK["N_D_bulk"])
+        (_dk.get("N_D_junction") or _STACK["N_D_junction"])
+        * (_dk.get("N_D_bulk") or _STACK["N_D_bulk"])
     )  # ~ 4.34e14 for the default stack
     eps_sic = 9.66 * 8.854e-14  # F/cm
     Q_val = 1.602e-19
