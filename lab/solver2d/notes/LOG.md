@@ -564,3 +564,71 @@ Transient: the direct cathode current on the n+ is 1e19 majority current (round-
 transient_cce_vs_dose_rate(contact=None) -> anode with n+, cathode without (legacy unchanged).
 Sweep is_fully_depleted uses the analytic graded V_fd = 8.21 V (1.2 x = 9.85 V), looser than
 the Debye reach-through 10.30 V; no 20/40/60 V row changes.
+
+## Coarser n+ / interface mesh for the default stack: GATE FAILS (feat/nplus-mesh, 2026-10-17)
+
+Script `lab/solver2d/bench/nplus_mesh.py` (injects extra y-lines at epi_end +- d into the
+mesh-only build by patching devsim.add_2d_mesh_line; production untouched). Engine2d only
+(the gate is engine-on-fine vs engine-on-candidate; devsim parity leg not run since the
+mesh gate failed first). CSV: notes/nplus_mesh_gate.csv.
+
+Where the nodes are (hw 25, 10 um epi, y rows): default stack 684 = p+ 19 + epi 618 + n+ 47;
+no n+ 309 = 19 + 289 + 1. The n+ is NOT the cost (already graded 1 nm -> 99 nm at x1.11).
+The cost is the epi side: devsim grades geometrically between neighbouring lines, so the
+1 nm line at the epi end pulls the whole epi_mid2 (junction + 5 um, ps 50 nm) -> epi_end
+interval down at ratio ~1.01: +330 rows on 10 um, 1482 rows on 20 um (15 um graded). The
+hw 150 ratio 49248 / 23544 = 2.09 is the ny ratio.
+
+But those few-nm epi cells are exactly where W is measured: past reach-through the
+depletion edge sits 0.03-0.2 um before the epi end, and below it the edge sweeps the
+interior. W to 1e-6 (10 pm on 10 um) needs ~few-nm cells there.
+
+Candidates (rows hw25 e10/n1 | e20/n1 | e10/n5), worst over the 21-config gate vs fine:
+| cand | rows | relW | relCCE | relE (epi) |
+|---|---|---|---|---|
+| fine | 684 / 1482 / 870 | - | - | - |
+| e05n02 (end-0.5um ps 50nm, end+0.2um ps 20nm) | 415 / 615 / 496 | 3.5e-4 | 3.6e-6 | 1.4e-3 |
+| k3 (5 lines, few-nm kept over last 0.3 um) | 587 / 811 / 668 | 2.4e-5 | 7.3e-7 | 3.0e-4 |
+(k3 adds rows on the 5 um epi: 483 vs 464.)
+
+Self-convergence (hw25, vs an 'ultra' mesh, 1644 rows on 10 um): the fine mesh itself is
+1-6e-6 off in W, and a REFINEMENT (sfine, 1055 rows) moves W by 1.2-1.3e-5 at 20/50 V:
+| epi/V | fine | sfine (finer) | e05n02 | k3 |
+|---|---|---|---|---|
+| 10/5 | -1.1e-6 | +5.5e-7 | -2.4e-5 | -4.4e-6 |
+| 10/20 | +1.7e-6 | -1.2e-5 | -2.0e-4 | -5.3e-7 |
+| 10/50 | +2.1e-6 | -1.3e-5 | -1.1e-4 | -4.8e-6 |
+| 20/30 | -5.0e-6 | -5.3e-6 | -1.7e-4 | -4.1e-6 |
+| 20/100 | -6.2e-6 | -6.8e-6 | -6.5e-5 | -2.2e-6 |
+W's mesh error is erratic (crossing interpolation inside a cell). The 1e-6 tolerance is at or
+below the fine mesh's own discretisation scatter: fine is 1-6e-6 from ultra on 10/20 um
+epis (ultra itself not checked against anything finer), and a refinement (sfine) moves W by
+1.2-1.3e-5. Only perturbations of one line-injection family were tried.
+
+Full gate vs ultra (`nplus_mesh_vs_ultra.py`, 18 configs, hw 150 skipped: same y-mesh as
+hw 25/50; notes/nplus_mesh_vs_ultra.out), worst |relW| / relCCE:
+| mesh | 10 um epi | 5 um epi | 20 um epi | relCCE |
+|---|---|---|---|---|
+| fine | 5.4e-6 | 3.5e-5 | 6.2e-6 | 4.9e-7 |
+| k3 | 9.2e-6 | 1.5e-5 | 4.1e-6 | 1.2e-6 |
+| e05n02 | 2.0e-4 | 3.7e-4 | 1.7e-4 | 4.1e-6 |
+k3 is inside the fine mesh's overall error envelope (<= 3.5e-5) but worse than fine on the
+10 um configs (9.2e-6 vs 2.8e-6 at 10 V).
+
+devsim create_2d_dd_device hw 150 -50 V default stack (`nplus_mesh_devsim.py`, machine load
+~14 from other sessions, so absolute times inflated; the patch reaches the DD path, checked
+by num_nodes): fine 49248 nodes 293 s; k3 42264 nodes 236 s (0.80x); e05n02 29880 nodes
+148 s (0.51x). Engine2d hw 150 (CSV t_f/t_c): fine 0.83-1.24 s, k3 0.73-0.91 s, e05n02
+0.66-0.73 s; 20 um/n+ 5: 2.7-3.0 s -> 1.44 s (k3) / 1.29 s (e05n02).
+Suite baseline (before, unchanged code, -n auto on the 2D files): test_converges_at_minus_50V_300um
+127 s, 104 tests 207 s wall.
+dpsi_V column max (1-6 mV) is the single abrupt-step node / np.interp across the step; the
+interior shift is ~1e-4 V (e05n02 at 20 V, linear in y = uniform field shift ~2e-5 rel).
+Low-bias relE 2-3e-4 is partly interpolation in the quasi-neutral tail.
+Devsim parity leg (engine2d vs devsim on a new mesh) not run: the mesh gate failed first. CCE meets 1e-6 for k3 (<= 7.3e-7) but not for the big saving (e05n02 3.6e-6).
+The 2D 'dark current' (SRH with n1 = p1 = n_i, ~1e-8 /q per cm) is not the physical leakage
+(run_dark_current is 1D + traps; 1D mesh untouched -> unchanged trivially).
+Decision: not applied. Options for the caller: (a) re-state the W gate against an ultra
+reference ("no worse than the fine mesh's own envelope", ~3.5e-5) and take k3: -14% nodes /
+devsim 0.80x on 10 um, -45% on 20 um, +4% rows on 5 um (would want a per-epi line rule);
+(b) accept W ~2-4e-4 for e05n02: -39% nodes, devsim 0.51x; (c) leave it.
