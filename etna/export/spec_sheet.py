@@ -1,0 +1,469 @@
+"""Device spec sheet from a DeviceConfig and an ``etna.run_all`` Report.
+
+``build_spec(config, report)`` assembles a plain dict (layers incl. the graded profile,
+area, bias, full-depletion numbers with their definitions, CCE, dark current, solver
+provenance and validity per section, known systematics). The serialisers turn it into
+JSON, CSV (key/value rows), Markdown and a PDF (matplotlib; already a dependency).
+Pure: never runs a simulation; sections missing from the report become labelled rows.
+"""
+
+from __future__ import annotations
+
+import csv
+import io
+import json
+from dataclasses import asdict
+
+import numpy as np
+
+from etna._version import __version__
+from etna.api.results import peak_field_1d
+from etna.export.cross_section import stack_layers
+from etna.export.labels import (
+    ALPHA_NOTE,
+    CALIBRATION_NOTE,
+    CV_SYSTEMATIC_NOTE,
+    CV_SYSTEMATIC_OTHER,
+    DARK_CALIBRATION_NOTE,
+    MEASURED_W_30V_UM,
+    VALIDATION_LABEL,
+    VFD_DEFINITION,
+    analytic_vfd,
+    doping_formula,
+    epi_donor_profile,
+    has_nplus,
+    is_reference_device,
+    reach_through_definition,
+)
+
+# The run_all sections a spec sheet reads (the cheap ones; see etna.run_all).
+SPEC_SECTIONS = ("cv", "cce", "field", "dark")
+_DOPING_DEPTHS_UM = (0.0, 0.5, 1.0, 2.0, 3.0, 5.0, 7.5, 10.0)
+_DARK_BIAS_V = -60.0
+
+
+def _section(report, name):
+    if report is None:
+        return None
+    try:
+        return report.get(name)
+    except KeyError:
+        return None
+
+
+def _ok_result(report, name):
+    sec = _section(report, name)
+    if sec is None or sec.status != "ok" or sec.result is None:
+        return None
+    return sec.result
+
+
+def _interp_at(x, y, v):
+    """y at bias v (V, negative = reverse) if v lies inside the swept range, else None."""
+    x = np.abs(np.asarray(x, dtype=float))
+    y = np.asarray(y, dtype=float)
+    if not x.size or not (x.min() - 1e-9 <= abs(v) <= x.max() + 1e-9):
+        return None
+    o = np.argsort(x)
+    return float(np.interp(abs(v), x[o], y[o]))
+
+
+def _f(v):
+    return None if v is None else float(v)
+
+
+def _provenance_rows(report) -> "list[dict]":
+    rows = []
+    for name in SPEC_SECTIONS:
+        sec = _section(report, name)
+        if sec is None:
+            rows.append(
+                dict(
+                    section=name,
+                    status="not run",
+                    solver="",
+                    validated_domain=None,
+                    domain_note="",
+                    reason="section not in the report",
+                )
+            )
+            continue
+        md = sec.result.metadata if sec.result is not None else {}
+        rows.append(
+            dict(
+                section=name,
+                status=sec.status,
+                solver=sec.solver,
+                validated_domain=md.get("validated_domain"),
+                domain_note=md.get("domain_note") or "",
+                reason=sec.reason or md.get("fallback_reason", "") or "",
+            )
+        )
+    return rows
+
+
+def build_spec(config, report=None) -> dict:
+    """Spec-sheet dict for ``config`` from ``report`` (an ``etna.run_all`` Report).
+
+    ``report`` may be None or partial (2D device, skipped / failed sections): the
+    corresponding entries are None with a reason; nothing is recomputed here.
+    """
+    if report is not None and report.config != config:
+        raise ValueError("report was computed for a different DeviceConfig")
+    nplus = has_nplus(config)
+    ref = is_reference_device(config)
+    layers = stack_layers(config)
+    t_e = config.epi_thickness_um
+    depths = [d for d in _DOPING_DEPTHS_UM if d < t_e] + [t_e]
+    profile = [
+        dict(
+            depth_below_junction_um=float(d),
+            N_D_cm3=float(epi_donor_profile(config, d)),
+        )
+        for d in depths
+    ]
+
+    spec = {
+        "label": VALIDATION_LABEL,
+        "generator": f"etna {__version__}",
+        "model": (
+            "default stack (n+ layer)"
+            if nplus
+            else "legacy model (no n+, cathode on the n- epi)"
+        ),
+        "reference_device": ref,
+        "dimension": "1D" if config.half_width_um is None else "2D",
+        "config": asdict(config),
+        "area_cm2": config.area_cm2,
+        "area_mm2": config.area_cm2 * 100.0,
+        "temperature_K": config.T,
+        "layers": [
+            {
+                k: L[k]
+                for k in (
+                    "name",
+                    "top_um",
+                    "bottom_um",
+                    "thickness_um",
+                    "doping",
+                    "note",
+                )
+            }
+            for L in layers
+        ],
+        "epi_doping": {
+            "profile": config.doping_profile,
+            "formula": doping_formula(config),
+            "N_D_junction_cm3": config.N_D_junction,
+            "N_D_bulk_cm3": config.N_D_bulk,
+            "L_transition_um": config.L_transition_um,
+            "samples": profile,
+        },
+    }
+
+    # full depletion: both numbers, each with its definition
+    cv = _ok_result(report, "cv")
+    cce = _ok_result(report, "cce")
+    rt = None
+    rt_method = ""
+    for r in (cv, cce):
+        if r is not None and r.metadata.get(
+            "reach_through_known", "reach_through_V" in r.metadata
+        ):
+            rt = r.metadata.get("reach_through_V")
+            rt_method = r.metadata.get("reach_through_method") or ""
+            break
+    spec["full_depletion"] = {
+        "reach_through_V": _f(rt),
+        "reach_through_definition": reach_through_definition(config),
+        "reach_through_method": rt_method,
+        "reach_through_note": (
+            "" if (cv or cce) else "C-V / CCE not available in the report"
+        ),
+        "analytic_V_fd_V": analytic_vfd(config),
+        "analytic_V_fd_definition": VFD_DEFINITION,
+    }
+
+    # C-V: W at the measurement biases
+    cvd = {"available": cv is not None}
+    if cv is not None:
+        W = np.asarray(cv.metadata.get("depletion_widths", []), dtype=float) * 1e4
+        cvd.update(
+            bias_range_V=[float(np.max(cv.x)), float(np.min(cv.x))],
+            W_um={f"{v:g} V": _f(_interp_at(cv.x, W, v)) for v in (0.0, -10.0, -30.0)},
+            C_at_minus30V_F=_f(_interp_at(cv.x, cv.y, -30.0)),
+        )
+    w30 = cvd.get("W_um", {}).get("-30 V")
+    if ref and w30 is not None:
+        cvd["systematic"] = CV_SYSTEMATIC_NOTE.format(
+            w=w30, d=100.0 * (w30 - MEASURED_W_30V_UM) / MEASURED_W_30V_UM
+        )
+        cvd["measured_W_minus30V_um"] = MEASURED_W_30V_UM
+    else:
+        cvd["systematic"] = CV_SYSTEMATIC_OTHER
+    cvd["calibration"] = (
+        CALIBRATION_NOTE
+        if ref
+        else ("Calibration at 0 / -10 V applies to the reference device only.")
+    )
+    spec["cv"] = cvd
+
+    ccd = {"available": cce is not None}
+    if cce is not None:
+        y = np.asarray(cce.y, dtype=float)
+        ccd.update(
+            bias_range_V=[float(np.max(cce.x)), float(np.min(cce.x))],
+            CCE_min=float(np.nanmin(y)),
+            CCE_max=float(np.nanmax(y)),
+            CCE_at_deepest_bias=float(y[np.argmax(np.abs(cce.x))]),
+        )
+    ccd["generation"] = (
+        ALPHA_NOTE
+        if nplus
+        else ("Alpha generation confined to the n- epi (legacy model, no n+ layer).")
+    )
+    spec["cce"] = ccd
+
+    dark = _ok_result(report, "dark")
+    dd = {"available": dark is not None, "note": DARK_CALIBRATION_NOTE}
+    if dark is not None:
+        I60 = _interp_at(dark.x, np.abs(dark.y), _DARK_BIAS_V)
+        dd.update(
+            bias_range_V=[float(np.max(dark.x)), float(np.min(dark.x))],
+            area_cm2=config.area_cm2,
+            I_at_minus60V_A=_f(I60),
+            J_at_minus60V_A_per_cm2=None if I60 is None else I60 / config.area_cm2,
+            I_at_deepest_bias_A=float(np.abs(dark.y)[np.argmax(np.abs(dark.x))]),
+            truncated=bool(dark.metadata.get("truncated", False)),
+        )
+    spec["dark_current"] = dd
+
+    field = _ok_result(report, "field")
+    fd = {"available": field is not None}
+    if field is not None:
+        fd["bias_V"] = _f(field.metadata.get("bias_V"))
+        pk = peak_field_1d(field.x, field.y, config) if np.size(field.x) else None
+        if pk is not None:
+            fd.update(
+                peak_E_V_per_cm=pk[0],
+                peak_depth_um=pk[1],
+                peak_note=(
+                    "excl. the nm Debye spike at the epi/n+ interface" if pk[2] else ""
+                ),
+            )
+        elif field.mesh is not None and "ElectricField" in field.mesh.node_values:
+            E = np.asarray(field.mesh.node_values["ElectricField"], dtype=float)
+            fd.update(
+                peak_E_V_per_cm=float(np.nanmax(E)),
+                peak_note="2D map, max over all nodes",
+            )
+    spec["field"] = fd
+
+    spec["provenance"] = _provenance_rows(report)
+    spec["statements"] = [
+        VALIDATION_LABEL,
+        "Measurement comparisons (the 'stated' exceptions): "
+        + (
+            "C-V W(-30 V) vs Photons Fig. 4b (see cv.systematic); dark current is a "
+            "calibration to the measured bound."
+            if ref
+            else "none for this config " "(they apply to the reference device only)."
+        ),
+        "No GDSII layout: guard ring / pad dimensions are not available and are not invented.",
+    ]
+    return spec
+
+
+# --------------------------------------------------------------------------- formats
+
+
+def spec_to_json(spec: dict) -> str:
+    return json.dumps(
+        spec, indent=2, default=lambda o: o.item() if hasattr(o, "item") else str(o)
+    )
+
+
+def _flatten(prefix, obj, out):
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            _flatten(f"{prefix}.{k}" if prefix else str(k), v, out)
+    elif isinstance(obj, list):
+        for i, v in enumerate(obj):
+            _flatten(f"{prefix}[{i}]", v, out)
+    else:
+        out.append((prefix, "" if obj is None else obj))
+
+
+def spec_to_csv(spec: dict) -> str:
+    """Key/value CSV; the first row is the validation label."""
+    rows = []
+    _flatten("", spec, rows)
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["# " + VALIDATION_LABEL])
+    w.writerow(["key", "value"])
+    for k, v in rows:
+        w.writerow([k, v])
+    return buf.getvalue()
+
+
+def _g(v, fmt="{:.4g}", unit=""):
+    if v is None:
+        return "n/a"
+    return fmt.format(v) + (f" {unit}" if unit else "")
+
+
+def spec_to_markdown(spec: dict) -> str:
+    L = []
+    L.append("# Device spec sheet")
+    L.append("")
+    L.append(f"> **{spec['label']}**")
+    L.append("")
+    L.append(
+        f"- Generator: {spec['generator']}; model: {spec['model']}; {spec['dimension']}"
+    )
+    L.append(
+        f"- Active area: {spec['area_cm2']:g} cm^2 ({spec['area_mm2']:g} mm^2); T = {spec['temperature_K']:g} K"
+    )
+    L.append("")
+    L.append("## Layers (anode to cathode)")
+    L.append("")
+    L.append("| layer | depth (um) | thickness (um) | doping | note |")
+    L.append("|---|---|---|---|---|")
+    for x in spec["layers"]:
+        L.append(
+            f"| {x['name']} | {x['top_um']:g} - {x['bottom_um']:g} | {x['thickness_um']:g} | {x['doping']} | {x['note']} |"
+        )
+    ed = spec["epi_doping"]
+    L.append("")
+    L.append(f"Epi doping ({ed['profile']}): `{ed['formula']}`")
+    L.append("")
+    L.append("| depth below junction (um) | N_D (cm^-3) |")
+    L.append("|---|---|")
+    for s in ed["samples"]:
+        L.append(f"| {s['depth_below_junction_um']:g} | {s['N_D_cm3']:.4g} |")
+    fd = spec["full_depletion"]
+    L.append("")
+    L.append("## Full depletion")
+    L.append("")
+    L.append(
+        f"- **Reach-through: {_g(fd['reach_through_V'], '{:.2f}', 'V')}** "
+        f"({fd['reach_through_method'] or fd['reach_through_note'] or 'n/a'}). "
+        f"Definition: {fd['reach_through_definition']}."
+    )
+    L.append(
+        f"- **Analytic graded V_fd: {_g(fd['analytic_V_fd_V'], '{:.2f}', 'V')}**. "
+        f"Definition: {fd['analytic_V_fd_definition']}."
+    )
+    cv = spec["cv"]
+    L.append("")
+    L.append("## C-V")
+    L.append("")
+    if cv["available"]:
+        L.append(
+            f"- Bias range: {cv['bias_range_V'][0]:g} to {cv['bias_range_V'][1]:g} V"
+        )
+        L.append(
+            "- W: "
+            + ", ".join(f"{k}: {_g(v, '{:.3f}', 'um')}" for k, v in cv["W_um"].items())
+        )
+        L.append(f"- C(-30 V): {_g(cv['C_at_minus30V_F'], '{:.4g}', 'F')}")
+    else:
+        L.append("- not available in the report")
+    L.append(f"- {cv['calibration']}")
+    L.append(f"- {cv['systematic']}")
+    cc = spec["cce"]
+    L.append("")
+    L.append("## Charge collection (CCE)")
+    L.append("")
+    if cc["available"]:
+        L.append(
+            f"- Bias range: {cc['bias_range_V'][0]:g} to {cc['bias_range_V'][1]:g} V; "
+            f"CCE {cc['CCE_min']:.4f} - {cc['CCE_max']:.4f}; at deepest bias {cc['CCE_at_deepest_bias']:.4f}"
+        )
+    else:
+        L.append("- not available in the report")
+    L.append(f"- {cc['generation']}")
+    dk = spec["dark_current"]
+    L.append("")
+    L.append("## Dark current")
+    L.append("")
+    if dk["available"]:
+        L.append(
+            f"- I(-60 V) = {_g(dk['I_at_minus60V_A'], '{:.3g}', 'A')} on {dk['area_cm2']:g} cm^2 "
+            f"(J = {_g(dk['J_at_minus60V_A_per_cm2'], '{:.3g}', 'A/cm^2')}); "
+            f"bias range {dk['bias_range_V'][0]:g} to {dk['bias_range_V'][1]:g} V"
+        )
+    else:
+        L.append("- not available in the report")
+    L.append(f"- {dk['note']}")
+    fl = spec["field"]
+    L.append("")
+    L.append("## Electric field")
+    L.append("")
+    if fl["available"] and fl.get("peak_E_V_per_cm") is not None:
+        where = f" at {fl['peak_depth_um']:.2f} um" if "peak_depth_um" in fl else ""
+        L.append(
+            f"- Peak |E| at {fl['bias_V']:g} V: {fl['peak_E_V_per_cm']:.4g} V/cm{where} {fl.get('peak_note', '')}"
+        )
+    else:
+        L.append("- not available in the report")
+    L.append("")
+    L.append("## Solver provenance and validity")
+    L.append("")
+    L.append("| section | status | solver | validated domain | domain note | reason |")
+    L.append("|---|---|---|---|---|---|")
+    for p in spec["provenance"]:
+        L.append(
+            f"| {p['section']} | {p['status']} | {p['solver']} | {p['validated_domain']} | {p['domain_note']} | {p['reason']} |"
+        )
+    L.append("")
+    L.append("## Statements")
+    L.append("")
+    for s in spec["statements"]:
+        L.append(f"- {s}")
+    L.append("")
+    return "\n".join(L)
+
+
+def spec_to_pdf(spec: dict, config=None) -> bytes:
+    """PDF bytes: the Markdown text on text pages, plus the cross-section if ``config``."""
+    import textwrap
+
+    from matplotlib.backends.backend_pdf import FigureCanvasPdf, PdfPages
+    from matplotlib.figure import Figure
+
+    lines = []
+    for raw in spec_to_markdown(spec).splitlines():
+        lines.extend(textwrap.wrap(raw, 110) or [""])
+    per_page = 62
+    buf = io.BytesIO()
+    with PdfPages(buf) as pdf:
+        for start in range(0, len(lines), per_page):
+            fig = Figure(figsize=(8.27, 11.69))
+            FigureCanvasPdf(fig)
+            fig.text(
+                0.05,
+                0.97,
+                VALIDATION_LABEL,
+                fontsize=7,
+                color="#b2182b",
+                style="italic",
+            )
+            fig.text(
+                0.05,
+                0.95,
+                "\n".join(lines[start : start + per_page]),
+                va="top",
+                family="monospace",
+                fontsize=6.6,
+            )
+            pdf.savefig(fig)
+        if config is not None:
+            from etna.export.cross_section import _draw_cross_section
+
+            fig = Figure(figsize=(11.69, 8.27))
+            FigureCanvasPdf(fig)
+            _draw_cross_section(fig, config)
+            pdf.savefig(fig)
+    return buf.getvalue()

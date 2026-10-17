@@ -17,6 +17,36 @@ if TYPE_CHECKING:
     from etna.api.device import DeviceConfig
 
 
+# Half-width (um) of the window around the abrupt epi/n+ step excluded from the peak
+# field: the nm-scale Debye spike there is a property of the step doping, not of the
+# depletion field. Shared by run_all, etna.export and etna.viz so all report one number.
+INTERFACE_SPIKE_WINDOW_UM = 0.1
+
+
+def peak_field_1d(x_um, E, config) -> "tuple[float, float, bool] | None":
+    """(peak |E| V/cm, its depth um, interface_excluded) of a 1D field profile.
+
+    With an n+ layer, nodes within ``INTERFACE_SPIKE_WINDOW_UM`` of the epi/n+
+    interface are excluded (``interface_excluded=True``). None if no finite value.
+    """
+    x = np.asarray(x_um, dtype=float)
+    y = np.asarray(E, dtype=float)
+    if not x.size or x.size != y.size:
+        return None
+    keep = np.isfinite(y)
+    excluded = False
+    if getattr(config, "nplus_thickness_um", None):
+        x_if = config.substrate_thickness_um + config.epi_thickness_um
+        window = np.abs(x - x_if) > INTERFACE_SPIKE_WINDOW_UM
+        if (keep & window).any():
+            keep &= window
+            excluded = True
+    if not keep.any():
+        return None
+    i = int(np.argmax(np.where(keep, y, -np.inf)))
+    return float(y[i]), float(x[i]), excluded
+
+
 @dataclass
 class MeshData:
     """Geometry viewer contract — post-build devsim mesh extraction.
