@@ -53,7 +53,9 @@ class DeviceConfig:
     # None = the LEGACY model, cathode directly on the n- epi (non-convergence wall at
     # deep reverse bias: a contact artefact); see legacy_config().
     nplus_thickness_um: Optional[float] = _um(DEFAULT_STACK["nplus_thickness_cm"])  # um
-    N_D_nplus: float = DEFAULT_STACK["N_D_nplus"]  # cm^-3, n+ donor doping (fully ionized)
+    N_D_nplus: float = DEFAULT_STACK[
+        "N_D_nplus"
+    ]  # cm^-3, n+ donor doping (fully ionized)
     # Dark-current effective-generation (TAT proxy) fit: N_t (cm^-3 s^-1) and trap level
     # E_t (eV below Ec). Used by run_dark_current only; not device-builder keywords.
     N_t: float = DEFAULT_STACK["N_t"]
@@ -79,7 +81,9 @@ class DeviceConfig:
         _positive("N_D_bulk", self.N_D_bulk)
         _positive("N_t", self.N_t)
         if not (0.0 < self.E_t < 3.26):
-            problems.append(f"E_t must be inside the 4H-SiC gap, 0-3.26 eV (got {self.E_t!r})")
+            problems.append(
+                f"E_t must be inside the 4H-SiC gap, 0-3.26 eV (got {self.E_t!r})"
+            )
         if self.half_width_um is not None:
             _positive("half_width_um", self.half_width_um)
         if self.N_D is not None:
@@ -126,7 +130,10 @@ def device_kwargs(config: DeviceConfig) -> dict:
     # nplus_thickness_cm is always present: the core builders default to the stack's n+
     # layer, so the legacy (no n+) geometry must be passed as an explicit None.
     if config.nplus_thickness_um is not None:
-        kw.update(nplus_thickness_cm=config.nplus_thickness_um * 1e-4, N_D_nplus=config.N_D_nplus)
+        kw.update(
+            nplus_thickness_cm=config.nplus_thickness_um * 1e-4,
+            N_D_nplus=config.N_D_nplus,
+        )
     else:
         kw.update(nplus_thickness_cm=None)
     return kw
@@ -151,6 +158,38 @@ LEGACY_PRESET = {
 def legacy_config(**overrides) -> DeviceConfig:
     """DeviceConfig of the LEGACY model (pre-flip default, no n+), plus ``overrides``."""
     return DeviceConfig(**{**LEGACY_PRESET, **overrides})
+
+
+# MICRODOSIMETER preset (Petringa et al. 2025, Physica Medica 140, 105675, pp.2-3): 5x5 mm2
+# die, 10 um n- epi on n+, p+ epi 0.3-1 um. SEPARATE from the C-V-calibrated 4 mm2 dosimeter
+# (DEFAULT_STACK is untouched). Epi doping: ONE parameter, uniform N_D fitted so that the
+# full-depletion voltage (run_cv's reach_through_V definition) is 30.00 V, the paper's
+# "fully depleted ... at approximately -30 V" (lab/microdosimeter/bench/fit_vfd.py). Weakly
+# determined: +-5 % in N_D moves V_fd by -1.55/+1.5 V; the paper's own "on the order of
+# 1e14 cm^-3" (V_fd 9 V here) and its Fig. 3b C-V (a 4 mm2 plateau, knee near -5 V) do
+# not agree with -30 V. The N_t / E_t dark-current fit is the dosimeter's (not refitted).
+MICRODOSIMETER_N_D = 3.0575e14  # cm^-3
+MICRODOSIMETER_PRESET = {
+    "epi_thickness_um": 10.0,
+    "substrate_thickness_um": 0.3,  # p+ layer; the paper gives 0.3-1 um
+    "doping_profile": "uniform",
+    "N_D": MICRODOSIMETER_N_D,
+    "area_cm2": 0.25,  # 5 x 5 mm2
+    "nplus_thickness_um": _um(DEFAULT_STACK["nplus_thickness_cm"]),
+    "N_D_nplus": DEFAULT_STACK["N_D_nplus"],
+}
+
+
+def microdosimeter_config(p_plus_um: float = 0.3, **overrides) -> DeviceConfig:
+    """DeviceConfig of the Petringa 2025 SiC microdosimeter (25 mm2, V_fd = 30 V fit).
+
+    ``p_plus_um`` is the p+ layer thickness (paper: 0.3 to 1 um; V_fd does not depend on
+    it). See MICRODOSIMETER_PRESET for what is fitted and how weakly. Use with
+    ``run_cce_tilted_alpha`` for the paper's 65-deg 241Am alpha test.
+    """
+    return DeviceConfig(
+        **{**MICRODOSIMETER_PRESET, "substrate_thickness_um": p_plus_um, **overrides}
+    )
 
 
 @serialized
