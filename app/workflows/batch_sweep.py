@@ -69,10 +69,10 @@ SWEEPABLE_FIELDS = [
 # the DeviceConfig defaults and inside its valid range).
 DEFAULT_VALUES = {
     "epi_thickness_um": "10, 15, 20",
-    "substrate_thickness_um": "1, 2, 3",
+    "substrate_thickness_um": "0.3, 1, 2",
     "N_A": "1e18, 5e18, 1e19",
-    "N_D_junction": "1e15, 2.93e15, 5e15",
-    "N_D_bulk": "5e13, 8.82e13, 2e14",
+    "N_D_junction": "1e15, 2.974271e15, 5e15",
+    "N_D_bulk": "5e13, 6.335936e13, 2e14",
     "L_transition_um": "0.5, 0.987, 2",
     "T": "250, 300, 350",
     "area_cm2": "1e-4, 1e-3, 4e-2",

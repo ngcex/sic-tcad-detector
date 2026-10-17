@@ -532,3 +532,35 @@ Calibrated stack V_fd (analytic graded) = 8.208 V (legacy doping: 10.40 V).
 | 25 | calibrated + n+ | -100 | 0.21 s | 13.3 s | identical | 1.4e-14 V | 9.7e-12 |
 | 25 | calibrated, no n+ | -30 | 0.15 s | 3.1 s | identical | 5.3e-15 V | 3.8e-14 |
 | 50 | legacy, no n+ | -20 | 0.21 s | 7.0 s | identical | 5.3e-15 V | 4.5e-13 |
+
+## Default flip: the n+ stack is the default model (feat/nplus-default, 2026-10-17)
+
+One constant, etna.core.device.DEFAULT_STACK (= NPLUS_CALIBRATION): p+ 0.3 um, n+ 1 um 1e19,
+2.974271e15 / 6.335936e13 / L 0.987 um, N_t 2.805349e12, E_t 0.67 (N_t / E_t live in
+SiC4H_Parameters and are read back). Read by DeviceConfig (now also carries N_t / E_t, used by
+run_dark_current only), create_sic_device / create_sic_2d_device graded fallbacks (builder
+geometry defaults unchanged: p+ 1 um, no n+), cce_vs_bias, cce_vs_fluence, device2d and the
+engine2d gate. microdosimetric_sweep defaults to the stack (nplus_thickness_cm=None = legacy).
+LEGACY_STACK / etna.legacy_config(): no n+, p+ 1 um, 2.93e15 / 8.82e13 / 0.987, N_t 2.8e12,
+E_t 0.65; reproduces the pre-flip DeviceConfig() numbers to <= 1e-9 (tests/test_default_stack.py).
+
+Before (DeviceConfig() at f60be71 = legacy) -> after (DeviceConfig(), scratch baseline.py):
+| quantity | before | after |
+|---|---|---|
+| CCE -10 / -30 / -50 V | 0.963266 / 0.997719 / 0.998474 | 0.999021 / 0.999706 / 0.999819 |
+| dark -10 / -30 / -60 V (4 mm2) | 5.962 / 14.564 / 17.957 pA | 6.132 / 14.873 / 18.000 pA |
+| W 0 / -10 / -30 V | 1.697 / 9.515 / 9.984 um | 1.700 / 9.500 / 9.899 um |
+| reach_through_V | 17.0 V (mesh rule) | 10.30 V (Debye rule; L_D 0.47 um) |
+| dark sweep to -100 V | 20/20 points | 20/20 points (E_t 0.67 with n+: no -89.5 V stop) |
+| run_all flash (20-230 Gy/s, -30 V) | 0.997534 | 0.999703 (balanced extraction, unchanged code) |
+| run_all damage (1e13 p/cm2) | 0.996445, then NaN x5 | 0.997907, then NaN x5 (Phi_c 5.04e13 -> 3.62e13) |
+| run_transient (cathode -> anode with n+) | 0.997534 (spread 3e-8) | 0.99969-0.99987 (spread 1.8e-4) |
+| run_all 2D sweep (hw 25/50, 20/40/60 V) | 4/6 valid, 60 V rows devsim NaN, 35.4 s* | 6/6 valid, all engine2d, 0.91 s |
+| run_field hw 50, -50 V | 0.48 s (engine2d) | 0.34 s (engine2d) |
+(*55.8 s before the stack-box commit, load ~3.4; 35.4 s at load ~2.)
+Transient: the direct cathode current on the n+ is 1e19 majority current (round-off):
+0.983 / 0.996 / 1.0 / 0.998 / 0.999 / 1.0 (clipped) on the default; the anode gives
+0.99973 / 0.99987 / 0.99973 / 0.99969 / 0.99973 / 0.99970 (balanced steady state 0.999703).
+transient_cce_vs_dose_rate(contact=None) -> anode with n+, cathode without (legacy unchanged).
+Sweep is_fully_depleted uses the analytic graded V_fd = 8.21 V (1.2 x = 9.85 V), looser than
+the Debye reach-through 10.30 V; no 20/40/60 V row changes.

@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 import etna.api.simulation as sim
-from etna.api.device import DeviceConfig
+from etna.api.device import DeviceConfig, legacy_config
 
 
 def _devsim(monkeypatch, cfg, bias):
@@ -29,7 +29,7 @@ class TestEligibility:
             (DeviceConfig(), -20.0),  # 1D
             (DeviceConfig(half_width_um=25.0), 5.0),  # forward
             (DeviceConfig(half_width_um=25.0), -2.0),  # below the validated 5 V
-            (DeviceConfig(half_width_um=25.0), -100.0),
+            (legacy_config(half_width_um=25.0), -100.0),  # no n+: 80 V box
             (DeviceConfig(half_width_um=25.0, T=350.0), -20.0),
             (
                 DeviceConfig(half_width_um=25.0, doping_profile="uniform", N_D=1e15),

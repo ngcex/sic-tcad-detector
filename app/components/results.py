@@ -312,24 +312,33 @@ def _sweep_header_lines(result: SimResult) -> list[str]:
     """Truncation and full-depletion notes for bias sweeps (C-V, CCE)."""
     md = result.metadata
     lines = []
+    cfg = getattr(result, "config", None)
+    legacy = cfg is not None and getattr(cfg, "nplus_thickness_um", None) is None
     if md.get("truncated") and len(result.x):
+        why = (
+            "model/solver artefact of the legacy model: ohmic cathode on the n- epi, "
+            "no n+ layer; beyond full depletion, outside the validated domain"
+            if legacy
+            else "solver non-convergence; outside the validated domain"
+        )
         lines.append(
             f"# truncated: sweep stopped at {np.min(result.x):.2f} V "
             f"(requested down to {md.get('requested_v_stop', float('nan')):.2f} V) "
-            "— devsim did not converge further (model/solver artefact: ohmic "
-            "cathode on the n- epi, no n+ substrate; beyond full depletion, outside "
-            "the validated domain)"
+            f"— devsim did not converge further ({why})"
         )
     if "reach_through_V" in md:
         v_rt = md["reach_through_V"]
         if v_rt is None:
             lines.append("# reach_through_V: none (not reached or not computed)")
         else:
-            lines.append(
-                f"# reach_through_V: {v_rt:.2f} (epi fully depleted; beyond it the "
-                "result depends on the cathode model: ohmic contact on the n- epi, "
-                "no n+ substrate)"
+            why = (
+                "epi fully depleted; legacy model: beyond it the result depends on the "
+                "cathode model, ohmic contact on the n- epi, no n+ layer"
+                if legacy
+                else "epi fully depleted: depletion edge within one Debye length of the "
+                "n-/n+ step -- a definition, not a measurement"
             )
+            lines.append(f"# reach_through_V: {v_rt:.2f} ({why})")
     if md.get("cross_checked_to_V") is not None:
         lines.append(
             f"# cross_checked_to_V: {md['cross_checked_to_V']:.1f} (deepest |V| of "

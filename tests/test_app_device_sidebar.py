@@ -26,6 +26,8 @@ ALL_FIELDS_VALUES = {
     "area_cm2": 2e-4,
     "nplus_thickness_um": 2.0,  # added with the n+ layer DeviceConfig fields
     "N_D_nplus": 5e18,
+    "N_t": 3e12,  # dark-current fit fields, added with the n+ default flip
+    "E_t": 0.66,
 }
 
 
@@ -78,3 +80,34 @@ def test_dimensionality_mapping():
 
     result_2d = assemble_config(values_2d)
     assert result_2d.half_width_um == 50.0
+
+
+def test_historical_model_checkbox_applies_the_legacy_preset():
+    """The sidebar's 'historical model' checkbox merges LEGACY_PRESET into the values."""
+    from etna import LEGACY_PRESET, legacy_config
+
+    values = dict(ALL_FIELDS_VALUES, doping_profile="graded", N_D=None)
+    values.update(LEGACY_PRESET)
+    cfg = assemble_config(values)
+    ref = legacy_config(
+        epi_thickness_um=5.0, half_width_um=50.0, N_A=2e19, T=310.0, area_cm2=2e-4
+    )
+    assert cfg == ref
+    assert cfg.nplus_thickness_um is None and (cfg.N_t, cfg.E_t) == (2.8e12, 0.65)
+
+
+def test_sidebar_default_is_the_nplus_stack():
+    from app.components.device_sidebar import render_device_sidebar  # noqa: F401
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_file("app/main.py", default_timeout=120)
+    at.run()
+    assert at.session_state["device_config"] == DeviceConfig()
+    assert not at.sidebar.checkbox(key="cfg_legacy_on").value
+    texts = " ".join(c.value for c in at.sidebar.caption)
+    assert "Inside the 1D engine/devsim cross-check domain" in texts
+    at.sidebar.checkbox(key="cfg_legacy_on").check()
+    at.run()
+    from etna import legacy_config
+
+    assert at.session_state["device_config"] == legacy_config()

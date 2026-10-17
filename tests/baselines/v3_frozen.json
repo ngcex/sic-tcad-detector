@@ -1,6 +1,6 @@
 {
-  "cce_center_100um": 0.96085509,
-  "cce_center_300um": 0.96085509,
+  "cce_center_100um": 0.98552834,
+  "cce_center_300um": 0.98552834,
   "cv_1d": {
     "-10.0": 0.0009592594516739858,
     "-5.0": 0.0005775706380019595,
@@ -17,6 +17,7 @@
       "N_D_bulk": 85000000000000.0,
       "N_D_junction": 2900000000000000.0
     },
+    "rebaselined_nplus_flip": "cce_center_*um updated from 0.96085509 to 0.98552834 (+2.57 %): the create_sic_2d_device graded fallbacks now read DEFAULT_STACK (2.974271e15 / 6.335936e13 / 0.987 um, was 2.931417e15 / 8.823059e13 / 0.9872267 um); geometry unchanged (p+ 1 um, no n+). Lower N_D_bulk -> wider depletion at 10 V. tolerance_rel kept at 0.1%.",
     "rebaselined_plan_26_04": "cce_center_*um updated from 0.96446952 (v3.0 snapshot) to 0.96085509 (calibrated graded defaults). The 0.37% shift is the intended consequence of the -50V convergence calibration (CONS-01 SC#1); N_D_bulk 8.5e13->8.823e13 dominates. tolerance_rel kept at 0.1% as a forward guard."
   },
   "notebook_list": [

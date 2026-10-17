@@ -552,6 +552,7 @@ def transient_cce_vs_dose_rate(
     dt_max=1e-4,
     epi_thickness_cm=10e-4,
     device_kwargs=None,
+    contact=None,
 ):
     """Sweep dose rates and compute transient CCE at each.
 
@@ -580,6 +581,14 @@ def transient_cce_vs_dose_rate(
     device_kwargs : dict or None
         Additional keyword arguments for create_dd_device (e.g. N_A, T,
         substrate_thickness_cm, doping_profile, N_D); override the defaults.
+    contact : {"cathode", "anode"} or None
+        Contact whose (direct) current is integrated. None = "anode" when the device has
+        an n+ layer, else "cathode". The direct cathode current on the n+ is the
+        majority-carrier current in 1e19 material, dominated by round-off: on the default
+        stack (-30 V, 20-230 Gy/s) it scatters 0.983-1.0 (clipped) vs the anode's
+        0.99969-0.99987 (spread 1.8e-4; balanced steady-state CCE 0.999703). Without n+
+        the cathode is kept (spread 3e-8; legacy numbers unchanged). The balanced
+        steady-state form is not used: it has no dQ/dt term.
 
     Returns
     -------
@@ -600,6 +609,10 @@ def transient_cce_vs_dose_rate(
         L_transition=1.0e-4,
     )
     dev_kw.update(device_kwargs or {})
+    if contact is None:
+        contact = "anode" if dev_kw.get("nplus_thickness_cm") is not None else "cathode"
+    if contact not in ("cathode", "anode"):
+        raise ValueError(f"contact must be 'cathode' or 'anode', got {contact!r}")
 
     for dose_rate in dose_rates:
         dev_id = uuid.uuid4().hex[:8]
@@ -629,7 +642,7 @@ def transient_cce_vs_dose_rate(
             G_spatial = confine_generation_to_epi(device_info, x_nodes, G_spatial)
 
             # Transient simulation
-            solver = TransientSolver(device_info, contact="cathode")
+            solver = TransientSolver(device_info, contact=contact)
             solver.initialize()
 
             result = solver.simulate_pulse(
@@ -655,4 +668,6 @@ def transient_cce_vs_dose_rate(
             except Exception:
                 pass
 
-    return pd.DataFrame({"dose_rate_Gy_s": dose_rates, "transient_cce": cce_values})
+    df = pd.DataFrame({"dose_rate_Gy_s": dose_rates, "transient_cce": cce_values})
+    df.attrs["contact"] = contact
+    return df

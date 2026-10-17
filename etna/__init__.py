@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from etna._version import __version__
-from etna.api.device import DeviceConfig
+from etna.api.device import LEGACY_PRESET, DeviceConfig, legacy_config
 from etna.api.results import MeshData, SimResult
 from etna.api.simulation import (
     run_cce,
@@ -23,6 +23,8 @@ from etna.api.sweep import ParametricSweep
 
 __all__ = [
     "DeviceConfig",
+    "LEGACY_PRESET",
+    "legacy_config",
     "SimResult",
     "MeshData",
     "run_cv",

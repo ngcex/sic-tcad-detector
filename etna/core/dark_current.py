@@ -613,7 +613,7 @@ def dark_current_sweep(device_info, V_range, area=0.05, V_step=0.5):
     return results
 
 
-def create_dark_current_device(T=300, N_t=None, S_n=None, S_p=None, **kwargs):
+def create_dark_current_device(T=300, N_t=None, S_n=None, S_p=None, E_t=None, **kwargs):
     """Convenience function to create a DD device with TAT and SRV models.
 
     Parameters
@@ -626,6 +626,8 @@ def create_dark_current_device(T=300, N_t=None, S_n=None, S_p=None, **kwargs):
         Electron surface recombination velocity (cm/s).
     S_p : float, optional
         Hole surface recombination velocity (cm/s).
+    E_t : float, optional
+        Trap level below Ec (eV). Default from SiC4H_Parameters.
     **kwargs
         Additional arguments passed to create_dd_device().
 
@@ -636,7 +638,7 @@ def create_dark_current_device(T=300, N_t=None, S_n=None, S_p=None, **kwargs):
     """
     device_info = create_dd_device(T=T, **kwargs)
 
-    setup_tat_model(device_info, N_t=N_t)
+    setup_tat_model(device_info, N_t=N_t, E_t=E_t)
     setup_surface_recombination(device_info, S_n=S_n, S_p=S_p)
 
     return device_info

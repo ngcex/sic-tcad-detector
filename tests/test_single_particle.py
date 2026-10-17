@@ -320,6 +320,13 @@ class TestCCEVsBias:
                     half_width_um=50.0,
                     V_bias=V_bias,
                     device_name=f"test_bias_{int(V_bias)}",
+                    # device2d's pre-flip fallbacks: with DEFAULT_STACK doping on the no-n+
+                    # builder geometry the direct-current CCE is 1.0077 / 1.0048 (10 / 50 V),
+                    # non-monotone above 1 (was 0.9776 / 1.0066). Open item: single_particle
+                    # integrates the direct cathode current (noisy past ~1).
+                    N_D_junction=2.931417e15,
+                    N_D_bulk=8.823059e13,
+                    L_transition=9.872267e-5,
                 )
 
                 generation, Q_gen = ion_track_generation_2d(

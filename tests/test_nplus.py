@@ -11,12 +11,18 @@ import devsim
 import numpy as np
 import pytest
 
-from etna.api.device import DeviceConfig, device_kwargs
+from etna.api.device import DeviceConfig, device_kwargs, legacy_config
 from etna.core.charge_collection import cce_vs_bias
 from etna.core.device import create_sic_device
 from etna.core.drift_diffusion import create_dd_device, ramp_bias
 
 NPLUS = dict(nplus_thickness_cm=1e-4, N_D_nplus=1e19)
+# Doping the spike numbers were taken with: the core graded fallbacks before the n+ flip
+# (cce_vs_bias 2.90e15 / 8.50e13 / 1 um; device2d 2.931417e15 / 8.823059e13 / 0.9872267 um).
+# The fallbacks are now DEFAULT_STACK; pinned here so the tests keep checking the n+
+# physics against the same spike values.
+SPIKE_1D = dict(N_D_junction=2.90e15, N_D_bulk=8.50e13, L_transition=1.0e-4)
+SPIKE_2D = dict(N_D_junction=2.931417e15, N_D_bulk=8.823059e13, L_transition=9.872267e-5)
 
 
 def _name(tag):
@@ -50,7 +56,7 @@ def test_invalid_nplus_rejected():
 def test_cce_with_nplus_matches_spike_and_stays_below_one():
     """Raw collected/generated ratio (before the [0, 1] clip) with the balanced extraction.
     Spike (epi-only generation): 0.998867 0.999562 0.999708 0.999778 0.999820."""
-    r = cce_vs_bias(-np.arange(10.0, 55.0, 10.0), device_kwargs=dict(NPLUS))
+    r = cce_vs_bias(-np.arange(10.0, 55.0, 10.0), device_kwargs=dict(NPLUS, **SPIKE_1D))
     assert not r["truncated"]
     raw = np.asarray(r["I_collected"]) / r["I_generated"]
     assert np.all(raw < 1.0)
@@ -92,7 +98,8 @@ def test_dark_current_independent_of_nplus_thickness():
 
 
 def test_device_kwargs_only_carry_nplus_when_on():
-    assert "nplus_thickness_cm" not in device_kwargs(DeviceConfig())
+    assert "nplus_thickness_cm" not in device_kwargs(legacy_config())
+    assert device_kwargs(DeviceConfig())["nplus_thickness_cm"] == pytest.approx(1e-4)
     kw = device_kwargs(DeviceConfig(nplus_thickness_um=2.0, N_D_nplus=5e18))
     assert kw["nplus_thickness_cm"] == pytest.approx(2e-4)
     assert kw["N_D_nplus"] == 5e18
@@ -115,7 +122,8 @@ def test_2d_cce_with_nplus(gen_in_nplus, expected):
     from etna.core.solver_tol import DC_REL_ERROR
 
     info = create_2d_dd_device(
-        half_width_um=25.0, V_bias=20.0, device_name=_name("np2d"), nplus_generation=gen_in_nplus, **NPLUS
+        half_width_um=25.0, V_bias=20.0, device_name=_name("np2d"), nplus_generation=gen_in_nplus, **NPLUS,
+        **SPIKE_2D,
     )
     try:
         y = np.array(devsim.get_node_model_values(device=info["device_name"], region="sic", name="y"))

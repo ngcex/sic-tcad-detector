@@ -21,6 +21,12 @@ from etna.core.devsim_lock import serialized
 from etna.core.device2d import create_sic_2d_device
 from etna.core.drift_diffusion import create_dd_device, setup_sic_drift_diffusion
 from etna.core.poisson import setup_poisson, solve_equilibrium
+from etna.core.device import DEFAULT_STACK, LEGACY_STACK
+
+
+def _um(cm):
+    """cm -> um rounded to 12 digits (0.3e-4 cm -> 0.3, not 0.30000000000000004)."""
+    return None if cm is None else round(cm * 1e4, 12)
 
 
 @dataclass
@@ -28,25 +34,30 @@ class DeviceConfig:
     """Dimension-agnostic device configuration (geometry, doping, operating conditions)."""
 
     epi_thickness_um: float = 10.0  # um, epitaxial layer thickness
-    substrate_thickness_um: float = 1.0  # um, p+ ANODE layer thickness (not the n+ substrate)
+    # um, p+ ANODE layer thickness (not the n+ substrate). Defaults below: the default stack
+    # (etna.core.device.DEFAULT_STACK; um values literal so they display exactly).
+    substrate_thickness_um: float = _um(DEFAULT_STACK["substrate_thickness_cm"])
     half_width_um: Optional[float] = None  # um, lateral half-width (2D devices only)
     N_A: float = 1e19  # cm^-3, substrate acceptor doping
     doping_profile: str = "graded"  # "graded" or "uniform" epi doping profile
     N_D: Optional[float] = (
         None  # cm^-3, uniform epi donor doping (uniform profile only)
     )
-    N_D_junction: float = (
-        2.93e15  # cm^-3, epi donor doping at junction (graded profile)
-    )
-    N_D_bulk: float = 8.82e13  # cm^-3, epi donor doping in bulk (graded profile)
-    L_transition_um: float = 0.987  # um, graded doping transition length
+    N_D_junction: float = DEFAULT_STACK["N_D_junction"]  # cm^-3, epi doping at junction
+    N_D_bulk: float = DEFAULT_STACK["N_D_bulk"]  # cm^-3, epi donor doping in bulk
+    L_transition_um: float = _um(DEFAULT_STACK["L_transition"])  # um, graded transition
     T: float = 300.0  # K, device temperature
     area_cm2: float = 1e-4  # cm^2, device active area
     # n+ layer under the n- epi, cathode contact on its far end (the conductive n+
-    # substrate, truncated). None = historical model, cathode directly on the n- epi
-    # (non-convergence wall at deep reverse bias: a contact artefact).
-    nplus_thickness_um: Optional[float] = None  # um
-    N_D_nplus: float = 1e19  # cm^-3, n+ donor doping (fully ionized)
+    # substrate, truncated to 1 um: W/CCE/dark do not depend on it, LOG.md). Default ON.
+    # None = the LEGACY model, cathode directly on the n- epi (non-convergence wall at
+    # deep reverse bias: a contact artefact); see legacy_config().
+    nplus_thickness_um: Optional[float] = _um(DEFAULT_STACK["nplus_thickness_cm"])  # um
+    N_D_nplus: float = DEFAULT_STACK["N_D_nplus"]  # cm^-3, n+ donor doping (fully ionized)
+    # Dark-current effective-generation (TAT proxy) fit: N_t (cm^-3 s^-1) and trap level
+    # E_t (eV below Ec). Used by run_dark_current only; not device-builder keywords.
+    N_t: float = DEFAULT_STACK["N_t"]
+    E_t: float = DEFAULT_STACK["E_t"]
 
     def __post_init__(self) -> None:
         """Reject physically meaningless values early, with a clear message.
@@ -66,6 +77,9 @@ class DeviceConfig:
         _positive("L_transition_um", self.L_transition_um)
         _positive("N_D_junction", self.N_D_junction)
         _positive("N_D_bulk", self.N_D_bulk)
+        _positive("N_t", self.N_t)
+        if not (0.0 < self.E_t < 3.26):
+            problems.append(f"E_t must be inside the 4H-SiC gap, 0-3.26 eV (got {self.E_t!r})")
         if self.half_width_um is not None:
             _positive("half_width_um", self.half_width_um)
         if self.N_D is not None:
@@ -114,6 +128,27 @@ def device_kwargs(config: DeviceConfig) -> dict:
     if config.nplus_thickness_um is not None:
         kw.update(nplus_thickness_cm=config.nplus_thickness_um * 1e-4, N_D_nplus=config.N_D_nplus)
     return kw
+
+
+# LEGACY preset: the default model before the n+ flip (cathode directly on the n- epi,
+# p+ 1 um, doping 2.93e15 / 8.82e13 / 0.987 um, N_t 2.8e12, E_t 0.65), from
+# etna.core.device.LEGACY_STACK. Reproduces the pre-flip numbers (tests/test_default_stack.py).
+LEGACY_PRESET = {
+    "substrate_thickness_um": _um(LEGACY_STACK["substrate_thickness_cm"]),
+    "nplus_thickness_um": _um(LEGACY_STACK["nplus_thickness_cm"]),
+    "N_D_nplus": LEGACY_STACK["N_D_nplus"],
+    "doping_profile": "graded",
+    "N_D_junction": LEGACY_STACK["N_D_junction"],
+    "N_D_bulk": LEGACY_STACK["N_D_bulk"],
+    "L_transition_um": _um(LEGACY_STACK["L_transition"]),
+    "N_t": LEGACY_STACK["N_t"],
+    "E_t": LEGACY_STACK["E_t"],
+}
+
+
+def legacy_config(**overrides) -> DeviceConfig:
+    """DeviceConfig of the LEGACY model (pre-flip default, no n+), plus ``overrides``."""
+    return DeviceConfig(**{**LEGACY_PRESET, **overrides})
 
 
 @serialized
