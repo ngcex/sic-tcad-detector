@@ -1,0 +1,56 @@
+targets W (um): paper labels [1.68 9.52 9.73]; production targets [1.7  9.5  9.73]; paper creep -10->-30 = +0.21
+== baseline (production DEFAULT_STACK, no buffer) ==
+DEFAULT_STACK                  | NJ 2.9743e+15 NB 6.3359e+13 res 0e+00 | edge 1.700 9.500 9.899 | C 1.708 9.764 9.981 | creep e/C +0.399/+0.217 conv True
+   W_C robustness (x0, DV):
+     x0 0.3 um DV 0.1: W_C [1.71  9.764 9.981]
+     x0 0.3 um DV 0.25: W_C [1.708 9.764 9.981]
+     x0 0.5 um DV 0.1: W_C [1.71  9.764 9.981]
+     x0 0.5 um DV 0.25: W_C [1.708 9.764 9.981]
+     x0 1.0 um DV 0.1: W_C [1.71  9.764 9.981]
+     x0 1.0 um DV 0.25: W_C [1.708 9.764 9.981]
+   uniform 3e14 check: W_edge [3.146 6.744 9.798]  W_C [3.155 6.772 9.912]
+== buffer scan, (NJ, NB) re-solved on the 0/-10 V targets with W_edge ==
+edge Lb    0 nm none           | NJ 2.9743e+15 NB 6.3359e+13 res 1e-15 | edge 1.700 9.500 9.899 | C 1.708 9.764 9.981 | creep e/C +0.399/+0.217 conv True
+edge Lb  100 nm inside         | NJ 2.9813e+15 NB 5.9909e+13 res 2e-15 | edge 1.700 9.500 9.871 | C 1.708 9.761 9.952 | creep e/C +0.371/+0.191 conv True
+edge Lb  200 nm inside         | NJ 2.9959e+15 NB 5.2693e+13 res 5e-16 | edge 1.700 9.500 9.881 | C 1.708 9.754 9.909 | creep e/C +0.381/+0.155 conv True
+edge Lb  300 nm inside         | NJ 3.0198e+15 NB 4.0910e+13 res 3e-15 | edge 1.700 9.500 9.848 | C 1.708 9.742 9.864 | creep e/C +0.348/+0.122 conv True
+edge Lb  500 nm inside         | NJ 3.0912e+15 NB 5.8624e+12 res 4e-03 | edge 1.700 9.464 9.789 | C 1.707 9.718 9.801 | creep e/C +0.325/+0.083 conv True
+edge Lb  800 nm inside         | NJ 3.0970e+15 NB 3.1334e+12 res 3e-16 | edge 1.700 9.500 9.666 | C 1.707 9.575 9.678 | creep e/C +0.166/+0.103 conv True
+edge Lb  100 nm centred        | NJ 2.9744e+15 NB 6.3316e+13 res 2e-16 | edge 1.700 9.500 9.899 | C 1.708 9.764 9.980 | creep e/C +0.399/+0.217 conv True
+edge Lb  200 nm centred        | NJ 2.9748e+15 NB 6.3075e+13 res 6e-16 | edge 1.700 9.500 9.897 | C 1.708 9.764 9.979 | creep e/C +0.397/+0.216 conv True
+edge Lb  300 nm centred        | NJ 2.9760e+15 NB 6.2495e+13 res 2e-15 | edge 1.700 9.500 9.933 | C 1.708 9.763 9.977 | creep e/C +0.433/+0.214 conv True
+edge Lb  500 nm centred        | NJ 2.9811e+15 NB 5.9984e+13 res 8e-16 | edge 1.700 9.500 9.940 | C 1.708 9.762 9.971 | creep e/C +0.440/+0.209 conv True
+edge Lb  800 nm centred        | NJ 2.9967e+15 NB 5.2299e+13 res 2e-15 | edge 1.700 9.500 9.933 | C 1.708 9.757 9.959 | creep e/C +0.433/+0.201 conv True
+== buffer scan, (NJ, NB) re-solved on the 0/-10 V targets with W_C ==
+C Lb    0 nm none              | NJ 2.9527e+15 NB 8.2555e+13 res 2e-13 | edge 1.691 9.269 9.896 | C 1.700 9.500 9.979 | creep e/C +0.628/+0.479 conv True
+C Lb  100 nm inside            | NJ 2.9545e+15 NB 8.1644e+13 res 5e-14 | edge 1.691 9.263 9.866 | C 1.700 9.500 9.949 | creep e/C +0.603/+0.449 conv True
+C Lb  200 nm inside            | NJ 2.9580e+15 NB 7.9842e+13 res 1e-14 | edge 1.691 9.255 9.867 | C 1.700 9.500 9.903 | creep e/C +0.612/+0.403 conv True
+C Lb  300 nm inside            | NJ 2.9634e+15 NB 7.7139e+13 res 8e-15 | edge 1.691 9.248 9.831 | C 1.700 9.500 9.851 | creep e/C +0.584/+0.351 conv True
+C Lb  500 nm inside            | NJ 2.9838e+15 NB 6.6763e+13 res 1e-13 | edge 1.692 9.243 9.730 | C 1.700 9.500 9.745 | creep e/C +0.488/+0.245 conv True
+C Lb  800 nm inside            | NJ 3.0795e+15 NB 1.8378e+13 res 2e-13 | edge 1.693 9.403 9.615 | C 1.700 9.500 9.627 | creep e/C +0.211/+0.127 conv True
+C Lb  100 nm centred           | NJ 2.9527e+15 NB 8.2541e+13 res 2e-14 | edge 1.691 9.268 9.896 | C 1.700 9.500 9.978 | creep e/C +0.627/+0.478 conv True
+C Lb  200 nm centred           | NJ 2.9529e+15 NB 8.2467e+13 res 2e-14 | edge 1.691 9.268 9.894 | C 1.700 9.500 9.977 | creep e/C +0.626/+0.477 conv True
+C Lb  300 nm centred           | NJ 2.9532e+15 NB 8.2288e+13 res 5e-14 | edge 1.691 9.267 9.928 | C 1.700 9.500 9.974 | creep e/C +0.661/+0.474 conv True
+C Lb  500 nm centred           | NJ 2.9547e+15 NB 8.1525e+13 res 2e-14 | edge 1.691 9.263 9.935 | C 1.700 9.500 9.965 | creep e/C +0.672/+0.465 conv True
+C Lb  800 nm centred           | NJ 2.9593e+15 NB 7.9205e+13 res 3e-14 | edge 1.691 9.253 9.920 | C 1.700 9.500 9.943 | creep e/C +0.668/+0.443 conv True
+== 3-parameter exact solve (NJ, NB, L) on all three targets ==
+edge 3-par, no buffer          | NJ 2.2368e+15 NB 1.0000e+12 L 1.450 res 2e-02 | edge 1.700 9.500 9.876 | C 1.708 9.878 9.983 | creep e/C +0.376/+0.104 conv True
+C 3-par, no buffer             | NJ 3.2439e+15 NB 8.8868e+13 L 0.894 res 3e-02 | edge 1.691 9.278 9.897 | C 1.700 9.499 9.979 | creep e/C +0.619/+0.480 conv True
+== epi thickness (nominal 10 um; real epi tolerance is typically several %) ==
+edge epi 9.7 um                | NJ 3.0753e+15 NB 1.3306e+13 res 1e-02 | edge 1.700 9.390 9.600 | C 1.707 9.622 9.685 | creep e/C +0.210/+0.063 conv True
+C epi 9.7 um                   | NJ 2.9919e+15 NB 6.2643e+13 res 6e-15 | edge 1.692 9.246 9.603 | C 1.700 9.500 9.682 | creep e/C +0.357/+0.182 conv True
+edge epi 9.75 um               | NJ 3.0760e+15 NB 1.3165e+13 res 6e-03 | edge 1.700 9.438 9.650 | C 1.707 9.672 9.735 | creep e/C +0.212/+0.063 conv True
+C epi 9.75 um                  | NJ 2.9792e+15 NB 6.9108e+13 res 4e-14 | edge 1.692 9.242 9.652 | C 1.700 9.500 9.731 | creep e/C +0.409/+0.231 conv True
+edge epi 9.8 um                | NJ 3.0766e+15 NB 1.3026e+13 res 1e-03 | edge 1.700 9.487 9.699 | C 1.707 9.721 9.785 | creep e/C +0.213/+0.064 conv True
+C epi 9.8 um                   | NJ 2.9705e+15 NB 7.3511e+13 res 5e-14 | edge 1.692 9.243 9.700 | C 1.700 9.500 9.781 | creep e/C +0.457/+0.281 conv True
+== 3-parameter exact solve (NJ, NB, Lb), L held 0.987 um, buffer inside the epi ==
+edge: Lb = 488 nm
+edge 3-par (NJ,NB,Lb)          | NJ 3.0752e+15 NB 1.3638e+13 L 0.488 res 5e-03 | edge 1.700 9.463 9.780 | C 1.707 9.701 9.792 | creep e/C +0.317/+0.092 conv True
+C: Lb = 529 nm
+C 3-par (NJ,NB,Lb)             | NJ 2.9888e+15 NB 6.4218e+13 L 0.529 res 6e-14 | edge 1.692 9.244 9.716 | C 1.700 9.500 9.730 | creep e/C +0.472/+0.230 conv True
+== W(V) curves (um), W_edge / W_C ==
+                                             0            -2            -5           -10           -15           -20           -30           -40           -60
+production (no buffer)            1.700/ 1.708  3.067/ 3.088  6.551/ 6.617  9.500/ 9.764  9.763/ 9.928  9.840/ 9.960  9.899/ 9.981  9.926/ 9.989  9.950/ 9.996  conv True
+buffer 488 nm, fit W_edge         1.700/ 1.707  3.374/ 3.386  8.858/ 9.378  9.463/ 9.701  9.701/ 9.746  9.745/ 9.767  9.780/ 9.792  9.797/ 9.807  9.818/ 9.827  conv True
+buffer 529 nm, fit W_C            1.692/ 1.700  3.042/ 3.063  6.480/ 6.546  9.244/ 9.500  9.544/ 9.653  9.663/ 9.693  9.716/ 9.730  9.740/ 9.751  9.767/ 9.776  conv True
+no buffer, fit W_C 0/-10 V        1.691/ 1.700  2.975/ 2.996  5.879/ 5.935  9.269/ 9.500  9.728/ 9.906  9.827/ 9.953  9.896/ 9.979  9.925/ 9.988  9.950/ 9.996  conv True
