@@ -304,6 +304,61 @@ class TestCCEHeatmap2D:
         assert 0 <= af <= 1.0, f"active_fraction ({af}) should be between 0 and 1"
 
 
+class TestCCEHeatmapExcludesNplus:
+    """cce_heatmap_2d: the n+ layer below the epi is not active volume (no devsim).
+
+    Before the fix the default depth step was y >= junction_pos, so the n+ nodes got
+    CCE 1 and entered the active-fraction denominator (same bug class as dbc01b0).
+    """
+
+    @staticmethod
+    def _mesh(monkeypatch):
+        import etna.core.charge_collection_2d as cc2d
+
+        jp, epi, npl = 0.3e-4, 10e-4, 1e-4
+        xs = np.linspace(0.0, 25e-4, 6)
+        ys = np.concatenate(
+            [
+                np.linspace(0, jp, 4),
+                np.linspace(jp, jp + epi, 21)[1:],
+                np.linspace(jp + epi, jp + epi + npl, 6)[1:],
+            ]
+        )
+        X, Y = np.meshgrid(xs, ys)
+        vals = {"x": X.ravel(), "y": Y.ravel()}
+        monkeypatch.setattr(
+            cc2d.devsim,
+            "get_node_model_values",
+            lambda device, region, name: list(vals[name]),
+        )
+        info = {
+            "device_name": "d",
+            "region_name": "r",
+            "substrate_thickness_cm": jp,
+            "epi_thickness_cm": epi,
+            "epi_end": jp + epi,
+            "nplus_thickness_cm": npl,
+        }
+        lateral = {"x_positions_cm": xs, "cce_values": np.ones_like(xs)}
+        return info, lateral, Y.ravel(), jp, jp + epi
+
+    def test_nplus_nodes_have_zero_cce(self, monkeypatch):
+        info, lateral, y, jp, epi_end = self._mesh(monkeypatch)
+        r = cce_heatmap_2d(info, lateral)
+        in_epi = (y >= jp) & (y <= epi_end + 1e-12)
+        assert np.all(r["cce_map"][y > epi_end + 1e-12] == 0.0)
+        assert np.all(r["cce_map"][y < jp] == 0.0)
+        assert np.all(r["cce_map"][in_epi] == 1.0)
+        assert r["active_fraction"] == 1.0
+
+    def test_active_fraction_denominator_is_epi_only(self, monkeypatch):
+        info, lateral, y, jp, epi_end = self._mesh(monkeypatch)
+        in_epi = (y >= jp) & (y <= epi_end + 1e-12)
+        top = in_epi & (y <= jp + 5e-4)
+        r = cce_heatmap_2d(info, lateral, cce_1d_depth=np.where(top, 1.0, 0.0))
+        assert r["active_fraction"] == pytest.approx(top.sum() / in_epi.sum())
+
+
 class TestLateralScanIsMeshIndependentForUniformDevice:
     """PERF-03: the device is laterally uniform, so edge and centre CCE must agree.
 

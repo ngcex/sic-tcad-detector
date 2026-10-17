@@ -201,7 +201,10 @@ simulation to capture the current pulse waveform.
 The simulation uses:
 - **Instantaneous injection:** generation pulse in a single 1 ps BDF1 step
 - **Adaptive time-stepping:** dt = max(dt_min, min(dt_max, 0.1*t))
-- **Early termination:** when signal current drops below 1% of peak
+- **Convergence stop:** when a step adds < 1e-7 of the collected charge for 3
+  consecutive steps (validated against 200 ns runs to < 1e-6 in CCE)
+- **Charge estimator:** backward-Euler sum of the contact current over every
+  step, the injection step included
 
 The current pulse shows a fast rise (injection) followed by collection as
 carriers drift and diffuse to the contacts.
@@ -501,12 +504,13 @@ md(
    at 50 V bias.
 
 3. **Charge conservation validated:** CCE values are stable across the tested
-   LET range (1 -- 500 keV/um).  The CCE(LET) table clips values to [0, 1]
-   since overcollection is a numerical artifact of the generation-pulse BDF1
-   method (displacement current during early post-injection steps).  Raw CCE
-   before clipping is ≤ 1.007 at 50 V, confirming good charge conservation.
+   LET range (0.5 -- 500 keV/um).  The collected charge is the backward-Euler
+   sum of the contact current over every BDF1 step (injection step included),
+   so the raw CCE stays <= 1 (0.99996 -- 0.99997 at 50 V on the default stack);
+   the [0, 1] clip in the table is only a guard.  (The earlier post-injection
+   trapezoid gave a raw 1.006.)
 
-4. **CCE(LET) is flat at 1.0** at full depletion (50 V), consistent with
+4. **CCE(LET) is flat at ~1.0** at full depletion (50 V), consistent with
    the linear drift-diffusion model: all carriers are swept by the strong
    drift field regardless of track density.  Note that high-injection plasma
    effects (Auger recombination, field screening) are not captured by the
