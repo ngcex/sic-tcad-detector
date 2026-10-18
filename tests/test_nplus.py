@@ -123,7 +123,9 @@ def test_device_kwargs_carry_nplus_explicitly():
 # 0.9997212 / 0.9621150 before both mobilities at N_D_bulk (was DEFAULT_N_D 1.07e15), 2026-10-17
 # 0.9621205 (True) before 2026-10-18: I_gen counted the never-injected cathode-row
 # generation (share 4.64e-4 with nplus_generation); now the injected generation only.
-@pytest.mark.parametrize("gen_in_nplus, expected", [(False, 0.9997262), (True, 0.9625666)])
+# 0.9625666 (True) before the local per-node mobility in 2D (A-03: n+ holes at their own
+# 1e19 mobility, 76 instead of 124 cm2/Vs; the False case moves by < 2e-6).
+@pytest.mark.parametrize("gen_in_nplus, expected", [(False, 0.9997262), (True, 0.9625702)])
 def test_2d_cce_with_nplus(gen_in_nplus, expected):
     """2D devsim (hw 25, -20 V, n+ 1 um): balanced raw CCE <= 1, equal to the 1D value
     (0.999562, epi-only G), laterally flat; the direct contact current gives 1.0136 here."""
