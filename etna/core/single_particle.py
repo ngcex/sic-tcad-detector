@@ -36,6 +36,7 @@ from etna.core.charge_collection_2d import (
 )
 from etna.core.charge_collection import add_generation_to_dd
 from etna.core.drift_diffusion import extract_contact_current
+from etna.core.solver_tol import DC_REL_ERROR
 
 logger = logging.getLogger(__name__)
 
@@ -202,10 +203,12 @@ def simulate_single_particle(
     zeros = np.zeros(n_nodes)
     add_generation_to_dd(device_info, zeros)
     try:
+        # the shared DC tolerance (was 1e-10, which on 2D devices at high bias
+        # stagnates near 1e-9 and can only reach the relaxed retry; solver_tol)
         devsim.solve(
             type="transient_dc",
             absolute_error=1e10,
-            relative_error=1e-10,
+            relative_error=DC_REL_ERROR,
             maximum_iterations=30,
         )
     except devsim.error:
