@@ -136,3 +136,14 @@ share 0: the stripe is confined to the epi); default + nplus_generation 50 V 0.9
 0.954963 at 50 V (share 6.07e-4); v3 cce_center 0.95394391 -> 0.95452362; test_nplus 2D
 abrupt-n+ nplus_generation 0.9621205 -> 0.9625666. Engine vs devsim after the change: max
 |dCCE| 7.9e-15 over these cases (<= 1e-11 gate).
+Notebooks re-run into scratch (base 68af67e vs this branch; tracked notebooks untouched):
+nb06 75 s: I_reverse(300 K) 3.680e-10 -> 3.941e-10 A/cm2 (+7.1 %: N_t refit + profile),
+W(0 V, 300 K) 1.689 -> 1.649 um (edge), CCE(300 K) 0.9942 -> 0.9944, dI/dT clinical
+4.758e-10 -> 5.095e-10 A/cm2/K. nb07 55 s: N_t 2.81e12 -> 2.85e12; its own -30 V device
+check 18.4 -> 19.7 pA (ratio to 18 pA 1.02 -> 1.09; the notebook compares a -30 V point
+with the -60 V bound). nb12 31 s: compensation now at 1.94e13 (was 5e13 in its grid):
+the 1.94e13 grid point is reported as fully compensated (not solved); the 2.78e13 /
+3.73e13 / 5e13 points were already. nb20 259 s: sweep valid 28 -> 32 of 36 (V_fd column
+6.96 / 10.16 -> 3.91 / 6.47 V at N_D_bulk 5e13 / 8.5e13), baseline half-width points 7 ->
+8, center CCE 20 V 0.999726 -> 0.999723, dark at 50 V (hw 50) 4.500e-14 -> 4.441e-14 A.
+Full suite: 913 passed in 290 s (-n auto, loadfile).
