@@ -218,7 +218,8 @@ def cv_sweep(device_info, V_range, eps_r=9.7, area=1.0):
     device_info : dict
         Device info dict (DD equations must be set up via create_dd_device).
     V_range : array_like
-        Array of reverse bias voltages (V, should be <= 0 for reverse bias).
+        Bias voltages in the conventional sign (V): negative = reverse bias. A
+        positive value is not rejected; it applies forward bias.
     eps_r : float
         Relative permittivity, used only for "W_from_C" (C itself comes from the
         device's own Permittivity). Default 9.7.
@@ -451,7 +452,8 @@ def cv_at_fluence(
     fluence : float
         Proton fluence (protons/cm^2).
     V_range : array_like
-        Array of reverse bias voltages (V, should be <= 0 for reverse bias).
+        Bias voltages in the conventional sign (V): negative = reverse bias. A
+        positive value is not rejected; it applies forward bias.
     area : float
         Junction area (cm^2). Default 1.0.
     epi_thickness_cm : float

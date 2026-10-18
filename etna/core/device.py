@@ -1218,7 +1218,8 @@ def calibrate_graded_doping(
     -------
     result : dict
         Dictionary with keys: N_D_junction, N_D_bulk, L_transition,
-        final_cost, success, W_simulated (dict of V: W pairs).
+        final_cost, success. (No W_simulated: unlike the 2D variant, the 1D
+        calibration does not return the per-bias widths; audit A-10.)
     """
     from etna.core.drift_diffusion import create_dd_device
     from etna.core.poisson import extract_depletion_width_numerical
