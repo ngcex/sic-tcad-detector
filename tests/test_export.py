@@ -62,7 +62,9 @@ def _fake_report(cfg, w30_um=9.9788):  # eps*A/C(-30 V) of the default stack
         cfg,
         "dark_current",
         db,
-        -4.5e-14 * np.abs(db) / 60.0,
+        # J(-60 V) = 4.5e-10 A/cm2 at any area (18 pA on the 4 mm2 default since
+        # 2026-10-18; the fake was a fixed 4.5e-14 A = the old 1e-4 cm2 default)
+        -4.5e-10 * cfg.area_cm2 * np.abs(db) / 60.0,
         dict(solver="devsim", validated_domain=True, domain_note=None),
     )
     x = np.array([0.0, 0.3, 0.5, 5.0, 10.29, 10.3, 10.31, 11.3])
@@ -130,7 +132,8 @@ def test_spec_default_reference_device():
         "65 deg" in spec["cce"]["generation"]
         and "never reach the n+" in spec["cce"]["generation"]
     )
-    assert spec["dark_current"]["I_at_minus60V_A"] == pytest.approx(4.5e-14)
+    # 4 mm2 default area since 2026-10-18: 1.8e-11 A (was 4.5e-14 A on 1e-4 cm2, x400)
+    assert spec["dark_current"]["I_at_minus60V_A"] == pytest.approx(1.8e-11, rel=1e-12)
     assert spec["dark_current"]["J_at_minus60V_A_per_cm2"] == pytest.approx(4.5e-10)
     assert "calibration" in spec["dark_current"]["note"]
     # the spikes at both abrupt steps (8e5 at 0.3 um, 9e5 at 10.3 um) are excluded from the peak

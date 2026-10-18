@@ -291,7 +291,7 @@ class TestCalibrationCV:
 class TestResetStateLeak:
     """Phase 26 / CONS-01 SC#3: reset_devsim_fully() clears alt-structure cylindrical globals.
 
-    Plan 02 implements `src/devsim_reset.py` and wires this test.
+    Plan 02 implemented `etna/core/devsim_reset.py` and wired this test.
     """
 
     @pytest.mark.slow

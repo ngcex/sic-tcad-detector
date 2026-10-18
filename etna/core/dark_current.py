@@ -61,8 +61,8 @@ logger = logging.getLogger(__name__)
 # (Before 2026-10-18 the defaults were 0.05 cm2 in extract_dark_current_components /
 # dark_current_sweep / sensitivity_sweep and 0.04 cm2 elsewhere. Notebook 07 passes
 # area=0.05 explicitly, so its "19.7 pA" is the 4 mm2 value x 1.25, not a bound violation.)
-# DeviceConfig.area_cm2 keeps its own 1e-4 cm2 default: run_dark_current uses the config's
-# area, so DeviceConfig() leakage is the 4 mm2 value x 1e-4 / 0.04.
+# DeviceConfig.area_cm2 defaults to this value since 2026-10-18 (was 1e-4 cm2, i.e.
+# DeviceConfig() leakage was the 4 mm2 value / 400).
 AREA_DOSIMETER_CM2 = 0.04
 
 # Physical constants in SI

@@ -107,12 +107,11 @@ def test_sidebar_default_is_the_nplus_stack():
 
     at = AppTest.from_file("app/main.py", default_timeout=120)
     at.run()
-    # the sidebar models the 4 mm2 dosimeter; DeviceConfig keeps its 1e-4 cm2 default
+    # the sidebar models the 4 mm2 dosimeter == DeviceConfig's default area (2026-10-18;
+    # before, the sidebar overrode DeviceConfig's 1e-4 cm2 with 0.04)
     import dataclasses
 
-    assert at.session_state["device_config"] == dataclasses.replace(
-        DeviceConfig(), area_cm2=0.04
-    )
+    assert at.session_state["device_config"] == DeviceConfig()
     assert not at.sidebar.checkbox(key="cfg_legacy_on").value
     texts = " ".join(c.value for c in at.sidebar.caption)
     assert "Inside the 1D engine/devsim cross-check domain" in texts
@@ -120,22 +119,16 @@ def test_sidebar_default_is_the_nplus_stack():
     at.run()
     from etna import legacy_config, measured_cv_config, nplus_calibrated_config
 
-    assert at.session_state["device_config"] == dataclasses.replace(
-        legacy_config(), area_cm2=0.04
-    )
+    assert at.session_state["device_config"] == legacy_config()
     # the default IS the measured-C-V profile (2026-10-18); the previous calibrated model
     # (abrupt n+, no transition) is the opt-in checkbox now
     at.sidebar.checkbox(key="cfg_legacy_on").uncheck()
     at.run()
-    assert at.session_state["device_config"] == dataclasses.replace(
-        measured_cv_config(), area_cm2=0.04
-    )
+    assert at.session_state["device_config"] == measured_cv_config()
     assert not at.sidebar.checkbox(key="cfg_nplus_cal_on").value
     at.sidebar.checkbox(key="cfg_nplus_cal_on").check()
     at.run()
-    assert at.session_state["device_config"] == dataclasses.replace(
-        nplus_calibrated_config(), area_cm2=0.04
-    )
+    assert at.session_state["device_config"] == nplus_calibrated_config()
     infos = " ".join(c.value for c in at.sidebar.info)
     assert "Previous calibrated model" in infos and "no graded transition" in infos
     texts = " ".join(c.value for c in at.sidebar.caption)
@@ -145,5 +138,5 @@ def test_sidebar_default_is_the_nplus_stack():
     at.sidebar.checkbox(key="cfg_buffer_on").uncheck()
     at.run()
     assert at.session_state["device_config"] == dataclasses.replace(
-        DeviceConfig(), area_cm2=0.04, buffer_thickness_um=None, buffer_end_doping=None
+        DeviceConfig(), buffer_thickness_um=None, buffer_end_doping=None
     )

@@ -10,7 +10,6 @@
   no-n+ devsim sweep stop at -89.5 V; with n+ it must not).
 """
 
-import dataclasses
 
 import numpy as np
 import pytest
@@ -136,7 +135,7 @@ def test_legacy_preset_reproduces_the_pre_flip_numbers():
         ],
         rtol=1e-9,
     )
-    d = sim.run_dark_current(dataclasses.replace(c, area_cm2=0.04), 0.0, -30.0, 4)
+    d = sim.run_dark_current(c, 0.0, -30.0, 4)  # default area: 4 mm2
     np.testing.assert_allclose(
         d.y * 1e12,
         # hole mobility at the epi doping (2026-10-17, A-03); pre-flip:
@@ -172,7 +171,7 @@ def test_default_numbers_are_the_measured_cv_record():
     assert cv.metadata["reach_through_V"] == pytest.approx(3.1)
     cce = sim.run_cce(c, -10.0, -50.0, 3)
     np.testing.assert_allclose(cce.y, [0.9994734, 0.9998111, 0.9998832], atol=1e-7)
-    d = sim.run_dark_current(dataclasses.replace(c, area_cm2=0.04), 0.0, -60.0, 7)
+    d = sim.run_dark_current(c, 0.0, -60.0, 7)  # default area: 4 mm2
     np.testing.assert_allclose(
         d.y[[1, 3, 6]] * 1e12, [6.296, 15.763, 18.000], atol=1e-3
     )
@@ -200,7 +199,7 @@ def test_previous_default_numbers_are_the_calibration_record():
     # both mobilities at N_D_bulk (was DEFAULT_N_D 1.07e15) since 2026-10-17: 0.999303 / 0.999812 / 0.999884 before;
     # local per-node mobility (A-03) since 2026-10-18: 0.999316 / 0.999816 / 0.999887 before
     np.testing.assert_allclose(cce.y, [0.9993150, 0.9998155, 0.9998862], atol=1e-7)
-    d = sim.run_dark_current(dataclasses.replace(c, area_cm2=0.04), 0.0, -60.0, 7)
+    d = sim.run_dark_current(c, 0.0, -60.0, 7)  # default area: 4 mm2
     np.testing.assert_allclose(
         d.y[[1, 3, 6]] * 1e12, [6.077, 14.720, 18.000], atol=1e-3
     )
@@ -226,6 +225,32 @@ def test_legacy_dark_sweep_reaches_v_stop_with_the_2V_ramp():
     assert np.all(np.isfinite(d.y)) and len(d.y) == 20
     plateau = d.y[d.x <= -60.0]
     assert np.all(np.diff(plateau) >= 0) and plateau[-1] / plateau[0] - 1 < 1e-3
+    # ... but past reach-through the contact sits in depleted epi: flagged per point
+    rt = d.metadata["reach_through_V"]
+    assert rt == pytest.approx(run_cv_legacy_reach_through(), abs=1e-9)
+    np.testing.assert_array_equal(d.metadata["past_reach_through"], np.abs(d.x) > rt)
+    assert (
+        d.metadata["past_reach_through"][-1] and not d.metadata["past_reach_through"][0]
+    )
+    assert "outside model validity" in d.metadata["validity_note"]
+    # the default (n+) model carries no such record
+    n = sim.run_dark_current(DeviceConfig(), 0.0, -10.0, 3)
+    assert (
+        n.metadata["validity_note"] is None and n.metadata["past_reach_through"] is None
+    )
+
+
+def test_legacy_dark_sweep_before_reach_through_is_all_valid():
+    """A legacy sweep ending before reach-through (0..-10 V < 17 V) still knows where
+    reach-through lies (fixed lattice, not the caller's grid): every point valid."""
+    d = sim.run_dark_current(legacy_config(), 0.0, -10.0, 3)
+    assert d.metadata["reach_through_V"] == pytest.approx(17.0)
+    np.testing.assert_array_equal(d.metadata["past_reach_through"], [False] * 3)
+
+
+def run_cv_legacy_reach_through():
+    """The legacy reach-through as run_cv reports it (same engine rule, 0.05 V)."""
+    return sim.run_cv(legacy_config(), 0.0, -40.0, 21).metadata["reach_through_V"]
 
 
 class _Spy:

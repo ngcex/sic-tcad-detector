@@ -25,7 +25,8 @@ either side.
 Generators other than 17/18 only write the notebook source; outputs are stripped on
 commit by nbstripout (`.gitattributes`). Never execute a notebook into `notebooks/`
 to refresh tracked figures by accident: notebooks write `../figures/*.png` (and,
-via `etna.core.plotting.save_figure`, `etna/figures/`, gitignored).
+via `etna.core.plotting.save_figure`, `$ETNA_FIGURE_DIR` or `./figures` relative to the
+working directory, i.e. `notebooks/figures/`, gitignored; before 2026-10-18 `etna/figures/`).
 
 ## Notebook housekeeping (2026-10-18)
 

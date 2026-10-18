@@ -675,9 +675,9 @@ def calibrate_graded_doping_2d(
     from etna.core.devsim_reset import _CARTESIAN_DEFAULTS
     import devsim.python_packages.simple_physics as simple_physics
 
-    # Planar assembly globals once, at entry (devsim_reset step 3 without deleting
-    # devices): a cylindrical build earlier in the process would otherwise corrupt
-    # the planar trials' Poisson weights.
+    # Planar assembly globals once, at entry (devsim's Cartesian values, without the
+    # device deletion of a full reset): a cylindrical build earlier in the process
+    # would otherwise corrupt the planar trials' Poisson weights.
     # (raxis_zero / raxis_variable have no Cartesian value and devsim refuses an empty
     # one; they are read only by the cylindrical models these five select.)
     for name, value in _CARTESIAN_DEFAULTS.items():

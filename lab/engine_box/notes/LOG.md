@@ -89,6 +89,10 @@ etna/core/transient.py (WP-A), so the change is a WP-A follow-up: hoist the buil
 and ramp above the loop in transient_cce_vs_dose_rate, snapshot once, restore per rate
 (delete the device once in a finally). Side note for WP-A: the 20 Gy/s point comes out
 at exactly 1.0 (clipped) on the default stack while 50-230 Gy/s give 0.99980-0.99984.
+Correction 2026-10-18 (WP-F, 010d795): on f232b37 (local per-node mobility, A-03) the 20 Gy/s
+point is raw 0.999725, not clipped; the exact 1.0 was the pre-A-03 raw 1.00028, clipped to 1
+below the 5 % warning margin. The dataframe/metadata now carry transient_cce_raw. Build-once
+landed: 7.48 -> 2.15 s on DeviceConfig(), bit-identical.
 
 ## Legacy dark-current "wall" was a 0.5 V-ramp artefact
 

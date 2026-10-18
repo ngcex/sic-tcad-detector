@@ -24,6 +24,7 @@ from etna.core.devsim_lock import (
 from etna.core.device2d import create_sic_2d_device
 from etna.core.drift_diffusion import create_dd_device, setup_sic_drift_diffusion
 from etna.core.poisson import setup_poisson, solve_equilibrium
+from etna.core.dark_current import AREA_DOSIMETER_CM2
 from etna.core.device import (
     DEFAULT_STACK,
     LEGACY_STACK,
@@ -56,7 +57,10 @@ class DeviceConfig:
     N_D_bulk: float = DEFAULT_STACK["N_D_bulk"]  # cm^-3, epi donor doping in bulk
     L_transition_um: float = _um(DEFAULT_STACK["L_transition"])  # um, graded transition
     T: float = 300.0  # K, device temperature
-    area_cm2: float = 1e-4  # cm^2, device active area
+    # cm^2, device active area: the 4 mm2 dosimeter (AREA_DOSIMETER_CM2 = 0.04, the area
+    # at which N_t is fitted to < 18 pA at -60 V), so DeviceConfig() gives its absolute C
+    # and dark current. Before 2026-10-18 the default was 1e-4 cm2 (C and I x 1/400).
+    area_cm2: float = AREA_DOSIMETER_CM2
     # n+ layer under the n- epi, cathode contact on its far end (the conductive n+
     # substrate, truncated to 1 um: W/CCE/dark do not depend on it, LOG.md). Default ON.
     # None = the LEGACY model, cathode directly on the n- epi (non-convergence wall at

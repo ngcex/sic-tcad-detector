@@ -295,7 +295,7 @@ def _refine_reach_through(
     lattice = np.arange(k0, k1 + 1) * step
     try:
         kws = [device_kwargs(config)]
-        pb, _, _ = _engine_batch(kws)
+        pb, _ = _engine_batch(kws)
         res = reverse_sweep(
             pb,
             -lattice,
@@ -345,10 +345,10 @@ def _failed_result(config, sim_type, error, **empty_keys) -> SimResult:
 def _engine_batch(kws):
     """Engine batch for devices sharing one mesh geometry.
 
-    ``kws`` is a list of ``device_kwargs(config)`` dicts. Returns the batch, the
-    mesh nodes and the per-device doping at which both mobilities are evaluated
-    (``etna.core.device.mobility_doping``, as the devsim builders: N_D for uniform,
-    N_D_bulk for graded).
+    ``kws`` is a list of ``device_kwargs(config)`` dicts. Returns the batch and the
+    mesh nodes. (Until 2026-10-18 it also returned the per-device scalar mobility
+    doping for cce_sweep's ``N_D``; the mobility is local per node since A-03 and
+    cce_sweep ignores ``N_D``, so it is no longer computed or passed.)
     """
     col = lambda key: np.array([k[key] for k in kws], dtype=float)
     sub = kws[0]["substrate_thickness_cm"]
@@ -379,13 +379,7 @@ def _engine_batch(kws):
         buffer=buffer,
         donor_table=table,
     )
-    nd_mob = np.array(
-        [
-            mobility_doping(k["N_D"], k["doping_profile"], k["N_D_bulk"], table)
-            for k in kws
-        ]
-    )
-    return pb, x, nd_mob
+    return pb, x
 
 
 def _engine_groups(configs, bias_array, facade):
@@ -450,7 +444,7 @@ def _cv_batch(configs, v_start, v_stop, n_points, capture):
     fell_back = set()
     for idxs in _engine_groups(configs, bias_array, "run_cv").values():
         kws = [device_kwargs(configs[i]) for i in idxs]
-        pb, _, _ = _engine_batch(kws)
+        pb, _ = _engine_batch(kws)
         res = reverse_sweep(
             pb, bias_array, kws[0]["substrate_thickness_cm"], kws[0]["epi_thickness_cm"]
         )
@@ -527,7 +521,7 @@ def _cce_batch(configs, v_start, v_stop, n_points, capture):
     fell_back = set()
     for idxs in _engine_groups(configs, bias_array, "run_cce").values():
         kws = [device_kwargs(configs[i]) for i in idxs]
-        pb, x, nd = _engine_batch(kws)
+        pb, x = _engine_batch(kws)
         sub = kws[0]["substrate_thickness_cm"]
         # Full-depletion voltage from a dark Poisson sweep on the same grid
         # (CCE carries no W of its own); cheap, does not touch the CCE numbers.
@@ -548,7 +542,7 @@ def _cce_batch(configs, v_start, v_stop, n_points, capture):
             else None
         )
         G = alpha_generation(x, sub, 15e-4, 1e18, epi_end=epi_end)
-        # Mobility inputs mirror cce_vs_bias exactly (mobility_doping, both carriers).
+        # Local per-node mobility from the batch doping, as cce_vs_bias (A-03).
         res = cce_sweep(
             pb,
             bias_array,
@@ -556,7 +550,6 @@ def _cce_batch(configs, v_start, v_stop, n_points, capture):
             G,
             T=[k["T"] for k in kws],
             N_A=[k["N_A"] for k in kws],
-            N_D=nd,
         )
         for j, i in enumerate(idxs):
             if not (res.converged[:, j].all()):
@@ -1293,7 +1286,7 @@ def run_cce_tilted_alpha(
     from etna.core.generation_profiles import E_PAIR_SIC_EV, tilted_alpha_generation
 
     kws = [device_kwargs(config)]
-    pb, x, nd = _engine_batch(kws)
+    pb, x = _engine_batch(kws)
     sub = kws[0]["substrate_thickness_cm"]
     epi_end = sub + kws[0]["epi_thickness_cm"]
     E0 = 5.5e6
@@ -1324,7 +1317,7 @@ def run_cce_tilted_alpha(
     pick = []
     for v in bias_array:  # last occurrence of each requested bias, in request order
         pick.append(int(np.flatnonzero(np.isclose(grid, v, rtol=0, atol=1e-12))[-1]))
-    res = cce_sweep(pb, grid, sub, G_rate, T=config.T, N_A=config.N_A, N_D=nd)
+    res = cce_sweep(pb, grid, sub, G_rate, T=config.T, N_A=config.N_A)
     if not res.converged[:, 0].all():
         raise RuntimeError("run_cce_tilted_alpha: batched engine did not converge")
     dark = reverse_sweep(
@@ -1617,7 +1610,7 @@ def _temperature_engine(config: DeviceConfig, temperatures, voltage, method):
     from etna.core.charge_collection import hecht_cce
 
     kws = [device_kwargs(_with_T(config, T)) for T in temperatures]
-    pb, x, nd = _engine_batch(kws)
+    pb, x = _engine_batch(kws)
     sub, epi = kws[0]["substrate_thickness_cm"], kws[0]["epi_thickness_cm"]
     if method == "hecht":
         res = reverse_sweep(pb, [voltage], sub, epi, capacitance=False)
@@ -1630,7 +1623,7 @@ def _temperature_engine(config: DeviceConfig, temperatures, voltage, method):
         return vals, res.converged[0]
     epi_end = sub + epi if kws[0].get("nplus_thickness_cm") else None
     G = alpha_generation(x, sub, 15e-4, 1e18, epi_end=epi_end)
-    res = cce_sweep(pb, [voltage], sub, G, T=temperatures, N_D=nd)
+    res = cce_sweep(pb, [voltage], sub, G, T=temperatures)
     return res.cce[0], res.converged[0]
 
 
@@ -1759,7 +1752,10 @@ def run_dark_current(
         (A), metadata contains "I_SRH", "I_TAT", "I_SRV", "area_cm2", and the
         truncation record: "truncated" (True if the sweep stopped before
         v_stop), "requested_v_start", "requested_v_stop", "reached_v_stop"
-        (last converged bias, None if no point converged).
+        (last converged bias, None if no point converged); and the validity record
+        of the legacy (cathode-on-epi) model: "reach_through_V",
+        "past_reach_through" (bool per point, outside model validity) and
+        "validity_note" (all None with an n+ layer).
 
     Warning
     -------
@@ -1807,6 +1803,8 @@ def run_dark_current(
                 "requested_v_start": result["requested_v_start"],
                 "requested_v_stop": result["requested_v_stop"],
                 "reached_v_stop": result["reached_v_stop"],
+                # legacy (cathode-on-epi) model: points past reach-through flagged
+                **_legacy_dark_validity(config, result["voltages"]),
                 **_provenance(config, "devsim"),
             },
             mesh=None,
@@ -1826,6 +1824,72 @@ def run_dark_current(
             reset_devsim_fully()
 
 
+LEGACY_DARK_VALIDITY_NOTE = (
+    "legacy model (cathode contact on the n- epi, no n+ layer): at |V| above the "
+    "reach-through voltage the depletion edge reaches the ohmic cathode, whose "
+    "boundary condition (n = N_D, infinite recombination) then sits in depleted "
+    "material; the dark current there is a contact artefact (a plateau), outside "
+    "model validity. Use the default (n+) model for those biases."
+)
+
+
+def _legacy_dark_validity(config: DeviceConfig, voltages) -> dict:
+    """Reach-through and per-point validity of a legacy (no n+) dark sweep.
+
+    The legacy dark sweep reaches -100 V since the 2 V ramp (WP-B, LOG.md "Legacy
+    dark-current wall"), far past the legacy reach-through (17.0 V on the mesh rule
+    of _reach_through_V for the legacy default). The reach-through is the C-V/CCE
+    one (dark Poisson on the batched engine over a fixed 0..-max(100, |V|) lattice,
+    refined to 0.05 V). Three states: reached (``past_reach_through`` = |V| > it);
+    not reached within the lattice (reach_through_V None, every point valid); engine
+    unavailable (``past_reach_through`` None: unknown).
+    With an n+ layer there is no contact on the epi: empty validity record.
+    """
+    if config.nplus_thickness_um is not None:
+        return {
+            "reach_through_V": None,
+            "past_reach_through": None,
+            "validity_note": None,
+        }
+    v = np.asarray(voltages, dtype=float)
+    # fixed lattice (independent of the caller's grid, so a short sweep still knows
+    # where reach-through lies); refined to 0.05 V like run_cv / run_cce
+    v_max = max(100.0, float(np.max(np.abs(v))) if v.size else 0.0)
+    grid = np.linspace(0.0, -v_max, 201)
+    state = "unknown"
+    rt = None
+    try:
+        kws = [device_kwargs(config)]
+        pb, _ = _engine_batch(kws)
+        dark = reverse_sweep(
+            pb,
+            grid,
+            kws[0]["substrate_thickness_cm"],
+            kws[0]["epi_thickness_cm"],
+            capacitance=False,
+        )
+        if dark.converged[:, 0].all():
+            rt = _refine_reach_through(
+                config, _reach_through_V(dark.W[:, 0], grid, config), grid
+            )
+            state = "reached" if rt is not None else "not_reached"
+    except Exception as e:  # pragma: no cover - defensive (outside the engine box)
+        logger.info("legacy dark sweep: reach-through not available (%s)", e)
+    if state == "reached":
+        past = np.abs(v) > rt + 1e-9
+        note = f"reach-through {rt:g} V; " + LEGACY_DARK_VALIDITY_NOTE
+    elif state == "not_reached":
+        past = np.zeros(v.shape, dtype=bool)
+        note = (
+            f"legacy model: no reach-through within 0..-{v_max:g} V (dark Poisson on "
+            "the batched engine): every point is inside the depletion-edge validity."
+        )
+    else:
+        past = None
+        note = "reach-through unknown (engine unavailable); " + LEGACY_DARK_VALIDITY_NOTE
+    return {"reach_through_V": rt, "past_reach_through": past, "validity_note": note}
+
+
 @serialized
 def run_transient(
     config: DeviceConfig,
@@ -1835,11 +1899,11 @@ def run_transient(
 ) -> SimResult:
     """Run a transient CCE-vs-dose-rate FLASH-pulse sweep and return a SimResult.
 
-    Wraps `etna.core.transient.transient_cce_vs_dose_rate`, which builds
-    AND deletes its own device for EACH dose rate internally. Despite living
-    in the "bucket-b" task, run_transient is bucket-a-SHAPED: it adds NO
-    build_device / reset_devsim_fully / delete_device — a facade-level cleanup
-    would double-delete the core's per-dose-rate devices.
+    Wraps `etna.core.transient.transient_cce_vs_dose_rate`, which builds ONE
+    device for the whole sweep (dark state restored per dose rate) and deletes it
+    itself. Despite living in the "bucket-b" task, run_transient is bucket-a-SHAPED:
+    it adds NO build_device / reset_devsim_fully / delete_device — a facade-level
+    cleanup would double-delete the core's device.
 
     Signature note (D-03): run_transient's signature is NOT defined in the
     design spec. This wraps transient_cce_vs_dose_rate as the MINIMAL
@@ -1867,7 +1931,8 @@ def run_transient(
     -------
     SimResult
         sim_type="transient", x=dose_rates (Gy/s), y=transient CCE values
-        (dimensionless), metadata contains "V_bias".
+        (dimensionless, clipped to [0, 1]), metadata contains "V_bias" and
+        "transient_cce_raw" (the unclipped values).
     """
     _require_1d(config, "run_transient")
 
@@ -1879,8 +1944,8 @@ def run_transient(
         config.epi_thickness_um * 1e-4 if epi_thickness_cm is None else epi_thickness_cm
     )
 
-    # transient_cce_vs_dose_rate builds AND deletes its own device per dose
-    # rate, so run_transient adds NO device cleanup (bucket-a-shaped).
+    # transient_cce_vs_dose_rate builds AND deletes its own (single) device, so
+    # run_transient adds NO device cleanup (bucket-a-shaped).
     kw = device_kwargs(config)
     kw.pop("epi_thickness_cm")
     df = transient_cce_vs_dose_rate(
@@ -1902,6 +1967,7 @@ def run_transient(
         y=y,
         metadata={
             "V_bias": V_bias,
+            "transient_cce_raw": df["transient_cce_raw"].to_numpy(),
             # integrated contact current: anode with an n+ layer (the direct cathode
             # current on the n+ is round-off), cathode without (core docstring)
             "current_contact": df.attrs.get("contact", "cathode"),
