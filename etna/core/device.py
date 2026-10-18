@@ -26,6 +26,7 @@ from etna.core.sic_material import (
     srh_lifetime,
 )
 from etna.core.incomplete_ionization import ionized_acceptor_concentration
+from etna.core.solver_tol import DC_REL_ERROR
 
 logger = logging.getLogger(__name__)
 
@@ -326,6 +327,15 @@ def create_sic_device(
 
     Structure: p+ anode layer (left, anode) | n- epitaxial layer [| graded n-/n+
     transition] | [n+ layer] (right, cathode)
+
+    A BARE call is NOT the default device (DeviceConfig()): it builds a UNIFORM epi
+    at DEFAULT_N_D (1.07e15) on the default geometry (p+ 0.3 um, n+ 1 um) with an
+    abrupt epi end (default_buffer_for_profile drops the stack's transition for a
+    uniform profile), a simple test diode kept as the low-level default because ~90
+    call sites (tests, sweeps, notebooks) rely on it. Decision 2026-10-18 (tech-debt
+    WP-A): not changed; every production path passes the full stack explicitly
+    (the facades through etna.api.device.device_kwargs, the core sweeps through
+    their DEFAULT_STACK graded keywords), pinned by tests/test_default_stack.py.
 
     Parameters
     ----------
@@ -1028,7 +1038,7 @@ def calibrate_graded_doping(
                             devsim.solve(
                                 type="dc",
                                 absolute_error=1e10,
-                                relative_error=1e-10,
+                                relative_error=DC_REL_ERROR,
                                 maximum_iterations=40,
                             )
                         except devsim.error:

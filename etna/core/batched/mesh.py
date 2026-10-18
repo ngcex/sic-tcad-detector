@@ -23,7 +23,12 @@ from etna.core.devsim_lock import serialized
 def node_positions(epi_thickness_cm, substrate_thickness_cm, nplus_thickness_cm=None):
     """Node coordinates x (cm) of the diode mesh, read-only (N,).
 
-    ``nplus_thickness_cm`` (None = no n+ layer) is part of the cache key.
+    ``nplus_thickness_cm`` (None = no n+ layer) is part of the cache key. Unlike
+    create_sic_device (whose default is the stack's 1 um n+), the default here is None:
+    a mesh probe for a default-stack device must pass the n+ thickness. The default is
+    kept because etna.api.simulation's legacy reach-through branch calls
+    node_positions(epi, sub) for devices that genuinely have no n+; make_batch, which
+    turns the mesh into a device, requires nplus/buffer explicitly.
     """
     name = f"mesh_probe_{uuid.uuid4().hex[:8]}"
     region = "sic"

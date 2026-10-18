@@ -383,3 +383,29 @@ def test_core_builders_uniform_profile_is_abrupt():
         assert info.get("buffer_thickness_cm") is None
     finally:
         devsim.delete_device(device=info["device_name"])
+
+
+def test_bare_builder_is_the_documented_uniform_test_diode():
+    """Decision 2026-10-18 (WP-A): a bare create_sic_device() stays a uniform 1.07e15
+    epi on the default geometry (p+ 0.3 um, n+ 1 um, abrupt end), NOT DeviceConfig();
+    the facades pass the full stack (device_kwargs carries every stack key)."""
+    import uuid
+
+    import devsim
+
+    from etna.api.device import device_kwargs
+    from etna.core.device import DEFAULT_N_D, create_sic_device
+
+    info = create_sic_device(device_name=f"bare_{uuid.uuid4().hex[:6]}")
+    try:
+        assert info["doping_profile"] == "uniform" and info["N_D"] == DEFAULT_N_D
+        assert info["substrate_thickness_cm"] == DEFAULT_STACK["substrate_thickness_cm"]
+        assert info["nplus_thickness_cm"] == DEFAULT_STACK["nplus_thickness_cm"]
+        assert info["buffer_thickness_cm"] is None
+    finally:
+        devsim.delete_device(device=info["device_name"])
+    kw = device_kwargs(DeviceConfig())
+    assert kw["doping_profile"] == "graded"
+    for key in ("substrate_thickness_cm", "nplus_thickness_cm", "N_D_junction",
+                "N_D_bulk", "L_transition", "buffer_thickness_cm", "buffer_end_doping"):
+        assert key in kw, key

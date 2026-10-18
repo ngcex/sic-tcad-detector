@@ -42,7 +42,7 @@ X0 = 0.5e-4
 def batch(NJ, NB, Lb_cm=0.0, shift_cm=0.0, epi=EPI0, L=S["L_transition"]):
     x = node_positions(epi, SUB, NP)
     x_end = SUB + epi
-    pb = make_batch(x, SUB, 1e19, NJ, NB, L, 300.0, nplus=(x_end, S["N_D_nplus"]))
+    pb = make_batch(x, SUB, 1e19, NJ, NB, L, 300.0, nplus=(x_end, S["N_D_nplus"]), buffer=None)
     if Lb_cm > 0:
         donors = pb.donors.copy()
         x1 = x_end + shift_cm

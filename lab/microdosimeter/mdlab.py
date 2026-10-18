@@ -137,7 +137,7 @@ def uniform_batch(sub_cm, N_D, N_A=1e19, T=300.0, extra_donors=None):
     """PoissonBatch for uniform-epi microdosimeters (N_D scalar or (B,)), n+ 1 um below."""
     x = mesh(sub_cm)
     N_D = np.atleast_1d(np.asarray(N_D, float))
-    pb = make_batch(x, sub_cm, N_A, N_D, N_D, 1e-4, T, nplus=(sub_cm + EPI_CM, N_NPLUS))
+    pb = make_batch(x, sub_cm, N_A, N_D, N_D, 1e-4, T, nplus=(sub_cm + EPI_CM, N_NPLUS), buffer=None)
     if extra_donors is not None:
         donors = pb.donors + extra_donors
         acc = pb.donors - pb.netdop

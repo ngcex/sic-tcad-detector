@@ -63,8 +63,9 @@ def make_batch(
     N_D_bulk,
     L_transition,
     T=300.0,
-    nplus=None,
-    buffer=None,
+    *,
+    nplus,
+    buffer,
 ):
     """PoissonBatch for graded p+/n- diodes on mesh ``x`` (uniform: N_D_junction == N_D_bulk).
 
@@ -73,6 +74,9 @@ def make_batch(
     come from ``node_positions(..., nplus_thickness_cm)``); None = no n+.
     ``buffer`` = (x_epi_end, Lb, N_end) for the graded n-/n+ transition over the last
     Lb of the epi (``etna.core.device.create_sic_device`` buffer keywords); None = none.
+    Both are REQUIRED keywords (since 2026-10-18; they defaulted to None, so a caller
+    that forgot them silently got the legacy no-n+ / abrupt-end geometry while the
+    devsim builders default to the stack's n+ and transition).
     """
     T = np.atleast_1d(np.asarray(T, dtype=float))
     N_A_ion = _per_device(_n_a_ionized, N_A, T)

@@ -99,7 +99,7 @@ def donors_profile(x, NJ, NB, L, epi_cm, Lb_cm=0.0, N_np=N_NP):
 
 def batch_from_profiles(x, donors_rows):
     """PoissonBatch for a (B, N) donor array on mesh x (p+ 1e19 for x <= SUB)."""
-    ref = make_batch(x, SUB, NA, 1e15, 1e15, 1e-4, 300.0, nplus=(SUB + 1.0, N_NP))
+    ref = make_batch(x, SUB, NA, 1e15, 1e15, 1e-4, 300.0, nplus=(SUB + 1.0, N_NP), buffer=None)
     acc = ref.donors - ref.netdop
     acc = np.broadcast_to(acc[:1], donors_rows.shape).copy()
     return PoissonBatch(x, donors_rows, acc, ref.n_i[0], ref.V_t[0])

@@ -111,7 +111,7 @@ if __name__ == "__main__":
     from etna.core.batched import alpha_generation, cce_sweep, make_batch, node_positions
 
     x = node_positions(10e-4, 1e-4)
-    pb = make_batch(x, 1e-4, 1e19, 2.9e15, 8.5e13, 1e-4)
+    pb = make_batch(x, 1e-4, 1e19, 2.9e15, 8.5e13, 1e-4, nplus=None, buffer=None)
     G = alpha_generation(x, 1e-4, 15e-4, 1e18)
     e = cce_sweep(pb, -np.arange(10.0, 55.0, 10.0), 1e-4, G).cce[:, 0]
     print("CCE 1D batched engine (balanced)", e, "\n   rel vs devsim balanced", rel(e, c_bal), "\n   rel vs devsim direct", rel(e, c_dir))

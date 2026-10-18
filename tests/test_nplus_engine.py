@@ -63,7 +63,9 @@ def test_nplus_cv_potential_and_cce_match_devsim():
         devsim.delete_device(device=name)
     assert not ref["truncated"]  # no convergence wall with n+
     x = node_positions(EPI, SUB, NP)
-    pb = make_batch(x, SUB, 1e19, 2.9e15, 8.5e13, 1e-4, nplus=(SUB + EPI, 1e19))
+    pb = make_batch(
+        x, SUB, 1e19, 2.9e15, 8.5e13, 1e-4, nplus=(SUB + EPI, 1e19), buffer=None
+    )
     res = reverse_sweep(pb, BIASES, SUB, EPI, keep_psi=True)
     assert res.converged.all()
     np.testing.assert_allclose(res.W[:, 0], ref["depletion_widths"], rtol=1e-10)

@@ -68,6 +68,7 @@ def test_engine_capacitance_is_the_terminal_charge_derivative():
         cfg.N_D_bulk,
         cfg.L_transition_um * 1e-4,
         nplus=(sub + epi, cfg.N_D_nplus),
+        buffer=None,
     )
     v = pb.v.copy()
     v[0] = v[-1] = 0.0
