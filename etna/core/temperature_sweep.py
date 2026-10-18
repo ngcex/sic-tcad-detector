@@ -18,10 +18,8 @@ from scipy.stats import linregress
 
 from etna.core.sic_material import (
     SiC4H_Parameters,
-    bandgap,
     intrinsic_concentration,
     mobility_caughey_thomas_T,
-    srh_lifetime,
 )
 from etna.core.device import DEFAULT_STACK as _STACK, mobility_doping
 
@@ -100,9 +98,9 @@ def sweep_iv_vs_temperature(
             if use_tat:
                 # dark_current_sweep refreshes the TAT field/gamma factors at every
                 # bias step; ramp_bias leaves them at their 0 V values, which
-                # under-reported the leakage ~7.6x (audit B-01). Fixed 0.5 V steps:
-                # the per-step refresh cannot use the adaptive ramp.
-                sweep = dark_current_sweep(device_info, [V_reverse], area=1.0, V_step=0.5)
+                # under-reported the leakage ~7.6x (audit B-01). Fixed steps
+                # (DARK_RAMP_STEP_V): the per-step refresh cannot use the adaptive ramp.
+                sweep = dark_current_sweep(device_info, [V_reverse], area=1.0)
                 if len(sweep["J_total"]) == 0:
                     raise RuntimeError(f"dark_current_sweep did not converge at {V_reverse} V")
                 I_total = sweep["J_total"][-1]

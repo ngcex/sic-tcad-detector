@@ -628,7 +628,7 @@ def test_sweep_reports_truncation(monkeypatch):
     try:
         full = dark_current_sweep(info, np.array([-0.5]), area=0.04)
         assert full["truncated"] is False and full["reached_v_stop"] == -0.5
-        real = dc._refresh_and_resolve
+        real = dc._resolve_self_consistent
         calls = {"n": 0}
 
         def fail_second(device, region):
@@ -637,7 +637,7 @@ def test_sweep_reports_truncation(monkeypatch):
                 raise devsim.error("synthetic non-convergence")
             return real(device, region)
 
-        monkeypatch.setattr(dc, "_refresh_and_resolve", fail_second)
+        monkeypatch.setattr(dc, "_resolve_self_consistent", fail_second)
         cut = dark_current_sweep(info, np.array([-1.0, -1.5, -2.0]), area=0.04)
     finally:
         devsim.delete_device(device=info["device_name"])
