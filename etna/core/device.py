@@ -366,7 +366,10 @@ def build_diode_mesh(
     devsim.add_1d_mesh_line(mesh=mesh_name, pos=0.0, ps=1e-5, tag="top")
 
     # Approach junction from p-side: finer spacing
-    devsim.add_1d_mesh_line(mesh=mesh_name, pos=junction_pos - 5e-6, ps=1e-6)
+    # (skipped for a p+ layer thinner than 50 nm, as in the 2D builder: the line would
+    # sit at or below x = 0 and devsim fails with an opaque contact error; audit A-14)
+    if junction_pos - 5e-6 > 1e-8:
+        devsim.add_1d_mesh_line(mesh=mesh_name, pos=junction_pos - 5e-6, ps=1e-6)
 
     # Junction vicinity: very fine spacing (~1 nm = 1e-7 cm)
     devsim.add_1d_mesh_line(mesh=mesh_name, pos=junction_pos, ps=1e-7)

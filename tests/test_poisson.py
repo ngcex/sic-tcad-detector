@@ -247,3 +247,21 @@ class TestVbiRegression:
         V_bi_v1 = built_in_potential(N_A_ionized, N_D, params.n_i_300)
         V_bi_T = built_in_potential(N_A_ionized, N_D, n_i_T)
         assert V_bi_T == pytest.approx(V_bi_v1, rel=1e-10)
+
+
+def test_thin_p_plus_layer_builds():
+    """audit-v7 A-14: a p+ layer thinner than 50 nm builds (no mesh line below x = 0)."""
+    import devsim
+
+    from etna.core.device import create_sic_device
+    from etna.core.devsim_reset import delete_device_and_mesh
+
+    info = create_sic_device(device_name=_unique_name(), substrate_thickness_cm=2e-6)
+    try:
+        x = devsim.get_node_model_values(
+            device=info["device_name"], region=info["region_name"], name="x"
+        )
+        assert min(x) == 0.0
+        assert info["junction_pos"] == pytest.approx(2e-6)
+    finally:
+        delete_device_and_mesh(info["device_name"])
