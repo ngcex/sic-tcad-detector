@@ -1,0 +1,91 @@
+# ETNA continuous integration.
+#
+#   test     (push / pull request): lock check, lint (once a ruff config exists), notebook
+#            hygiene, and the fast default test run (`-m "not exhaustive"` from pytest.ini).
+#   nightly  (schedule / manual): the `exhaustive` tests (redundant deep variants) and a
+#            dependency audit of the locked set (audit C-05).
+#
+# Installs `--extra dev` only (no `viz`): the GDSII and manim tests skip themselves when
+# gdstk / manim are absent. See docs/USAGE.md, "Tests" and "Development workflow".
+name: CI
+
+on:
+  push:
+    branches: [main, "fix/**", "feat/**"]
+  pull_request:
+  schedule:
+    - cron: "17 2 * * *" # nightly, 02:17 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONUNBUFFERED: "1"
+  MPLBACKEND: Agg
+
+jobs:
+  test:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: System libraries for devsim (BLAS / LAPACK)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libopenblas-dev liblapack-dev
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+          enable-cache: true
+
+      - name: Lock file is up to date
+        run: uv lock --check
+
+      - name: Install (dev extra)
+        run: uv sync --locked --extra dev
+
+      - name: Ruff (only once a ruff configuration is committed)
+        run: |
+          if [ -f ruff.toml ] || [ -f .ruff.toml ] || grep -q '^\[tool\.ruff' pyproject.toml; then
+            uv run --no-sync ruff check .
+          else
+            echo "no ruff configuration yet: lint step skipped"
+          fi
+
+      - name: Notebook hygiene (no outputs in tracked notebooks)
+        run: uv run --no-sync nbstripout --verify notebooks/*.ipynb
+
+      - name: Notebook generators in sync
+        run: uv run --no-sync python scripts/check_notebook_generators.py
+
+      - name: Tests (fast default run)
+        run: uv run --no-sync pytest -n auto --dist loadfile -q --durations=20
+
+  nightly:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: System libraries for devsim (BLAS / LAPACK)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libopenblas-dev liblapack-dev
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+          enable-cache: true
+
+      - name: Install (dev extra)
+        run: uv sync --locked --extra dev
+
+      - name: Exhaustive tests
+        run: uv run --no-sync pytest -n auto --dist loadfile -q -m exhaustive --durations=20
+
+      - name: Dependency audit of the locked set (runtime + all extras)
+        run: |
+          uv export --frozen --no-hashes --all-extras --no-emit-project > /tmp/req-all.txt
+          uvx pip-audit --no-deps --disable-pip -r /tmp/req-all.txt
