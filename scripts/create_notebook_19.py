@@ -95,6 +95,8 @@ import numpy as np
 import pandas as pd
 import logging
 
+from etna.core.devsim_lock import set_devsim_quiet
+set_devsim_quiet(True)  # drop devsim's Newton log from direct core calls; ETNA_DEVSIM_VERBOSE=1 shows it
 from etna.core.alternative_structures import (
     create_mesa_device,
     create_3d_electrode_device,

@@ -35,6 +35,8 @@ nb.cells.append(
         "matplotlib.use('Agg')  # non-interactive backend for notebook creation\n"
         "import matplotlib.pyplot as plt\n"
         "\n"
+        "from etna.core.devsim_lock import set_devsim_quiet\n"
+        "set_devsim_quiet(True)  # drop devsim's Newton log from direct core calls; ETNA_DEVSIM_VERBOSE=1 shows it\n"
         "from etna.core.generation_profiles import (\n"
         "    alpha_generation_profile,\n"
         "    proton_generation_profile,\n"

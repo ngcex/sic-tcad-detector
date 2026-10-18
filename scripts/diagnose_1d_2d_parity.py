@@ -46,6 +46,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 import devsim
 
 from etna.core.drift_diffusion import create_dd_device
+from etna.core.devsim_lock import set_devsim_quiet
 from etna.core.charge_collection_2d import create_2d_dd_device
 from etna.core.poisson import extract_depletion_width_numerical
 
@@ -353,6 +354,7 @@ def _fmt(v):
 
 
 def main():
+    set_devsim_quiet(True)  # devsim Newton log off; ETNA_DEVSIM_VERBOSE=1 shows it
     print("[diag] Phase 26 1D-vs-2D reverse-bias convergence diagnostic")
     print("[diag] profile = {2.9e15, 8.5e13, 1e-4} (v3.0 defaults)")
 

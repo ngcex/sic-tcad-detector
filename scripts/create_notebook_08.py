@@ -53,6 +53,8 @@ nb.cells.append(
         "import pandas as pd\n"
         "import time\n"
         "\n"
+        "from etna.core.devsim_lock import set_devsim_quiet\n"
+        "set_devsim_quiet(True)  # drop devsim's Newton log from direct core calls; ETNA_DEVSIM_VERBOSE=1 shows it\n"
         "from etna.core.transient import (\n"
         "    TransientSolver, simulate_pulse_train, transient_cce_vs_dose_rate,\n"
         "    pulse_envelope\n"

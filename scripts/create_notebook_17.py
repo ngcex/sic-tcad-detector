@@ -85,6 +85,8 @@ import numpy as np
 import pandas as pd
 import time
 
+from etna.core.devsim_lock import set_devsim_quiet
+set_devsim_quiet(True)  # drop devsim's Newton log from direct core calls; ETNA_DEVSIM_VERBOSE=1 shows it
 from etna.core.single_particle import load_cce_let_table
 from etna.core.mc_coupling import load_mc_events_csv, process_mc_ensemble, pulse_height_distribution
 

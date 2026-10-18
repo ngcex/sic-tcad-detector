@@ -50,6 +50,7 @@ from etna.core.charge_collection_2d import (
 )
 from etna.core.charge_collection import add_generation_to_dd
 from etna.core.drift_diffusion import create_dd_device
+from etna.core.devsim_lock import set_devsim_quiet
 from etna.core.cv_analysis import cv_sweep
 
 # v3.0 default graded doping (then in src/device2d.py:41-43; now DEFAULT_STACK differs)
@@ -199,6 +200,7 @@ def build_metadata():
 
 
 def main():
+    set_devsim_quiet(True)  # devsim Newton log off; ETNA_DEVSIM_VERBOSE=1 shows it
     # Ensure all canonical notebooks exist before freezing.
     missing = [
         nb for nb in NOTEBOOK_LIST if not pathlib.Path(f"notebooks/{nb}").exists()

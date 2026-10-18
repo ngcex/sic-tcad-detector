@@ -324,6 +324,22 @@ def _generation(dev, x_pos, gen_rate, sigma):
     return (row[:, None] * lat[None, :]).ravel()
 
 
+def _uniform_epi_generation(dev, gen_rate):
+    """Uniform G = gen_rate below the junction (k order), as compare_cce_2d_vs_1d: zero
+    in the p+, beyond the epi end with an n+ layer unless nplus_generation
+    (confine_generation_to_epi), and on the contact rows (not injected)."""
+    g = dev.grid
+    info = dev.info
+    row = np.where(g.ys >= dev.junction, float(gen_rate), 0.0)
+    if info.get("nplus_thickness_cm") is not None and not info.get(
+        "nplus_generation", False
+    ):
+        row[g.ys > info["epi_end"] + 1e-12] = 0.0
+    row[0] = 0.0
+    row[-1] = 0.0
+    return np.repeat(row, g.nx)
+
+
 def lateral_cce_scan_2d(
     half_width_um,
     V_bias,
@@ -332,6 +348,7 @@ def lateral_cce_scan_2d(
     n_lateral_points=10,
     gen_rate=1e18,
     stripe_sigma_cm=2e-4,
+    full_area=False,
     **device_kwargs,
 ):
     """Engine equivalent of create_2d_dd_device(...) + cce_lateral_scan(..., n_points).
@@ -341,6 +358,10 @@ def lateral_cce_scan_2d(
     q_collected_over_deposited (as cce_lateral_scan), device_info (resolved exactly as create_sic_2d_device: N_A_ionized, N_D_junction,
     N_D_bulk, L_transition, n_i, epi_thickness_cm, ...), cathode_field,
     gummel_iterations. Raises Engine2DFallback / Engine2DOutsideValidity (module doc).
+
+    ``full_area=True`` adds ``cce_full_area``: the CCE of a uniform ``gen_rate`` over
+    the whole epi width (the 2D half of ``compare_cce_2d_vs_1d``: G = gen_rate below the
+    junction, confined to the epi, contact rows not injected, clipped to [0, 1]).
     """
     reason = engine2d_unsupported_reason(
         half_width_um,
@@ -391,6 +412,12 @@ def lateral_cce_scan_2d(
                 np.sum(vol * G)
             )  # box rule over injected nodes, as compute_cce_2d
             cce[m] = float(np.clip(abs(I) / I_gen, 0.0, 1.0)) if I_gen > 0 else 0.0
+        cce_full = None
+        if full_area:
+            G = _uniform_epi_generation(dev, gen_rate)
+            I = dev.illuminated_current(G)
+            I_gen = float(np.sum(vol * G))
+            cce_full = float(np.clip(abs(I) / I_gen, 0.0, 1.0)) if I_gen > 0 else 0.0
     except EngineNotConverged as e:
         raise Engine2DFallback(str(e)) from e
     # depth over which pairs are generated, as cce_lateral_scan: the epi, plus the n+
@@ -399,7 +426,7 @@ def lateral_cce_scan_2d(
     if has_nplus and info.get("nplus_generation"):
         gen_depth += info["nplus_thickness_cm"]
     f_in = in_mesh_generation_fraction(gen_depth, alpha_range_cm=_ALPHA_RANGE_CM)
-    return {
+    out = {
         "x_positions_cm": x_positions,
         "x_positions_um": x_positions * 1e4,
         "cce_values": cce,
@@ -410,6 +437,9 @@ def lateral_cce_scan_2d(
         "cathode_field": field,
         "gummel_iterations": list(dev.gummel_iterations),
     }
+    if full_area:
+        out["cce_full_area"] = cce_full
+    return out
 
 
 # Dark-state (field map) envelope. The dark solve is the quasi-Fermi Poisson only (no

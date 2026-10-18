@@ -84,6 +84,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import devsim
 
+from etna.core.devsim_lock import set_devsim_quiet
+set_devsim_quiet(True)  # drop devsim's Newton log from direct core calls; ETNA_DEVSIM_VERBOSE=1 shows it
 from etna.core.device2d import create_sic_2d_device
 from etna.core.device import create_sic_device
 from etna.core.poisson import setup_poisson, solve_equilibrium
@@ -128,7 +130,9 @@ setup_poisson(device_info_100)
 solve_equilibrium(device_info_100)
 setup_sic_drift_diffusion(device_info_100)
 device_info_100['dd_initialized'] = True
-ramp_bias(device_info_100, V_target=50.0, contact='cathode', V_step=0.5)
+# adaptive ramp (5 V steps, halved on a Newton failure down to 0.5 V): same 50 V state
+# as fixed 0.5 V steps (max |dV| 1.4e-14 V), 18 s instead of 150 s
+ramp_bias(device_info_100, V_target=50.0, contact='cathode', V_step=0.5, V_step_max=5.0)
 
 print(f"Device: {device_info_100['device_name']}")
 print(f"Half-width: {device_info_100['half_width_cm']*1e4:.0f} µm")
@@ -317,15 +321,16 @@ path is less favorable → CCE drops at the edges.
 
 code(
     """
-# Run bias-dependent lateral CCE scan for 100 µm SV
-# Each bias creates a new device, runs the scan, and cleans up
+# Run bias-dependent lateral CCE scan for 100 µm SV (5 biases × 5 positions)
+# solver='auto': the 2D engine (parity with the devsim device ~1e-14, ~0.4 s per bias);
+# devsim (a new device per bias, ~20 s each) only outside the engine's box
 print("Running bias-dependent CCE scan for 100 µm SV...")
-print("(This takes several minutes — 5 biases × 5 positions)")
 result_100 = cce_vs_bias_lateral(
     half_width_um=50.0,
     biases=[5.0, 10.0, 20.0, 30.0, 50.0],
     n_points=5,
     gen_rate=1e18,
+    solver='auto',
 )
 print("Done.")
 """
@@ -400,18 +405,11 @@ print(f"Most pronounced edge effect at V = {best_bias:.0f} V")
 
 # Run 300 µm SV at the same bias
 print(f"Running 300 µm SV lateral scan at {best_bias:.0f} V...")
-dev_300 = None
-try:
-    dev_300 = create_2d_dd_device(half_width_um=150.0, V_bias=best_bias)
-    scan_300_low = cce_lateral_scan(dev_300, n_points=5, gen_rate=1e18)
-    print(f"300 µm SV at {best_bias:.0f}V: edge/center = "
-          f"{scan_300_low['edge_to_center_ratio']:.4f}")
-finally:
-    if dev_300 is not None:
-        try:
-            devsim.delete_device(device=dev_300['device_name'])
-        except Exception:
-            pass
+res_300 = cce_vs_bias_lateral(half_width_um=150.0, biases=[best_bias], n_points=5,
+                              gen_rate=1e18, solver='auto')
+scan_300_low = res_300['scans'][0]
+print(f"300 µm SV at {best_bias:.0f}V ({res_300['solvers'][0]}): edge/center = "
+      f"{scan_300_low['edge_to_center_ratio']:.4f}")
 
 scan_100_low = result_100['scans'][best_bias_idx]
 """
@@ -509,11 +507,12 @@ CCE for both SV sizes. This quantifies the active-to-geometric volume ratio.
 code(
     """
 print('Running 2D vs 1D comparison for 100 µm SV at 50V...')
-cmp_100 = compare_cce_2d_vs_1d(half_width_um=50.0, V_bias=50.0, gen_rate=1e18)
+# solver='auto': the 2D half on the 2D engine (parity with devsim <= 7e-15), 1D on devsim
+cmp_100 = compare_cce_2d_vs_1d(half_width_um=50.0, V_bias=50.0, gen_rate=1e18, solver='auto')
 print('Done.\\n')
 
 print('Running 2D vs 1D comparison for 300 µm SV at 50V...')
-cmp_300 = compare_cce_2d_vs_1d(half_width_um=150.0, V_bias=50.0, gen_rate=1e18)
+cmp_300 = compare_cce_2d_vs_1d(half_width_um=150.0, V_bias=50.0, gen_rate=1e18, solver='auto')
 print('Done.')
 """
 )

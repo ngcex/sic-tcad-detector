@@ -81,6 +81,8 @@ os.chdir('..')
 import matplotlib.pyplot as plt
 import numpy as np
 
+from etna.core.devsim_lock import set_devsim_quiet
+set_devsim_quiet(True)  # drop devsim's Newton log from direct core calls; ETNA_DEVSIM_VERBOSE=1 shows it
 from etna.core.microdosimetry import (
     mean_chord_length,
     lineal_energy_spectrum,
