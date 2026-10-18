@@ -69,7 +69,6 @@ nb.cells.append(
         "    'font.size': 10,\n"
         "    'figure.dpi': 300,\n"
         "    'savefig.dpi': 300,\n"
-        "    'savefig.bbox_inches': 'tight',\n"
         "    'axes.linewidth': 0.8,\n"
         "    'lines.linewidth': 1.2,\n"
         "})\n"

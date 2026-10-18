@@ -14,17 +14,17 @@ Computes immutable v3.0 reference values directly via the same Python API the
     (0.1 %), devsim version, v3.0 default doping, purpose.
 
 Plan 04 asserts that the calibrated 2D defaults reproduce these within
-``metadata.tolerance_rel`` at biases <= -10 V — any src/ change that drifts the
+``metadata.tolerance_rel`` at biases <= -10 V — any etna/core change that drifts the
 values by > 0.1 % fails CI.
 
-DOES NOT modify src/. DOES NOT re-run any notebook.
+DOES NOT modify etna/. DOES NOT re-run any notebook.
 
 Run:
-    cd /Users/ngcex/projects/physics/etna && uv run python scripts/freeze_v3_baselines.py
+    uv run python scripts/freeze_v3_baselines.py   # from the repository root
 
 NOTE on devsim global state: ``devsim.reset_devsim()`` clears the direct-solver
 parameter AND the UMFPACK solver callback; this script saves and restores both
-between device builds (mirrors src/optimization.py), otherwise the second build
+between device builds (mirrors etna/core/optimization.py), otherwise the second build
 fails with ``Solver "custom" specified, but "solver_callback" not set``.
 """
 
@@ -52,7 +52,7 @@ from etna.core.charge_collection import add_generation_to_dd
 from etna.core.drift_diffusion import create_dd_device
 from etna.core.cv_analysis import cv_sweep
 
-# v3.0 default graded doping (src/device2d.py:41-43)
+# v3.0 default graded doping (then in src/device2d.py:41-43; now DEFAULT_STACK differs)
 N_D_JUNCTION = 2.9e15
 N_D_BULK = 8.5e13
 L_TRANSITION = 1e-4
