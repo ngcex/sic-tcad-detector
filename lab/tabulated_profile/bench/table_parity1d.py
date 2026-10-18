@@ -30,7 +30,7 @@ from etna.core.batched import (
 from etna.core.charge_collection import cce_vs_bias
 from etna.core.cv_analysis import cv_sweep
 from etna.core.device import MEASURED_CV_TABLE, MEASURED_CV_TABULATED_STACK as S
-from etna.core.device import donor_table_spec, mobility_doping
+from etna.core.device import donor_table_spec
 from etna.core.drift_diffusion import create_dd_device
 
 CV_BIAS = np.array([0.0, -2.0, -5.0, -10.0, -20.0, -40.0, -60.0, -80.0, -100.0])
@@ -133,7 +133,6 @@ def main():
             G,
             T=kw.get("T", 300.0),
             N_A=kw.get("N_A", 1e19),
-            N_D=mobility_doping(None, "graded", None, spec),
         )
         nc = len(c["cce_values"])
         dc = np.max(np.abs(ce.cce[:nc, 0] - c["cce_values"]))

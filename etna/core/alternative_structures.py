@@ -751,20 +751,13 @@ def restore_cartesian_coords():
     Call after deleting a cylindrical device and before creating a new
     Cartesian device, to avoid solver interference.
     """
-    devsim.set_parameter(name="node_volume_model", value="NodeVolume")
-    devsim.set_parameter(name="edge_couple_model", value="EdgeCouple")
-    devsim.set_parameter(
-        name="element_edge_couple_model",
-        value="ElementEdgeCouple",
-    )
-    devsim.set_parameter(
-        name="element_node0_volume_model",
-        value="ElementNodeVolume@en0",
-    )
-    devsim.set_parameter(
-        name="element_node1_volume_model",
-        value="ElementNodeVolume@en1",
-    )
+    # devsim's own Cartesian values (one source: etna.core.devsim_reset). Until
+    # 2026-10-18 the element node-volume entries were "ElementNodeVolume@en0/@en1",
+    # inert because etna assembles no element_node_model terms.
+    from etna.core.devsim_reset import _CARTESIAN_DEFAULTS
+
+    for name, value in _CARTESIAN_DEFAULTS.items():
+        devsim.set_parameter(name=name, value=value)
 
 
 def create_3d_electrode_device(
