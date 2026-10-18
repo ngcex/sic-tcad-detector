@@ -20,3 +20,6 @@ scratchpad/
 
 # save_figure() output written next to the package by notebooks 02-05 (not package data)
 etna/figures/
+
+# lab/solver2d devsim reference dumps: regenerated on demand (lab/solver2d/README.md)
+lab/solver2d/notes/*.npz
