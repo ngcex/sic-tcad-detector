@@ -27,7 +27,8 @@ def test_preset_fields_and_default_stack_untouched():
         <= _ENGINE_BOX["N_D_uniform"][1]
     )
     d = DeviceConfig()  # the dosimeter default is a different device
-    assert d.area_cm2 == 1e-4 and d.doping_profile == "graded"
+    # 4 mm2 dosimeter area (0.04 cm2) since 2026-10-18 (was 1e-4 cm2)
+    assert d.area_cm2 == 0.04 and d.doping_profile == "graded"
     assert d.N_D_bulk == DEFAULT_STACK["N_D_bulk"]
 
 

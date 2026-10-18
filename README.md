@@ -111,8 +111,8 @@ uv run jupyter lab notebooks/01_phase1_validation.ipynb
 ```python
 from etna import DeviceConfig, run_cv, run_cce, run_field, run_radiation_damage
 
-cfg = DeviceConfig(epi_thickness_um=10.0, N_A=1e19)
-result = run_cv(cfg)          # SimResult: bias (x), capacitance (y), metadata
+cfg = DeviceConfig(epi_thickness_um=10.0, N_A=1e19)  # default area: the 4 mm2 dosimeter
+result = run_cv(cfg)          # SimResult: bias (x), capacitance in F for area_cm2 (y), metadata
 result = run_cce(cfg, v_start=-1.0, v_stop=-40.0)
 result = run_field(cfg)       # includes result.mesh (MeshData) for 2D devices
 result.metadata["solver"]     # "batched" | "engine2d" | "devsim"
