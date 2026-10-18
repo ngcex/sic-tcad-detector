@@ -31,6 +31,9 @@ viz = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["etna"]
+# save_figure() (etna/core/plotting.py) writes notebook figures next to the package;
+# they are build artefacts, never package data.
+exclude = ["etna/figures"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

@@ -1,28 +1,26 @@
 """Single-responsibility full reset of devsim global state.
 
-devsim's own ``reset_devsim()`` deletes devices but does NOT unset the
-process-global parameters that some constructors install. In particular,
-``src/alternative_structures.py:573-598`` (``_activate_cylindrical_coords``)
-switches devsim into cylindrical (r, z) integration by setting seven global
-parameters (``raxis_zero``, ``raxis_variable`` and the five assembly-model
-names). These persist into the next *planar* device build and silently corrupt
-its Poisson assembly weights — PITFALLS P03 / P30 (severity HIGH).
+``etna.core.alternative_structures._activate_cylindrical_coords`` switches devsim
+into cylindrical (r, z) integration by setting seven process-global parameters
+(``raxis_zero``, ``raxis_variable`` and the five assembly-model names); a planar
+build after it must not inherit them (PITFALLS P03 / P30). The original premise
+of this module, that ``devsim.reset_devsim()`` does NOT unset them, is false on
+the pinned devsim 2.10: ``reset_devsim()`` removes ``raxis_*`` and restores the
+Cartesian assembly models (audit-v7 A-08), so step 3 below is redundant (kept
+as a harmless belt-and-braces until A-08 removes it). What the wrapper really
+adds is (2) enumerating-and-deleting every device (never hardcoding names,
+PITFALLS P20) and (1)/(5) preserving ``direct_solver`` and ``solver_callback``,
+which ``reset_devsim()`` clears.
 
-``reset_devsim_fully`` closes that leak by, in order: (1) snapshotting the
-solver parameters, (2) enumerating-and-deleting every device (never hardcoding
-names — PITFALLS P20), (3) restoring the Cartesian defaults for every leaking
-global, (4) calling ``devsim.reset_devsim()``, and (5) restoring the saved
-solver parameters.
+Order: (1) snapshot the solver parameters, (2) delete every device, (3) restore
+the Cartesian defaults for every cylindrical global, (4) ``devsim.reset_devsim()``,
+(5) restore the saved solver parameters.
 
 Consumers:
-    - ``src/optimization.py`` — between microdosimetric-sweep trials, replacing
-      the former inline ``devsim.reset_devsim()`` block.
+    - ``etna/core/optimization.py`` — between microdosimetric-sweep trials.
     - The cylindrical-leak regression canary
       (``tests/test_device2d.py::TestResetStateLeak``).
-    - The Phase 26 graded-doping 2D calibration loop (~50 device builds).
-    - The Phase 31 tensor-mobility extension (will add its own globals here).
-
-Leak source verified by Read of ``src/alternative_structures.py:573-620``.
+    - ``etna.core.device2d.calibrate_graded_doping_2d`` (Phase 26 calibration loop).
 """
 
 import logging
@@ -32,7 +30,7 @@ import devsim
 logger = logging.getLogger(__name__)
 
 # The seven devsim process-globals set by
-# src/alternative_structures.py:_activate_cylindrical_coords (lines 573-598).
+# etna/core/alternative_structures.py:_activate_cylindrical_coords.
 # These leak across devices because they are global, not per-device.
 _CYLINDRICAL_GLOBALS = (
     "raxis_zero",
@@ -45,7 +43,7 @@ _CYLINDRICAL_GLOBALS = (
 )
 
 # Cartesian defaults to restore for the five assembly-model globals, per
-# src/alternative_structures.py:restore_cartesian_coords (lines 601-620).
+# etna/core/alternative_structures.py:restore_cartesian_coords.
 # raxis_zero and raxis_variable have no Cartesian counterpart and are cleared
 # to the empty string.
 _CARTESIAN_DEFAULTS = {
@@ -61,8 +59,8 @@ def reset_devsim_fully(preserve_solver=True):
     """Clear ALL devsim global state, including cylindrical-axis parameters.
 
     Replaces the inline ``devsim.reset_devsim()`` block formerly in
-    ``src/optimization.py``. Use after any cylindrical run (e.g. a 3D-electrode
-    device from ``src/alternative_structures.py``) before building a planar
+    ``etna/core/optimization.py``. Use after any cylindrical run (e.g. a 3D-electrode
+    device from ``etna/core/alternative_structures.py``) before building a planar
     device, and between calibration trials, to guarantee a clean session.
 
     The five-step workflow:

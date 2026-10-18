@@ -3,7 +3,7 @@ id: D-07
 title: Notebook generators drifted from committed notebooks (stale src.* logger names in nb16/nb20, extra rcParams in gen08, hand-edits in nb05)
 severity: low
 category: docs
-status: open
+status: fixed  # 2026-10-18 sync: 7acbe10 + 9dec765 (wp-c1): generators kept only where they reproduce the notebook (scripts/check_notebook_generators.py, all in sync), 04/05/20 deleted, decisions in scripts/README.md
 location: scripts/create_notebook_05.py, scripts/create_notebook_08.py:72, scripts/create_notebook_16.py, scripts/create_notebook_20.py; notebooks/05_parametric_studies.ipynb, 08_transient_flash.ipynb, 16_single_particle_cce.ipynb, 20_feasibility_report.ipynb
 labels: [notebooks, generators, drift, logging]
 source: raw-D F7

@@ -7,10 +7,10 @@ Streamlit bind check).
 
 | id   | severity | status | title                                                                                        | effort |
 | ---- | -------- | ------ | -------------------------------------------------------------------------------------------- | ------ |
-| C-01 | high     | open   | Most facades silently ignore DeviceConfig fields (T, N_A, substrate, doping_profile/N_D)     | M      |
+| C-01 | high     | fixed  | Most facades silently ignore DeviceConfig fields (T, N_A, substrate, doping_profile/N_D)     | M      |
 | C-02 | medium   | open   | Batch Sweep offers sweep parameters the selected facade ignores (identical curves)           | S      |
 | C-03 | medium   | open   | devsim.error is not a RuntimeError; pages crash with a raw traceback                         | S      |
-| C-04 | high     | open   | No devsim serialization; concurrent facade calls segfault the process (reproduced, exit 139) | S      |
+| C-04 | high     | fixed  | No devsim serialization; concurrent facade calls segfault the process (reproduced, exit 139) | S      |
 | C-05 | medium   | open   | uv.lock pins transitive deps with advisories (runtime + dev; tornado corrected)              | S      |
 | C-06 | low      | open   | C-V / Mott-Schottky labels and 1/C^2 CSV column use per-area units; values are in Farads     | S      |
 | C-07 | low      | open   | sim_type="dark_current" has two shapes; bias sweep mislabeled T_K; no truncation flag        | S      |
@@ -43,3 +43,12 @@ Sub-claims in the raw file that were corrected inside the issues:
 
 The raw file's 11 "Dropped candidates" were already dropped by the auditor and are not converted
 into issues.
+
+## Status sync 2026-10-18 (wp-c1)
+
+Status column synced from the issue files and the git log; evidence per change:
+
+- C-01: fixed. 8fd9602 + a0bd37c (file status already fixed)
+- C-04: fixed. 5d20634 (file status already fixed)
+
+Counts after the sync: 2 fixed, 15 open (the Totals line above is the audit-time count).

@@ -21,14 +21,13 @@ This artifact is consumed by Plan 03 (26-03-PLAN.md Task 1) to gate the
 calibration approach: jumping straight to a 2D Nelder-Mead refit only makes sense
 if H1/H3 hold; if H2 dominates, the fix is mesh/BC, not the profile.
 
-DIAGNOSTIC ONLY — this script does NOT modify any file under ``src/``.
+DIAGNOSTIC ONLY — this script does NOT modify any file under ``etna/``.
 
 Run:
-    cd /Users/ngcex/projects/physics/etna && uv run python scripts/diagnose_1d_2d_parity.py
+    uv run python scripts/diagnose_1d_2d_parity.py   # from the repository root
 
-NOTE on imports: ``create_dd_device`` is exported from ``src.drift_diffusion``
-(NOT ``src.device`` — the plan's import path was corrected here; ``src.device``
-only exposes the lower-level ``create_sic_device``).
+NOTE on imports: ``create_dd_device`` is exported from ``etna.core.drift_diffusion``
+(NOT ``etna.core.device``, which only exposes the lower-level ``create_sic_device``).
 """
 
 import datetime
@@ -36,7 +35,7 @@ import pathlib
 import sys
 import uuid
 
-# Allow `uv run python scripts/diagnose_1d_2d_parity.py` to find the `src`
+# Allow `uv run python scripts/diagnose_1d_2d_parity.py` to find the `etna`
 # package: when run as a script, sys.path[0] is the scripts/ dir, not the
 # project root. Prepend the project root so `import etna.core.*` resolves without
 # requiring PYTHONPATH to be set externally.
@@ -45,7 +44,6 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 import devsim
-import numpy as np
 
 from etna.core.drift_diffusion import create_dd_device
 from etna.core.charge_collection_2d import create_2d_dd_device
@@ -81,7 +79,8 @@ def _reset_devsim_safe():
         pass
 
 
-# --- Constants: copied verbatim from src/device2d.py:41-43 (v3.0 defaults) ---
+# --- Constants: the v3.0 graded defaults (then in src/device2d.py:41-43; the
+# current default is DEFAULT_STACK, fitted on measured C-V since 2026-10-18) ---
 N_D_JUNCTION = 2.9e15  # cm^-3, near junction
 N_D_BULK = 8.5e13  # cm^-3, deep epi bulk
 L_TRANSITION = 1e-4  # cm, characteristic decay length
@@ -133,12 +132,9 @@ def ramp_to_max(create_fn, device_label, **kwargs):
         device_info = create_fn(**kwargs)
 
         # Cathode bias name. For p+/n- diode, positive cathode V = reverse bias.
-        try:
-            from src import cv_analysis as _cv  # for GetContactBiasName
+        from etna.core import cv_analysis as _cv  # for GetContactBiasName
 
-            bias_name = _cv.simple_physics.GetContactBiasName("cathode")
-        except Exception:
-            bias_name = "cathode_bias"
+        bias_name = _cv.simple_physics.GetContactBiasName("cathode")
 
         device = device_info["device_name"]
 
@@ -193,7 +189,7 @@ def _W_at_voltages_1d(voltages):
     that fails to converge.
     """
     out = {}
-    from src import cv_analysis as _cv
+    from etna.core import cv_analysis as _cv
 
     bias_name = _cv.simple_physics.GetContactBiasName("cathode")
     for v in voltages:
