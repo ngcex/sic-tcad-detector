@@ -16,7 +16,12 @@ import numpy as np
 import pytest
 
 import etna.api.simulation as sim
-from etna.api.device import DeviceConfig, device_kwargs, legacy_config
+from etna.api.device import (
+    DeviceConfig,
+    device_kwargs,
+    legacy_config,
+    microdosimeter_config,
+)
 from etna.core.batched.dark import generation_cce
 from etna.core.charge_collection import add_generation_to_dd, compute_cce_from_dd
 from etna.core.dark_current import dark_reference
@@ -43,8 +48,8 @@ def _scaled(epi, nd, vb):
     return dict(epi_thickness_cm=epi, N_D_bulk=nd, N_D_junction=nj, V_bias=vb)
 
 
-def _legacy():
-    kw = device_kwargs(legacy_config())
+def _legacy(fn=legacy_config):
+    kw = device_kwargs(fn())
     return dict(
         epi_thickness_cm=kw.pop("epi_thickness_cm"), device_kwargs=kw, V_bias=-30.0
     )
@@ -55,6 +60,7 @@ CASES = [
     dict(device_kwargs=dict(T=150.0)),
     dict(device_kwargs=dict(T=450.0)),
     _legacy(),
+    _legacy(microdosimeter_config),
 ] + [
     _scaled(*c) for c in itertools.product([5e-4, 20e-4], [5e13, 5e14], [-10.0, -50.0])
 ]

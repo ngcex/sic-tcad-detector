@@ -16,6 +16,7 @@ from etna.api.device import (
     device_kwargs,
     legacy_config,
     measured_cv_tabulated_config,
+    microdosimeter_config,
     nplus_calibrated_config,
 )
 from etna.core.dark_current import (
@@ -59,6 +60,7 @@ PRESETS = {
     "tabulated": measured_cv_tabulated_config,
     "nplus_calibrated": nplus_calibrated_config,
     "legacy": legacy_config,
+    "microdosimeter": microdosimeter_config,
 }
 CASES = [
     ("default", 150.0),
@@ -74,6 +76,7 @@ CASES = [
     ("legacy", 150.0),
     ("legacy", 300.0),
     ("legacy", 450.0),
+    ("microdosimeter", 300.0),
 ]
 
 
