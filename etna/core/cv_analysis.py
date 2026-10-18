@@ -326,9 +326,13 @@ def cv_sweep(device_info, V_range, eps_r=9.7, area=1.0):
             # reaches the back contact and the DD solver's Newton iteration
             # stops converging. This is a physical sweep endpoint, not a
             # bug — stop here and return the converged portion.
+            # V_target is the first bias NOT reached (audit D-10 wording)
+            last = (
+                f"{solved_voltages[-1]:.2f}V" if solved_voltages else "no bias point"
+            )
             logger.warning(
-                f"cv_sweep: stopped sweep at V={V_target:.2f}V "
-                f"(requested down to {V_range.min():.2f}V)"
+                f"cv_sweep: could not reach V={V_target:.2f}V; sweep stopped after "
+                f"{last} (requested down to {V_range.min():.2f}V)"
             )
             truncated = True
             break

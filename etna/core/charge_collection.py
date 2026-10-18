@@ -582,7 +582,7 @@ def cce_vs_bias(
                 # endpoint (not punch-through) -- stop here and return the
                 # converged portion rather than raising (mirrors cv_sweep).
                 logger.warning(
-                    f"cce_vs_bias: stopped sweep at V={V_target:.1f}V "
+                    f"cce_vs_bias: could not reach V={V_target:.1f}V, sweep stopped "
                     f"(requested down to {V_range.min():.1f}V): {e}"
                 )
                 truncated = True
@@ -1254,7 +1254,8 @@ def cce_vs_bias_at_fluence(
                 # convergence wall (lower |V| on a damaged device): keep the converged
                 # points instead of losing them all to the exception (audit-v7 B-05)
                 logger.warning(
-                    f"cce_vs_bias_at_fluence: stopped sweep at V={V_target:.1f}V "
+                    f"cce_vs_bias_at_fluence: could not reach V={V_target:.1f}V, "
+                    "sweep stopped "
                     f"(requested down to {V_range.min():.1f}V), "
                     f"fluence={fluence:.2e}: {e}"
                 )
