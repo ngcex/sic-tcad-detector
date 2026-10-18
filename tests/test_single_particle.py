@@ -218,9 +218,13 @@ class TestBackwardEulerEstimator:
         times = np.array([1e-12, 3e-12, 7e-12])
         currents = np.array([-2.0, -1.0, -0.5])  # sign ignored, |I| integrated
         expected = 2.0 * 1e-12 + 1.0 * 2e-12 + 0.5 * 4e-12
-        assert collected_charge(times, currents, 0.0) == pytest.approx(expected, rel=1e-12)
+        assert collected_charge(times, currents, 0.0) == pytest.approx(
+            expected, rel=1e-12
+        )
         # dark current subtracted per unit time
-        assert collected_charge(times, currents - 0.1, -0.1) == pytest.approx(expected, rel=1e-12)
+        assert collected_charge(times, currents - 0.1, -0.1) == pytest.approx(
+            expected, rel=1e-12
+        )
         assert collected_charge([], [], 0.0) == 0.0
 
     @staticmethod
@@ -400,3 +404,89 @@ class TestCCEVsBias:
         assert (
             cce_results[50.0] >= cce_results[10.0]
         ), f"CCE(50V)={cce_results[50.0]:.6f} < CCE(10V)={cce_results[10.0]:.6f}"
+
+
+class TestAffineTable:
+    """build_cce_let_table(method="affine") fill logic with a fake transient (no devsim)."""
+
+    LETS = np.logspace(np.log10(0.5), np.log10(500.0), 7)
+
+    def _run(self, monkeypatch, q_col_of_qgen, check_tol=5e-7):
+        import etna.core.single_particle as sp
+
+        k = 2.0e-15  # Q_gen (C/cm) per keV/um
+        monkeypatch.setattr(
+            sp, "ion_track_generation_2d", lambda info, L, x_ion_cm=0.0: (None, k * L)
+        )
+        calls = []
+
+        def point(i):
+            calls.append(i)
+            L = self.LETS[i]
+            row = sp._table_row(L, k * L, q_col_of_qgen(k * L), True, 1e-10 * (1 + i))
+            return {**row, "simulated": True}
+
+        rows, sim = sp._affine_table({}, self.LETS, 0.0, point, check_tol)
+        return rows, sim, calls
+
+    def test_affine_fill_exact_for_affine_response(self, monkeypatch):
+        a, b = 0.99997, -3e-21  # b in C/cm
+        rows, sim, calls = self._run(monkeypatch, lambda q: a * q + b)
+        assert sorted(calls) == [0, 3, 6]  # let_min, middle, let_max only
+        assert rows is not None and len(rows) == len(self.LETS)
+        for i, r in enumerate(rows):
+            q = 2.0e-15 * self.LETS[i]
+            assert r["CCE_raw"] == pytest.approx((a * q + b) / q, rel=0, abs=1e-12)
+            assert r["simulated"] == (i in (0, 3, 6))
+        # filled rows take t95 / converged of the simulated LET nearest in log
+        assert rows[1]["t_collection_ns"] == pytest.approx(rows[0]["t_collection_ns"])
+        assert rows[5]["t_collection_ns"] == pytest.approx(rows[6]["t_collection_ns"])
+
+    def test_nonaffine_response_falls_back(self, monkeypatch):
+        # CCE rising by 1e-5 per decade of LET: the middle point misses the line
+        rows, sim, calls = self._run(
+            monkeypatch, lambda q: q * (0.9999 + 1e-5 * np.log10(q / 2.0e-15))
+        )
+        assert rows is None and sorted(sim) == [0, 3, 6]
+
+    def test_unknown_method_rejected(self):
+        from etna.core.single_particle import build_cce_let_table
+
+        with pytest.raises(ValueError):
+            build_cce_let_table(method="linear", half_width_um=2.0, n_let_points=4)
+
+
+@pytest.mark.slow
+class TestBuildCCELetTableSmallMesh:
+    """build_cce_let_table on a small mesh (hw 2 um, 5 mesh columns): the shared-device
+    table equals a fresh device per LET, and method="affine" equals method="full"."""
+
+    def test_build_once_and_affine_parity(self):
+        from etna.core.charge_collection_2d import create_2d_dd_device
+        from etna.core.devsim_reset import delete_device_and_mesh
+        from etna.core.single_particle import (
+            build_cce_let_table,
+            ion_track_generation_2d,
+            simulate_single_particle,
+        )
+
+        kw = dict(
+            half_width_um=2.0, V_bias=50.0, n_let_points=4, let_min=0.5, let_max=500.0
+        )
+        full = build_cce_let_table(method="full", **kw)
+        affine = build_cce_let_table(method="affine", **kw)
+        assert full["converged"].all() and full["simulated"].all()
+        # n=4: let_min, the middle (index 2) and let_max simulated, index 1 filled
+        assert affine["simulated"].tolist() == [True, False, True, True]
+        for i in (0, 2, 3):
+            assert affine["CCE_raw"][i] == full["CCE_raw"][i]
+        assert abs(affine["CCE_raw"][1] - full["CCE_raw"][1]) < 1e-6
+
+        # build-once parity: a fresh device at that LET gives the full-table row
+        info = create_2d_dd_device(half_width_um=2.0, V_bias=50.0)
+        try:
+            gen, q_gen = ion_track_generation_2d(info, full["LET_keV_um"][1])
+            fresh = simulate_single_particle(info, gen)["Q_collected"] / q_gen
+        finally:
+            delete_device_and_mesh(info["device_name"])
+        assert abs(fresh - full["CCE_raw"][1]) < 1e-12

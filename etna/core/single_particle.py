@@ -60,6 +60,10 @@ Q_ELECTRON = 1.602e-19  # C, elementary charge
 # (The old 5 % headroom covered the post-injection trapezoid, audit C4.)
 _CCE_EXCESS_TOL = 1e-3
 
+# build_cce_let_table(method="affine"): largest accepted miss, in CCE_raw, of the
+# simulated middle LET against the end-point line (fresh hw 50 run: 1.8e-7).
+_AFFINE_CHECK_TOL = 5e-7
+
 
 def ion_track_generation_2d(
     device_info, LET_keV_um, x_ion_cm=0.0, track_sigma_cm=1e-4, E_pair_eV=7.8
@@ -439,6 +443,8 @@ def build_cce_let_table(
     x_ion_cm=0.0,
     contact=None,
     device_kwargs=None,
+    method="affine",
+    affine_check_tol=_AFFINE_CHECK_TOL,
 ):
     """Build CCE(LET) lookup table from transient simulations.
 
@@ -465,18 +471,50 @@ def build_cce_let_table(
         Forwarded to simulate_single_particle (None = anode with n+, else cathode).
     device_kwargs : dict or None
         Extra keyword arguments for create_2d_dd_device (geometry / doping stack).
+    method : {"affine", "full"}
+        "full": one transient per LET. "affine" (default, n_let_points > 3): three
+        transients (let_min, let_max and the middle LET of the grid); the other rows
+        are Q_collected = a * Q_generated + b through the let_min / let_max points,
+        and the simulated middle point checks that line (see Notes). Falls back to
+        "full" (with a warning) if the check fails or a transient fails.
+    affine_check_tol : float
+        Largest |CCE_raw(fit) - CCE_raw(simulated)| accepted at the middle LET.
 
     Returns
     -------
     table : pandas.DataFrame
         Columns: LET_keV_um, Q_generated_fC, Q_collected_fC, CCE (clipped to
         [0, 1]), CCE_raw (unclipped Q_collected / Q_generated), t_collection_ns,
-        converged.
+        converged, simulated (False for the rows filled by the affine fit).
+
+    Notes
+    -----
+    Why the affine fill is enough. The table's LETs are all low injection (peak
+    excess density 2.6e9-2.6e12 cm^-3 for 0.5-500 keV/um against N_D_bulk 3.4e13, no
+    plasma effects in the model), so the transient is linear in the deposited charge
+    and the physical CCE does not depend on the LET; the simulated tables vary by
+    only ~1e-5 over three decades. That residual variation goes as 1/LET, i.e. a
+    fixed charge offset b, which the line a * Q_generated + b reproduces. Its origin
+    is the dark-current subtraction of collected_charge, sum (|I| - |I_dark|) dt: at
+    the anode of the default stack I_dark (+2.0e-13 A/cm at hw 50, 50 V) has the
+    opposite sign to the signal current, so each step is off by ~|I_dark| dt, an
+    offset of order I_dark * t_end independent of the LET (the sign-aware sum
+    (I_dark - I) dt gives 0.9999715 / 0.9999703 / 0.9999703 at LET 0.5 / 15.8 / 500
+    against 0.9999624 / 0.9999699 / 0.9999703; the Newton tolerances are not the
+    cause: TRANSIENT_ABS_ERROR 1e10 -> 1e7 is bit-identical, TRANSIENT_REL_ERROR
+    1e-8 -> 1e-11 moves CCE by 3e-9; lab/engine_box/bench/let_table_abs_tol.py). The
+    end-point line misses the simulated middle LET by 1.8e-7 (fresh hw 50 run;
+    t_end varies by ~10 % between LETs) and every row of the stored 100 / 300 um
+    tables by <= 1.5e-7 / 5.5e-7 (lab/engine_box/bench/let_table_affine.py: the
+    full 20 / 10-point grids, affine vs full). Cost: 3 transients instead of
+    n_let_points (20 -> 3 for the 100 um table, 10 -> 3 for the 300 um one).
     """
+    if method not in ("affine", "full"):
+        raise ValueError(f"method must be 'affine' or 'full', got {method!r}")
     LET_values = np.logspace(np.log10(let_min), np.log10(let_max), n_let_points)
 
     # One device for the whole table: the build (mesh, Poisson, equilibrium, DD setup,
-    # bias ramp; ~25 s at hw 50, a third of a point) does not depend on the LET. The
+    # bias ramp; ~25 s at hw 50, a quarter of a point) does not depend on the LET. The
     # dark DC state (Potential / Electrons / Holes at V_bias) is snapshotted once and
     # restored before each LET; simulate_single_particle's transient_dc then resets
     # the time-integration history, as a fresh device would (the transient_cce_vs_
@@ -487,19 +525,83 @@ def build_cce_let_table(
     )
     try:
         dark_state = _snapshot_dark_state(device_info)
-        results = [
-            _cce_let_point(
-                device_info, dark_state, LET, x_ion_cm, contact, i, n_let_points
+
+        def point(i):
+            return _cce_let_point(
+                device_info,
+                dark_state,
+                LET_values[i],
+                x_ion_cm,
+                contact,
+                i,
+                n_let_points,
             )
-            for i, LET in enumerate(LET_values)
-        ]
+
+        rows, done = None, {}
+        if method == "affine" and n_let_points > 3:
+            rows, done = _affine_table(
+                device_info, LET_values, x_ion_cm, point, affine_check_tol
+            )
+        if rows is None:  # "full", or the affine check failed: simulate the rest
+            rows = [done[i] if i in done else point(i) for i in range(n_let_points)]
     finally:
         try:
             delete_device_and_mesh(device_info["device_name"])
         except Exception:
             pass
 
-    return pd.DataFrame(results)
+    return pd.DataFrame(rows)
+
+
+def _affine_table(device_info, LET_values, x_ion_cm, point, check_tol):
+    """(rows, simulated): table rows from transients at let_min, let_max and the middle
+    LET, the others from Q_collected = a * Q_generated + b through the end points
+    (build_cce_let_table Notes). rows is None if a transient fails or the middle point
+    misses the line by more than ``check_tol`` in CCE_raw (the caller then simulates
+    the other LETs); ``simulated`` maps grid index -> simulated row."""
+    n = len(LET_values)
+    i_lo, i_mid, i_hi = 0, n // 2, n - 1
+    sim = {i: point(i) for i in (i_lo, i_hi, i_mid)}
+    if any(not np.isfinite(r["CCE_raw"]) for r in sim.values()):
+        logger.warning("affine CCE(LET) table: a transient failed, simulating the other LETs")
+        return None, sim
+    q_gen = {i: r["Q_generated_fC"] for i, r in sim.items()}
+    q_col = {i: r["Q_collected_fC"] for i, r in sim.items()}
+    slope = (q_col[i_hi] - q_col[i_lo]) / (q_gen[i_hi] - q_gen[i_lo])
+
+    def fit(qg):
+        return q_col[i_lo] + slope * (qg - q_gen[i_lo])
+
+    miss = abs(fit(q_gen[i_mid]) / q_gen[i_mid] - sim[i_mid]["CCE_raw"])
+    if miss > check_tol:
+        logger.warning(
+            f"affine CCE(LET) table: middle LET {LET_values[i_mid]:.3g} keV/um misses "
+            f"the end-point line by {miss:.2e} in CCE (> {check_tol:g}): simulating "
+            "the other LETs"
+        )
+        return None, sim
+    logger.info(
+        f"affine CCE(LET) table: middle-LET check |dCCE| = {miss:.2e} "
+        f"(tol {check_tol:g}); {n - 3} rows filled from the line"
+    )
+    # t95 and convergence of a filled row: those of the simulated LET nearest in log
+    sim_idx = np.array(sorted(sim))
+    rows = []
+    for i, LET in enumerate(LET_values):
+        if i in sim:
+            rows.append(sim[i])
+            continue
+        _, Q_gen = ion_track_generation_2d(device_info, LET, x_ion_cm=x_ion_cm)
+        near = sim[int(sim_idx[np.argmin(np.abs(np.log(LET_values[sim_idx] / LET)))])]
+        row = _table_row(
+            LET,
+            Q_gen,
+            fit(Q_gen * 1e15) * 1e-15,
+            near["converged"],
+            near["t_collection_ns"] * 1e-9,
+        )
+        rows.append({**row, "simulated": False})
+    return rows, sim
 
 
 # DC solution variables of the 2D DD device: the complete state create_2d_dd_device
@@ -539,6 +641,7 @@ def _cce_let_point(device_info, dark_state, LET, x_ion_cm, contact, i, n_let_poi
             sim_result["converged"],
             pulse_info["t_collection"],
         )
+        row["simulated"] = True
     except Exception as exc:
         logger.warning(f"Simulation failed for LET={LET:.2f} keV/um: {exc}")
         row = {
@@ -549,6 +652,7 @@ def _cce_let_point(device_info, dark_state, LET, x_ion_cm, contact, i, n_let_poi
             "CCE_raw": float("nan"),
             "converged": False,
             "t_collection_ns": float("nan"),
+            "simulated": True,
         }
 
     # Log progress every 5 LET values
