@@ -79,7 +79,7 @@ def test_manim_unavailable_gives_reason(monkeypatch):
 
     monkeypatch.setattr(builtins, "__import__", no_manim)
     ok, why = manim_available()
-    assert not ok and "uv sync --extra viz" in why and "pkgconf" in why
+    assert not ok and "uv sync --extra dev --extra viz" in why and "pkgconf" in why
     with pytest.raises(RuntimeError, match="extra viz"):
         render_animation({}, "StackScene")
 

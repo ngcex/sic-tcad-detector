@@ -101,4 +101,4 @@ def test_nav_sidebar_smoke():
     # and the sidebar wrote device_config before running the default page.
     assert at.exception == [], f"app/main.py raised on boot: {at.exception}"
     assert "device_config" in at.session_state
-    assert at.session_state["device_config"] is not None
+    assert type(at.session_state["device_config"]).__name__ == "DeviceConfig"

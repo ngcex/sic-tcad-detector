@@ -30,7 +30,6 @@ from etna.core.dark_current import create_dark_current_device, dark_current_swee
 from etna.core.device import (
     DEFAULT_N_D,
     donor_table_spec,
-    mobility_doping,
     table_sensitive_end_cm,
     table_sensitive_end_doping,
 )
@@ -1382,8 +1381,14 @@ def run_radiation_damage(
     config : DeviceConfig
         Device configuration (geometry, doping, temperature, area).
     fluences : np.ndarray or None
-        Proton fluences (cm^-2) to sweep. Default None -> np.geomspace(1e13,
-        1e16, 6).
+        Proton fluences (cm^-2) to sweep, used as given. Default None ->
+        ``default_fluence_grid(config, proton_energy_MeV)``: 8 log-spaced points
+        from 0.01x to 3x this device's compensation fluence (6 below it; the 2 beyond
+        it are normally NaN with a reason - the 3x point always - to show where the
+        model ends: compensation_fluence is a lower bound on the mesh threshold).
+        Before 2026-10-18 the default was a fixed 1e13..1e16 grid, which lies
+        beyond the compensation fluence of the default stack (1.35e13 at 5.6 MeV)
+        and of the tabulated preset (5.2e12): 6 of 6 points were NaN.
     V_bias : float
         Reverse bias (V, conventional-negative sign). Default -40.0.
     proton_energy_MeV : float
@@ -1397,6 +1402,9 @@ def run_radiation_damage(
         metadata contains "V_bias", "energy_MeV", "valid" (bool per point),
         "reason" (list of str, "" when valid) and "compensation_fluence"
         (p/cm^2; points at or beyond it are NaN: epi fully compensated).
+        "solver" names the solver(s) that produced the points ("batched" on the engine's
+        box, "devsim" outside it, "batched + devsim" when mixed) and
+        "solver_per_point" lists it per fluence ("" = not solved).
 
     Warning
     -------
@@ -1410,7 +1418,7 @@ def run_radiation_damage(
     _require_1d(config, "run_radiation_damage")
 
     if fluences is None:
-        fluences = np.geomspace(1e13, 1e16, 6)
+        fluences = default_fluence_grid(config, proton_energy_MeV)
 
     # Bucket-a: cce_vs_fluence builds AND deletes its own device per fluence.
     # Forward config doping/geometry (D-01) so this facade is self-consistent
@@ -1427,6 +1435,10 @@ def run_radiation_damage(
     n = len(result["fluences"])
     valid = result.get("valid")
     reason = result.get("reason")
+    # cce_vs_fluence reports the solver per point ("batched", "devsim", "" = not solved)
+    per_point = [str(v) for v in result.get("solver", [])]
+    used = sorted({v for v in per_point if v})
+    solver = " + ".join(used) if used else "none (no point solved)"
     return SimResult(
         config=config,
         sim_type="damage",
@@ -1435,7 +1447,8 @@ def run_radiation_damage(
         metadata={
             "V_bias": result["V_bias"],
             "energy_MeV": result["energy_MeV"],
-            **_provenance(config, "devsim"),
+            "solver_per_point": per_point,
+            **_provenance(config, solver),
             # Per-point validity (False = not solved: full donor compensation or
             # a solver failure; reason says which). Older cores lack the keys.
             "valid": (
@@ -1448,6 +1461,28 @@ def run_radiation_damage(
         },
         mesh=None,
     )
+
+
+DEFAULT_FLUENCE_GRID_SPAN = (1e-2, 3.0)  # x compensation_fluence
+DEFAULT_FLUENCE_GRID_POINTS = 8
+
+
+def default_fluence_grid(
+    config: DeviceConfig, proton_energy_MeV: float = 5.6
+) -> np.ndarray:
+    """Default fluence grid of ``run_radiation_damage`` for this device (p/cm^2).
+
+    ``DEFAULT_FLUENCE_GRID_POINTS`` log-spaced points from 0.01x to 3x
+    ``compensation_fluence(config, proton_energy_MeV)``: six lie below full donor
+    compensation (solved), the last two beyond its nominal value (normally NaN with a
+    reason; the 3x point always, since compensation_fluence is a lower bound), so the
+    curve shows the shape up to the model's validity limit and where it ends. The
+    Streamlit page proposes a narrower range (0.7e-3x .. 0.7x, every point solvable)
+    on purpose: there the user edits the range.
+    """
+    phi_c = compensation_fluence(config, proton_energy_MeV)
+    lo, hi = DEFAULT_FLUENCE_GRID_SPAN
+    return np.geomspace(lo * phi_c, hi * phi_c, DEFAULT_FLUENCE_GRID_POINTS)
 
 
 def compensation_fluence(config: DeviceConfig, proton_energy_MeV: float) -> float:

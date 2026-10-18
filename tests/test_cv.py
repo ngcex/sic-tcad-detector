@@ -137,7 +137,7 @@ class TestCvAtFluence:
         from etna.core.cv_analysis import cv_at_fluence
 
         result = cv_at_fluence(fluence=0.0, V_range=[0, -5, -10, -20, -30])
-        assert result is not None
+        assert isinstance(result, dict)
         C = result["capacitance"]
         W = result["depletion_widths"]
         assert len(C) > 0
@@ -161,9 +161,6 @@ class TestCvAtFluence:
         V_pts = [0, -5, -10, -20, -30]
         pristine = cv_at_fluence(fluence=0.0, V_range=V_pts)
         damaged = cv_at_fluence(fluence=1.2e13, V_range=V_pts)
-
-        assert pristine is not None
-        assert damaged is not None
 
         # Capacitance spread (max - min) should be smaller for damaged device
         spread_pristine = np.max(pristine["capacitance"]) - np.min(

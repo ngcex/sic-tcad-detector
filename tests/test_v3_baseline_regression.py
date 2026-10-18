@@ -1,15 +1,17 @@
-"""Phase 26 / CONS-01 SC#4: 2D outputs reproduce v3.0 baselines within tolerance.
+"""Frozen-value guards from tests/baselines/v3_frozen.json (tolerance metadata.tolerance_rel).
 
-Loads tests/baselines/v3_frozen.json (created by Plan 01 Task 2) and asserts
-that current code reproduces v3.0 CCE, 1D C-V, and the canonical notebook
-list within metadata.tolerance_rel.
+Two different things are pinned here:
 
-Plan 04 replaces xfail with real assertions after Plan 03's calibrated defaults
-are baked into src/device2d.py. The CCE re-computation recipe mirrors
-scripts/freeze_v3_baselines.py::compute_cce_center exactly (uniform epi
-generation at V_bias=10 V) so the only intended difference between the frozen
-value and the recomputed value is the calibrated _N_D_*_DEFAULT shift in
-src/device2d.py — which Plan 03 kept within 0.1 % in the low-bias regime.
+- the 2D CCE entries (JSON keys ``cce_center_100um`` / ``cce_center_300um``, names kept
+  from the v3.0 snapshot) are NOT v3.0 numbers any more: they guard the DEFAULT model's
+  2D builder (``create_2d_dd_device`` with no doping keywords = DEFAULT_STACK) on the
+  v3 uniform-generation recipe at 10 V; every re-pin is recorded in the JSON metadata
+  (``rebaselined_*``);
+- the 1D C-V entry IS the v3.0 snapshot: the v3 geometry and doping are passed
+  explicitly, so it guards the 1D builder/C-V extraction against silent drift.
+
+The CCE recipe mirrors scripts/freeze_v3_baselines.py::compute_cce_center (uniform
+generation over y >= junction at V_bias = 10 V).
 """
 
 import json
@@ -68,8 +70,9 @@ def _compute_cce_center(half_width_um):
 
 
 @pytest.mark.slow
-def test_v3_cce_center_100um_preserved():
-    """Calibrated 2D defaults must reproduce v3.0 CCE at the 100 um SV center."""
+def test_default_2d_builder_cce_uniform_generation_10V_hw50():
+    """Default-model 2D builder, v3 uniform-generation recipe at 10 V, hw 50 um: frozen
+    CCE (JSON key cce_center_100um, see the rebaselined_* metadata)."""
     from etna.core.devsim_reset import reset_devsim_fully
 
     baseline = _load_baseline()
@@ -80,7 +83,7 @@ def test_v3_cce_center_100um_preserved():
     try:
         cce = _compute_cce_center(half_width_um=50.0)
         assert math.isclose(cce, expected, rel_tol=tol), (
-            f"CCE 100 um SV regressed: expected {expected:.6e}, got {cce:.6e}, "
+            f"default 2D builder CCE (hw 50) moved: expected {expected:.6e}, got {cce:.6e}, "
             f"rel_diff = {abs(cce - expected) / expected:.3e}, tol = {tol}"
         )
     finally:
@@ -89,8 +92,9 @@ def test_v3_cce_center_100um_preserved():
 
 @pytest.mark.slow
 @pytest.mark.exhaustive  # laterally uniform: same value as the 100 um test (0.95452362)
-def test_v3_cce_center_300um_preserved():
-    """Calibrated 2D defaults must reproduce v3.0 CCE at the 300 um SV center."""
+def test_default_2d_builder_cce_uniform_generation_10V_hw150():
+    """Same guard at hw 150 um (JSON key cce_center_300um): laterally uniform, so the
+    value equals the hw 50 one."""
     from etna.core.devsim_reset import reset_devsim_fully
 
     baseline = _load_baseline()
@@ -101,7 +105,7 @@ def test_v3_cce_center_300um_preserved():
     try:
         cce = _compute_cce_center(half_width_um=150.0)
         assert math.isclose(cce, expected, rel_tol=tol), (
-            f"CCE 300 um SV regressed: expected {expected:.6e}, got {cce:.6e}, "
+            f"default 2D builder CCE (hw 150) moved: expected {expected:.6e}, got {cce:.6e}, "
             f"rel_diff = {abs(cce - expected) / expected:.3e}, tol = {tol}"
         )
     finally:
@@ -118,9 +122,9 @@ def test_v3_cv_1d_preserved():
     baseline = _load_baseline()
     expected_cv = baseline["cv_1d"]
     tol = baseline["metadata"]["tolerance_rel"]
-    # The 1D device is frozen and uses the v3.0 doping values directly — not the
-    # calibrated 2D constants. We assert that nothing has accidentally changed
-    # in src/device.py / drift_diffusion (defense in depth alongside git diff).
+    # The 1D device uses the v3.0 doping values and geometry directly (not the
+    # default stack): nothing may change in etna/core/device.py / drift_diffusion /
+    # cv_analysis for this explicit device.
     v3_doping = baseline["metadata"]["v3_default_doping"]
 
     reset_devsim_fully()

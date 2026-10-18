@@ -31,7 +31,7 @@ SCENES = ("StackScene", "DepletionScene")
 DEFAULT_BIASES = tuple(float(v) for v in np.linspace(0.0, -60.0, 13))  # 5 V steps
 _SCENES_FILE = Path(__file__).with_name("_scenes.py")
 _INSTALL_HINT = (
-    "install the optional extra with `uv sync --extra viz` (macOS: pycairo needs "
+    "install the optional extra with `uv sync --extra dev --extra viz` (macOS: pycairo needs "
     "`brew install pkgconf cairo pango`)"
 )
 

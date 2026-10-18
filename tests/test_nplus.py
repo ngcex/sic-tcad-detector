@@ -81,7 +81,10 @@ def test_nplus_removes_the_1d_wall():
     passes 100 V."""
     info = create_dd_device(device_name=_name("wall"), **NPLUS)
     try:
-        ramp_bias(info, 100.0, contact="cathode", V_step=0.5)
+        assert ramp_bias(info, 100.0, contact="cathode", V_step=0.5) is True
+        assert devsim.get_parameter(
+            device=info["device_name"], name="cathode_bias"
+        ) == pytest.approx(100.0, abs=1e-12)
     finally:
         devsim.delete_device(device=info["device_name"])
 

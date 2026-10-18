@@ -41,7 +41,8 @@ class TestEligibility:
         ],
     )
     def test_ineligible_configs(self, cfg, bias):
-        assert sim._field_engine_unsupported_reason(cfg, bias) is not None
+        why = sim._field_engine_unsupported_reason(cfg, bias)
+        assert isinstance(why, str) and why
 
 
 @pytest.mark.slow

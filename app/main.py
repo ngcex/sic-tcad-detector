@@ -4,7 +4,7 @@ Run with: streamlit run app/main.py
 
 Wires the device-config sidebar (renders on every page, before pg.run(),
 so device_config persists across navigation per UI-07) and registers
-Home + the 7 workflow pages via callable-based st.Page.
+Home + the 9 workflow pages (10 st.Page entries) via callable-based st.Page.
 """
 
 import sys

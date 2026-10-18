@@ -15,7 +15,10 @@ References:
     - Knoll, "Radiation Detection and Measurement", 4th ed.
 """
 
-from etna.core.solver_tol import DC_REL_ERROR
+from etna.core.solver_tol import (
+    DC_ABS_ERROR,
+    DC_REL_ERROR,
+)
 import logging
 import uuid
 
@@ -41,7 +44,7 @@ logger = logging.getLogger(__name__)
 
 # graded-doping defaults of the fluence sweeps = cce_vs_bias = the default stack
 from etna.core.device import DEFAULT_STACK as _STACK  # noqa: E402
-from etna.core.device import mobility_doping  # noqa: E402
+from etna.core.device import graded_stack_kwargs, mobility_doping  # noqa: E402
 
 
 def full_compensation_reason(damaged):
@@ -183,32 +186,6 @@ def hecht_cce(
     return np.clip(cce, 0.0, 1.0)
 
 
-def compute_cce_from_current(I_collected, I_generated):
-    """Compute CCE as ratio of collected to generated current.
-
-    Used by the DD solver (Plan 02) to extract CCE from simulation.
-
-    Parameters
-    ----------
-    I_collected : float or array_like
-        Collected current (A/cm^2) at the contact.
-    I_generated : float or array_like
-        Total generated current (A/cm^2) from radiation.
-
-    Returns
-    -------
-    cce : float or ndarray
-        Charge collection efficiency, clipped to [0, 1].
-    """
-    I_collected = np.abs(np.asarray(I_collected, dtype=float))
-    I_generated = np.asarray(I_generated, dtype=float)
-
-    with np.errstate(divide="ignore", invalid="ignore"):
-        cce = np.where(I_generated > 0, I_collected / I_generated, 0.0)
-
-    return np.clip(cce, 0.0, 1.0)
-
-
 def hecht_cce_partial_depletion(
     V,
     d_epi,
@@ -248,7 +225,8 @@ def hecht_cce_partial_depletion(
         Hole lifetime (s). Default: srh_lifetime(T) (6e-7 at 300 K).
     L_diff_p : float
         Minority carrier (hole) diffusion length (cm). Default: 7e-4 (7 um).
-        From literature CCE fitting (Sciencedirect S0168900205006443).
+        From a literature CCE fit: Nucl. Instrum. Meth. A, ScienceDirect PII
+        S0168900205006443 (authors/title were not recorded with the value).
     N_D_mobility : float or None
         Donor density of the default mobilities (see hecht_cce).
 
@@ -527,15 +505,10 @@ def cce_vs_bias(
     # graded doping of the default stack (etna.core.device.DEFAULT_STACK); was a
     # fourth set 2.90e15 / 8.50e13 / 1.0e-4 before the n+ flip. Geometry (p+, n+) comes
     # from device_kwargs (the facades pass the full DeviceConfig stack).
-    from etna.core.device import DEFAULT_STACK
-
     kwargs = dict(
         device_name=dev_name,
         epi_thickness_cm=epi_thickness_cm,
-        doping_profile="graded",
-        N_D_junction=DEFAULT_STACK["N_D_junction"],
-        N_D_bulk=DEFAULT_STACK["N_D_bulk"],
-        L_transition=DEFAULT_STACK["L_transition"],
+        **graded_stack_kwargs(),
     )
     if device_kwargs:
         kwargs.update(device_kwargs)
@@ -619,7 +592,7 @@ def cce_vs_bias(
 
             devsim.solve(
                 type="dc",
-                absolute_error=1e10,
+                absolute_error=DC_ABS_ERROR,
                 relative_error=DC_REL_ERROR,
                 maximum_iterations=40,
             )
@@ -645,7 +618,7 @@ def cce_vs_bias(
             add_generation_to_dd(device_info, zero_gen)
             devsim.solve(
                 type="dc",
-                absolute_error=1e10,
+                absolute_error=DC_ABS_ERROR,
                 relative_error=DC_REL_ERROR,
                 maximum_iterations=40,
             )
@@ -941,7 +914,7 @@ def _cce_fluence_devsim(dev_kw, damaged, V_bias, alpha_range_cm, generation_rate
         add_generation_to_dd(device_info, gen_values)
         devsim.solve(
             type="dc",
-            absolute_error=1e10,
+            absolute_error=DC_ABS_ERROR,
             relative_error=DC_REL_ERROR,
             maximum_iterations=40,
         )
@@ -1246,9 +1219,6 @@ def cce_vs_bias_at_fluence(
     gen_values[x_epi < 0] = 0.0
     gen_values = confine_generation_to_epi(device_info, x_nodes, gen_values)
 
-    Q = 1.602e-19
-    I_generated = Q * np.trapezoid(gen_values, x_nodes)
-
     # --- Sweep bias on single damaged device ---
     # Sort voltages for stable ramping (descending: 0, -10, -20, ...)
     sorted_indices = np.argsort(-V_range)
@@ -1268,7 +1238,7 @@ def cce_vs_bias_at_fluence(
             add_generation_to_dd(device_info, gen_values)
             devsim.solve(
                 type="dc",
-                absolute_error=1e10,
+                absolute_error=DC_ABS_ERROR,
                 relative_error=DC_REL_ERROR,
                 maximum_iterations=40,
             )
@@ -1286,7 +1256,7 @@ def cce_vs_bias_at_fluence(
             add_generation_to_dd(device_info, zero_gen)
             devsim.solve(
                 type="dc",
-                absolute_error=1e10,
+                absolute_error=DC_ABS_ERROR,
                 relative_error=DC_REL_ERROR,
                 maximum_iterations=40,
             )
@@ -1372,10 +1342,7 @@ def cce_post_anneal(
     """
     dev_kw = dict(
         epi_thickness_cm=epi_thickness_cm,
-        doping_profile="graded",
-        N_D_junction=_STACK["N_D_junction"],
-        N_D_bulk=_STACK["N_D_bulk"],
-        L_transition=_STACK["L_transition"],
+        **graded_stack_kwargs(),
     )
     dev_kw.update(device_kwargs or {})
     from etna.core.device import apply_damaged_params, create_sic_device
@@ -1497,7 +1464,7 @@ def cce_post_anneal(
         add_generation_to_dd(device_info, gen_values)
         devsim.solve(
             type="dc",
-            absolute_error=1e10,
+            absolute_error=DC_ABS_ERROR,
             relative_error=DC_REL_ERROR,
             maximum_iterations=40,
         )
@@ -1550,6 +1517,9 @@ def cce_anneal_vs_temperature(
     anneal_params=None,
 ) -> dict:
     """Sweep annealing temperature and compute CCE at each point.
+
+    Public study helper (no internal caller): the isochronal-anneal CCE curve built
+    on cce_post_anneal.
 
     Uses a fresh device per temperature point. Enables plotting CCE
     recovery vs annealing temperature at fixed fluence and anneal time.
@@ -1683,17 +1653,12 @@ def cce_vs_epi_thickness(
     epi_range_cm = np.asarray(epi_range_cm, dtype=float)
     cce_values = np.zeros(len(epi_range_cm))
 
-    Q = 1.602e-19
-
     for i, epi_thick in enumerate(epi_range_cm):
         dev_id = uuid.uuid4().hex[:8]
         dev_name = f"cce_epi_{dev_id}"
 
         dev_kw = dict(
-            doping_profile="graded",
-            N_D_junction=_STACK["N_D_junction"],
-            N_D_bulk=_STACK["N_D_bulk"],
-            L_transition=_STACK["L_transition"],
+            **graded_stack_kwargs(),
         )
         dev_kw.update(device_kwargs or {})  # geometry / doping overrides (not epi)
         device_info = create_dd_device(
@@ -1724,8 +1689,6 @@ def cce_vs_epi_thickness(
             gen_values[x_epi < 0] = 0.0
             gen_values = confine_generation_to_epi(device_info, x_nodes, gen_values)
 
-            I_generated = Q * np.trapezoid(gen_values, x_nodes)
-
             # Ramp to bias (cathode voltage is -V_bias)
             cathode_V = -V_bias
             ramp_bias(
@@ -1736,7 +1699,7 @@ def cce_vs_epi_thickness(
             add_generation_to_dd(device_info, gen_values)
             devsim.solve(
                 type="dc",
-                absolute_error=1e10,
+                absolute_error=DC_ABS_ERROR,
                 relative_error=DC_REL_ERROR,
                 maximum_iterations=40,
             )

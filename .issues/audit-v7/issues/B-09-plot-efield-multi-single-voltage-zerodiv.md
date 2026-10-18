@@ -3,7 +3,7 @@ id: B-09
 title: plot_electric_field_multi raises ZeroDivisionError for a single-voltage sweep
 severity: low
 category: bug
-status: open
+status: fixed 2026-10-18 (wp-c2 910e2a6: plot_electric_field_multi removed, no caller)
 location: etna/core/plotting.py:100-104
 labels: [plotting, edge-case, raw-F9]
 ---

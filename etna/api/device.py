@@ -17,15 +17,13 @@ import uuid
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
-from etna.core.devsim_lock import (
-    quiet_devsim,
-    serialized,
-)  # noqa: F401  (quiet_devsim re-exported)
+from etna.core.devsim_lock import serialized
 from etna.core.device2d import create_sic_2d_device
 from etna.core.drift_diffusion import create_dd_device, setup_sic_drift_diffusion
 from etna.core.poisson import setup_poisson, solve_equilibrium
 from etna.core.dark_current import AREA_DOSIMETER_CM2
 from etna.core.device import (
+    DEFAULT_N_A,
     DEFAULT_STACK,
     LEGACY_STACK,
     MEASURED_CV_TABULATED_STACK,
@@ -48,7 +46,7 @@ class DeviceConfig:
     # (etna.core.device.DEFAULT_STACK; um values literal so they display exactly).
     substrate_thickness_um: float = _um(DEFAULT_STACK["substrate_thickness_cm"])
     half_width_um: Optional[float] = None  # um, lateral half-width (2D devices only)
-    N_A: float = 1e19  # cm^-3, substrate acceptor doping
+    N_A: float = DEFAULT_N_A  # cm^-3, p+ anode acceptor doping
     doping_profile: str = "graded"  # "graded" or "uniform" epi doping profile
     N_D: Optional[float] = (
         None  # cm^-3, uniform epi donor doping (uniform profile only)

@@ -347,14 +347,19 @@ Returns CCE vs proton fluence. `x` is fluence (p/cm²), `y` is CCE. Metadata:
 
 - `valid` (bool per point) and `reason` (str per point)
 - `compensation_fluence` (p/cm²)
+- `solver` (the solver that ran the points: `batched` on the default stack, `devsim`
+  outside the engine box, joined when mixed) and `solver_per_point`
 - `V_bias`, `energy_MeV`
 
 The donor-removal model fully compensates the low-doped epi at a fluence that depends on
 the profile: 1.35e13 p/cm² at 5.6 MeV on the default stack, 5.18e12 on the tabulated
 preset. Points at or beyond it are **NaN** with a reason, not solved. Choose the grid
-from `compensation_fluence`, and always check `valid`. The default grid may lie largely
-past compensation (on the default stack, 5 of the 6 default points are NaN at this
-version). The NIEL kappa factors are placeholders, so read only the relative shape.
+from `compensation_fluence`, and always check `valid`. With `fluences=None` the grid
+adapts to the device (`etna.api.simulation.default_fluence_grid`): 8 log-spaced points
+from 0.01x to 3x the compensation fluence: 6 are solved, and the last 2 are normally NaN
+with a reason (the 3x point always; `compensation_fluence` is a lower bound on the mesh
+threshold), showing where the model ends. Explicit grids are used as given. The
+NIEL kappa factors are placeholders, so read only the relative shape.
 Also, the facade's default `proton_energy_MeV=5.6` lies below the NIEL table, and kappa
 is silently clamped to its 30 MeV value. This is audit B-07, open at this version. The
 Radiation Damage page offers 30, 62, 70 and 150 MeV only.
@@ -465,7 +470,10 @@ for r in sweep.run():
 Runs, in one process: `cv`, `cce`, `field`, `damage`, `dark`, `temperature`, `flash`,
 and, on request, `sweep` (a small 2D-engine microdosimetric grid; section 11). It asserts
 between sections that no devsim device leaked. On the default device the whole run takes
-about 3 s with every fast path active.
+about 3 s with every fast path active. A section's `status` is `ok`, `warning` (it ran
+but returned no valid point; `reason` says why), `error` or `skipped`; `rep.ok` is
+True only when every section is `ok`. A curve with invalid points starts its key
+figures with "k of n points valid", and the damage row adds the compensation fluence.
 
 ```python
 from etna import DeviceConfig, run_all
@@ -835,12 +843,13 @@ uv run pytest -n0 -x tests/test_api_cce.py        # serial, e.g. with --pdb
 uv run pytest -n auto --dist loadfile -q --durations=20  # slowest tests
 ```
 
-- 86 modules and 999 tests. `pytest.ini` deselects the `exhaustive` marker (6 redundant
-  deep variants, each implied by a kept smoke test), so the default run collects 993.
+- 86 modules and 994 tests. `pytest.ini` deselects the `exhaustive` marker (7 redundant
+  deep variants, each implied by a kept test), so the default run collects 987.
   The `slow` marker labels the devsim integration tests but does not deselect them.
-- The default run took **5.6 minutes on 10 cores** (993 passed). The slowest tests are
-  devsim 2D builds: `test_device2d_convergence.py` at 300 µm (141 s), single-particle
-  CCE vs bias (120 s), 2D lateral scans (50-90 s).
+- The default run took **4.3 minutes on 10 cores** (987 passed, no warnings). The
+  slowest tests are devsim 2D builds: `test_device2d_convergence.py` at 300 µm,
+  single-particle CCE vs bias, the 2D lateral scan and the 2D-vs-1D C-V (use
+  `--durations=20` for the current list).
 - `--dist loadfile` keeps each module's devsim devices in one worker process (devsim
   state is process-global). Use it with `-n`.
 - Families: `test_api_*` (facades), `test_app_*` (Streamlit `AppTest`, mocked and
@@ -850,8 +859,8 @@ uv run pytest -n auto --dist loadfile -q --durations=20  # slowest tests
   presets (`test_default_stack.py`, `test_nplus_calibration.py`,
   `test_measured_cv_preset.py`, `test_measured_cv_tabulated.py`,
   `test_microdosimeter_preset.py`) and the core physics modules.
-- CI (`.github/workflows/ci.yml`) runs the lock check, ruff (once a ruff configuration
-  is committed), notebook hygiene, the generator check and the fast run on pushes and
+- CI (`.github/workflows/ci.yml`) runs the lock check, ruff (`ruff check .` with
+  `ruff.toml`: pyflakes F, E9, W6 over etna/, app/, tests/, scripts/), notebook hygiene, the generator check and the fast run on pushes and
   PRs. A nightly job runs `-m exhaustive` and a `pip-audit` of the locked set.
 
 ---

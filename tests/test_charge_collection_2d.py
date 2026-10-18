@@ -24,9 +24,7 @@ from etna.core.charge_collection_2d import (
     _robust_dc_solve,
 )
 from etna.core.device2d import create_sic_2d_device
-from etna.core.poisson import setup_poisson, solve_equilibrium
 from etna.core.drift_diffusion import (
-    setup_sic_drift_diffusion,
     ramp_bias,
 )
 from etna.core.charge_collection import add_generation_to_dd, compute_cce_from_dd
@@ -211,7 +209,7 @@ class TestCompareCCE2Dvs1D:
 
     @pytest.mark.slow
     def test_ratio_is_one_for_laterally_uniform_device(self):
-        """Active-to-geometric ratio of the laterally uniform 100 um SV is 1 (no edge loss).
+        """Active-to-geometric ratio of the laterally uniform SV is 1 (no edge loss).
 
         The device is laterally uniform (mirror side walls, full-width contacts), so CCE(x)
         is flat and the ratio is 1 (DESIGN-2: CCE uniformity is not a modelled result). The
@@ -219,7 +217,10 @@ class TestCompareCCE2Dvs1D:
         cathode current (ratio 0.999999964, lateral CCE scattered by 5e-8); with the
         balanced extraction the scatter is ~1e-9 and the ratio 1.0000000002.
         """
-        result = compare_cce_2d_vs_1d(half_width_um=50.0, V_bias=50.0, gen_rate=1e18)
+        # hw 25 (was 50: 30 -> 12 s): same numbers, the device is laterally uniform
+        # (hw 50 / 25: cce_1d 0.9998822732483303 both, cce_2d_center equal to 2e-16,
+        # ratio 1 + 6.3e-11 / 1 + 8.2e-10)
+        result = compare_cce_2d_vs_1d(half_width_um=25.0, V_bias=50.0, gen_rate=1e18)
 
         assert result["cce_1d"] > 0, f"1D CCE should be > 0, got {result['cce_1d']}"
         assert (
@@ -229,6 +230,11 @@ class TestCompareCCE2Dvs1D:
         # 1D twin with the same (epi-confined) generation: the laterally uniform device
         # gives the same CCE (the 1D side used to generate in the n+ too: 0.9543 vs 0.9998)
         assert result["cce_1d"] == pytest.approx(result["cce_2d_center"], abs=1e-3)
+        # B-14: the centre key is the lateral scan's x = 0 point, not the full-area value
+        assert result["cce_2d_center"] == result["lateral_scan"]["cce_values"][0]
+        assert result["cce_2d_full_area"] == pytest.approx(
+            result["cce_2d_center"], abs=1e-6
+        )  # laterally uniform device
 
 
 # ---------------------------------------------------------------------------
@@ -368,6 +374,11 @@ class TestLateralScanIsMeshIndependentForUniformDevice:
     """
 
     @pytest.mark.slow
+    # same property, stronger checks, kept in the default run by
+    # TestCCELateralScan::test_edge_equals_center_for_uniform_device (hw 50, 5 points:
+    # edge == centre to rel 1e-6 and ratio 1 to 1e-6); this hw 25 mesh variant (~40 s
+    # under the full suite) runs with -m exhaustive
+    @pytest.mark.exhaustive
     def test_edge_to_centre_ratio_is_one(self):
         device_info = create_2d_dd_device(half_width_um=25.0, V_bias=50.0)
         try:

@@ -649,9 +649,11 @@ def spec_to_pdf(spec: dict, config=None) -> bytes:
         lines.extend(textwrap.wrap(raw, 110) or [""])
     per_page = 62
     buf = io.BytesIO()
+    # pages are laid out by hand: layout="none" opts out of the rcParams constrained
+    # layout that etna.core.plotting sets
     with PdfPages(buf) as pdf:
         for start in range(0, len(lines), per_page):
-            fig = Figure(figsize=(8.27, 11.69))
+            fig = Figure(figsize=(8.27, 11.69), layout="none")
             FigureCanvasPdf(fig)
             fig.text(
                 0.05,
@@ -673,7 +675,7 @@ def spec_to_pdf(spec: dict, config=None) -> bytes:
         if config is not None:
             from etna.export.cross_section import _draw_cross_section
 
-            fig = Figure(figsize=(11.69, 8.27))
+            fig = Figure(figsize=(11.69, 8.27), layout="none")
             FigureCanvasPdf(fig)
             _draw_cross_section(fig, config)
             pdf.savefig(fig)

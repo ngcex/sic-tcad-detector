@@ -55,6 +55,7 @@ import numpy as np
 from etna.core.charge_collection import add_generation_to_dd, compute_cce_from_dd
 from etna.core.generation_profiles import confine_generation_to_epi, proton_generation_profile
 from etna.core.device import DEFAULT_STACK as _STACK
+from etna.core.solver_tol import DC_ABS_ERROR, FLASH_REL_ERROR
 
 logger = logging.getLogger(__name__)
 
@@ -187,8 +188,8 @@ def solve_with_continuation(device_info, generation_values, n_steps=5):
         try:
             devsim.solve(
                 type="dc",
-                absolute_error=1e10,
-                relative_error=1e-10,
+                absolute_error=DC_ABS_ERROR,
+                relative_error=FLASH_REL_ERROR,
                 maximum_iterations=60,
             )
             current_frac = target_frac
@@ -214,8 +215,8 @@ def solve_with_continuation(device_info, generation_values, n_steps=5):
                 try:
                     devsim.solve(
                         type="dc",
-                        absolute_error=1e10,
-                        relative_error=1e-10,
+                        absolute_error=DC_ABS_ERROR,
+                        relative_error=FLASH_REL_ERROR,
                         maximum_iterations=60,
                     )
                     lo = mid
@@ -236,8 +237,8 @@ def solve_with_continuation(device_info, generation_values, n_steps=5):
                 try:
                     devsim.solve(
                         type="dc",
-                        absolute_error=1e10,
-                        relative_error=1e-10,
+                        absolute_error=DC_ABS_ERROR,
+                        relative_error=FLASH_REL_ERROR,
                         maximum_iterations=60,
                     )
                     current_frac = target_frac
@@ -257,7 +258,7 @@ def solve_with_continuation(device_info, generation_values, n_steps=5):
             if not converged_at_target:
                 return False
 
-    logger.info(f"Continuation complete: converged at 100% generation rate")
+    logger.info("Continuation complete: converged at 100% generation rate")
     return True
 
 
@@ -382,8 +383,8 @@ def cce_vs_dose_rate(
             add_generation_to_dd(device_info, zero_gen)
             devsim.solve(
                 type="dc",
-                absolute_error=1e10,
-                relative_error=1e-10,
+                absolute_error=DC_ABS_ERROR,
+                relative_error=FLASH_REL_ERROR,
                 maximum_iterations=40,
             )
 
@@ -417,8 +418,8 @@ def cce_vs_dose_rate(
         add_generation_to_dd(device_info2, gen_ref)
         devsim.solve(
             type="dc",
-            absolute_error=1e10,
-            relative_error=1e-10,
+            absolute_error=DC_ABS_ERROR,
+            relative_error=FLASH_REL_ERROR,
             maximum_iterations=40,
         )
         cce_no_auger = compute_cce_from_dd(device_info2, gen_ref, contact="cathode")

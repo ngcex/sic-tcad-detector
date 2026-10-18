@@ -208,17 +208,6 @@ def _frame(outer: float, inner: float) -> tuple[tuple[float, float], ...]:
     )
 
 
-def polygon_area_um2(points) -> float:
-    """Shoelace area (um^2) of a simple / keyhole polygon."""
-    s = 0.0
-    n = len(points)
-    for i in range(n):
-        x0, y0 = points[i]
-        x1, y1 = points[(i + 1) % n]
-        s += x0 * y1 - x1 * y0
-    return abs(s) / 2.0
-
-
 def _label(d: Dim, what: str, drawn: str = "") -> str:
     tail = f"; {drawn}" if drawn else ""
     return f"{d.layout_class} | {what}: {d.value_text}{tail} | src: {d.source}"

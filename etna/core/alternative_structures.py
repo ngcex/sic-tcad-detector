@@ -64,11 +64,11 @@ from etna.core.device2d import (
     set_graded_doping_2d,
     EPS_0,
     Q,
-    K_B_EV,
     K_B_J,
     DEFAULT_N_D,
 )
 from etna.core.device import (
+    DEFAULT_N_A,
     LEGACY_STACK,
     NPLUS_CALIBRATION,
     acceptor_total_scale,
@@ -131,7 +131,6 @@ def _set_sic_material_params(device_name, region_name, N_D, N_A, T):
     Returns a partial dict with material-related keys.
     """
     params = SiC4H_Parameters()
-    kT_eV = K_B_EV * T
     kT_J = K_B_J * T
     V_t = kT_J / Q
 
@@ -446,7 +445,7 @@ def create_mesa_device(
     trench_depth_um=10.0,
     epi_thickness_cm=10e-4,
     substrate_thickness_cm=ALT_STACK["substrate_thickness_cm"],
-    N_A=1e19,
+    N_A=DEFAULT_N_A,
     T=300,
     doping_profile="graded",
     N_D_junction=None,
@@ -776,7 +775,7 @@ def create_3d_electrode_device(
     top_gap_um=2.0,
     epi_thickness_cm=10e-4,
     substrate_thickness_cm=ALT_STACK["substrate_thickness_cm"],
-    N_A=1e19,
+    N_A=DEFAULT_N_A,
     T=300,
     doping_profile="graded",
     N_D_junction=None,
@@ -1034,7 +1033,7 @@ def create_delta_e_e_device(
     delta_e_thickness_um=2.0,
     e_stop_thickness_um=50.0,
     substrate_thickness_cm=ALT_STACK["substrate_thickness_cm"],
-    N_A=1e19,
+    N_A=DEFAULT_N_A,
     T=300,
     doping_profile="graded",
     N_D_junction=None,
@@ -1311,7 +1310,7 @@ def create_guard_ring_device(
     guard_ring_depth_um=1.0,
     epi_thickness_cm=10e-4,
     substrate_thickness_cm=ALT_STACK["substrate_thickness_cm"],
-    N_A=1e19,
+    N_A=DEFAULT_N_A,
     N_A_guard=5e18,
     T=300,
     doping_profile="graded",

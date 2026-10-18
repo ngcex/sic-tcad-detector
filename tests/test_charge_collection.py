@@ -19,8 +19,6 @@ from etna.core.charge_collection import (
     cce_vs_bias_at_fluence,
     cce_vs_fluence,
     compare_cce_hecht_vs_dd,
-    compute_cce_from_current,
-    compute_cce_from_dd,
     hecht_cce,
     hecht_cce_partial_depletion,
 )
@@ -89,42 +87,6 @@ class TestHechtEquation:
         cce = hecht_cce(V, d=10e-4)
         assert np.all(cce >= 0.0)
         assert np.all(cce <= 1.0)
-
-
-class TestCCEFromCurrent:
-    """Tests for compute_cce_from_current."""
-
-    def test_cce_from_current_ratio(self):
-        """Simple ratio: I_collected / I_generated."""
-        cce = compute_cce_from_current(0.5, 1.0)
-        assert abs(cce - 0.5) < 1e-15
-
-    def test_cce_from_current_full_collection(self):
-        """Full collection: CCE = 1.0."""
-        cce = compute_cce_from_current(1.0, 1.0)
-        assert abs(cce - 1.0) < 1e-15
-
-    def test_cce_from_current_zero_generated(self):
-        """Zero generated current should give CCE = 0."""
-        cce = compute_cce_from_current(0.5, 0.0)
-        assert cce == 0.0
-
-    def test_cce_from_current_clipped(self):
-        """CCE should be clipped to [0, 1]."""
-        cce = compute_cce_from_current(2.0, 1.0)
-        assert cce == 1.0
-
-    def test_cce_from_current_negative_collected(self):
-        """Should use absolute value of collected current."""
-        cce = compute_cce_from_current(-0.7, 1.0)
-        assert abs(cce - 0.7) < 1e-15
-
-    def test_cce_from_current_vectorized(self):
-        """Should work with array inputs."""
-        I_c = np.array([0.0, 0.5, 1.0])
-        I_g = np.array([1.0, 1.0, 1.0])
-        cce = compute_cce_from_current(I_c, I_g)
-        np.testing.assert_allclose(cce, [0.0, 0.5, 1.0])
 
 
 class TestHechtPartialDepletion:
@@ -293,7 +255,8 @@ class TestCCEVsBias:
     """Integration tests for CCE vs bias sweep."""
 
     @pytest.fixture(scope="class")
-    def cce_sweep_result(self):
+    @classmethod
+    def cce_sweep_result(cls):
         """Run CCE sweep once for all tests in this class."""
         V = np.array([0.0, -5.0, -10.0, -20.0, -40.0, -60.0])
         result = cce_vs_bias(V, epi_thickness_cm=10e-4)
@@ -383,7 +346,7 @@ def test_compare_hecht_uses_only_the_reached_biases(monkeypatch):
     np.testing.assert_array_equal(r["voltages"], [-10.0, -20.0])
     assert len(r["cce_dd"]) == len(r["cce_hecht"]) == len(r["cce_hecht_partial"]) == 2
     expected = np.max(np.abs(r["cce_dd"] - cc.hecht_cce(r["voltages"], d=10e-4)))
-    assert r["max_deviation"] == pytest.approx(expected)
+    assert r["max_deviation"] == pytest.approx(expected, rel=1e-12)
 
 
 # ===================================================================

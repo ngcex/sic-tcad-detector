@@ -10,7 +10,6 @@ Validates:
 - Integration test with real CCE table (marked slow)
 """
 
-import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -420,7 +419,6 @@ class TestROOTImport:
 class TestFullPipeline:
     def test_with_cce_table(self):
         """Full pipeline: synthetic events -> process_mc_ensemble -> PHD."""
-        import json
         import time
 
         cce_path = Path("data/cce_let_table_100um.json")

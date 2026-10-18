@@ -21,7 +21,14 @@ References:
     - devsim diode example: https://devsim.net/examples_diode.html
 """
 
-from etna.core.solver_tol import DC_REL_ERROR
+from etna.core.solver_tol import (
+    AGGRESSIVE_ABS_ERROR,
+    AGGRESSIVE_REL_ERROR,
+    DC_ABS_ERROR,
+    DC_REL_ERROR,
+    RELAXED_ABS_ERROR,
+    RELAXED_REL_ERROR,
+)
 import logging
 
 import devsim
@@ -151,7 +158,7 @@ def solve_equilibrium(device_info):
     try:
         devsim.solve(
             type="dc",
-            absolute_error=1e10,
+            absolute_error=DC_ABS_ERROR,
             relative_error=DC_REL_ERROR,
             maximum_iterations=40,
         )
@@ -160,8 +167,8 @@ def solve_equilibrium(device_info):
         try:
             devsim.solve(
                 type="dc",
-                absolute_error=1e12,
-                relative_error=1e-8,
+                absolute_error=RELAXED_ABS_ERROR,
+                relative_error=RELAXED_REL_ERROR,
                 maximum_iterations=100,
             )
             logger.info("Equilibrium solve converged (relaxed)")
@@ -169,8 +176,8 @@ def solve_equilibrium(device_info):
             try:
                 devsim.solve(
                     type="dc",
-                    absolute_error=1e14,
-                    relative_error=1e-6,
+                    absolute_error=AGGRESSIVE_ABS_ERROR,
+                    relative_error=AGGRESSIVE_REL_ERROR,
                     maximum_iterations=200,
                 )
                 logger.info("Equilibrium solve converged (aggressive)")

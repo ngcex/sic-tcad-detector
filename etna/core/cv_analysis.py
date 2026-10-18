@@ -17,7 +17,12 @@ References:
     - Sze & Ng, "Physics of Semiconductor Devices", Ch. 2: Junction capacitance
 """
 
-from etna.core.solver_tol import DC_REL_ERROR
+from etna.core.solver_tol import (
+    DC_ABS_ERROR,
+    DC_REL_ERROR,
+    RELAXED_ABS_ERROR,
+    RELAXED_REL_ERROR,
+)
 import logging
 import uuid
 
@@ -70,6 +75,9 @@ def junction_capacitance(W, eps_r=9.7, area=1.0):
 
 def depletion_width_from_capacitance(C, eps_r=9.7, area=1.0):
     """Compute depletion width from capacitance (inverse of junction_capacitance).
+
+    Public utility (no internal caller): W = eps A / C for measured C-V data, the
+    conversion behind the eps*A/C figures quoted in the validation notes.
 
     Parameters
     ----------
@@ -167,7 +175,7 @@ def small_signal_capacitance(device_info, step_V=_SS_STEP_V):
             try:
                 devsim.solve(
                     type="dc",
-                    absolute_error=1e10,
+                    absolute_error=DC_ABS_ERROR,
                     relative_error=DC_REL_ERROR,
                     maximum_iterations=40,
                 )
@@ -175,8 +183,8 @@ def small_signal_capacitance(device_info, step_V=_SS_STEP_V):
                 _restore_solution(device, region, snap)
                 devsim.solve(
                     type="dc",
-                    absolute_error=1e12,
-                    relative_error=1e-8,
+                    absolute_error=RELAXED_ABS_ERROR,
+                    relative_error=RELAXED_REL_ERROR,
                     maximum_iterations=100,
                 )
             holes[sign] = np.array(
@@ -279,7 +287,7 @@ def cv_sweep(device_info, V_range, eps_r=9.7, area=1.0):
             try:
                 devsim.solve(
                     type="dc",
-                    absolute_error=1e10,
+                    absolute_error=DC_ABS_ERROR,
                     relative_error=DC_REL_ERROR,
                     maximum_iterations=40,
                 )
@@ -287,8 +295,8 @@ def cv_sweep(device_info, V_range, eps_r=9.7, area=1.0):
                 try:
                     devsim.solve(
                         type="dc",
-                        absolute_error=1e12,
-                        relative_error=1e-8,
+                        absolute_error=RELAXED_ABS_ERROR,
+                        relative_error=RELAXED_REL_ERROR,
                         maximum_iterations=100,
                     )
                 except devsim.error as e:

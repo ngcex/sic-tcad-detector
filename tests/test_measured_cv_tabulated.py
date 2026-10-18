@@ -485,7 +485,6 @@ def test_batches_group_by_table_and_mix_with_the_default():
         area_cm2=0.04, donor_table=tuple((d, n * 1.5) for d, n in MEASURED_CV_TABLE)
     )
     dflt = DeviceConfig(area_cm2=0.04)
-    V = np.linspace(0.0, -40.0, 9)
     batch = sim.run_cv_batch([tab, dflt, other], 0.0, -40.0, 9)
     for r, c in zip(batch, (tab, dflt, other)):
         assert r.metadata["solver"] == "batched"

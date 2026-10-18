@@ -53,7 +53,7 @@ class TestDevice2DCreation:
         dev = create_sic_2d_device(device_name=_unique_name())
         params = dev["params"]
         assert params.eps_r == pytest.approx(9.7)
-        assert params.n_i_300 == pytest.approx(5e-9)
+        assert params.n_i_300 == pytest.approx(5e-9, rel=1e-12)
         assert params.E_g == pytest.approx(3.26)
 
 
@@ -89,9 +89,6 @@ class TestDoping2D:
         device = dev["device_name"]
         region = dev["region_name"]
 
-        x = np.array(
-            devsim.get_node_model_values(device=device, region=region, name="x")
-        )
         y = np.array(
             devsim.get_node_model_values(device=device, region=region, name="y")
         )
@@ -194,16 +191,9 @@ class TestMeshStructure:
 
 
 # ---------------------------------------------------------------------------
-# Phase 26 / CONS-01 skeleton test classes.
-#
-# These hold the test surface in place BEFORE implementation. Every body is
-# decorated @pytest.mark.xfail(strict=True) so they collect (proving the surface
-# exists) but cannot produce a false green. Plans 02-04 replace the xfail bodies
-# with real assertions, flipping xfail -> pass:
-#   - Plan 02 adds the 2D-aware W extractor + reset_devsim_fully() + node helpers
-#     -> wires TestCalibrationCV, TestResetStateLeak, TestGradedDopingSmoothness
-#   - Plan 03 calibrates the 2D defaults
-#     -> wires TestReverseBiasConvergence and TestCalibrationCV assertions
+# Phase 26 / CONS-01 acceptance tests (2D C-V vs the 1D twin, reset of the
+# cylindrical globals, graded-doping smoothness, reverse-bias convergence). They
+# started as xfail(strict) skeletons; all now carry real assertions.
 # ---------------------------------------------------------------------------
 
 
@@ -403,9 +393,6 @@ class TestExtractDepletionWidth2DCenter:
     y as depth. These tests lock the new dimension-aware extractor.
     """
 
-    def test_importable(self):
-        from etna.core.poisson import extract_depletion_width_2d_center  # noqa: F401
-
     def test_raises_on_1d_device(self):
         from etna.core.poisson import extract_depletion_width_2d_center
 
@@ -492,7 +479,7 @@ class TestGradedDopingSmoothness:
 
         # Center column (x ~= 0), sorted by depth, restricted to the n-epi.
         center = np.abs(x) < 1e-6
-        xc, yc, dc = x[center], y[center], donors[center]
+        yc, dc = y[center], donors[center]
         order = np.argsort(yc)
         yc, dc = yc[order], dc[order]
         in_epi = (yc > dev["junction_pos"]) & (dc > 0) & (yc < dev["epi_end"] - 1e-12)

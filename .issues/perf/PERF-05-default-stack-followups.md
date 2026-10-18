@@ -11,7 +11,8 @@ From the independent review of 72beb9b (no blockers):
   is overstated.
 - `test_cce_increases_with_bias` is pinned to legacy until the single-particle estimator
   (Option A, advisor) lands; `test_v3_cce_center_100um_preserved` now guards the DEFAULT
-  model (0.95346904), name is misleading.
+  model (0.95346904), name is misleading. DONE 2026-10-18 (wp-c2 6517841): renamed
+  test_default_2d_builder_cce_uniform_generation_10V_hw50/_hw150, JSON metadata.key_names.
 - `microdosimetric_sweep(n_jobs>1)` spawn workers do not pin numba/BLAS threads
   (oversubscription); no app path uses n_jobs today.
 - `cce_heatmap_2d` counts the n+ layer as active epi (assigned to the estimator agent).

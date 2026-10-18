@@ -59,4 +59,5 @@ def test_facade_first_param_is_config(name, fn):
 
 def test_deviceconfig_importable():
     """DeviceConfig is importable from etna (first-arg type for all facades)."""
-    assert DeviceConfig is not None
+    assert inspect.isclass(DeviceConfig)
+    assert DeviceConfig.__module__ == "etna.api.device"

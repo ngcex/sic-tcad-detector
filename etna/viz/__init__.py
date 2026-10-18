@@ -1,6 +1,6 @@
 """Optional animations of real simulator data (manim, extra ``viz``).
 
-Install with ``uv sync --extra viz`` (macOS: pycairo needs ``brew install pkgconf cairo
+Install with ``uv sync --extra dev --extra viz`` (macOS: pycairo needs ``brew install pkgconf cairo
 pango``). Without manim, ``manim_available()`` returns ``(False, reason)`` and the rest
 of etna is unaffected; ``animation_data`` (pure numpy + etna solvers) works either way.
 """

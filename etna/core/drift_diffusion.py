@@ -21,7 +21,14 @@ References:
     - Phase 1 clamped exponential approach for SiC n_i stability
 """
 
-from etna.core.solver_tol import DC_REL_ERROR
+from etna.core.solver_tol import (
+    AGGRESSIVE_ABS_ERROR,
+    AGGRESSIVE_REL_ERROR,
+    DC_ABS_ERROR,
+    DC_REL_ERROR,
+    RELAXED_ABS_ERROR,
+    RELAXED_REL_ERROR,
+)
 import logging
 
 import devsim
@@ -178,7 +185,7 @@ def setup_sic_drift_diffusion(device_info):
     logger.info("Performing initial coupled DD solve at equilibrium (0V)")
     devsim.solve(
         type="dc",
-        absolute_error=1e10,
+        absolute_error=DC_ABS_ERROR,
         relative_error=DC_REL_ERROR,
         maximum_iterations=40,
     )
@@ -462,13 +469,13 @@ def create_dd_device(doping_profile="graded", **kwargs):
 # (target point): same tolerance and the same 40-iteration cap. Kept as a separate name
 # so the two can be tuned independently.
 _RAMP_SOLVE = dict(
-    type="dc", absolute_error=1e10, relative_error=DC_REL_ERROR, maximum_iterations=40
+    type="dc", absolute_error=DC_ABS_ERROR, relative_error=DC_REL_ERROR, maximum_iterations=40
 )
 _RAMP_SOLVE_COARSE = dict(
-    type="dc", absolute_error=1e10, relative_error=DC_REL_ERROR, maximum_iterations=40
+    type="dc", absolute_error=DC_ABS_ERROR, relative_error=DC_REL_ERROR, maximum_iterations=40
 )
 _RAMP_SOLVE_RELAXED = dict(
-    type="dc", absolute_error=1e12, relative_error=1e-8, maximum_iterations=100
+    type="dc", absolute_error=RELAXED_ABS_ERROR, relative_error=RELAXED_REL_ERROR, maximum_iterations=100
 )
 # Third tier, same as solve_equilibrium's. Needed where the n- epi reaches a zero-flux
 # surface beyond a p+ implant edge (guard-ring gap, epi overhang, 3D-electrode top
@@ -479,7 +486,7 @@ _RAMP_SOLVE_RELAXED = dict(
 # relative; check it a posteriori with the balanced contact-current sum (should be
 # ~0 relative to the generated current).
 _RAMP_SOLVE_AGGRESSIVE = dict(
-    type="dc", absolute_error=1e14, relative_error=1e-6, maximum_iterations=200
+    type="dc", absolute_error=AGGRESSIVE_ABS_ERROR, relative_error=AGGRESSIVE_REL_ERROR, maximum_iterations=200
 )
 # Tier order of the fallback chain; the index is what the ramp bookkeeping stores.
 _RAMP_TIERS = (
@@ -816,7 +823,7 @@ def iv_sweep(
                 try:
                     devsim.solve(
                         type="dc",
-                        absolute_error=1e10,
+                        absolute_error=DC_ABS_ERROR,
                         relative_error=DC_REL_ERROR,
                         maximum_iterations=40,
                     )
@@ -825,8 +832,8 @@ def iv_sweep(
                     try:
                         devsim.solve(
                             type="dc",
-                            absolute_error=1e12,
-                            relative_error=1e-8,
+                            absolute_error=RELAXED_ABS_ERROR,
+                            relative_error=RELAXED_REL_ERROR,
                             maximum_iterations=100,
                         )
                         logger.info(

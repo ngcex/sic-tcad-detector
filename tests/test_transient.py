@@ -16,9 +16,7 @@ import pytest
 from etna.core.drift_diffusion import (
     create_dd_device,
     ramp_bias,
-    extract_contact_current,
 )
-from etna.core.charge_collection import add_generation_to_dd
 from etna.core.flash_recombination import add_auger_recombination, cce_vs_dose_rate
 from etna.core.generation_profiles import proton_generation_profile
 from etna.core.transient import (
@@ -407,7 +405,7 @@ def test_transient_cce_commensurate_or_not(t_duration):
         solver = TransientSolver(info)
         solver.initialize()
         res = solver.simulate_pulse(G, t_rise=1e-6, t_duration=t_duration, t_fall=1e-6)
-        assert res["times"][0] == pytest.approx(1e-7)  # step END stamp
+        assert res["times"][0] == pytest.approx(1e-7, rel=1e-9)  # step END stamp
         assert res["generation_integral"] == pytest.approx(1e-6 + t_duration, rel=1e-9)
         cce = solver.compute_transient_cce(res, G, x)
     finally:

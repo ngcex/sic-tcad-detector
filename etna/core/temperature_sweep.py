@@ -21,7 +21,7 @@ from etna.core.sic_material import (
     intrinsic_concentration,
     mobility_caughey_thomas_T,
 )
-from etna.core.device import DEFAULT_STACK as _STACK, mobility_doping
+from etna.core.device import graded_stack_kwargs, mobility_doping
 
 
 logger = logging.getLogger(__name__)
@@ -78,10 +78,7 @@ def sweep_iv_vs_temperature(
         kwargs = dict(
             device_name=dev_name,
             T=T,
-            doping_profile="graded",
-            N_D_junction=_STACK["N_D_junction"],
-            N_D_bulk=_STACK["N_D_bulk"],
-            L_transition=_STACK["L_transition"],
+            **graded_stack_kwargs(),
         )
         kwargs.update(device_kwargs)
 
@@ -190,10 +187,7 @@ def sweep_cv_vs_temperature(
         kwargs = dict(
             device_name=dev_name,
             T=T,
-            doping_profile="graded",
-            N_D_junction=_STACK["N_D_junction"],
-            N_D_bulk=_STACK["N_D_bulk"],
-            L_transition=_STACK["L_transition"],
+            **graded_stack_kwargs(),
         )
         kwargs.update(device_kwargs)
 
@@ -272,10 +266,7 @@ def sweep_cce_vs_temperature(
             kwargs = dict(
                 device_name=dev_name,
                 T=T,
-                doping_profile="graded",
-                N_D_junction=_STACK["N_D_junction"],
-                N_D_bulk=_STACK["N_D_bulk"],
-                L_transition=_STACK["L_transition"],
+                **graded_stack_kwargs(),
             )
             kwargs.update(device_kwargs)
 
@@ -305,10 +296,7 @@ def sweep_cce_vs_temperature(
         for T in temperatures:
             try:
                 dd_kwargs = dict(
-                    doping_profile="graded",
-                    N_D_junction=_STACK["N_D_junction"],
-                    N_D_bulk=_STACK["N_D_bulk"],
-                    L_transition=_STACK["L_transition"],
+                    **graded_stack_kwargs(),
                     T=T,
                 )
                 dd_kwargs.update(device_kwargs)

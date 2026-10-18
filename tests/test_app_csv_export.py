@@ -57,8 +57,8 @@ def test_cv_csv_columns_and_header():
 
     # A data row matches the fixture values (first row: bias=0.0).
     first_data_row = non_comment_lines[1].split(",")
-    assert float(first_data_row[0]) == pytest.approx(0.0)
-    assert float(first_data_row[1]) == pytest.approx(1e-9)
+    assert float(first_data_row[0]) == pytest.approx(0.0, abs=0)
+    assert float(first_data_row[1]) == pytest.approx(1e-9, rel=1e-6, abs=0)
     assert float(first_data_row[2]) == pytest.approx(1e17)
     assert float(first_data_row[3]) == pytest.approx(1e-4)
 

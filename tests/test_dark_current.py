@@ -15,8 +15,6 @@ from etna.core.dark_current import (
     dark_current_vs_fluence,
     extract_dark_current_components,
     dark_current_sweep,
-    setup_tat_model,
-    setup_surface_recombination,
     nt_temperature_scale,
     _compute_node_efield,
     _compute_gamma_factors,
@@ -24,7 +22,6 @@ from etna.core.dark_current import (
 from etna.core.drift_diffusion import (
     create_dd_device,
     ramp_bias,
-    extract_contact_current,
 )
 from etna.core.sic_material import SiC4H_Parameters, intrinsic_concentration
 

@@ -12,12 +12,12 @@ Each finding was spot-checked against the code on 2026-10-15. Severity changes f
 | [D-05](D-05-diagnose-parity-script-imports-removed-src.md)    | medium   | fixed    | diagnose_1d_2d_parity.py imports removed `src` package unguarded; crashes in run_1d()                                       | S      |
 | [D-06](D-06-dead-create-notebook-15-v1.md)                    | low      | fixed    | create_notebook_15.py (v1) is dead and writes to nonexistent absolute path                                                  | S      |
 | [D-07](D-07-notebook-generators-drift.md)                     | low      | fixed    | Notebook generators drifted from committed notebooks (stale src.* loggers in nb16/nb20, etc.)                               | S/M    |
-| [D-08](D-08-core-functions-only-used-by-tests.md)             | low      | open     | Nine etna.core public functions referenced only by their own tests                                                          | M      |
-| [D-09](D-09-ruff-unused-imports-dead-assignments.md)          | low      | partial  | 45 ruff F-rule findings (unused imports, dead I_generated, unasserted W_60)                                                 | S      |
+| [D-08](D-08-core-functions-only-used-by-tests.md)             | low      | fixed    | Nine etna.core public functions referenced only by their own tests                                                          | M      |
+| [D-09](D-09-ruff-unused-imports-dead-assignments.md)          | low      | fixed    | 45 ruff F-rule findings (unused imports, dead I_generated, unasserted W_60)                                                 | S      |
 | [D-10](D-10-cv-example-truncated-sweep-no-assert.md)          | low      | open     | cv_example.py sweeps to −200 V, silently truncated to 7 points, no assertions; spec still −200 V                            | S      |
-| [D-11](D-11-stale-src-paths-counts-comments.md)               | low      | partial  | Stale src/ names, /physics/etna cd paths, "46 modules" count, xfail-skeleton comments                                       | S      |
-| [D-12](D-12-v3-baseline-degenerate-300um.md)                  | low      | open     | v3 baseline guard degenerate (300 µm == 100 µm CCE) and frozen from dirty tree                                              | S      |
-| [D-13](D-13-tests-without-assertions.md)                      | low      | open     | Five tests have no assertions (print-only diagnostic, slow transient smoke)                                                 | S      |
+| [D-11](D-11-stale-src-paths-counts-comments.md)               | low      | fixed    | Stale src/ names, /physics/etna cd paths, "46 modules" count, xfail-skeleton comments                                       | S      |
+| [D-12](D-12-v3-baseline-degenerate-300um.md)                  | low      | closed   | v3 baseline guard degenerate (300 µm == 100 µm CCE) and frozen from dirty tree                                              | S      |
+| [D-13](D-13-tests-without-assertions.md)                      | low      | fixed    | Five tests have no assertions (print-only diagnostic, slow transient smoke)                                                 | S      |
 | [D-14](D-14-cwd-dependent-test-paths.md)                      | low      | open     | cwd-relative data paths in three tests silently skip/fail outside repo root                                                 | S      |
 | [D-15](D-15-design2-sv-width-default-mismatch.md)             | low      | open     | run_microdosimetry/app default sv_width 150 µm vs DESIGN-2 validated 100 µm SV                                              | S      |
 | [D-16](D-16-security-sweep-no-findings.md)                    | info     | rejected | Security sweep — no findings (confirmed negative result, nothing to track)                                                  | S      |
@@ -38,3 +38,14 @@ Status column synced from the issue files and the git log; evidence per change:
 - D-11: partial. 7acbe10 (wp-c1): scripts/ usage lines and src/ refs fixed (remaining 'src/device2d.py' mentions are historical, past tense); open: README.md:123 (WP-D), tests/ comments (WP-C2), device2d.py refs
 
 Counts after the sync: 6 fixed, 7 open, 2 partial, 1 rejected (the Totals line above is the audit-time count).
+
+## Status sync 2026-10-18 (wp-c2)
+
+- D-08: fixed. 910e2a6 + 834e1ae: 3 of 9 removed, 6 kept with a reason.
+- D-09: fixed. ce2e236 (45 -> 0 ruff findings), b09760c (scoped ruff.toml for CI).
+- D-11: fixed. 6517841, fa2ecfa, 732c086 (tests), c0d62e6 (README, WP-D).
+- D-12: closed (decision). 6517841; git_commit_sha stays WORKING_TREE, re-pins recorded in metadata.rebaselined_*.
+- D-13: fixed. 48745b2 + ce2e236.
+- D-10: still open (examples/cv_example.py and the design spec are outside wp-c2's files).
+
+Counts after this sync (from the issue files): 1 closed, 10 fixed, 4 open, 1 rejected.

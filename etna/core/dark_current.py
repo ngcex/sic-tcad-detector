@@ -36,7 +36,12 @@ References:
     - Kimoto & Cooper, "Fundamentals of Silicon Carbide Technology"
 """
 
-from etna.core.solver_tol import DC_REL_ERROR
+from etna.core.solver_tol import (
+    DC_ABS_ERROR,
+    DC_REL_ERROR,
+    RELAXED_ABS_ERROR,
+    RELAXED_REL_ERROR,
+)
 import logging
 import uuid
 
@@ -51,7 +56,7 @@ from etna.core.drift_diffusion import (
     create_dd_device,
     extract_steady_state_current,
 )
-from etna.core.device import DEFAULT_STACK as _STACK
+from etna.core.device import DEFAULT_STACK as _STACK, graded_stack_kwargs
 
 
 logger = logging.getLogger(__name__)
@@ -370,15 +375,15 @@ def _solve_dc():
     try:
         devsim.solve(
             type="dc",
-            absolute_error=1e10,
+            absolute_error=DC_ABS_ERROR,
             relative_error=DC_REL_ERROR,
             maximum_iterations=40,
         )
     except devsim.error:
         devsim.solve(
             type="dc",
-            absolute_error=1e12,
-            relative_error=1e-8,
+            absolute_error=RELAXED_ABS_ERROR,
+            relative_error=RELAXED_REL_ERROR,
             maximum_iterations=100,
         )
 
@@ -1046,6 +1051,9 @@ def dark_current_post_anneal(
 ) -> dict:
     """Compute dark current for an irradiated + annealed device.
 
+    Public study API (no internal caller): the dark-current counterpart of
+    charge_collection.cce_post_anneal.
+
     Composes annealing recovery (Plan 17-01) with the TAT/SRV dark current
     model.  Uses the same "fresh device per point" staged creation pattern
     as dark_current_vs_fluence but with compute_annealed_params.
@@ -1095,10 +1103,7 @@ def dark_current_post_anneal(
     """
     dev_kw = dict(
         epi_thickness_cm=epi_thickness_cm,
-        doping_profile="graded",
-        N_D_junction=_STACK["N_D_junction"],
-        N_D_bulk=_STACK["N_D_bulk"],
-        L_transition=_STACK["L_transition"],
+        **graded_stack_kwargs(),
     )
     dev_kw.update(device_kwargs or {})
 

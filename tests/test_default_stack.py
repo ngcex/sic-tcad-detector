@@ -406,7 +406,9 @@ def test_uniform_profile_does_not_inherit_the_fitted_transition():
     )
     assert c2.buffer_thickness_um == 0.5
     # the graded default keeps it
-    assert etna.DeviceConfig().buffer_thickness_um is not None
+    assert etna.DeviceConfig().buffer_thickness_um == pytest.approx(
+        1.136634, rel=1e-12
+    )
     # the sidebar path (uniform chosen there) goes through the same rule
     v = dict(
         epi_thickness_um=10.0,

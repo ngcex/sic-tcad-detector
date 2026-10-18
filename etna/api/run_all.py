@@ -13,7 +13,6 @@ later build depend on an earlier one, so it is reported as an error).
 
 from __future__ import annotations
 
-import hashlib
 import json
 import time
 from dataclasses import asdict, dataclass, field
@@ -176,7 +175,7 @@ DEFAULT_SECTIONS = tuple(n for n in SECTION_NAMES if n != "sweep")
 class SectionResult:
     name: str
     title: str
-    status: str  # "ok" | "error" | "skipped"
+    status: str  # "ok" | "warning" (ran, no valid point) | "error" | "skipped"
     solver: str = ""
     reason: str = ""  # failure / skip reason, empty when ok
     wall_s: float = 0.0
@@ -245,13 +244,6 @@ def _json_default(o):
     return str(o)
 
 
-def config_key(config: DeviceConfig) -> str:
-    """Stable hash of a DeviceConfig, for caching a Report."""
-    return hashlib.sha256(
-        json.dumps(asdict(config), sort_keys=True, default=str).encode()
-    ).hexdigest()[:16]
-
-
 def _truncation_note(res: SimResult) -> str:
     """' (TRUNCATED: reached X of requested Y V)' for a sweep cut short, else ''."""
     md = res.metadata
@@ -262,6 +254,26 @@ def _truncation_note(res: SimResult) -> str:
     reached = f"{x[np.argmax(np.abs(x))]:.3g} V" if x.size else "no point"
     req_txt = f" of requested {req:.3g} V" if req is not None else ""
     return f" (TRUNCATED: reached {reached}{req_txt})"
+
+
+def _valid_counts(res: SimResult) -> "tuple[int, int]":
+    """(valid, total) points of a curve result: metadata["valid"] if present, else finite y."""
+    y = np.asarray(res.y, dtype=float)
+    if not y.size:
+        return 0, 0
+    valid = res.metadata.get("valid")
+    valid = None if valid is None else np.asarray(valid, dtype=bool)
+    if valid is None or valid.shape != y.shape:  # absent or not per point: use finite y
+        valid = np.isfinite(y)
+    return int(np.count_nonzero(valid)), int(y.size)
+
+
+def _compensation_note(res: SimResult) -> str:
+    """'; full donor compensation at X p/cm^2' for a damage sweep (else '')."""
+    phi_c = res.metadata.get("compensation_fluence")
+    if res.sim_type != "damage" or phi_c is None:
+        return ""
+    return f"; full donor compensation at {phi_c:.3g} p/cm^2"
 
 
 def _summarize(res: SimResult) -> str:
@@ -283,12 +295,22 @@ def _summarize(res: SimResult) -> str:
     if not x.size or not y.size:
         return "no data" + _truncation_note(res)
     finite = y[np.isfinite(y)]
+    n_valid, n_pts = _valid_counts(res)
+    partial = f"{n_valid} of {n_pts} points valid; " if n_valid < n_pts else ""
     if not finite.size:
-        return f"{x.size} points, all NaN" + _truncation_note(res)
+        return (
+            f"{x.size} points, all NaN"
+            + _compensation_note(res)
+            + _truncation_note(res)
+        )
     return (
-        f"{x.size} pts, x {np.nanmin(x):.3g}..{np.nanmax(x):.3g}, "
-        f"y {finite.min():.3g}..{finite.max():.3g}"
-    ) + _truncation_note(res)
+        (
+            f"{partial}{x.size} pts, x {np.nanmin(x):.3g}..{np.nanmax(x):.3g}, "
+            f"y {finite.min():.3g}..{finite.max():.3g}"
+        )
+        + _compensation_note(res)
+        + _truncation_note(res)
+    )
 
 
 def _solver_of(res: SimResult) -> str:
@@ -347,12 +369,21 @@ def run_all(config: DeviceConfig, sections: "tuple[str, ...] | None" = None) -> 
             )
         else:
             err = res.metadata.get("error")
+            n_valid, n_pts = _valid_counts(res)
+            status, why = ("error", str(err)) if err else ("ok", "")
+            if not err and n_pts and n_valid == 0:
+                status, why = "warning", f"no valid point (0 of {n_pts})" + (
+                    f": {res.metadata['reason'][-1]}"
+                    if isinstance(res.metadata.get("reason"), (list, tuple))
+                    and res.metadata["reason"]
+                    else ""
+                )
             sec = SectionResult(
                 name,
                 title,
-                "error" if err else "ok",
+                status,
                 solver=_solver_of(res),
-                reason=str(err) if err else "",
+                reason=why,
                 wall_s=time.perf_counter() - t0,
                 summary="" if err else _summarize(res),
                 result=res,

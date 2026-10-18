@@ -166,6 +166,9 @@ def load_mc_events_csv(filepath, column_map=None, pos_unit="cm", energy_unit="ke
 def list_root_trees(filepath):
     """List TTree names in a ROOT file.
 
+    Kept as public API (no internal caller): the discovery step for
+    ``load_mc_events_root(tree_name=...)`` when a Geant4 file does not use "Hits".
+
     Parameters
     ----------
     filepath : str or pathlib.Path
@@ -320,6 +323,9 @@ def events_to_charge_profiles(
     E_pair_eV=E_PAIR_SIC_EV,
 ):
     """Convert MC events to 2D mesh charge generation profiles.
+
+    Public pipeline step (no internal caller; listed in the module docstring): Geant4
+    events -> per-event 2D generation for the single-particle solver.
 
     This is the "full path" for mesh-resolved profiles.  Each event's total
     deposited energy is converted to an effective LET, then

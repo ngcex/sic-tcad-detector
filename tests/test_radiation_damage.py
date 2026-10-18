@@ -282,7 +282,6 @@ class TestComputeDamagedParams:
         """Fluence=0 returns pristine values unchanged (exact equality)."""
         N_D = np.array([1e15, 5e14, 1e14])
         r = compute_damaged_params(1e-6, 6e-7, N_D, 0.0)
-        assert r["tau_n"] is not None
         assert r["tau_n"] == 1e-6  # exact equality, not approx
         assert r["tau_p"] == 6e-7
         assert r["N_D_profile"] is N_D  # same object, no copy

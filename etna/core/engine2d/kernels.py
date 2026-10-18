@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import math
 
-import numpy as np
 from numba import njit
 
 EXP_CLAMP = 60.0  # in ln(cm^-3): exp(60) ~ 1e26, above any physical density

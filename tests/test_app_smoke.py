@@ -153,7 +153,8 @@ def test_radiation_damage_page_two_fluences():
     # Defaults stay below full compensation: every point is solved.
     assert res.metadata["valid"].all() and np.isfinite(res.y).all()
     assert res.x.max() < res.metadata["compensation_fluence"]
-    assert "Solver: devsim" in _captions(at)
+    # the damage sweep reports the solver that ran: the batched engine on the default stack
+    assert "Solver: batched" in _captions(at)
 
 
 def test_microdosimetry_page_fixture_upload():

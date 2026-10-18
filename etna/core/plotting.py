@@ -73,53 +73,6 @@ def plot_electric_field(x_cm, E_field, voltage_label="", ax=None, **kwargs):
     return ax
 
 
-def plot_electric_field_multi(results_dict, ax=None, junction_offset=True):
-    """Plot E-field profiles for multiple bias voltages.
-
-    Parameters
-    ----------
-    results_dict : dict
-        Dictionary with 'voltages', 'E_fields' keys from voltage_sweep().
-        E_fields is a list of (x, E) tuples.
-    ax : matplotlib.axes.Axes or None
-        Axes to plot on.
-    junction_offset : bool
-        If True, offset x by junction position so x=0 is at the junction.
-
-    Returns
-    -------
-    ax : matplotlib.axes.Axes
-    """
-    if ax is None:
-        fig, ax = plt.subplots()
-
-    voltages = results_dict["voltages"]
-    E_fields = results_dict["E_fields"]
-
-    # Select a subset of voltages for clarity
-    n_curves = min(8, len(voltages))
-    indices = np.linspace(0, len(voltages) - 1, n_curves, dtype=int)
-
-    cmap = plt.cm.viridis
-    colors = [cmap(i / (n_curves - 1)) for i in range(n_curves)]
-
-    for i, idx in enumerate(indices):
-        V = voltages[idx]
-        x, E = E_fields[idx]
-        x_um = np.asarray(x) * 1e4
-        label = f"{V:.0f} V" if V == int(V) else f"{V:.1f} V"
-        ax.plot(x_um, np.abs(E), color=colors[i], label=label)
-
-    ax.set_xlabel("Depth ($\\mu$m)")
-    ax.set_ylabel("|Electric Field| (V/cm)")
-    ax.set_title("Electric Field vs Depth at Multiple Biases")
-    ax.set_yscale("log")
-    ax.grid(True, alpha=0.3)
-    ax.legend(loc="best", title="Bias")
-
-    return ax
-
-
 def plot_depletion_width_vs_bias(
     voltages,
     W_numerical,

@@ -50,8 +50,6 @@ def test_unknown_section_rejected():
 
 
 def test_leaked_device_is_reported(monkeypatch):
-    import devsim
-
     deleted = []
     calls = []
 
@@ -64,12 +62,6 @@ def test_leaked_device_is_reported(monkeypatch):
     rep = etna.run_all(etna.DeviceConfig(), ("cv",))
     assert rep.get("cv").status == "error" and "leaked" in rep.get("cv").reason
     assert deleted == ["leaky"]
-
-
-def test_config_key_distinguishes_configs():
-    a, b = etna.DeviceConfig(), etna.DeviceConfig(epi_thickness_um=12.0)
-    assert ra.config_key(a) == ra.config_key(etna.DeviceConfig())
-    assert ra.config_key(a) != ra.config_key(b)
 
 
 def test_sweep_is_opt_in_and_reports_rows():
@@ -113,7 +105,9 @@ def test_run_field_2d_with_nplus_uses_engine():
 
 def test_2d_field_summary_reports_the_map():
     rep = etna.run_all(etna.DeviceConfig(half_width_um=25.0), ("field",))
-    assert "2D map" in rep.get("field").summary and "max |E|" in rep.get("field").summary
+    assert (
+        "2D map" in rep.get("field").summary and "max |E|" in rep.get("field").summary
+    )
 
 
 def test_1d_field_summary_excludes_the_nplus_interface_spike():
@@ -121,6 +115,7 @@ def test_1d_field_summary_excludes_the_nplus_interface_spike():
     res, summ = rep.get("field").result, rep.get("field").summary
     assert "excl. spikes at the abrupt doping steps" in summ
     assert float(summ.split("peak |E| ")[1].split(" ")[0]) < 0.7 * float(res.y.max())
+
 
 def test_truncated_sweep_is_flagged_in_the_summary(monkeypatch):
     from etna.api import simulation as s
@@ -146,3 +141,66 @@ def test_truncated_sweep_is_flagged_in_the_summary(monkeypatch):
         metadata={"truncated": False, "requested_v_stop": -100.0},
     )
     assert "TRUNCATED" not in ra._summarize(full)
+
+
+@pytest.mark.parametrize(
+    "factory",
+    [etna.DeviceConfig, etna.measured_cv_tabulated_config, etna.legacy_config],
+    ids=["default", "tabulated", "legacy"],
+)
+def test_damage_default_grid_adapts_to_the_compensation_fluence(factory):
+    """The default fluence grid starts below the device's compensation fluence (the old
+    fixed 1e13..1e16 grid was entirely beyond it on the default and tabulated stacks)."""
+    from etna.api import simulation as s
+
+    cfg = factory()
+    phi_c = s.compensation_fluence(cfg, 5.6)
+    grid = s.default_fluence_grid(cfg, 5.6)
+    assert grid.size == s.DEFAULT_FLUENCE_GRID_POINTS == 8
+    np.testing.assert_allclose(grid[[0, -1]], [1e-2 * phi_c, 3.0 * phi_c], rtol=1e-12)
+    rep = etna.run_all(cfg, ("damage",))
+    sec = rep.get("damage")
+    res = sec.result
+    np.testing.assert_allclose(res.x, grid, rtol=0, atol=0)
+    valid = np.asarray(res.metadata["valid"])
+    # every point below the compensation fluence is solved, the last one (3x) is not
+    assert valid[res.x < phi_c].all() and (res.x < phi_c).sum() == 6
+    assert not valid[-1] and np.isnan(res.y[-1])
+    assert "full donor compensation" in res.metadata["reason"][-1]
+    assert sec.status == "ok" and sec.solver == "batched", (sec.status, sec.solver)
+    assert sec.summary.startswith(f"{int(valid.sum())} of 8 points valid; "), sec.summary
+    assert f"full donor compensation at {phi_c:.3g} p/cm^2" in sec.summary, sec.summary
+
+
+def test_damage_explicit_grid_is_used_unchanged():
+    from etna.api import simulation as s
+
+    grid = np.array([1e11, 3e12, 5e14])
+    res = s.run_radiation_damage(etna.DeviceConfig(), fluences=grid)
+    np.testing.assert_array_equal(res.x, grid)
+    assert list(res.metadata["valid"]) == [True, True, False]
+
+
+def test_all_nan_section_is_a_labelled_warning(monkeypatch):
+    from etna.api import simulation as s
+
+    def beyond(cfg, *a, **k):
+        return etna.SimResult(
+            config=cfg,
+            sim_type="damage",
+            x=np.array([1e15, 1e16]),
+            y=np.array([np.nan, np.nan]),
+            metadata={
+                "valid": np.array([False, False]),
+                "reason": ["full donor compensation", "full donor compensation"],
+                "compensation_fluence": 1.35e13,
+                "solver": "none (no point solved)",
+            },
+        )
+
+    monkeypatch.setattr(s, "run_radiation_damage", beyond)
+    rep = etna.run_all(etna.DeviceConfig(), ("damage",))
+    sec = rep.get("damage")
+    assert sec.status == "warning" and not rep.ok
+    assert sec.reason.startswith("no valid point (0 of 2)") and "compensation" in sec.reason
+    assert "all NaN" in sec.summary and "1.35e+13" in sec.summary

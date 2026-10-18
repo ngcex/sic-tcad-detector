@@ -57,6 +57,12 @@ class TestSiC4HParameters:
     def test_nv_300(self):
         assert self.p.NV_300 == 2.49e19
 
+    def test_literature_dos_matches_compute_ni(self):
+        """The documented NC/NV(300 K) agree with what the solvers use (audit A-11)."""
+        _, NC, NV, _ = compute_ni(300)
+        assert NC == pytest.approx(self.p.NC_300, rel=0.01)  # 1.6951e19
+        assert NV == pytest.approx(self.p.NV_300, rel=0.01)  # 2.5088e19
+
 
 class TestComputeNi:
     """Test first-principles n_i calculation."""

@@ -659,8 +659,9 @@ def compare_cce_2d_vs_1d(half_width_um=50.0, V_bias=50.0, gen_rate=1e18):
     result : dict
         Dictionary with keys:
         - "cce_1d": 1D CCE value
-        - "cce_2d_center": 2D CCE with uniform epi generation
-        - "cce_2d_full_area": 2D CCE integrated over full area
+        - "cce_2d_center": 2D CCE of the centre column (lateral scan, x = 0)
+        - "cce_2d_full_area": 2D CCE with uniform epi generation over the full area
+          (before 2026-10-18 "cce_2d_center" returned this value too: audit B-14)
         - "active_to_geometric_ratio": effective active / geometric area
         - "lateral_scan": result from cce_lateral_scan
         - "half_width_um": half-width used
@@ -752,7 +753,7 @@ def compare_cce_2d_vs_1d(half_width_um=50.0, V_bias=50.0, gen_rate=1e18):
 
         return {
             "cce_1d": float(cce_1d),
-            "cce_2d_center": float(cce_2d_full),
+            "cce_2d_center": float(cce_center),
             "cce_2d_full_area": float(cce_2d_full),
             "active_to_geometric_ratio": float(active_to_geometric),
             "lateral_scan": lateral_scan,

@@ -121,7 +121,8 @@ class TestValidation2Dvs1D:
     """Quantitative 1D-vs-2D validation (MESH-02 requirement)."""
 
     @pytest.fixture(scope="class")
-    def solved_devices(self):
+    @classmethod
+    def solved_devices(cls):
         """Create and solve both 1D and 2D devices with matching parameters."""
         from etna.core.device import create_sic_device
         from etna.core.device2d import create_sic_2d_device
@@ -173,7 +174,8 @@ class TestVisualization2D:
     """Test that 2D visualization functions produce valid figures."""
 
     @pytest.fixture(scope="class")
-    def solved_2d_device(self):
+    @classmethod
+    def solved_2d_device(cls):
         """Create and solve a 2D device for visualization tests."""
         from etna.core.device2d import create_sic_2d_device
         from etna.core.poisson import setup_poisson, solve_equilibrium
@@ -192,7 +194,7 @@ class TestVisualization2D:
         dev = solved_2d_device
         fig, ax = plot_potential_2d(dev["device_name"], dev["region_name"])
         assert isinstance(fig, plt.Figure)
-        assert ax is not None
+        assert isinstance(ax, plt.Axes) and ax.has_data()
         plt.close(fig)
 
     def test_plot_efield_returns_figure(self, solved_2d_device):
@@ -202,7 +204,7 @@ class TestVisualization2D:
         dev = solved_2d_device
         fig, ax = plot_efield_2d(dev["device_name"], dev["region_name"])
         assert isinstance(fig, plt.Figure)
-        assert ax is not None
+        assert isinstance(ax, plt.Axes) and ax.has_data()
         plt.close(fig)
 
     def test_triangulation_has_correct_shape(self, solved_2d_device):

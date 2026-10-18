@@ -11,7 +11,7 @@ Streamlit bind check).
 | C-02 | medium   | open   | Batch Sweep offers sweep parameters the selected facade ignores (identical curves)           | S      |
 | C-03 | medium   | open   | devsim.error is not a RuntimeError; pages crash with a raw traceback                         | S      |
 | C-04 | high     | fixed  | No devsim serialization; concurrent facade calls segfault the process (reproduced, exit 139) | S      |
-| C-05 | medium   | open   | uv.lock pins transitive deps with advisories (runtime + dev; tornado corrected)              | S      |
+| C-05 | medium   | resolved (a6ce6da) | uv.lock pins transitive deps with advisories (runtime + dev; tornado corrected)              | S      |
 | C-06 | low      | open   | C-V / Mott-Schottky labels and 1/C^2 CSV column use per-area units; values are in Farads     | S      |
 | C-07 | low      | open   | sim_type="dark_current" has two shapes; bias sweep mislabeled T_K; no truncation flag        | S      |
 | C-08 | low      | open   | Radiation page: fluence 0 crashes, negative gives NaN fluences, min>max accepted             | S      |
@@ -52,3 +52,10 @@ Status column synced from the issue files and the git log; evidence per change:
 - C-04: fixed. 5d20634 (file status already fixed)
 
 Counts after the sync: 2 fixed, 15 open (the Totals line above is the audit-time count).
+
+## Status sync 2026-10-18 (wp-c2)
+
+- C-05: resolved. a6ce6da (WP-D lock upgrade); pip-audit of the all-extras export re-run on wp-c2: no known vulnerabilities.
+- C-13: still open (MeshData.regions/contacts, build_device device_name, to_csv_bytes branches for temperature/flash/transient are not addressed by wp-c2).
+
+Counts after this sync (from the issue files): 2 fixed, 14 open, 1 resolved.

@@ -8,7 +8,6 @@ diagonally dominant (Dirichlet rows are identity rows).
 
 from __future__ import annotations
 
-import numpy as np
 from numba import njit
 
 

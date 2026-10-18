@@ -20,13 +20,17 @@ import scipy.optimize
 
 from etna.core.sic_material import (
     SiC4H_Parameters,
-    mobility_caughey_thomas,
     intrinsic_concentration,
     mobility_caughey_thomas_T,
     srh_lifetime,
 )
 from etna.core.incomplete_ionization import ionized_acceptor_concentration
-from etna.core.solver_tol import DC_REL_ERROR
+from etna.core.solver_tol import (
+    DC_ABS_ERROR,
+    DC_REL_ERROR,
+    RELAXED_ABS_ERROR,
+    RELAXED_REL_ERROR,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +39,9 @@ DEFAULT_N_D = 1.07e15  # cm^-3
 # n+ layer under the epi (when enabled): conductive 4H-SiC substrate doping, fully
 # ionized. 1e18 and 1e19 give the same W/CCE/dark current to <1e-3 (lab spike).
 DEFAULT_N_D_NPLUS = 1e19  # cm^-3
+# p+ anode acceptor doping (Al), the same in every stack (default, n+-calibrated,
+# legacy): the default N_A of every builder and of DeviceConfig.
+DEFAULT_N_A = 1e19  # cm^-3
 
 # DEFAULT DEVICE STACK (single source of truth): p+ anode 0.3 um / 10 um graded n- epi with
 # a graded n-/n+ transition over its last 1.14 um / n+ substrate (1 um modelled, cathode on
@@ -88,6 +95,21 @@ DEFAULT_STACK = {
 }
 # Historical name of the same record (the opt-in preset before the 2026-10-18 flip).
 MEASURED_CV_STACK = DEFAULT_STACK
+
+
+def graded_stack_kwargs() -> dict:
+    """Graded epi doping of DEFAULT_STACK as builder keywords (a fresh dict).
+
+    ``doping_profile='graded'`` plus N_D_junction / N_D_bulk / L_transition: the
+    doping the 1D sweep helpers (temperature, anneal, epi-thickness, transient) start
+    from before their ``device_kwargs`` overrides. Geometry keys are not included.
+    """
+    return {
+        "doping_profile": "graded",
+        "N_D_junction": DEFAULT_STACK["N_D_junction"],
+        "N_D_bulk": DEFAULT_STACK["N_D_bulk"],
+        "L_transition": DEFAULT_STACK["L_transition"],
+    }
 
 # PREVIOUS DEFAULT (2026-10-17 .. 2026-10-18): the n+ stack calibrated on three C-V points,
 # exponential epi with an ABRUPT 1e19 n+ step at the epi end (no transition). Kept so its
@@ -387,7 +409,7 @@ def create_sic_device(
     region_name="sic",
     epi_thickness_cm=10e-4,
     substrate_thickness_cm=DEFAULT_STACK["substrate_thickness_cm"],
-    N_A=1e19,
+    N_A=DEFAULT_N_A,
     N_D=None,
     T=300,
     doping_profile="uniform",
@@ -514,7 +536,6 @@ def create_sic_device(
     devsim.create_device(mesh=mesh_name, device=device_name)
 
     # --- Set 4H-SiC material parameters ---
-    kT_eV = K_B_EV * T  # eV
     kT_J = K_B_J * T  # J
     V_t = kT_J / Q  # V (thermal voltage in Volts for devsim)
 
@@ -1154,7 +1175,7 @@ def calibrate_graded_doping(
     target_W_data=None,
     epi_thickness_cm=10e-4,
     substrate_thickness_cm=1e-4,
-    N_A=1e19,
+    N_A=DEFAULT_N_A,
     T=300,
     x0=None,
     maxiter=80,
@@ -1273,15 +1294,15 @@ def calibrate_graded_doping(
                         try:
                             devsim.solve(
                                 type="dc",
-                                absolute_error=1e10,
+                                absolute_error=DC_ABS_ERROR,
                                 relative_error=DC_REL_ERROR,
                                 maximum_iterations=40,
                             )
                         except devsim.error:
                             devsim.solve(
                                 type="dc",
-                                absolute_error=1e12,
-                                relative_error=1e-8,
+                                absolute_error=RELAXED_ABS_ERROR,
+                                relative_error=RELAXED_REL_ERROR,
                                 maximum_iterations=100,
                             )
                         V += 0.5

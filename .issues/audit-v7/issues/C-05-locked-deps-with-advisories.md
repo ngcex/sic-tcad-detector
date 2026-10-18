@@ -4,7 +4,7 @@ source: raw-C F5
 title: uv.lock pins transitive dependencies with published advisories (runtime: urllib3, anyio, gitpython; dev: tornado, jupyterlab, jupyter-server, notebook, mistune, soupsieve)
 severity: medium
 category: security
-status: open
+status: resolved
 location:
   - uv.lock:30-31 (anyio 4.14.1), :548-549 (gitpython 3.1.50), :2223-2224 (urllib3 2.7.0)
   - pyproject.toml:10-24 (no audit step; no floor pins for transitive deps)
@@ -82,3 +82,7 @@ audit:
 ## Effort
 
 S
+
+## Resolution (2026-10-18)
+
+Resolved by a6ce6da (WP-D): `uv lock --upgrade-package urllib3 anyio gitpython tornado jupyterlab jupyter-server notebook mistune soupsieve`; CI nightly job runs pip-audit on the all-extras export (.github/workflows/ci.yml). Re-checked on wp-c2 after the merge: `uv export --frozen --all-extras --no-hashes --no-emit-project | uvx pip-audit --no-deps --disable-pip -r -` -> "No known vulnerabilities found".

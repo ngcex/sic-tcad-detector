@@ -21,7 +21,6 @@ import pytest
 
 from etna.core.microdosimetry import (
     compute_kappa_table,
-    compute_microdosimetric_means,
     lineal_energy_spectrum,
     make_y_bins,
     mean_chord_length,
@@ -192,23 +191,6 @@ class TestLinealEnergySpectrum:
 
 
 # ---------------------------------------------------------------------------
-# Compute microdosimetric means (standalone)
-# ---------------------------------------------------------------------------
-
-
-class TestComputeMicrodosimetricMeans:
-    def test_agrees_with_spectrum(self, spectrum_broad):
-        """Standalone means should match those from lineal_energy_spectrum."""
-        means = compute_microdosimetric_means(
-            spectrum_broad["bin_centers"],
-            spectrum_broad["f_y"],
-            spectrum_broad["bin_widths"],
-        )
-        assert means["y_F"] == pytest.approx(spectrum_broad["y_F"], rel=1e-6)
-        assert means["y_D"] == pytest.approx(spectrum_broad["y_D"], rel=1e-6)
-
-
-# ---------------------------------------------------------------------------
 # Kappa table tests
 # ---------------------------------------------------------------------------
 
@@ -345,7 +327,7 @@ class TestPlots:
             y_D=spectrum_broad["y_D"],
             label="Test",
         )
-        assert ax is not None
+        assert isinstance(ax, plt.Axes) and ax.has_data()
         plt.close("all")
 
     def test_plot_yf_spectrum_creates_figure(self, spectrum_broad):
@@ -356,7 +338,7 @@ class TestPlots:
             y_F=spectrum_broad["y_F"],
             label="Test",
         )
-        assert ax is not None
+        assert isinstance(ax, plt.Axes) and ax.has_data()
         plt.close("all")
 
     def test_plot_yd_on_existing_axes(self, spectrum_broad):

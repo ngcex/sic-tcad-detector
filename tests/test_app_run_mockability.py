@@ -15,7 +15,6 @@ import numpy as np
 from streamlit.testing.v1 import AppTest
 
 import etna
-from etna import DeviceConfig
 
 
 def test_run_cv_mockable_via_module_attribute(monkeypatch):

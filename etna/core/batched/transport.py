@@ -100,7 +100,7 @@ class ContinuityBatch:
         self.kn = (Q * self.mu_n * pb.V_t[None, :]) / self.h  # (N-1, B)
         self.kp = (Q * self.mu_p * pb.V_t[None, :]) / self.h
         D = pb.netdop
-        n_i, V_t = pb.n_i, pb.V_t
+        n_i = pb.n_i
         celec = lambda d: 1e-10 + 0.5 * np.abs(d + np.sqrt(d**2 + 4 * n_i**2))
         chole = lambda d: 1e-10 + 0.5 * np.abs(-d + np.sqrt(d**2 + 4 * n_i**2))
         self.n_bc = np.stack(
