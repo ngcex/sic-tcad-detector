@@ -350,7 +350,8 @@ def build_spec(config, report=None) -> dict:
                 else "none for this config (they apply to the reference device only)."
             )
         ),
-        "No GDSII layout: guard ring / pad dimensions are not available and are not invented.",
+        "No fabrication layout: the GDSII export is a labelled REFERENCE-NOT-FAB schematic; "
+        "guard ring / pad dimensions are not available and are not invented.",
     ]
     return spec
 

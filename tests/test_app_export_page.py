@@ -185,3 +185,16 @@ def test_animation_button_renders_videos(monkeypatch, tmp_path):
     assert rendered == ["StackScene", "DepletionScene"]
     cfg, vids = at.session_state["export_animation"]
     assert cfg == DeviceConfig() and set(vids) == {"StackScene", "DepletionScene"}
+
+
+def test_layout_block_shows_disclaimer_and_degrades_without_gdstk(monkeypatch):
+    from etna import export as ex
+
+    at = _start(monkeypatch, [])
+    assert ex.LAYOUT_DISCLAIMER in [w.value for w in at.warning]
+    assert "REFERENCE-NOT-FAB" in " ".join(h.value for h in at.subheader)
+
+    monkeypatch.setattr(ex, "gds_available", lambda: (False, "gdstk not installed"))
+    at = _start(monkeypatch, [])
+    assert any("GDSII download unavailable" in i.value for i in at.info)
+    assert ex.LAYOUT_DISCLAIMER in [w.value for w in at.warning]

@@ -1,4 +1,4 @@
-"""Export page: spec sheet, dimensioned cross-section, node profile (CSV / VTK).
+"""Export page: spec sheet, cross-section, node profile (CSV / VTK), schematic layout.
 
 All files come from ``etna.export`` (pure builders) and carry the validation label.
 The spec sheet reads an ``etna.run_all`` Report (the Run All page's one is reused when
@@ -160,6 +160,39 @@ def _animation_block(cfg) -> None:
         )
 
 
+def _layout_block() -> None:
+    st.subheader("Reference layout (schematic, REFERENCE-NOT-FAB)")
+    st.warning(ex.LAYOUT_DISCLAIMER)
+    st.write(
+        "Labelled schematic of the dosimeter (2 x 2 mm active, die 2.7 +- 0.15 mm, "
+        "periphery as one termination zone, corner pad SIZE UNKNOWN) and of the "
+        "microdosimeter (5 x 5 mm active; die size MISSING). Every polygon carries its "
+        "class (DOCUMENTED / MEASURED-FROM-FIGURE / PLACEHOLDER) and source "
+        "(deliverables/DIMENSIONS-provenance.md). No rings, dicing street or pad size: "
+        "they are not documented and are not invented."
+    )
+    ok, why = ex.gds_available()
+    if not ok:
+        st.info(f"GDSII download unavailable: {why}. The SVG preview still works.")
+    for device in ("dosimeter", "microdosimeter"):
+        c = st.columns(2)
+        c[0].download_button(
+            f"SVG ({device})",
+            ex.layout_svg(device),
+            f"etna_{device}_REFERENCE-NOT-FAB.svg",
+            "image/svg+xml",
+            key=f"ex_layout_svg_{device}",
+        )
+        if ok:
+            c[1].download_button(
+                f"GDSII ({device})",
+                ex.layout_gds(device),
+                f"etna_{device}_REFERENCE-NOT-FAB.gds",
+                "application/octet-stream",
+                key=f"ex_layout_gds_{device}",
+            )
+
+
 def render() -> None:
     st.title("Export")
     st.info(ex.VALIDATION_LABEL)
@@ -172,7 +205,4 @@ def render() -> None:
     st.divider()
     _animation_block(cfg)
     st.divider()
-    st.caption(
-        "No GDSII layout: guard ring and pad dimensions are not available, and are not "
-        "invented."
-    )
+    _layout_block()

@@ -9,7 +9,10 @@ Every export carries ``VALIDATION_LABEL`` verbatim.
 - ``cross_section``: dimensioned stack drawing, vertical axis to scale (SVG / PNG).
 - ``mesh_export``: doping / potential / field per node (CSV, legacy-ASCII VTK), 1D and 2D.
 
-No GDSII layout: guard ring and pad dimensions are not available, and are not invented.
+- ``gds``: labelled SCHEMATIC reference layouts (top cell ``*REFERENCE-NOT-FAB``), GDSII
+  (optional ``gdstk``) + SVG, from the documented / measured-from-figure dimensions only.
+  Not a fabrication layout: guard ring, pad and dicing dimensions are not available and
+  are not invented.
 """
 
 from etna.export.labels import VALIDATION_LABEL
@@ -23,6 +26,12 @@ from etna.export.spec_sheet import (
 )
 from etna.export.cross_section import cross_section_png, cross_section_svg, stack_layers
 from etna.export.mesh_export import profile_to_csv, profile_to_vtk
+from etna.export.gds import (
+    DISCLAIMER as LAYOUT_DISCLAIMER,
+    gds_available,
+    layout_gds,
+    layout_svg,
+)
 
 __all__ = [
     "VALIDATION_LABEL",
@@ -37,4 +46,8 @@ __all__ = [
     "cross_section_png",
     "profile_to_csv",
     "profile_to_vtk",
+    "LAYOUT_DISCLAIMER",
+    "gds_available",
+    "layout_gds",
+    "layout_svg",
 ]
