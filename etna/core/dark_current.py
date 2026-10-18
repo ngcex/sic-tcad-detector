@@ -531,8 +531,8 @@ def _resolve_self_consistent(device, region):
     the previous state. Iterating to the fixed point E_field_node = E(state) makes the
     result independent of the ramp path (bias step), to FIXED_POINT_RTOL: with a single
     pass, the 2 V and 0.5 V ramps differ by up to 4e-6 at 400 K; at the fixed point by
-    < 1e-15 (lab/engine_box/notes/LOG.md). Usually 1-3 passes (each a 1-2 iteration
-    Newton solve). The last operation is a solve, so the contact current and the U_TAT
+    < 1e-15 (lab/engine_box/notes/LOG.md). At least 2 passes, usually 2-3 (each a 1-2
+    iteration Newton solve). The last operation is a solve, so the contact current and the U_TAT
     integral use the same f_depl. Raises devsim.error as ``_refresh_and_resolve``.
     """
 
@@ -541,11 +541,15 @@ def _resolve_self_consistent(device, region):
             devsim.get_node_model_values(device=device, region=region, name="E_field_node")
         )
 
+    # Pass k sets E_k = E(state_{k-1}) and solves state_k. E_k ~ E_{k-1} means state_{k-1}
+    # was solved with its own field, hence state_k ~ state_{k-1}. The first comparison is
+    # skipped: the stored field need not be the one the present state was solved with
+    # (right after setup_tat_model it is E of the TAT-free state), so pass 1 proves nothing.
     E_prev = field()
-    for _ in range(_FIXED_POINT_MAX_ITER):
+    for k in range(_FIXED_POINT_MAX_ITER):
         _refresh_and_resolve(device, region)
         E = field()
-        if np.max(np.abs(E - E_prev)) <= FIXED_POINT_RTOL * np.max(E):
+        if k > 0 and np.max(np.abs(E - E_prev)) <= FIXED_POINT_RTOL * np.max(E):
             return
         E_prev = E
     logger.warning(
