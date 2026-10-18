@@ -33,6 +33,7 @@ from etna.api.simulation import (
 )
 from etna.api.run_all import Report, SectionResult, run_all
 from etna.api.sweep import ParametricSweep
+from etna.core.devsim_lock import quiet_devsim, set_devsim_quiet
 
 __all__ = [
     "DeviceConfig",
@@ -64,5 +65,7 @@ __all__ = [
     "run_all",
     "Report",
     "SectionResult",
+    "set_devsim_quiet",
+    "quiet_devsim",
     "__version__",
 ]

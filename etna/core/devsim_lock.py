@@ -11,7 +11,10 @@ therefore also runs ``fn`` inside :func:`quiet_devsim`, which drops what the
 calling thread writes to ``sys.stdout`` (etna itself reports through
 ``logging``/``warnings``, never ``print``). Set ``ETNA_DEVSIM_VERBOSE=1`` to see
 devsim's output again. Use ``with quiet_devsim():`` around direct core calls in
-notebooks or scripts.
+notebooks or scripts, or call :func:`set_devsim_quiet` once (first notebook
+cell, script ``main``) to silence every devsim call of the process, from any
+thread: each public ``devsim`` function is then wrapped so that only the time
+spent inside devsim is quiet; ``print`` from the notebook itself still shows.
 
 Only Python-level ``sys.stdout`` is redirected: devsim writes its solver log
 through the Python stream (the 5 math-library lines printed once at import are
@@ -99,6 +102,65 @@ def quiet_devsim():
             # uninstall once nobody is quiet, unless someone replaced sys.stdout since
             if not proxy._quiet and sys.stdout is proxy:
                 sys.stdout = proxy._wrapped
+
+
+_GLOBAL_LOCK = threading.Lock()
+_patched: list[tuple[object, str, object]] = []  # (module, name, original)
+
+
+def _quiet_call(fn):
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        with quiet_devsim():
+            return fn(*args, **kwargs)
+
+    wrapper.__etna_quiet_original__ = fn
+    return wrapper
+
+
+def set_devsim_quiet(enabled: bool = True) -> None:
+    """Process-wide switch: silence devsim's log for every devsim call, any thread.
+
+    ``set_devsim_quiet(True)`` wraps each public function of the ``devsim``
+    module (and the aliases bound by ``from devsim import *`` in the already
+    imported ``devsim.*`` packages) in :func:`quiet_devsim`, so direct core
+    calls from notebooks, scripts and labs stop streaming the Newton log, while
+    the caller's own ``print`` output between devsim calls is unaffected.
+    ``set_devsim_quiet(False)`` restores the original functions (the default
+    state). ``ETNA_DEVSIM_VERBOSE=1`` still forces devsim's output (checked at
+    call time). Idempotent; no effect on results: it only discards text.
+    """
+    import devsim
+
+    with _GLOBAL_LOCK:
+        if enabled and not _patched:
+            originals = {
+                name: obj
+                for name, obj in vars(devsim).items()
+                if not name.startswith("_") and callable(obj) and not isinstance(obj, type)
+            }
+            by_id = {id(obj): name for name, obj in originals.items()}
+            wrappers = {name: _quiet_call(obj) for name, obj in originals.items()}
+            modules = [devsim] + [
+                m
+                for k, m in list(sys.modules.items())
+                if k.startswith("devsim.") and m is not None
+            ]
+            for mod in modules:
+                for name, obj in list(vars(mod).items()):
+                    src = by_id.get(id(obj))
+                    if src is not None and originals[src] is obj:
+                        _patched.append((mod, name, obj))
+                        setattr(mod, name, wrappers[src])
+        elif not enabled and _patched:
+            for mod, name, obj in reversed(_patched):
+                setattr(mod, name, obj)
+            _patched.clear()
+
+
+def devsim_quiet_enabled() -> bool:
+    """True while :func:`set_devsim_quiet` (process-wide) is on."""
+    return bool(_patched)
 
 
 def serialized(fn):
