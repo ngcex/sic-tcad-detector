@@ -84,7 +84,11 @@ def test_three_point_system_has_no_exact_solution():
 
 @pytest.mark.slow
 def test_nt_reproduces_the_18pA_bound():
-    from etna.core.dark_current import create_dark_current_device, dark_current_sweep
+    from etna.core.dark_current import (
+        AREA_DOSIMETER_CM2,
+        create_dark_current_device,
+        dark_current_sweep,
+    )
 
     kw = {
         k: CAL[k]
@@ -111,7 +115,7 @@ def test_nt_reproduces_the_18pA_bound():
         from etna.core.dark_current import setup_tat_model
 
         setup_tat_model(info, E_t=CAL["E_t"], N_t=CAL["N_t"])  # the record's trap level
-        r = dark_current_sweep(info, np.array([-60.0]), area=0.04)
+        r = dark_current_sweep(info, np.array([-60.0]), area=AREA_DOSIMETER_CM2)
     finally:
         devsim.delete_device(device=info["device_name"])
     assert abs(r["I_total"][0]) == pytest.approx(18e-12, rel=1e-5)

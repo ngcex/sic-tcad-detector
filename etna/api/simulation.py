@@ -45,7 +45,12 @@ logger = logging.getLogger(__name__)
 # tests/test_api_engine_switch.py pin representative points).
 # Anything outside goes to devsim. Widening a bound only needs a parity run.
 _ENGINE_BOX = {
-    "T": (250.0, 400.0),
+    # T 250-400 -> 150-450 K (2026-10-18): run_cv C/W and run_cce CCE vs devsim at
+    # 150/200/225/425/450/500 K on the default, n+-calibrated, legacy and microdosimeter
+    # stacks, 21-point C-V to -100 V (legacy -40 V), 7-point CCE: |dC/C| <= 3.2e-8,
+    # |dW| <= 2.6e-18 cm, |dCCE| <= 1.3e-13 (lab/engine_box/notes/LOG.md,
+    # tests/test_engine_T_box.py). 100 K: devsim itself fails on the legacy stack.
+    "T": (150.0, 450.0),
     "N_A": (1e18, 1e19),
     "N_D_junction": (1e15, 1e16),
     # N_D_bulk lower bound 5e13 -> 2e13 (2026-10-18) for the measured-C-V preset (3.4e13):
@@ -71,15 +76,28 @@ _ENGINE_MAX_JUMP_V_300K = 100.0
 
 
 def validated_domain_reason(config: DeviceConfig) -> "str | None":
-    """Why ``config`` lies outside the validated 1D domain (None = inside).
+    """Why ``config`` lies outside the validated domain (None = inside).
 
-    The validated domain is the ``_ENGINE_BOX`` parameter box in which the
-    batched engine was cross-checked against the devsim reference. It concerns
-    the device parameters only (bias limits are checked per call). Results for
-    devices outside it come from devsim alone and have no engine cross-check.
+    1D: the ``_ENGINE_BOX`` parameter box in which the batched engine was
+    cross-checked against the devsim reference. 2D (``half_width_um`` set): the
+    2D engine's dark-state envelope (``ENGINE2D_DARK_BOX`` / n+ / transition
+    boxes; epi 5-30 um since 2026-10-18), checked at its lowest parity bias. It
+    concerns the device parameters only (bias limits are checked per call).
+    Results for devices outside it come from devsim alone and have no engine
+    cross-check.
     """
     if config.half_width_um is not None:
-        return "2D device"
+        from etna.core.engine2d import (
+            ENGINE2D_DARK_BOX,
+            engine2d_dark_unsupported_reason,
+        )
+
+        reason = engine2d_dark_unsupported_reason(
+            config.half_width_um,
+            ENGINE2D_DARK_BOX["V_cathode"][0],
+            **device_kwargs(config),
+        )
+        return None if reason is None else f"2D engine: {reason}"
     if config.doping_profile not in ("graded", "uniform"):
         return f"doping_profile={config.doping_profile!r}"
     checks = {
@@ -114,6 +132,8 @@ def validated_domain_reason(config: DeviceConfig) -> "str | None":
 
 def _engine_unsupported_reason(config: DeviceConfig, bias_array) -> "str | None":
     """Why the batched engine cannot serve this call (None = it can)."""
+    if config.half_width_um is not None:
+        return "2D device (the batched engine is 1D)"
     reason = validated_domain_reason(config)
     if reason is not None:
         return reason
@@ -1433,11 +1453,15 @@ def run_temperature_sweep(
 ) -> SimResult:
     """Run a CCE-vs-temperature sweep at a single bias and return a SimResult.
 
-    Bucket-a config->kwargs adapter over
-    `etna.core.temperature_sweep.sweep_cce_vs_temperature`, which builds
-    AND deletes its own device(s) (self-cleaning). run_temperature_sweep
-    therefore does NOT call `build_device`, `reset_devsim_fully`, or
-    `devsim.delete_device`.
+    Temperatures at which the device lies in the batched engine's validated box
+    (``_ENGINE_BOX``, T 150-450 K) are solved in one batched solve, one device per
+    T: "hecht" takes W from a dark Poisson solve, "dd" runs ``cce_sweep`` (parity
+    with the devsim path: |dCCE| <= 6e-12 hecht, <= 1.1e-12 dd, 250-400 K, -10..-60 V,
+    default/n+-calibrated/legacy stacks; tests/test_temperature_engine.py). The
+    other temperatures, and any that do not converge, go through
+    `etna.core.temperature_sweep.sweep_cce_vs_temperature`, which builds AND
+    deletes its own devsim device(s) and drops a temperature that fails.
+    ``metadata["solver_per_T"]`` says which path produced each point.
 
     Axis choice (D-04): a SINGLE bias (`voltages=[voltage]`) is passed so the
     returned curve is a clean 1D CCE-vs-T profile (x=T). Temperature is the
@@ -1464,41 +1488,115 @@ def run_temperature_sweep(
         (dimensionless), metadata contains "voltage_V" and "method".
     """
     _require_1d(config, "run_temperature_sweep")
+    if method not in ("hecht", "dd"):
+        raise ValueError(f"method must be 'hecht' or 'dd', got '{method}'")
 
     if temperatures is None:
         temperatures = np.linspace(250.0, 350.0, 5)
+    temperatures = np.atleast_1d(np.asarray(temperatures, dtype=float))
 
-    # Bucket-a: sweep_cce_vs_temperature self-cleans. Pass voltages=[voltage]
-    # (single element) so x=T is a clean 1D curve. Do NOT forward config.T
-    # (T is the swept axis); DO forward every other config field.
-    kw = device_kwargs(config)
-    kw.pop("T")
-    df = sweep_cce_vs_temperature(
-        temperatures=temperatures,
-        voltages=[voltage],
-        method=method,
-        **kw,
+    # Temperatures whose device lies in the engine's validated box are solved in one
+    # batched Newton solve (T is a per-device input); the rest, and any that do not
+    # converge, go through the devsim path (sweep_cce_vs_temperature, self-cleaning),
+    # which drops a temperature that fails, as before.
+    cce = np.full(temperatures.size, np.nan)
+    solver = np.full(temperatures.size, "devsim", dtype=object)
+    bias = np.array([voltage], dtype=float)
+    on_engine = [
+        i
+        for i, T in enumerate(temperatures)
+        if _engine_unsupported_reason(_with_T(config, T), bias) is None
+    ]
+    if on_engine:
+        vals, conv = _temperature_engine(
+            config, temperatures[on_engine], voltage, method
+        )
+        for j, i in enumerate(on_engine):
+            if conv[j]:
+                cce[i], solver[i] = vals[j], "batched"
+    rest = [i for i in range(temperatures.size) if solver[i] != "batched"]
+    if rest:
+        # Do NOT forward config.T (T is the swept axis); DO forward every other field.
+        kw = device_kwargs(config)
+        kw.pop("T")
+        df = sweep_cce_vs_temperature(
+            temperatures=temperatures[rest],
+            voltages=[voltage],
+            method=method,
+            **kw,
+        )
+        got = dict(zip(df["T"].to_numpy(), df["CCE"].to_numpy()))
+        for i in rest:
+            cce[i] = got.get(temperatures[i], np.nan)
+
+    keep = np.isfinite(cce)
+    used = set(solver[keep])
+    label = {
+        ("hecht", "batched"): "hecht (analytical; W from batched engine)",
+        ("hecht", "devsim"): "hecht (analytical; W from devsim)",
+        ("dd", "batched"): "batched",
+        ("dd", "devsim"): "devsim",
+    }
+    name = (
+        "failed (no temperature converged)"
+        if not used
+        else (
+            label[(method, used.pop())]
+            if len(used) == 1
+            else (
+                "hecht (analytical; W from batched engine + devsim)"
+                if method == "hecht"
+                else "batched + devsim"
+            )
+        )
     )
-
-    # Return is a long-format pd.DataFrame with columns T, V, CCE (Pitfall 3).
-    x = df["T"].to_numpy()
-    y = df["CCE"].to_numpy()
-
     return SimResult(
         config=config,
         sim_type="temperature",
-        x=x,
-        y=y,
+        x=temperatures[keep],
+        y=cce[keep],
         metadata={
             "voltage_V": voltage,
             "method": method,
-            **_provenance(
-                config,
-                "hecht (analytical; W from devsim)" if method == "hecht" else "devsim",
-            ),
+            "solver_per_T": solver[keep].astype(str),
+            **_provenance(config, name),
         },
         mesh=None,
     )
+
+
+def _with_T(config: DeviceConfig, T: float) -> DeviceConfig:
+    from dataclasses import replace
+
+    return replace(config, T=float(T))
+
+
+def _temperature_engine(config: DeviceConfig, temperatures, voltage, method):
+    """Batched-engine CCE at one bias for every T: (cce (n,), converged (n,) bool).
+
+    One batch, one device per temperature, all sharing the config's mesh. "hecht":
+    the depletion edge W from a dark Poisson solve, then ``hecht_cce(V, d=W, T)``
+    exactly as ``sweep_cce_vs_temperature``; "dd": ``cce_sweep`` with the
+    ``cce_vs_bias`` generation and mobility inputs (as ``run_cce``).
+    """
+    from etna.core.charge_collection import hecht_cce
+
+    kws = [device_kwargs(_with_T(config, T)) for T in temperatures]
+    pb, x, nd = _engine_batch(kws)
+    sub, epi = kws[0]["substrate_thickness_cm"], kws[0]["epi_thickness_cm"]
+    if method == "hecht":
+        res = reverse_sweep(pb, [voltage], sub, epi, capacitance=False)
+        vals = np.array(
+            [
+                float(hecht_cce(voltage, d=W, T=T))
+                for W, T in zip(res.W[0], temperatures)
+            ]
+        )
+        return vals, res.converged[0]
+    epi_end = sub + epi if kws[0].get("nplus_thickness_cm") else None
+    G = alpha_generation(x, sub, 15e-4, 1e18, epi_end=epi_end)
+    res = cce_sweep(pb, [voltage], sub, G, T=temperatures, N_D=nd)
+    return res.cce[0], res.converged[0]
 
 
 @serialized

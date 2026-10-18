@@ -49,7 +49,7 @@ class TestEligibility:
             ((300.0, 50.0), {}, "half_width_um"),
             ((50.0, 120.0), {}, "V_bias"),
             ((50.0, -5.0), {}, "V_bias"),
-            ((50.0, 50.0, 30e-4), {}, "epi_thickness_cm"),
+            ((50.0, 50.0, 31e-4), {}, "epi_thickness_cm"),
             ((50.0, 4.0), {}, "V_bias"),  # below the 5 V parity points
             ((50.0, 50.0, 10e-4, 1e16), {}, "N_D_bulk"),
         ],

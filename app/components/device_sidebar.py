@@ -19,6 +19,7 @@ from __future__ import annotations
 import streamlit as st
 
 from etna import DeviceConfig
+from etna.core.dark_current import AREA_DOSIMETER_CM2
 
 
 def assemble_config(values: dict) -> DeviceConfig:
@@ -65,7 +66,7 @@ def assemble_config(values: dict) -> DeviceConfig:
 
 
 # The sidebar models the 4 mm² dosimeter (DeviceConfig itself keeps its 1e-4 cm² default).
-SIDEBAR_DEFAULT_AREA_CM2 = 4e-2
+SIDEBAR_DEFAULT_AREA_CM2 = AREA_DOSIMETER_CM2
 
 # Sidebar labels for DeviceConfig fields, used to phrase validation errors.
 FIELD_LABELS = {

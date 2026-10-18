@@ -22,10 +22,10 @@ References:
     - ICRU Report 36: microdosimetric definitions
 """
 
-from etna.core.solver_tol import DC_REL_ERROR
+import contextlib
 import itertools
 import logging
-import uuid
+import os
 import warnings
 
 import devsim
@@ -34,7 +34,8 @@ import pandas as pd
 
 from etna.core.analytical import built_in_potential, full_depletion_voltage_graded
 from etna.core.charge_collection_2d import create_2d_dd_device, cce_lateral_scan
-from etna.core.dark_current import setup_tat_model
+from etna.core.dark_current import _resolve_self_consistent, setup_tat_model
+from etna.core.devsim_lock import serialized
 from etna.core.devsim_reset import reset_devsim_fully
 from etna.core.drift_diffusion import extract_steady_state_current
 from etna.core.microdosimetry import mean_chord_length
@@ -119,6 +120,7 @@ def analytic_vfd_from_info(params, V_bi):
     return full_depletion_voltage_profile(y, nd, V_bi)
 
 
+@serialized  # lock + quiet devsim log, also inside a spawned worker
 def _sweep_one(task):
     """One configuration of ``microdosimetric_sweep`` (module level so it can be pickled)."""
     i, total, hw, epi, nd, vb, n_lateral_points, *rest = task
@@ -294,6 +296,63 @@ def _sweep_one(task):
     return record
 
 
+# Thread-pool sizes of the native libraries in a sweep worker: one thread each, so
+# n_jobs workers use n_jobs cores (numba's default is one thread per core per worker).
+_WORKER_THREAD_ENV = (
+    "NUMBA_NUM_THREADS",
+    "OMP_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS",
+    "MKL_NUM_THREADS",
+    "VECLIB_MAXIMUM_THREADS",
+)
+
+
+def _worker_init():
+    """Spawn-pool initializer: one thread per native pool in the worker.
+
+    The environment caps are already inherited from the parent (``_spawn_pool``), which
+    is what counts for OpenBLAS / OpenMP: they size their pools when the worker first
+    imports numpy / numba, i.e. while unpickling this initializer, before it runs. They
+    are repeated here for any process the worker starts, and numba's runtime count is
+    set explicitly.
+    """
+    for key in _WORKER_THREAD_ENV:
+        os.environ[key] = "1"
+    import numba
+
+    numba.set_num_threads(1)
+
+
+@contextlib.contextmanager
+def _spawn_pool(max_workers):
+    """ProcessPoolExecutor (spawn) whose workers run single-threaded native pools.
+
+    The caps are put in ``os.environ`` while the workers are started (a spawned child
+    inherits the parent's environment) and restored afterwards; the parent's own pools
+    are already sized, so it is not affected. The caller holds the devsim lock
+    (``serialized``), so no other etna call starts processes meanwhile.
+    """
+    import multiprocessing
+    from concurrent.futures import ProcessPoolExecutor
+
+    saved = {key: os.environ.get(key) for key in _WORKER_THREAD_ENV}
+    os.environ.update({key: "1" for key in _WORKER_THREAD_ENV})
+    try:
+        with ProcessPoolExecutor(
+            max_workers=max_workers,
+            mp_context=multiprocessing.get_context("spawn"),
+            initializer=_worker_init,
+        ) as pool:
+            yield pool
+    finally:
+        for key, value in saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+
+@serialized
 def microdosimetric_sweep(
     half_widths_um=(25, 50, 100, 150),
     epi_thicknesses_cm=(5e-4, 10e-4, 20e-4),
@@ -366,7 +425,11 @@ def microdosimetric_sweep(
         Graded n-/n+ transition of every config (create_sic_2d_device keywords; default
         DEFAULT_STACK, both None = abrupt epi end). The V_fd gate then integrates the
         actual profile to the transition start (``analytic_vfd_from_info``). "auto"
-        serves it inside ENGINE2D_BUFFER_BOX.
+        serves it inside ENGINE2D_BUFFER_BOX. The default transition (Lb 1.14 um,
+        N_end 4.5e16) was FITTED to the C-V of the 10 um epi; it is applied unchanged
+        (same Lb before the epi end, same end doping) to every epi thickness of the
+        grid, so the rows at other thicknesses (e.g. the default 5 and 20 um) are a
+        model extrapolation, not a calibrated device.
 
     Returns
     -------
@@ -428,13 +491,7 @@ def microdosimetric_sweep(
     if n_jobs is not None and n_jobs > 1 and total > 1:
         # devsim state is per process and every config is a fresh build, so the
         # results are identical to the serial loop (executor.map keeps the order).
-        import multiprocessing
-        from concurrent.futures import ProcessPoolExecutor
-
-        with ProcessPoolExecutor(
-            max_workers=min(n_jobs, total),
-            mp_context=multiprocessing.get_context("spawn"),
-        ) as pool:
+        with _spawn_pool(min(n_jobs, total)) as pool:
             records = list(pool.map(_sweep_one, tasks))
     else:
         records = [_sweep_one(t) for t in tasks]
@@ -624,6 +681,7 @@ def score_structures(
     return df
 
 
+@serialized
 def get_dark_current_2d(half_width_um=50.0, V_bias=50.0, **device_kwargs):
     """Extract total dark current from a 2D DD device with TAT model.
 
@@ -655,14 +713,10 @@ def get_dark_current_2d(half_width_um=50.0, V_bias=50.0, **device_kwargs):
             **device_kwargs,
         )
 
-        # Apply TAT model and re-solve
+        # Apply the TAT model and solve to the self-consistent frozen-field state (as the
+        # 1D dark_current_sweep; vs the former single solve: 7e-15 at hw 25, 50 V, +0.3 s)
         setup_tat_model(device_info)
-        devsim.solve(
-            type="dc",
-            absolute_error=1e10,
-            relative_error=DC_REL_ERROR,
-            maximum_iterations=40,
-        )
+        _resolve_self_consistent(device_info["device_name"], device_info["region_name"])
 
         # Extract 2D current (A/cm)
         I_2d = extract_steady_state_current(device_info, contact="cathode")

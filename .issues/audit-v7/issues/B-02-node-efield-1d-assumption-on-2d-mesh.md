@@ -51,3 +51,15 @@ For an exact 2D |E|, use `element_from_edge_model` to get Ex and Ey, then `|E| =
 ## Effort
 
 M
+
+## Resolution (closed 2026-10-18, WP-B)
+
+Fixed in 9d19d9c: `_compute_node_efield` branches on `devsim.get_dimension(device)`. On 2D
+meshes it takes |grad Potential| from devsim's node gradient (`vector_gradient`); the 1D
+edge-chain average is kept for 1D only (now vectorised, bit-identical). Test plan covered by
+tests/test_tat_efield_2d.py (2D centre column vs 1D twin within 3 %, field integral = potential
+drop) and tests/test_optimization.py::TestDarkCurrent2DMatches1DTwin (get_dark_current_2d =
+J(1D twin) x full SV area within 3 %). Since 2026-10-18 get_dark_current_2d also iterates the
+frozen TAT field to self-consistency like the 1D sweep (`_resolve_self_consistent`; 7e-15
+relative change at hw 25 um, 50 V) and runs under the devsim lock. The INDEX row is left to
+WP-C (issue-index sync).

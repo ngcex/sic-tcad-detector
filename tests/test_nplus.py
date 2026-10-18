@@ -90,7 +90,11 @@ def test_nplus_removes_the_1d_wall():
 def test_dark_current_independent_of_nplus_thickness():
     """The effective-generation proxy is confined to the p+/epi, so the leakage does not
     grow with the (arbitrary, truncated) n+ thickness."""
-    from etna.core.dark_current import create_dark_current_device, dark_current_sweep
+    from etna.core.dark_current import (
+        AREA_DOSIMETER_CM2,
+        create_dark_current_device,
+        dark_current_sweep,
+    )
 
     out = []
     for t in (1e-4, 5e-4):
@@ -98,7 +102,7 @@ def test_dark_current_independent_of_nplus_thickness():
         try:
             out.append(
                 np.abs(
-                    dark_current_sweep(info, np.array([-10.0, -60.0]), area=0.04)[
+                    dark_current_sweep(info, np.array([-10.0, -60.0]), area=AREA_DOSIMETER_CM2)[
                         "I_total"
                     ]
                 )

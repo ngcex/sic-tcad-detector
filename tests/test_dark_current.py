@@ -418,7 +418,7 @@ class TestDarkCurrentVsFluence:
     def test_pristine_baseline_matches_calibration(self):
         """At fluence=0, dark current should match v1.1 calibrated pristine.
 
-        Expecting ~18.5 pA at -30V with area=0.04 cm^2.  Accept 5-100 pA.
+        Model gives 15.76 pA at -30 V, 0.04 cm^2 on the default stack (2026-10-18). Accept 5-200 pA.
         """
         result = dark_current_vs_fluence(
             fluence_range=np.array([0.0]),
@@ -628,7 +628,7 @@ def test_sweep_reports_truncation(monkeypatch):
     try:
         full = dark_current_sweep(info, np.array([-0.5]), area=0.04)
         assert full["truncated"] is False and full["reached_v_stop"] == -0.5
-        real = dc._refresh_and_resolve
+        real = dc._resolve_self_consistent
         calls = {"n": 0}
 
         def fail_second(device, region):
@@ -637,7 +637,7 @@ def test_sweep_reports_truncation(monkeypatch):
                 raise devsim.error("synthetic non-convergence")
             return real(device, region)
 
-        monkeypatch.setattr(dc, "_refresh_and_resolve", fail_second)
+        monkeypatch.setattr(dc, "_resolve_self_consistent", fail_second)
         cut = dark_current_sweep(info, np.array([-1.0, -1.5, -2.0]), area=0.04)
     finally:
         devsim.delete_device(device=info["device_name"])

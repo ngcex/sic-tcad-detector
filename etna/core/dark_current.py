@@ -14,9 +14,13 @@ Implements, in the DD equations:
 What the numbers mean (read before quoting any leakage value):
     Standard midgap SRH in 4H-SiC gives ~1e-49 A because n_i ~ 5e-9 cm^-3, so
     the real leakage (perimeter, surface states, defects) is not predicted here.
-    N_t = 2.8e12 cm^-3 s^-1 is FITTED so that the model equals the experimental
-    UPPER BOUND "< 18 pA up to -60 V" at -60 V, 4 mm2, 300 K (17.96 pA): a
-    calibration input, not a prediction or a validation. The bias shape comes
+    N_t (SiC4H_Parameters.N_t, 2.849024e12 cm^-3 s^-1 on the default measured-C-V
+    stack) is FITTED so that the model equals the experimental UPPER BOUND
+    "< 18 pA up to -60 V" at -60 V, 300 K on the 4 mm2 dosimeter
+    (AREA_DOSIMETER_CM2 = 0.04 cm2): I = 18.000 pA there by construction. A
+    calibration input, not a prediction or a validation. Currents scale with the
+    area passed in: e.g. a 0.05 cm2 area gives 1.25 x the 4 mm2 value (22.5 pA at
+    -60 V), which is not a violation of the bound. The bias shape comes
     from the f_depl = min(E/3.5e4, 1) heuristic (current rises until E > E_ref
     everywhere in the generating region, not "saturation at full depletion").
     The SRH / TAT / SRV split is a bookkeeping of model terms and is not
@@ -34,6 +38,7 @@ References:
 
 from etna.core.solver_tol import DC_REL_ERROR
 import logging
+import uuid
 
 import devsim
 import numpy as np
@@ -45,12 +50,20 @@ from devsim.python_packages.model_create import (
 from etna.core.drift_diffusion import (
     create_dd_device,
     extract_steady_state_current,
-    ramp_bias,
 )
 from etna.core.device import DEFAULT_STACK as _STACK
 
 
 logger = logging.getLogger(__name__)
+
+# Area of the 4 mm2 (2 x 2 mm) dosimeter, cm^2: the area at which N_t is calibrated to the
+# "< 18 pA up to -60 V" bound, and the default area of every dark-current function here.
+# (Before 2026-10-18 the defaults were 0.05 cm2 in extract_dark_current_components /
+# dark_current_sweep / sensitivity_sweep and 0.04 cm2 elsewhere. Notebook 07 passes
+# area=0.05 explicitly, so its "19.7 pA" is the 4 mm2 value x 1.25, not a bound violation.)
+# DeviceConfig.area_cm2 keeps its own 1e-4 cm2 default: run_dark_current uses the config's
+# area, so DeviceConfig() leakage is the 4 mm2 value x 1e-4 / 0.04.
+AREA_DOSIMETER_CM2 = 0.04
 
 # Physical constants in SI
 _HBAR_SI = 1.0546e-34  # J*s
@@ -128,9 +141,9 @@ def setup_tat_model(device_info, E_t=None, m_t=None, N_t=None):
         Tunneling effective mass in units of m0. Default from params.m_t.
     N_t : float, optional
         Effective generation rate (cm^-3 s^-1). Default from params.N_t.
-        Primary calibration parameter; leakage is linear in N_t (6.4 pA per 1e12 at
-        300 K, -30 V, 0.05 cm2). Default 2.8e12 is fitted to the experimental
-        <18 pA bound (-60 V, 4 mm2), see sic_material.py.
+        Primary calibration parameter; leakage is linear in N_t. The default
+        (SiC4H_Parameters.N_t) is fitted so that I(300 K, -60 V, AREA_DOSIMETER_CM2)
+        equals the experimental <18 pA bound, see sic_material.py.
     """
     device = device_info["device_name"]
     region = device_info["region_name"]
@@ -290,16 +303,11 @@ def _compute_node_efield(device, region):
     n_nodes = len(node_x)
     n_edges = len(E_edge)
 
-    E_node = np.zeros(n_nodes)
     abs_E = np.abs(E_edge)
-
-    for i in range(n_nodes):
-        if i == 0:
-            E_node[i] = abs_E[0]
-        elif i == n_nodes - 1:
-            E_node[i] = abs_E[n_edges - 1]
-        else:
-            E_node[i] = 0.5 * (abs_E[i - 1] + abs_E[i])
+    E_node = np.empty(n_nodes)
+    E_node[0] = abs_E[0]
+    E_node[-1] = abs_E[n_edges - 1]
+    E_node[1:-1] = 0.5 * (abs_E[: n_nodes - 2] + abs_E[1 : n_nodes - 1])
 
     E_node = np.maximum(E_node, 1e3)
 
@@ -354,6 +362,11 @@ def _refresh_and_resolve(device, region):
     """
     _compute_node_efield(device, region)
     _compute_gamma_factors(device, region)
+    _solve_dc()
+
+
+def _solve_dc():
+    """One DC solve: strict tolerances, then relaxed ones; raises devsim.error if both fail."""
     try:
         devsim.solve(
             type="dc",
@@ -422,7 +435,7 @@ def setup_surface_recombination(device_info, S_n=None, S_p=None, contact="cathod
     )
 
 
-def extract_dark_current_components(device_info, area=0.05):
+def extract_dark_current_components(device_info, area=AREA_DOSIMETER_CM2):
     """Extract dark current with component decomposition.
 
     Returns total current and its SRH, TAT, and SRV contributions. The split is a
@@ -437,7 +450,7 @@ def extract_dark_current_components(device_info, area=0.05):
     device_info : dict
         Device info dict with TAT model set up.
     area : float
-        Device area (cm^2). Default 0.05 cm^2 (5 mm^2).
+        Device area (cm^2). Default AREA_DOSIMETER_CM2 (0.04 cm^2, 4 mm^2).
 
     Returns
     -------
@@ -505,7 +518,108 @@ def extract_dark_current_components(device_info, area=0.05):
     }
 
 
-def dark_current_sweep(device_info, V_range, area=0.05, V_step=0.5):
+# Relative change of the node field E_field_node between two refresh + re-solve passes
+# below which the frozen-field TAT state is taken as self-consistent.
+FIXED_POINT_RTOL = 1e-10
+_FIXED_POINT_MAX_ITER = 20
+
+
+def _resolve_self_consistent(device, region):
+    """Refresh + re-solve until the frozen TAT field is self-consistent.
+
+    One ``_refresh_and_resolve`` leaves a lag: the state is solved with the field of
+    the previous state. Iterating to the fixed point E_field_node = E(state) makes the
+    result independent of the ramp path (bias step), to FIXED_POINT_RTOL: with a single
+    pass, the 2 V and 0.5 V ramps differ by up to 4e-6 at 400 K; at the fixed point by
+    < 1e-15 (lab/engine_box/notes/LOG.md). At least 2 passes, usually 2-3 (each a 1-2
+    iteration Newton solve). The last operation is a solve, so the contact current and the U_TAT
+    integral use the same f_depl. Raises devsim.error as ``_refresh_and_resolve``.
+    """
+
+    def field():
+        return np.asarray(
+            devsim.get_node_model_values(device=device, region=region, name="E_field_node")
+        )
+
+    # Pass k sets E_k = E(state_{k-1}) and solves state_k. E_k ~ E_{k-1} means state_{k-1}
+    # was solved with its own field, hence state_k ~ state_{k-1}. The first comparison is
+    # skipped: the stored field need not be the one the present state was solved with
+    # (right after setup_tat_model it is E of the TAT-free state), so pass 1 proves nothing.
+    E_prev = field()
+    for k in range(_FIXED_POINT_MAX_ITER):
+        _refresh_and_resolve(device, region)
+        E = field()
+        if k > 0 and np.max(np.abs(E - E_prev)) <= FIXED_POINT_RTOL * np.max(E):
+            return
+        E_prev = E
+    logger.warning(
+        "dark current: frozen-field TAT state not self-consistent after %d passes",
+        _FIXED_POINT_MAX_ITER,
+    )
+
+
+# Largest anode step (V) of the TAT bias ramps. Since the state at every extracted bias
+# is iterated to the frozen-field fixed point (_resolve_self_consistent), the result does
+# not depend on the step: 2 V vs 0.5 V |dI/I| <= 3e-15 (default config, 0..-100 V,
+# 250-400 K); the old single-refresh 0.5 V reference differs from the fixed point by
+# <= 3.2e-7 (400 K, 20-point grid). 2 V is the fastest step measured (0.5 / 1 / 2 / 3 / 5 V:
+# 4.3 / 3.3 / 2.5 / 3.6 / 3.6 s for run_dark_current's grid; larger steps need more
+# Newton iterations). lab/engine_box/bench/dark_vstep.py, lab/engine_box/notes/LOG.md.
+DARK_RAMP_STEP_V = 2.0
+_SWEEP_KEYS = ("I_total", "I_SRH", "I_TAT", "I_SRV", "J_total", "J_SRH", "J_TAT", "J_SRV")
+
+
+def _anode_bias_name():
+    import devsim.python_packages.simple_physics as simple_physics
+
+    return simple_physics.GetContactBiasName("anode")
+
+
+def _ramp_anode(device_info, V_target, V_step=DARK_RAMP_STEP_V):
+    """Ramp the anode from its present bias to ``V_target`` (V) in steps <= ``V_step``,
+    refreshing the frozen TAT field before every solve. Raises devsim.error (message
+    carries the failing bias) if a step does not converge."""
+    device = device_info["device_name"]
+    region = device_info["region_name"]
+    bias_name = _anode_bias_name()
+    try:
+        current_V = devsim.get_parameter(device=device, name=bias_name)
+    except devsim.error:
+        current_V = 0.0
+    delta = V_target - current_V
+    if abs(delta) <= 1e-12:
+        return
+    n_steps = max(1, int(np.ceil(abs(delta) / V_step)))
+    for V_int in np.linspace(current_V, V_target, n_steps + 1)[1:]:
+        devsim.set_parameter(device=device, name=bias_name, value=V_int)
+        _compute_node_efield(device, region)
+        _compute_gamma_factors(device, region)
+        try:
+            _solve_dc()
+        except devsim.error as e:
+            raise devsim.error(f"ramp failed at V={V_int:.3f} V: {e}") from e
+
+
+def dark_current_at_bias(
+    device_info, V, area=AREA_DOSIMETER_CM2, V_step=DARK_RAMP_STEP_V
+):
+    """Dark-current components at anode bias ``V`` (V, negative = reverse).
+
+    Ramps from the device's present bias (``_ramp_anode``), iterates the frozen TAT
+    field to self-consistency (``_resolve_self_consistent``) and returns
+    ``extract_dark_current_components``. Raises devsim.error on non-convergence.
+    """
+    _ramp_anode(device_info, V, V_step)
+    try:
+        _resolve_self_consistent(device_info["device_name"], device_info["region_name"])
+    except devsim.error as e:
+        raise devsim.error(f"final re-solve failed at V={V:.3f} V: {e}") from e
+    return extract_dark_current_components(device_info, area=area)
+
+
+def dark_current_sweep(
+    device_info, V_range, area=AREA_DOSIMETER_CM2, V_step=DARK_RAMP_STEP_V
+):
     """Sweep reverse voltage and extract dark current components.
 
     Parameters
@@ -515,9 +629,10 @@ def dark_current_sweep(device_info, V_range, area=0.05, V_step=0.5):
     V_range : array_like
         Array of reverse voltages (V). Negative = reverse bias on anode.
     area : float
-        Device area (cm^2). Default 0.05 cm^2.
+        Device area (cm^2). Default AREA_DOSIMETER_CM2 (0.04 cm^2).
     V_step : float
-        Maximum voltage step for ramping (V).
+        Maximum voltage step for ramping (V). Default DARK_RAMP_STEP_V (2 V); the
+        result does not depend on it (fixed-point TAT state at every bias).
 
     Returns
     -------
@@ -527,86 +642,17 @@ def dark_current_sweep(device_info, V_range, area=0.05, V_step=0.5):
         before the end of V_range), "requested_v_start", "requested_v_stop" and
         "reached_v_stop" (last converged bias, None if none).
     """
-    import devsim.python_packages.simple_physics as simple_physics
-
-    device = device_info["device_name"]
-    region = device_info["region_name"]
     V_range = np.asarray(V_range, dtype=float)
-
-    results = {
-        "voltages": [],
-        "I_total": [],
-        "I_SRH": [],
-        "I_TAT": [],
-        "I_SRV": [],
-        "J_total": [],
-        "J_SRH": [],
-        "J_TAT": [],
-        "J_SRV": [],
-    }
-
-    bias_name = simple_physics.GetContactBiasName("anode")
-
-    try:
-        current_V = devsim.get_parameter(device=device, name=bias_name)
-    except devsim.error:
-        current_V = 0.0
-
+    results = {"voltages": [], **{key: [] for key in _SWEEP_KEYS}}
     for V_target in V_range:
-        delta = V_target - current_V
-        if abs(delta) > 1e-12:
-            n_steps = max(1, int(np.ceil(abs(delta) / V_step)))
-            V_intermediates = np.linspace(current_V, V_target, n_steps + 1)[1:]
-
-            for V_int in V_intermediates:
-                devsim.set_parameter(device=device, name=bias_name, value=V_int)
-                _compute_node_efield(device, region)
-                _compute_gamma_factors(device, region)
-                try:
-                    devsim.solve(
-                        type="dc",
-                        absolute_error=1e10,
-                        relative_error=DC_REL_ERROR,
-                        maximum_iterations=40,
-                    )
-                except devsim.error:
-                    try:
-                        devsim.solve(
-                            type="dc",
-                            absolute_error=1e12,
-                            relative_error=1e-8,
-                            maximum_iterations=100,
-                        )
-                    except devsim.error as e:
-                        logger.warning(
-                            f"dark_current_sweep: failed at V={V_int:.3f}V: {e}"
-                        )
-                        return _finish_sweep(results, V_range)
-
-            current_V = V_target
-
-        # Refresh the TAT field at the converged bias and re-solve (removes the
-        # one-step f_depl lag; see _refresh_and_resolve).
         try:
-            _refresh_and_resolve(device, region)
+            components = dark_current_at_bias(device_info, V_target, area, V_step)
         except devsim.error as e:
-            logger.warning(f"dark_current_sweep: final re-solve failed at V={V_target:.3f}V: {e}")
+            logger.warning(f"dark_current_sweep: {e}")
             return _finish_sweep(results, V_range)
-
-        components = extract_dark_current_components(device_info, area=area)
         results["voltages"].append(V_target)
-        for key in (
-            "I_total",
-            "I_SRH",
-            "I_TAT",
-            "I_SRV",
-            "J_total",
-            "J_SRH",
-            "J_TAT",
-            "J_SRV",
-        ):
+        for key in _SWEEP_KEYS:
             results[key].append(components[key])
-
     return _finish_sweep(results, V_range)
 
 
@@ -660,7 +706,7 @@ def create_dark_current_device(T=300, N_t=None, S_n=None, S_p=None, E_t=None, **
 
 
 def sensitivity_sweep(
-    param_name, param_values, V_eval=-30.0, T=300, area=0.05, base_kwargs=None
+    param_name, param_values, V_eval=-30.0, T=300, area=AREA_DOSIMETER_CM2, base_kwargs=None
 ):
     """Sweep a single parameter and evaluate dark current at a fixed voltage.
 
@@ -680,7 +726,7 @@ def sensitivity_sweep(
     T : float
         Temperature (K). Default 300.
     area : float
-        Device area (cm^2). Default 0.05.
+        Device area (cm^2). Default AREA_DOSIMETER_CM2 (0.04 cm^2).
     base_kwargs : dict or None
         Baseline device parameters passed to create_dark_current_device.
 
@@ -691,7 +737,6 @@ def sensitivity_sweep(
     """
     import pandas as pd
 
-    import devsim.python_packages.simple_physics as simple_physics
 
     if base_kwargs is None:
         base_kwargs = {}
@@ -710,7 +755,9 @@ def sensitivity_sweep(
 
     records = []
     for i, val in enumerate(param_values):
-        device_name = f"sweep_{param_name}_{i}"
+        # unique: devsim keeps the mesh after delete_device, so a fixed name made a
+        # second sensitivity_sweep call in the same process fail ("mesh already exists")
+        device_name = f"sweep_{param_name}_{i}_{uuid.uuid4().hex[:8]}"
         kwargs = dict(base_kwargs)
         kwargs["T"] = T
 
@@ -725,52 +772,13 @@ def sensitivity_sweep(
 
         try:
             device_info = create_dark_current_device(**dc_kwargs, **kwargs)
-            device = device_info["device_name"]
-            region = device_info["region_name"]
-
-            # Ramp to V_eval in steps
-            bias_name = simple_physics.GetContactBiasName("anode")
-            V_step = 0.5
-            current_V = 0.0
-            n_steps = max(1, int(np.ceil(abs(V_eval) / V_step)))
-            V_intermediates = np.linspace(0, V_eval, n_steps + 1)[1:]
-
             ramp_ok = True
-            for V_int in V_intermediates:
-                devsim.set_parameter(device=device, name=bias_name, value=V_int)
-                _compute_node_efield(device, region)
-                _compute_gamma_factors(device, region)
-                try:
-                    devsim.solve(
-                        type="dc",
-                        absolute_error=1e10,
-                        relative_error=DC_REL_ERROR,
-                        maximum_iterations=40,
-                    )
-                except devsim.error:
-                    try:
-                        devsim.solve(
-                            type="dc",
-                            absolute_error=1e12,
-                            relative_error=1e-8,
-                            maximum_iterations=100,
-                        )
-                    except devsim.error as e:
-                        logger.warning(
-                            f"sensitivity_sweep: ramp failed at V={V_int:.3f} "
-                            f"for {param_name}={val}: {e}"
-                        )
-                        ramp_ok = False
-                        break
-
+            try:
+                components = dark_current_at_bias(device_info, V_eval, area=area)
+            except devsim.error as e:
+                logger.warning(f"sensitivity_sweep: {param_name}={val}: {e}")
+                ramp_ok = False
             if ramp_ok:
-                try:
-                    _refresh_and_resolve(device, region)
-                except devsim.error as e:
-                    logger.warning(f"sensitivity_sweep: final re-solve failed for {param_name}={val}: {e}")
-                    ramp_ok = False
-            if ramp_ok:
-                components = extract_dark_current_components(device_info, area=area)
                 records.append(
                     {
                         param_name: val,
@@ -802,7 +810,7 @@ def sensitivity_sweep(
 def dark_current_vs_fluence(
     fluence_range,
     V_bias=-30.0,
-    area=0.04,
+    area=AREA_DOSIMETER_CM2,
     epi_thickness_cm=10e-4,
     N_D_junction=_STACK["N_D_junction"],
     N_D_bulk=_STACK["N_D_bulk"],
@@ -831,7 +839,7 @@ def dark_current_vs_fluence(
     V_bias : float
         Reverse bias voltage applied to anode (V, negative).  Default -30V.
     area : float
-        Device area (cm^2).  Default 0.04 cm^2.
+        Device area (cm^2). Default AREA_DOSIMETER_CM2 (0.04 cm^2).
     epi_thickness_cm : float
         Epitaxial layer thickness (cm).  Default 10 um.
     N_D_junction : float
@@ -884,9 +892,7 @@ def dark_current_vs_fluence(
         L_transition=L_transition,
     )
     dev_kw.update(device_kwargs or {})
-    import uuid
 
-    import devsim.python_packages.simple_physics as simple_physics
 
     from etna.core.device import apply_damaged_params, create_sic_device
     from etna.core.drift_diffusion import setup_sic_drift_diffusion
@@ -975,31 +981,8 @@ def dark_current_vs_fluence(
             setup_tat_model(device_info, N_t=N_t)
             setup_surface_recombination(device_info, S_n=S_n, S_p=S_p)
 
-            device = device_info["device_name"]
-            region = device_info["region_name"]
-
-            # Ramp bias on anode (negative = reverse bias)
-            bias_name = simple_physics.GetContactBiasName("anode")
-            V_step = 1.0
-            n_steps = max(1, int(np.ceil(abs(V_bias) / V_step)))
-            V_intermediates = np.linspace(0, V_bias, n_steps + 1)[1:]
-
-            for V_int in V_intermediates:
-                devsim.set_parameter(device=device, name=bias_name, value=V_int)
-                _compute_node_efield(device, region)
-                _compute_gamma_factors(device, region)
-                devsim.solve(
-                    type="dc",
-                    absolute_error=1e10,
-                    relative_error=DC_REL_ERROR,
-                    maximum_iterations=40,
-                )
-
-            # Refresh E-field and Gamma at the final bias and re-solve (no lag)
-            _refresh_and_resolve(device, region)
-
-            # Extract dark current components
-            components = extract_dark_current_components(device_info, area=area)
+            # Ramp, iterate the TAT field to self-consistency, extract
+            components = dark_current_at_bias(device_info, V_bias, area=area)
             I_total[i] = components["I_total"]
             I_SRH[i] = components["I_SRH"]
             I_TAT[i] = components["I_TAT"]
@@ -1050,7 +1033,7 @@ def dark_current_post_anneal(
     T_anneal,
     t_anneal,
     V_bias=-30.0,
-    area=0.04,
+    area=AREA_DOSIMETER_CM2,
     epi_thickness_cm=10e-4,
     energy_MeV=62.0,
     lifetime_model="linear",
@@ -1078,7 +1061,7 @@ def dark_current_post_anneal(
     V_bias : float
         Reverse bias voltage (V, negative). Default -30V.
     area : float
-        Device area (cm^2). Default 0.04.
+        Device area (cm^2). Default AREA_DOSIMETER_CM2 (0.04 cm^2).
     epi_thickness_cm : float
         Epitaxial layer thickness (cm). Default 10 um.
     energy_MeV : float
@@ -1118,9 +1101,7 @@ def dark_current_post_anneal(
         L_transition=_STACK["L_transition"],
     )
     dev_kw.update(device_kwargs or {})
-    import uuid
 
-    import devsim.python_packages.simple_physics as simple_physics
 
     from etna.core.device import apply_damaged_params, create_sic_device
     from etna.core.drift_diffusion import setup_sic_drift_diffusion
@@ -1219,31 +1200,8 @@ def dark_current_post_anneal(
         setup_tat_model(device_info, N_t=N_t)
         setup_surface_recombination(device_info, S_n=S_n, S_p=S_p)
 
-        device = device_info["device_name"]
-        region = device_info["region_name"]
-
-        # Ramp bias on anode
-        bias_name = simple_physics.GetContactBiasName("anode")
-        V_step = 1.0
-        n_steps = max(1, int(np.ceil(abs(V_bias) / V_step)))
-        V_intermediates = np.linspace(0, V_bias, n_steps + 1)[1:]
-
-        for V_int in V_intermediates:
-            devsim.set_parameter(device=device, name=bias_name, value=V_int)
-            _compute_node_efield(device, region)
-            _compute_gamma_factors(device, region)
-            devsim.solve(
-                type="dc",
-                absolute_error=1e10,
-                relative_error=DC_REL_ERROR,
-                maximum_iterations=40,
-            )
-
-        # Refresh at the final bias and re-solve (no lag)
-        _refresh_and_resolve(device, region)
-
-        # Extract dark current components
-        components = extract_dark_current_components(device_info, area=area)
+        # Ramp, iterate the TAT field to self-consistency, extract
+        components = dark_current_at_bias(device_info, V_bias, area=area)
 
         logger.info(
             f"dark_current_post_anneal: fluence={fluence:.2e}, "

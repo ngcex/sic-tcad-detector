@@ -18,12 +18,10 @@ from scipy.stats import linregress
 
 from etna.core.sic_material import (
     SiC4H_Parameters,
-    bandgap,
     intrinsic_concentration,
     mobility_caughey_thomas_T,
-    srh_lifetime,
 )
-from etna.core.device import DEFAULT_STACK as _STACK
+from etna.core.device import DEFAULT_STACK as _STACK, mobility_doping
 
 
 logger = logging.getLogger(__name__)
@@ -100,9 +98,9 @@ def sweep_iv_vs_temperature(
             if use_tat:
                 # dark_current_sweep refreshes the TAT field/gamma factors at every
                 # bias step; ramp_bias leaves them at their 0 V values, which
-                # under-reported the leakage ~7.6x (audit B-01). Fixed 0.5 V steps:
-                # the per-step refresh cannot use the adaptive ramp.
-                sweep = dark_current_sweep(device_info, [V_reverse], area=1.0, V_step=0.5)
+                # under-reported the leakage ~7.6x (audit B-01). Fixed steps
+                # (DARK_RAMP_STEP_V): the per-step refresh cannot use the adaptive ramp.
+                sweep = dark_current_sweep(device_info, [V_reverse], area=1.0)
                 if len(sweep["J_total"]) == 0:
                     raise RuntimeError(f"dark_current_sweep did not converge at {V_reverse} V")
                 I_total = sweep["J_total"][-1]
@@ -113,10 +111,13 @@ def sweep_iv_vs_temperature(
                 I_total = extract_steady_state_current(device_info, contact="cathode")
 
             n_i_T, _, _, E_g_T = intrinsic_concentration(T, params)
-            mu_n = mobility_caughey_thomas_T(
-                params.N_ref_n * 0.001, T, "electron", params
+            # mobilities at the epi doping the device transport uses (mobility_doping:
+            # N_D uniform, N_D_bulk graded), not at a fixed 0.001 * N_ref
+            nd_mob = mobility_doping(
+                kwargs.get("N_D"), kwargs["doping_profile"], kwargs.get("N_D_bulk")
             )
-            mu_p = mobility_caughey_thomas_T(params.N_ref_p * 0.001, T, "hole", params)
+            mu_n = mobility_caughey_thomas_T(nd_mob, T, "electron", params)
+            mu_p = mobility_caughey_thomas_T(nd_mob, T, "hole", params)
 
             records.append(
                 {
