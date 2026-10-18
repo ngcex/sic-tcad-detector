@@ -740,14 +740,81 @@ def score_structures(
     return df
 
 
-@serialized
-def get_dark_current_2d(half_width_um=50.0, V_bias=50.0, **device_kwargs):
-    """Extract total dark current from a 2D DD device with TAT model.
+def dark_2d_twin_kwargs(**device_kwargs):
+    """create_sic_device keywords of the 1D twin of ``create_sic_2d_device(**device_kwargs)``:
+    the 2D builder's defaults (graded, DEFAULT_STACK doping, p+, n+ and transition), a
+    None doping value meaning the default as in the 2D builder."""
+    from etna.core.device import DEFAULT_N_A
+    from etna.core.device2d import (
+        _BUFFER_END_DOPING_DEFAULT,
+        _BUFFER_THICKNESS_DEFAULT_CM,
+        _L_TRANSITION_DEFAULT,
+        _N_D_BULK_DEFAULT,
+        _N_D_JUNCTION_DEFAULT,
+        _NPLUS_DEFAULT_CM,
+        _SUBSTRATE_DEFAULT_CM,
+    )
 
-    Creates a 2D drift-diffusion device, applies the trap-assisted tunneling
-    model, re-solves, and extracts the dark current from the cathode contact.
-    The 2D current (A/cm) is multiplied by the SV depth to get total current
-    in Amperes.
+    kw = dict(
+        epi_thickness_cm=10e-4,
+        substrate_thickness_cm=_SUBSTRATE_DEFAULT_CM,
+        N_A=DEFAULT_N_A,
+        N_D=None,
+        T=300,
+        doping_profile="graded",
+        N_D_junction=_N_D_JUNCTION_DEFAULT,
+        N_D_bulk=_N_D_BULK_DEFAULT,
+        L_transition=_L_TRANSITION_DEFAULT,
+        nplus_thickness_cm=_NPLUS_DEFAULT_CM,
+        N_D_nplus=DEFAULT_STACK["N_D_nplus"],
+        buffer_thickness_cm=_BUFFER_THICKNESS_DEFAULT_CM,
+        buffer_end_doping=_BUFFER_END_DOPING_DEFAULT,
+        donor_table=None,
+    )
+    for key, value in device_kwargs.items():
+        if key == "nplus_generation":
+            continue  # generation placement only, no effect on the dark current
+        if key not in kw:
+            raise TypeError(f"dark_2d_twin_kwargs: unexpected keyword {key!r}")
+        if value is None and key in ("N_D_junction", "N_D_bulk", "L_transition"):
+            continue
+        kw[key] = value
+    return kw
+
+
+def dark_2d_engine_reason(half_width_um, V_bias, **device_kwargs):
+    """Why get_dark_current_2d cannot use the 1D engine twin (None = it can): the 2D
+    engine's laterally-uniform scope, then the dark-current engine's."""
+    from etna.core.dark_current import dark_engine_reason
+    from etna.core.engine2d import engine2d_unsupported_reason
+
+    reason = engine2d_unsupported_reason(half_width_um, V_bias, **device_kwargs)
+    if reason is not None:
+        return f"2D engine: {reason}"
+    try:
+        kw = dark_2d_twin_kwargs(**device_kwargs)
+    except TypeError as e:
+        return str(e)
+    return dark_engine_reason(kw, [-float(V_bias)])
+
+
+@serialized
+def get_dark_current_2d(
+    half_width_um=50.0, V_bias=50.0, solver="auto", **device_kwargs
+):
+    """Total dark current (A) of the SV: the 2D TAT dark current of the half device,
+    times 2 (mirror) times the SV depth (square cross-section, 2 * half_width).
+
+    Solver (since 2026-10-18): the 2D device is laterally uniform whenever the 2D engine
+    accepts it (``engine2d_unsupported_reason`` is None: planar p+ and n+ over the whole
+    width, mirror boundaries), so its current is the 1D twin's current density times the
+    full SV area, J * (2 * half_width)^2; inside that scope and the dark-current
+    engine's (``etna.core.dark_current.dark_engine_reason``) J is the batched 1D engine
+    result (milliseconds; the devsim 2D solve took ~36 s). The two differ only by the
+    discretisation of the f_depl field: devsim 2D takes |grad psi| from the node
+    gradient, the 1D model the mean of the adjacent edge fields (measured difference
+    in tests/test_dark_current_2d_engine.py). ``solver="devsim"`` forces the 2D devsim
+    solve below (the reference), ``"engine"`` raises ValueError outside the scope.
 
     Parameters
     ----------
@@ -755,6 +822,8 @@ def get_dark_current_2d(half_width_um=50.0, V_bias=50.0, **device_kwargs):
         SV half-width (micrometers).
     V_bias : float
         Reverse bias voltage (V, positive).
+    solver : {"auto", "engine", "devsim"}
+        See above. Default "auto".
     **device_kwargs
         Additional arguments for create_2d_dd_device (e.g.,
         epi_thickness_cm, N_D_bulk).
@@ -764,6 +833,34 @@ def get_dark_current_2d(half_width_um=50.0, V_bias=50.0, **device_kwargs):
     float
         Dark current in Amperes.
     """
+    if solver not in ("auto", "engine", "devsim"):
+        raise ValueError(
+            f"solver must be 'auto', 'engine' or 'devsim' (got {solver!r})"
+        )
+    if solver != "devsim":
+        reason = dark_2d_engine_reason(half_width_um, V_bias, **device_kwargs)
+        if reason is not None and solver == "engine":
+            raise ValueError(f"get_dark_current_2d: engine unavailable ({reason})")
+        if reason is None:
+            from etna.core.dark_current import dark_current_engine, dark_reference
+
+            r = dark_current_engine(
+                [dark_reference(dark_2d_twin_kwargs(**device_kwargs))],
+                [-float(V_bias)],
+                area=1.0,
+            )[0]
+            if r["converged"].all():
+                I_total = float(r["J_total"][-1] * (2.0 * half_width_um * 1e-4) ** 2)
+                logger.info(
+                    f"Dark current 2D (1D engine twin): I_total={I_total:.3e} A"
+                )
+                return I_total
+            logger.warning(
+                "get_dark_current_2d: engine did not converge, using devsim 2D"
+            )
+        else:
+            logger.info("get_dark_current_2d: devsim 2D (%s)", reason)
+
     device_info = None
     try:
         device_info = create_2d_dd_device(
