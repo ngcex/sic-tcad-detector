@@ -1800,11 +1800,11 @@ def run_transient(
 ) -> SimResult:
     """Run a transient CCE-vs-dose-rate FLASH-pulse sweep and return a SimResult.
 
-    Wraps `etna.core.transient.transient_cce_vs_dose_rate`, which builds
-    AND deletes its own device for EACH dose rate internally. Despite living
-    in the "bucket-b" task, run_transient is bucket-a-SHAPED: it adds NO
-    build_device / reset_devsim_fully / delete_device — a facade-level cleanup
-    would double-delete the core's per-dose-rate devices.
+    Wraps `etna.core.transient.transient_cce_vs_dose_rate`, which builds ONE
+    device for the whole sweep (dark state restored per dose rate) and deletes it
+    itself. Despite living in the "bucket-b" task, run_transient is bucket-a-SHAPED:
+    it adds NO build_device / reset_devsim_fully / delete_device — a facade-level
+    cleanup would double-delete the core's device.
 
     Signature note (D-03): run_transient's signature is NOT defined in the
     design spec. This wraps transient_cce_vs_dose_rate as the MINIMAL
@@ -1832,7 +1832,8 @@ def run_transient(
     -------
     SimResult
         sim_type="transient", x=dose_rates (Gy/s), y=transient CCE values
-        (dimensionless), metadata contains "V_bias".
+        (dimensionless, clipped to [0, 1]), metadata contains "V_bias" and
+        "transient_cce_raw" (the unclipped values).
     """
     _require_1d(config, "run_transient")
 
@@ -1844,8 +1845,8 @@ def run_transient(
         config.epi_thickness_um * 1e-4 if epi_thickness_cm is None else epi_thickness_cm
     )
 
-    # transient_cce_vs_dose_rate builds AND deletes its own device per dose
-    # rate, so run_transient adds NO device cleanup (bucket-a-shaped).
+    # transient_cce_vs_dose_rate builds AND deletes its own (single) device, so
+    # run_transient adds NO device cleanup (bucket-a-shaped).
     kw = device_kwargs(config)
     kw.pop("epi_thickness_cm")
     df = transient_cce_vs_dose_rate(
@@ -1867,6 +1868,7 @@ def run_transient(
         y=y,
         metadata={
             "V_bias": V_bias,
+            "transient_cce_raw": df["transient_cce_raw"].to_numpy(),
             # integrated contact current: anode with an n+ layer (the direct cathode
             # current on the n+ is round-off), cathode without (core docstring)
             "current_contact": df.attrs.get("contact", "cathode"),

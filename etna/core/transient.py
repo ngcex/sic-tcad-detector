@@ -47,6 +47,10 @@ logger = logging.getLogger(__name__)
 # Physical constants (CGS)
 Q_ELECTRON = 1.602e-19  # C (elementary charge)
 
+# DC solution variables of the 1D DD device: the complete state that ramp_bias leaves
+# (transient_cce_vs_dose_rate restores them per dose rate instead of rebuilding).
+_DARK_STATE_SOLUTIONS = ("Potential", "Electrons", "Holes")
+
 
 def pulse_envelope(t, t_rise, t_duration, t_fall):
     """Trapezoidal pulse envelope returning value in [0, 1].
@@ -412,7 +416,7 @@ class TransientSolver:
             "dose_rate_Gy_s": dose_rate_Gy_s,
         }
 
-    def compute_transient_cce(self, result, G_spatial, x_nodes):
+    def compute_transient_cce(self, result, G_spatial, x_nodes, return_raw=False):
         """Compute charge collection efficiency from transient simulation.
 
         Backward-Euler (BDF1) estimator, the time-discrete charge balance of the
@@ -444,11 +448,17 @@ class TransientSolver:
             Spatial generation profile at mesh nodes (cm^-3 s^-1).
         x_nodes : array_like
             Mesh node positions (cm).
+        return_raw : bool
+            Also return the unclipped ratio Q_collected / Q_generated. Default False.
 
         Returns
         -------
         cce : float
-            Transient charge collection efficiency in [0, 1].
+            Transient charge collection efficiency in [0, 1] (the raw ratio clipped to
+            the physical ceiling 1; a raw value above 1.05 is logged as a bug).
+        cce_raw : float
+            Only with ``return_raw=True``: the unclipped ratio, so a clipped 1.0 can be
+            told apart from a measured one.
         """
         times = np.asarray(result["times"], dtype=float)
         currents = np.asarray(result["currents"], dtype=float)
@@ -480,7 +490,7 @@ class TransientSolver:
 
         if Q_generated <= 0:
             logger.warning("Q_generated <= 0, returning CCE = 0")
-            return 0.0
+            return (0.0, float("nan")) if return_raw else 0.0
 
         cce_raw = Q_collected / Q_generated
 
@@ -501,7 +511,7 @@ class TransientSolver:
             f"Q_collected={Q_collected:.4e}, Q_generated={Q_generated:.4e}, "
             f"analytic envelope {Q_analytic:.4e})"
         )
-        return cce
+        return (cce, float(cce_raw)) if return_raw else cce
 
 
 def simulate_pulse_train(
@@ -634,9 +644,10 @@ def transient_cce_vs_dose_rate(
 ):
     """Sweep dose rates and compute transient CCE at each.
 
-    For each dose rate, creates a fresh device, simulates a single FLASH
-    pulse, and extracts the transient CCE. Results are returned as a
-    pandas DataFrame for easy comparison with steady-state CCE.
+    Builds ONE device (Auger + bias ramp to V_bias), snapshots its dark DC state, and
+    for each dose rate restores that state, simulates a single FLASH pulse and extracts
+    the transient CCE; the device is deleted once at the end (also on error). Results
+    are returned as a pandas DataFrame for easy comparison with steady-state CCE.
 
     Parameters
     ----------
@@ -677,7 +688,9 @@ def transient_cce_vs_dose_rate(
     Returns
     -------
     df : pandas.DataFrame
-        DataFrame with columns ["dose_rate_Gy_s", "transient_cce"].
+        DataFrame with columns ["dose_rate_Gy_s", "transient_cce",
+        "transient_cce_raw"] (the unclipped Q_collected / Q_generated; transient_cce
+        is it clipped to [0, 1]); ``df.attrs["contact"]`` is the integrated contact.
     """
     if dose_rates is None:
         dose_rates = np.array([20, 50, 100, 150, 200, 230], dtype=float)
@@ -685,6 +698,7 @@ def transient_cce_vs_dose_rate(
         dose_rates = np.asarray(dose_rates, dtype=float)
 
     cce_values = []
+    raw_values = []
     dev_kw = dict(
         epi_thickness_cm=epi_thickness_cm,
         doping_profile="graded",
@@ -702,24 +716,34 @@ def transient_cce_vs_dose_rate(
     if contact not in ("cathode", "anode"):
         raise ValueError(f"contact must be 'cathode' or 'anode', got {contact!r}")
 
-    for dose_rate in dose_rates:
-        dev_id = uuid.uuid4().hex[:8]
-        device_info = create_dd_device(
-            device_name=f"transient_sweep_{dev_id}", **dev_kw
-        )
-        device = device_info["device_name"]
-        region = device_info["region_name"]
-
-        try:
-            add_auger_recombination(device_info)
-
-            # Ramp bias via anode (reverse bias)
-            ramp_bias(device_info, V_bias, contact="anode")
-
-            # Get mesh and generation profile
-            x_nodes = np.array(
-                devsim.get_node_model_values(device=device, region=region, name="x")
+    # One device for the whole sweep: build, Auger and the bias ramp do not depend on
+    # the dose rate. The dark DC state (Potential / Electrons / Holes) at V_bias is
+    # snapshotted once and restored before each dose rate's initialize(), whose
+    # transient_dc solve also resets the time-integration history; results are
+    # bit-identical to the former build-per-dose-rate loop (6 rates: 7.37 -> 2.13 s,
+    # lab/engine_box/bench/transient_build_once.py).
+    dev_id = uuid.uuid4().hex[:8]
+    device_info = create_dd_device(device_name=f"transient_sweep_{dev_id}", **dev_kw)
+    device = device_info["device_name"]
+    region = device_info["region_name"]
+    try:
+        add_auger_recombination(device_info)
+        # Ramp bias via anode (reverse bias)
+        ramp_bias(device_info, V_bias, contact="anode")
+        dark_state = {
+            name: list(
+                devsim.get_node_model_values(device=device, region=region, name=name)
             )
+            for name in _DARK_STATE_SOLUTIONS
+        }
+        x_nodes = np.array(
+            devsim.get_node_model_values(device=device, region=region, name="x")
+        )
+        for dose_rate in dose_rates:
+            for name, values in dark_state.items():
+                devsim.set_node_values(
+                    device=device, region=region, name=name, values=values
+                )
             G_spatial = proton_generation_profile(
                 x_nodes, E_MeV=62, dose_rate_Gy_s=dose_rate
             )
@@ -743,19 +767,28 @@ def transient_cce_vs_dose_rate(
                 dose_rate_Gy_s=dose_rate,
             )
 
-            cce = solver.compute_transient_cce(result, G_spatial, x_nodes)
+            cce, cce_raw = solver.compute_transient_cce(
+                result, G_spatial, x_nodes, return_raw=True
+            )
             cce_values.append(cce)
+            raw_values.append(cce_raw)
 
             logger.info(
-                f"transient_cce_vs_dose_rate: {dose_rate:.0f} Gy/s " f"-> CCE={cce:.4f}"
+                f"transient_cce_vs_dose_rate: {dose_rate:.0f} Gy/s "
+                f"-> CCE={cce:.4f} (raw {cce_raw:.6f})"
             )
+    finally:
+        try:
+            devsim.delete_device(device=device)
+        except Exception:
+            pass
 
-        finally:
-            try:
-                devsim.delete_device(device=device)
-            except Exception:
-                pass
-
-    df = pd.DataFrame({"dose_rate_Gy_s": dose_rates, "transient_cce": cce_values})
+    df = pd.DataFrame(
+        {
+            "dose_rate_Gy_s": dose_rates,
+            "transient_cce": cce_values,
+            "transient_cce_raw": raw_values,
+        }
+    )
     df.attrs["contact"] = contact
     return df
