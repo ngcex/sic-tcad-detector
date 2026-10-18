@@ -327,8 +327,8 @@ We validate charge conservation across three representative LET values
 (computed as |Q_collected - Q_generated * CCE_ref| / Q_generated) should be
 below 1%.
 
-This directly validates requirement SPRT-03: charge conservation in transient
-simulations.
+With `ETNA_REBUILD_CCE_TABLES=1` this validates requirement SPRT-03 (charge
+conservation in transient simulations) on the current code.
 
 **Default run:** the three transients are not re-simulated; the check reads the
 rows of the committed 100 um table (`data/cce_let_table_100um.json`, which stores
@@ -337,11 +337,13 @@ simulation) nearest to 1, 10 and 100 keV/um (LET = 1.03, 9.16 and 117 keV/um), a
 then checks every row of both tables (30 transients). With
 `ETNA_REBUILD_CCE_TABLES=1` the three LETs are simulated afresh (~3 min).
 
-*Caveat:* the committed tables were built on 2026-10-17, before the 2026-10-18
-transient fix (step-end time stamps, audit A-04). Their CCE agrees with a fresh
-simulation to the printed digits, but their stored t_95 (0.21 ns) is longer than a
-fresh run gives (0.12 ns at LET 1/10/100 keV/um, 50 V); rebuild the tables to
-refresh the collection times.
+*Caveat:* the committed tables were built on 2026-10-17 and predate the 2026-10-18
+changes to the transient/solver code (cause not identified). Their CCE agrees with a
+fresh simulation to the printed digits, but their stored t_95 (0.21 ns) is longer
+than a fresh run gives (0.12 ns at LET 1/10/100 keV/um, 50 V); rebuild the tables to
+refresh the collection times. In the default run the check below is therefore on
+stored results; the current transient code is exercised by Section 4 (and by this
+section with `ETNA_REBUILD_CCE_TABLES=1`).
 """
 )
 
