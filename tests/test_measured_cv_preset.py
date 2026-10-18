@@ -10,7 +10,6 @@ batched engine agree with the buffer (lab/buffer_profile/bench/buffer_parity1d.p
 the three labels; exports and the app label it as a fit (fit input, not a validation).
 """
 
-import dataclasses
 import uuid
 
 import devsim
@@ -363,9 +362,9 @@ def test_sidebar_values_with_the_preset_assemble_the_preset_config():
     # without the transition keys the sidebar assembles the default transition
     assert assemble_config(values).buffer_thickness_um == 1.136634
     values.update(etna.MEASURED_CV_PRESET)
-    assert assemble_config(values) == measured_cv_config(area_cm2=0.04)
+    assert assemble_config(values) == measured_cv_config()  # 0.04 cm2 = the default area
     values.update(etna.NPLUS_CALIBRATED_PRESET)
-    assert assemble_config(values) == nplus_calibrated_config(area_cm2=0.04)
+    assert assemble_config(values) == nplus_calibrated_config()
 
 
 def test_run_all_sweep_passes_the_buffer_to_the_engine():
