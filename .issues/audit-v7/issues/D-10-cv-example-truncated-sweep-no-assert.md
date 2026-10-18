@@ -3,7 +3,7 @@ id: D-10
 title: examples/cv_example.py sweeps to -200 V, silently gets 7/20 points, ignores truncation and asserts nothing; spec still shows -200 V
 severity: low
 category: improvement
-status: open
+status: fixed 2026-10-18 (final-abd 36083d1: cv_example uses run_cv(cfg) (0..-50 V), prints truncated / requested_v_stop, raises on truncation or non-monotonic C; tests/test_examples.py runs it in a subprocess with cwd and ETNA_FIGURE_DIR = tmp_path; spec examples -50 / -40 V; truncation warnings name the first bias not reached. Note: the '7 of 20 points at -200 V' premise is stale, the batched run_cv reaches -200 V. Evidence: pytest tests/test_examples.py -> 2 passed; python examples/cv_example.py -> truncated=False, C 2.0761e-10 -> 3.4910e-11 F)
 location: examples/cv_example.py:20-36; docs/superpowers/specs/2026-06-26-simulator-library-ui-design.md:143,147,174,206; etna/core/cv_analysis.py:233 (warning wording)
 labels: [examples, docs, punch-through, truncation]
 source: raw-D F10

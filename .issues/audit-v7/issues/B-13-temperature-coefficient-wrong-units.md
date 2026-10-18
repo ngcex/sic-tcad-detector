@@ -3,7 +3,7 @@ id: B-13
 title: extract_temperature_coefficient labels slopes "%/K" and "pA/K", but inputs are fractions and A/cm^2
 severity: low
 category: docs
-status: open
+status: fixed 2026-10-18 (final-abd 9456d76: units '1/K' for a CCE fraction, 'A/cm^2/K' for the 1D current density, no rescaling; I_reverse documented as a density. Evidence: pytest tests/test_temperature_sweep.py -k 'Coefficient or unit' -> 3 passed)
 location: etna/core/temperature_sweep.py:345-351 (unit inference), ~l.335 (docstring); tests/test_temperature_sweep.py (asserts the label string)
 labels: [temperature, units, documentation, raw-F13]
 ---

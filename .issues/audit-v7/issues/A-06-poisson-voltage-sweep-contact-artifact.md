@@ -3,7 +3,7 @@ id: A-06
 title: poisson.ramp_voltage / voltage_sweep return contact-artifact E-fields, use an inverted sign convention, and report analytic uniform-N_D widths for graded devices
 severity: medium
 category: bug
-status: open
+status: fixed 2026-10-18 (final-abd d579dc7: Poisson-only ramp_voltage / voltage_sweep removed, no caller outside test_voltage_sweep_short; bias sweeps are ramp_bias / cv_sweep. Evidence: grep -rn 'voltage_sweep|ramp_voltage' etna app tests scripts notebooks examples -> no hit; pytest tests/test_poisson.py -> 13 passed)
 location: etna/core/poisson.py:169-249 (ramp_voltage), 282-332 (extract_depletion_width uses device_info["N_D"]), 541-607 (voltage_sweep); tests/test_poisson.py:213-236 (test_voltage_sweep_short); etna/core/plotting.py:82
 labels: [audit-v7, slice-A, poisson, misleading-output]
 source: raw-A-core-solvers.md F6
