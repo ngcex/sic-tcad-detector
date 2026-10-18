@@ -115,13 +115,15 @@ def build_damage_figure(result: SimResult) -> go.Figure:
 
 
 def build_dark_current_figure(result: SimResult) -> go.Figure:
-    """Total dark current vs temperature (log-y, |I|).
+    """Total dark current (log-y, |I|) vs temperature or vs bias.
 
-    Input is one AGGREGATED SimResult (x = temperature K, y = I_total A). Only
-    the total is plotted: the SRH/TAT split is a modelling partition, not a
-    measured decomposition, and the surface (SRV) term is identically zero at
-    the ohmic cathode.
+    Two shapes: the Dark Current page's AGGREGATED ``sim_type="dark_current_vs_T"``
+    (x = temperature K at one bias) and ``run_dark_current``'s native
+    ``sim_type="dark_current"`` (x = bias V). Only the total is plotted: the
+    SRH/TAT split is a modelling partition, not a measured decomposition, and
+    the surface (SRV) term is identically zero at the ohmic cathode.
     """
+    vs_T = result.sim_type == "dark_current_vs_T"
     fig = go.Figure(
         data=go.Scatter(
             x=result.x,
@@ -132,8 +134,12 @@ def build_dark_current_figure(result: SimResult) -> go.Figure:
         )
     )
     fig.update_layout(
-        title="Dark Current vs Temperature (calibrated budget estimate)",
-        xaxis_title="Temperature (K)",
+        title=(
+            "Dark Current vs Temperature (calibrated budget estimate)"
+            if vs_T
+            else "Dark Current vs Bias (calibrated budget estimate)"
+        ),
+        xaxis_title="Temperature (K)" if vs_T else "Bias V (V)",
         yaxis_title="|Dark current| (A)",
         yaxis_type="log",
         yaxis_exponentformat="power",
@@ -372,7 +378,10 @@ def _sweep_header_lines(result: SimResult) -> list[str]:
 def to_csv_bytes(result: SimResult) -> bytes:
     """Serialize a SimResult to downloadable CSV bytes.
 
-    Dispatches on `result.sim_type` ("cv" | "cce" | "field") to produce the
+    Dispatches on `result.sim_type` ("cv" | "cce" | "field" | "damage" |
+    "dark_current" (x = bias, run_dark_current) | "dark_current_vs_T" (x = T,
+    the Dark Current page aggregate) | "microdosimetry" | "temperature" |
+    "flash" | "transient"; anything else raises ValueError) to produce the
     correct columns, and prepends a commented "#" metadata header carrying
     an ISO-8601 UTC timestamp, the etna software version, and every
     field of the device config (for traceability). Pure function — no
@@ -383,7 +392,7 @@ def to_csv_bytes(result: SimResult) -> bytes:
             {
                 "bias_V": result.x,
                 "capacitance_F": result.y,
-                "one_over_C2_cm4_per_F2": result.metadata["one_over_C_squared"],
+                "one_over_C2_per_F2": result.metadata["one_over_C_squared"],
                 "depletion_width_cm": result.metadata["depletion_widths"],
             }
         )
@@ -451,16 +460,63 @@ def to_csv_bytes(result: SimResult) -> bytes:
             "# WARNING: kappa (NIEL hardness factor) is a data-blocked placeholder; "
             "absolute Phi_crit numbers are unvalidated.",
         ]
-    elif result.sim_type == "dark_current":
-        df = pd.DataFrame({"T_K": result.x, "I_total_A": result.y})
+    elif result.sim_type in ("dark_current", "dark_current_vs_T"):
+        md = result.metadata
         extra_header_lines = []
-        if "V_bias" in result.metadata:
-            extra_header_lines.append(f"# V_bias: {result.metadata['V_bias']}")
+        if result.sim_type == "dark_current_vs_T":  # Dark Current page aggregate
+            df = pd.DataFrame({"T_K": result.x, "I_total_A": result.y})
+            if "V_bias" in md:
+                extra_header_lines.append(f"# V_bias: {md['V_bias']}")
+        else:  # run_dark_current: one bias sweep at config.T
+            df = pd.DataFrame({"bias_V": result.x, "I_total_A": result.y})
+            past = md.get("past_reach_through")
+            if past is not None and np.size(past) == len(result.x):
+                df["past_reach_through"] = np.asarray(past, dtype=bool)
+            if md.get("truncated"):
+                reached = md.get("reached_v_stop")
+                extra_header_lines.append(
+                    "# truncated: sweep stopped at "
+                    + ("no bias point" if reached is None else f"{reached:.2f} V")
+                    + f" (requested down to {md.get('requested_v_stop', float('nan')):.2f}"
+                    " V) -- devsim did not converge further"
+                )
+            if md.get("validity_note"):
+                extra_header_lines.append(f"# validity: {md['validity_note']}")
         extra_header_lines.append(
             "# NOTE: absolute leakage is a calibration input (N_t fitted to the "
             "experimental bound <18 pA up to -60 V at 4 mm2, 300 K); bias and "
             "temperature dependence are heuristic. Budget estimate, not a prediction."
         )
+    elif result.sim_type == "temperature":
+        md = result.metadata
+        cols = {"T_K": result.x, "CCE": result.y}
+        if np.size(md.get("solver_per_T", [])) == len(result.x) and len(result.x):
+            cols["solver"] = np.asarray(md["solver_per_T"], dtype=str)
+        df = pd.DataFrame(cols)
+        extra_header_lines = [
+            f"# voltage_V: {md.get('voltage_V')}",
+            f"# method: {md.get('method')}",
+        ]
+    elif result.sim_type == "flash":
+        md = result.metadata
+        df = pd.DataFrame({"dose_rate_Gy_s": result.x, "CCE": result.y})
+        extra_header_lines = [
+            f"# V_bias: {md.get('V_bias')}",
+            f"# E_MeV: {md.get('E_MeV')}",
+            "# WARNING: numerical sensitivity bound, NOT a validated FLASH "
+            "plasma-recombination prediction (high-injection physics not modelled; "
+            "see etna.core.flash_recombination).",
+        ]
+    elif result.sim_type == "transient":
+        md = result.metadata
+        cols = {"dose_rate_Gy_s": result.x, "CCE_clipped_0_1": result.y}
+        if np.size(md.get("transient_cce_raw", [])) == len(result.x) and len(result.x):
+            cols["CCE_raw"] = np.asarray(md["transient_cce_raw"], dtype=float)
+        df = pd.DataFrame(cols)
+        extra_header_lines = [
+            f"# V_bias: {md.get('V_bias')}",
+            f"# current_contact: {md.get('current_contact')}",
+        ]
     elif result.sim_type == "microdosimetry":
         df = pd.DataFrame({"y_keV_per_um": result.x, "y_times_d_y": result.y})
         extra_header_lines = [

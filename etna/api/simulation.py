@@ -1178,8 +1178,8 @@ def run_cce(
         irradiation), which is a stiffer solve that empirically stops
         converging around -50 to -60V — hence the extra margin vs run_cv/
         run_field's -50.0 default. See the "truncated" / "requested_v_stop"
-        metadata note above for what happens if a caller requests a deeper
-        v_stop than converges.
+        entries under Returns below for what happens if a caller requests a
+        deeper v_stop than converges.
     n_points : int
         Number of bias points in the sweep. Default 30.
 
@@ -1921,7 +1921,9 @@ def _legacy_dark_validity(config: DeviceConfig, voltages) -> dict:
         )
     else:
         past = None
-        note = "reach-through unknown (engine unavailable); " + LEGACY_DARK_VALIDITY_NOTE
+        note = (
+            "reach-through unknown (engine unavailable); " + LEGACY_DARK_VALIDITY_NOTE
+        )
     return {"reach_through_V": rt, "past_reach_through": past, "validity_note": note}
 
 
