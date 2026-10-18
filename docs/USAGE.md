@@ -154,13 +154,13 @@ for row in report.rows():
 
 Every facade returns a `SimResult` (`etna/api/results.py`):
 
-| field      | meaning                                                                                                                 |
-| ---------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `config`   | the `DeviceConfig` used                                                                                                 |
-| `sim_type` | `"cv"`, `"cce"`, `"field"`, `"damage"`, `"dark_current"`, `"temperature"`, `"flash"`, `"transient"`, `"microdosimetry"` |
-| `x`, `y`   | primary axis and output (numpy arrays; see each facade in section 6)                                                    |
-| `metadata` | dict: solver provenance (section 7) plus facade-specific arrays and scalars                                             |
-| `mesh`     | `MeshData` (node coordinates in cm, node values, regions, contacts) for `run_field`; `None` otherwise                   |
+| field      | meaning                                                                                                                                                                                                          |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `config`   | the `DeviceConfig` used                                                                                                                                                                                          |
+| `sim_type` | `"cv"`, `"cce"`, `"field"`, `"damage"`, `"dark_current"` (x = bias), `"temperature"`, `"flash"`, `"transient"`, `"microdosimetry"`; the app's Dark Current page builds a `"dark_current_vs_T"` aggregate (x = T) |
+| `x`, `y`   | primary axis and output (numpy arrays; see each facade in section 6)                                                                                                                                             |
+| `metadata` | dict: solver provenance (section 7) plus facade-specific arrays and scalars                                                                                                                                      |
+| `mesh`     | `MeshData` (node coordinates in cm, node values, regions, contacts) for `run_field`; `None` otherwise                                                                                                            |
 
 `run_all` returns a `Report` (`etna/api/run_all.py`). It provides `report.ok`,
 `report.rows()` (one summary dict per section), `report.get("cv").result` (the
@@ -433,7 +433,10 @@ print(f.y.round(6), t.metadata["transient_cce_raw"].round(6))
 Pure data pipeline (no devsim). It reads Monte Carlo per-step depositions from a CSV
 (columns `event_id, x, y, z, edep`; edep in keV, positions in cm) and returns the lineal
 energy spectrum: `x` is y (keV/µm), `y` is y·d(y). Metadata holds `y_F`, `y_D`, `f_y` and
-`l_bar_um` (mean chord length). `config` is carried for provenance only.
+`l_bar_um` (mean chord length). `config` is carried for provenance only. `mc_csv_path` may be
+a path or a file-like object (e.g. `io.BytesIO`). It raises `ValueError` for non-positive or
+non-finite sensitive-volume dimensions, a CSV with no events, non-finite or negative `edep`,
+or no event depositing energy.
 
 ```python
 from etna import DeviceConfig, run_microdosimetry
@@ -644,8 +647,10 @@ does fit, but it is lab-only (`lab/microdosimeter/notes/LOG.md` §9).
 uv run streamlit run app/main.py --server.address localhost
 ```
 
-Without `--server.address localhost` Streamlit listens on all network interfaces, with no
-authentication (audit C-16). Keep the flag on shared networks. One solve at a time:
+The committed `.streamlit/config.toml` binds the app to localhost when it is launched from
+the repo root (Streamlit reads the config of the launch directory); the flag makes that
+explicit from any directory. The app has no authentication: for shared use pass
+`--server.address 0.0.0.0` behind an authenticating reverse proxy (audit C-16). One solve at a time:
 devsim state is process-global, and the facades serialise access through a lock.
 
 **Sidebar** (`app/components/device_sidebar.py`). It is rendered on every page; the
@@ -682,6 +687,18 @@ header carries solver, domain, config and version.
 | Microdosimetry          | `run_microdosimetry`                                                            | MC events CSV upload, SV thickness (10 µm) and width                                                                                                               | y·d(y), y_F / y_D, CSV. Independent of the sidebar                                                                                                                                                                                                                                               |
 | Batch Sweep             | `ParametricSweep`                                                               | one of epi thickness, p+ thickness, N_A, N_D junction, N_D bulk, transition length, T, area; comma-separated values; facade (CCE vs bias, C-V, CCE vs temperature) | overlaid curves, bulk CSV, per-value failures listed                                                                                                                                                                                                                                             |
 | Export                  | engineering files (section 10)                                                  | spec sheet (reuses the Run All report when it matches); profile bias (default -30 V); animation button                                                             | spec sheet JSON/CSV/Markdown/PDF; cross-section SVG/PNG; mesh/profile CSV and VTK (ParaView/VisIt); two 480p manim MP4s (needs `viz`); schematic layout SVG and GDSII (needs `gdstk`) with the disclaimer "schematic, not a fabrication layout; missing dimensions must come from the mask data" |
+
+Page details not in the table:
+
+- The Field Map viewer draws the anode/cathode contacts (`MeshData.contacts`) as lines at
+  their depth and, in 2D, outlines the region (`MeshData.regions`).
+- The Dark Current CSV has columns `T_K, I_total_A`.
+- Batch Sweep values must be finite and positive; sweeping the area with a CCE facade is
+  disabled (CCE does not depend on area).
+- The shared CSV serializer (`app/components/results.py::to_csv_bytes`) covers every facade:
+  `run_temperature_sweep`, `run_flash_recombination` and `run_transient` included, and a native
+  `run_dark_current` result exports `bias_V, I_total_A` with the truncation record. The C-V
+  CSV column for 1/C² is `one_over_C2_per_F2`.
 
 As of the v5.0 milestone audit (`.planning/milestones/v5.0-MILESTONE-AUDIT.md`), 7 of the
 21 notebook workflows had no page. The Run All page has since added the FLASH

@@ -56,8 +56,10 @@ without needing to read or write any Python.
 uv run streamlit run app/main.py --server.address localhost
 ```
 
-Without `--server.address localhost`, Streamlit listens on all network interfaces with no
-authentication (audit C-16).
+The committed `.streamlit/config.toml` binds the app to localhost when it is launched from
+the repo root (Streamlit reads the config of the launch directory); `--server.address
+localhost` makes that explicit from any directory. The app has no authentication: for shared
+use pass `--server.address 0.0.0.0` behind an authenticating reverse proxy (audit C-16).
 
 A 10-page interactive app built on the `etna` public API. Configure a device once in the
 sidebar: geometry, doping, temperature, area, and preset checkboxes for the historical,
