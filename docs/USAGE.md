@@ -534,10 +534,11 @@ Which solver runs:
   5-30 µm, n+ and transition boxes). Otherwise devsim runs.
 - **devsim only**: 1D `run_field`, `run_dark_current`, `run_flash_recombination`,
   `run_transient`, and any engine fallback.
-- **Fluence sweeps**: the core `cce_vs_fluence` uses the batched engine where its box
-  allows (`tests/test_fluence_engine.py`). Note: at this version `run_radiation_damage`
-  labels its result `solver="devsim"` regardless (a known labelling gap in
-  `etna/api/simulation.py`). Do not read that label as evidence of which path ran.
+- **Fluence sweeps**: `run_radiation_damage` (through the core `cce_vs_fluence`) uses the
+  batched engine where its box allows (`tests/test_fluence_engine.py`) and devsim
+  otherwise. `metadata["solver"]` names the solver that ran the points and
+  `metadata["solver_per_point"]` records it per point (empty for the NaN points beyond
+  compensation).
 
 The **box** is a statement about where the two solvers agree. It is not a statement
 about physical validity: a device inside the box is solved the same way by both codes,
