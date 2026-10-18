@@ -89,9 +89,6 @@ class TestDoping2D:
         device = dev["device_name"]
         region = dev["region_name"]
 
-        x = np.array(
-            devsim.get_node_model_values(device=device, region=region, name="x")
-        )
         y = np.array(
             devsim.get_node_model_values(device=device, region=region, name="y")
         )
@@ -492,7 +489,7 @@ class TestGradedDopingSmoothness:
 
         # Center column (x ~= 0), sorted by depth, restricted to the n-epi.
         center = np.abs(x) < 1e-6
-        xc, yc, dc = x[center], y[center], donors[center]
+        yc, dc = y[center], donors[center]
         order = np.argsort(yc)
         yc, dc = yc[order], dc[order]
         in_epi = (yc > dev["junction_pos"]) & (dc > 0) & (yc < dev["epi_end"] - 1e-12)

@@ -16,9 +16,7 @@ import pytest
 from etna.core.drift_diffusion import (
     create_dd_device,
     ramp_bias,
-    extract_contact_current,
 )
-from etna.core.charge_collection import add_generation_to_dd
 from etna.core.flash_recombination import add_auger_recombination, cce_vs_dose_rate
 from etna.core.generation_profiles import proton_generation_profile
 from etna.core.transient import (

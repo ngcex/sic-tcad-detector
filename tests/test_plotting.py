@@ -12,7 +12,6 @@ matplotlib.use("Agg")  # Non-interactive backend, must be before pyplot import
 
 import matplotlib.pyplot as plt
 import numpy as np
-import pytest
 
 from etna.core.plotting import (
     plot_electric_field,

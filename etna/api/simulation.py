@@ -30,7 +30,6 @@ from etna.core.dark_current import create_dark_current_device, dark_current_swee
 from etna.core.device import (
     DEFAULT_N_D,
     donor_table_spec,
-    mobility_doping,
     table_sensitive_end_cm,
     table_sensitive_end_doping,
 )

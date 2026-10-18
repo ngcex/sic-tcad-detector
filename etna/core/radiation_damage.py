@@ -1051,7 +1051,6 @@ def radiation_hardness_sweep(
         CCE_retention. Sorted by CCE_retention descending.
     """
     import itertools
-    import warnings
 
     import pandas as pd
 

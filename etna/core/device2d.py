@@ -36,7 +36,6 @@ from etna.core.sic_material import (
 )
 from etna.core.incomplete_ionization import ionized_acceptor_concentration
 from etna.core.device import (
-    DEFAULT_N_D_NPLUS,
     DEFAULT_STACK,
     _buffer_term,
     _check_nplus,
@@ -393,7 +392,6 @@ def create_sic_2d_device(
     devsim.create_device(mesh=mesh_name, device=device_name)
 
     # --- Set 4H-SiC material parameters ---
-    kT_eV = K_B_EV * T
     kT_J = K_B_J * T
     V_t = kT_J / Q
 

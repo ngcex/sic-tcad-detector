@@ -1,0 +1,12 @@
+# Lint configuration (ruff >= 0.3). Kept out of pyproject.toml on purpose: one file owns it.
+# Scope: pyflakes (F: unused imports/variables, undefined names, redefinitions), syntax/IO
+# errors (E9) and deprecated-syntax warnings (W6). Import sorting (I) is NOT enabled: it
+# rewrites 88 import blocks in one go (an unreviewable diff for no behaviour change); enable it
+# in a dedicated formatting commit if wanted. Line length is cosmetic here (E501 not selected)
+# and matches black's default.
+line-length = 88
+target-version = "py312"  # requires-python >= 3.13; py312 is the newest this ruff (0.3.4) knows
+extend-exclude = ["lab", "notebooks", ".claude"]
+
+[lint]
+select = ["F", "E9", "W6"]

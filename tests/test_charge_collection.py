@@ -20,7 +20,6 @@ from etna.core.charge_collection import (
     cce_vs_fluence,
     compare_cce_hecht_vs_dd,
     compute_cce_from_current,
-    compute_cce_from_dd,
     hecht_cce,
     hecht_cce_partial_depletion,
 )

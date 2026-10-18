@@ -20,7 +20,6 @@ import scipy.optimize
 
 from etna.core.sic_material import (
     SiC4H_Parameters,
-    mobility_caughey_thomas,
     intrinsic_concentration,
     mobility_caughey_thomas_T,
     srh_lifetime,
@@ -514,7 +513,6 @@ def create_sic_device(
     devsim.create_device(mesh=mesh_name, device=device_name)
 
     # --- Set 4H-SiC material parameters ---
-    kT_eV = K_B_EV * T  # eV
     kT_J = K_B_J * T  # J
     V_t = kT_J / Q  # V (thermal voltage in Volts for devsim)
 

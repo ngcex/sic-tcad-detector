@@ -50,8 +50,6 @@ def test_unknown_section_rejected():
 
 
 def test_leaked_device_is_reported(monkeypatch):
-    import devsim
-
     deleted = []
     calls = []
 
@@ -113,7 +111,9 @@ def test_run_field_2d_with_nplus_uses_engine():
 
 def test_2d_field_summary_reports_the_map():
     rep = etna.run_all(etna.DeviceConfig(half_width_um=25.0), ("field",))
-    assert "2D map" in rep.get("field").summary and "max |E|" in rep.get("field").summary
+    assert (
+        "2D map" in rep.get("field").summary and "max |E|" in rep.get("field").summary
+    )
 
 
 def test_1d_field_summary_excludes_the_nplus_interface_spike():
@@ -121,6 +121,7 @@ def test_1d_field_summary_excludes_the_nplus_interface_spike():
     res, summ = rep.get("field").result, rep.get("field").summary
     assert "excl. spikes at the abrupt doping steps" in summ
     assert float(summ.split("peak |E| ")[1].split(" ")[0]) < 0.7 * float(res.y.max())
+
 
 def test_truncated_sweep_is_flagged_in_the_summary(monkeypatch):
     from etna.api import simulation as s

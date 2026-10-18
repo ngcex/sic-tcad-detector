@@ -257,7 +257,7 @@ def solve_with_continuation(device_info, generation_values, n_steps=5):
             if not converged_at_target:
                 return False
 
-    logger.info(f"Continuation complete: converged at 100% generation rate")
+    logger.info("Continuation complete: converged at 100% generation rate")
     return True
 
 

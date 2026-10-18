@@ -170,6 +170,9 @@ class TestDepletionWidth:
 
         # At -200V with epi=10um, W should be clamped to epi thickness
         assert W_200 == pytest.approx(epi, rel=0.01)
+        # W grows with bias up to the clamp: this estimator gives 7.94 um at -60 V on the
+        # default stack (10 um epi), below the -200 V clamp
+        assert 0.7 * epi < W_60 < W_200
 
     def test_validation_depletion_widths(self):
         """VALIDATION: compare W at 0V, -10V, -30V against experimental targets.

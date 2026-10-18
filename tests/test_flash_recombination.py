@@ -24,7 +24,7 @@ from etna.core.flash_recombination import (
     save_parametric_results,
     solve_with_continuation,
 )
-from etna.core.generation_profiles import dose_rate_to_generation, proton_generation_profile
+from etna.core.generation_profiles import proton_generation_profile
 from etna.core.sic_material import SiC4H_Parameters
 
 

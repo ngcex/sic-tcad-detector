@@ -64,7 +64,6 @@ from etna.core.device2d import (
     set_graded_doping_2d,
     EPS_0,
     Q,
-    K_B_EV,
     K_B_J,
     DEFAULT_N_D,
 )
@@ -131,7 +130,6 @@ def _set_sic_material_params(device_name, region_name, N_D, N_A, T):
     Returns a partial dict with material-related keys.
     """
     params = SiC4H_Parameters()
-    kT_eV = K_B_EV * T
     kT_J = K_B_J * T
     V_t = kT_J / Q
 

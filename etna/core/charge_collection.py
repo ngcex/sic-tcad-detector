@@ -1246,9 +1246,6 @@ def cce_vs_bias_at_fluence(
     gen_values[x_epi < 0] = 0.0
     gen_values = confine_generation_to_epi(device_info, x_nodes, gen_values)
 
-    Q = 1.602e-19
-    I_generated = Q * np.trapezoid(gen_values, x_nodes)
-
     # --- Sweep bias on single damaged device ---
     # Sort voltages for stable ramping (descending: 0, -10, -20, ...)
     sorted_indices = np.argsort(-V_range)
@@ -1683,8 +1680,6 @@ def cce_vs_epi_thickness(
     epi_range_cm = np.asarray(epi_range_cm, dtype=float)
     cce_values = np.zeros(len(epi_range_cm))
 
-    Q = 1.602e-19
-
     for i, epi_thick in enumerate(epi_range_cm):
         dev_id = uuid.uuid4().hex[:8]
         dev_name = f"cce_epi_{dev_id}"
@@ -1723,8 +1718,6 @@ def cce_vs_epi_thickness(
             # Zero generation in p+ substrate
             gen_values[x_epi < 0] = 0.0
             gen_values = confine_generation_to_epi(device_info, x_nodes, gen_values)
-
-            I_generated = Q * np.trapezoid(gen_values, x_nodes)
 
             # Ramp to bias (cathode voltage is -V_bias)
             cathode_V = -V_bias

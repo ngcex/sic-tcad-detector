@@ -18,7 +18,6 @@ single-particle CCE goes 0.961613 -> 0.962940 against the steady-state 0.962560 
 -9.5e-4 -> +3.8e-4; lab/default_flip/bench/sp_contacts.py).
 """
 
-import numpy as np
 import pytest
 
 # Legacy 2D device (pre-flip device2d model): p+ 1 um, no n+, old graded doping.

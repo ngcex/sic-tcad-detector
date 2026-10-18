@@ -24,9 +24,7 @@ from etna.core.charge_collection_2d import (
     _robust_dc_solve,
 )
 from etna.core.device2d import create_sic_2d_device
-from etna.core.poisson import setup_poisson, solve_equilibrium
 from etna.core.drift_diffusion import (
-    setup_sic_drift_diffusion,
     ramp_bias,
 )
 from etna.core.charge_collection import add_generation_to_dd, compute_cce_from_dd

@@ -195,8 +195,6 @@ def simulate_single_particle(
         )
     if contact not in ("cathode", "anode"):
         raise ValueError(f"contact must be 'cathode' or 'anode', got {contact!r}")
-    device = device_info["device_name"]
-    region = device_info["region_name"]
     n_nodes = len(generation_profile)
 
     # Step 1: Initialize transient state with zero generation

@@ -282,7 +282,6 @@ def test_preset_reproduces_the_digitised_cv():
 def test_analytic_vfd_profile_integral_matches_closed_form_without_buffer():
     from etna.export.labels import analytic_vfd
     from etna.core.analytical import (
-        built_in_potential,
         full_depletion_voltage_graded,
         full_depletion_voltage_profile,
     )

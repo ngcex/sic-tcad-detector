@@ -17,10 +17,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
-from etna.core.devsim_lock import (
-    quiet_devsim,
-    serialized,
-)  # noqa: F401  (quiet_devsim re-exported)
+from etna.core.devsim_lock import serialized
 from etna.core.device2d import create_sic_2d_device
 from etna.core.drift_diffusion import create_dd_device, setup_sic_drift_diffusion
 from etna.core.poisson import setup_poisson, solve_equilibrium

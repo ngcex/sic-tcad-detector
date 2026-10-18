@@ -68,7 +68,7 @@ class TestMesaDevice:
         from etna.core.alternative_structures import create_mesa_device
 
         name = _uid()
-        dev = create_mesa_device(device_name=name)
+        create_mesa_device(device_name=name)
         try:
             donors = np.array(
                 devsim.get_node_model_values(
@@ -235,7 +235,7 @@ class TestThreeDElectrodeDevice:
 
         # Create cylindrical device
         cyl_name = _uid()
-        dev_cyl = create_3d_electrode_device(device_name=cyl_name)
+        create_3d_electrode_device(device_name=cyl_name)
         devsim.delete_device(device=cyl_name)
         restore_cartesian_coords()
 
@@ -391,7 +391,7 @@ class TestGuardRingDevice:
         from etna.core.alternative_structures import create_guard_ring_device
 
         name = _uid()
-        dev = create_guard_ring_device(device_name=name, N_A_guard=5e18)
+        create_guard_ring_device(device_name=name, N_A_guard=5e18)
         try:
             # Get node positions and acceptor values
             x_vals = np.array(
