@@ -27,7 +27,13 @@ from etna.core.batched.material import EPS
 from etna.core.charge_collection import cce_vs_bias, cce_vs_fluence
 from etna.core.cv_analysis import cv_sweep
 from etna.core.dark_current import create_dark_current_device, dark_current_sweep
-from etna.core.device import DEFAULT_N_D, mobility_doping
+from etna.core.device import (
+    DEFAULT_N_D,
+    donor_table_spec,
+    mobility_doping,
+    table_sensitive_end_cm,
+    table_sensitive_end_doping,
+)
 from etna.core.devsim_reset import reset_devsim_fully
 from etna.core.drift_diffusion import ramp_bias
 from etna.core.flash_recombination import cce_vs_dose_rate
@@ -69,6 +75,11 @@ _ENGINE_BOX = {
     # as the N_D_bulk extension (buffer 0.5-2.5 um, end doping 1e16-1e19, to -100 V).
     "buffer_thickness_um": (0.5, 2.5),
     "buffer_end_doping": (1e16, 1e19),
+    # tabulated epi profile (donor_table): the table's N_D range (min and max) in place of
+    # the N_D_junction / N_D_bulk / L_transition boxes. Parity lab/tabulated_profile/bench/
+    # table_parity1d.py (the 19-knot measured-C-V table, scaled -0.3 / +0.3 dex, 150 / 450 K,
+    # a 20 um stretch, to -100 V), tests/test_measured_cv_tabulated.py.
+    "donor_table_N_D": (5e12, 5e16),
 }
 # Largest single bias jump that converges in one Newton solve at 300 K (the Newton
 # clamp is in V_t units, so the limit scales with T; measured 85 V at 250 K).
@@ -115,7 +126,12 @@ def validated_domain_reason(config: DeviceConfig) -> "str | None":
             buffer_thickness_um=config.buffer_thickness_um,
             buffer_end_doping=config.buffer_end_doping,
         )
-    if config.doping_profile == "graded":
+    if config.donor_table is not None:  # the table defines the profile: its range
+        lo, hi = _ENGINE_BOX["donor_table_N_D"]
+        n = [p[1] for p in config.donor_table]
+        if not (lo <= min(n) and max(n) <= hi):
+            return f"donor_table N_D range [{min(n):g}, {max(n):g}] outside [{lo:g}, {hi:g}]"
+    elif config.doping_profile == "graded":
         checks.update(
             N_D_junction=config.N_D_junction,
             N_D_bulk=config.N_D_bulk,
@@ -194,7 +210,13 @@ def _reach_through_V(W, bias_array, config: DeviceConfig) -> "float | None":
     rule: 17.0 V.
     """
     epi_cm = config.epi_thickness_um * 1e-4
-    if config.buffer_thickness_um is not None:
+    if config.donor_table is not None:
+        # tabulated profile: the low-doped epi ends one decade above the table's minimum
+        # (etna.core.device.table_sensitive_end_cm; a definition, as the buffer rule's)
+        threshold = table_sensitive_end_cm(
+            donor_table_spec(epi_cm, config.donor_table)
+        ) - _debye_length_epi_end(config)
+    elif config.buffer_thickness_um is not None:
         threshold = (
             epi_cm - config.buffer_thickness_um * 1e-4 - _debye_length_epi_end(config)
         )
@@ -217,7 +239,11 @@ def _debye_length_epi_end(config: DeviceConfig) -> float:
     from etna.core.batched.material import EPS, Q, thermal_voltage
 
     depth = config.epi_thickness_um - (config.buffer_thickness_um or 0.0)
-    if config.doping_profile == "uniform":
+    if config.donor_table is not None:
+        nd = table_sensitive_end_doping(
+            donor_table_spec(config.epi_thickness_um * 1e-4, config.donor_table)
+        )
+    elif config.doping_profile == "uniform":
         nd = DEFAULT_N_D if config.N_D is None else config.N_D
     else:
         L = config.L_transition_um * 1e-4
@@ -336,6 +362,8 @@ def _engine_batch(kws):
     buffer = None
     if kws[0].get("buffer_thickness_cm") is not None:
         buffer = (epi_end, col("buffer_thickness_cm"), col("buffer_end_doping"))
+    # tabulated epi profile: one table for the whole group (_engine_groups)
+    table = donor_table_spec(kws[0]["epi_thickness_cm"], kws[0].get("donor_table"))
     nd = np.array([DEFAULT_N_D if k["N_D"] is None else k["N_D"] for k in kws], float)
     uniform = np.array([k["doping_profile"] == "uniform" for k in kws])
     # A uniform profile is a flat graded one; L_transition only has to be > 0.
@@ -349,9 +377,13 @@ def _engine_batch(kws):
         col("T"),
         nplus=nplus,
         buffer=buffer,
+        donor_table=table,
     )
     nd_mob = np.array(
-        [mobility_doping(k["N_D"], k["doping_profile"], k["N_D_bulk"]) for k in kws]
+        [
+            mobility_doping(k["N_D"], k["doping_profile"], k["N_D_bulk"], table)
+            for k in kws
+        ]
     )
     return pb, x, nd_mob
 
@@ -370,6 +402,7 @@ def _engine_groups(configs, bias_array, facade):
             kw["substrate_thickness_cm"],
             kw.get("nplus_thickness_cm"),
             kw.get("buffer_thickness_cm") is not None,  # buffer values may differ
+            kw.get("donor_table"),  # a tabulated profile is shared by its group
         )
         groups.setdefault(key, []).append(i)
     return groups
@@ -1436,7 +1469,9 @@ def compensation_fluence(config: DeviceConfig, proton_energy_MeV: float) -> floa
     """
     from etna.core.radiation_damage import RadiationDamageParams, get_hardness_factor
 
-    if config.doping_profile == "uniform":
+    if config.donor_table is not None:
+        nd_min = min(n for _, n in config.donor_table)
+    elif config.doping_profile == "uniform":
         nd_min = DEFAULT_N_D if config.N_D is None else config.N_D
     else:
         nd_min = min(config.N_D_junction, config.N_D_bulk)

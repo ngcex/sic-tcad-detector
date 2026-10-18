@@ -20,6 +20,7 @@ from etna.core.device import (
     donor_profile,
     edge_mobility,
     local_mobility,
+    tabulated_donor_profile,
 )
 from etna.core.incomplete_ionization import ionized_acceptor_concentration
 from etna.core.sic_material import SiC4H_Parameters
@@ -75,6 +76,7 @@ def graded_doping(
     L_transition,
     nplus=None,
     buffer=None,
+    donor_table=None,
 ):
     """Donors and Acceptors, each (B, N), for ETNA's exponentially graded epi profile.
 
@@ -86,6 +88,11 @@ def graded_doping(
     ``buffer`` = (x_epi_end, Lb, N_end) (Lb, N_end scalar or (B,)) adds the graded
     n-/n+ transition of ``etna.core.device._buffer_term`` (``donor_profile`` is the
     shared numpy twin of the devsim expression); None = no buffer.
+    ``donor_table`` (a ``etna.core.device.donor_table_spec``, shared by the batch)
+    replaces the epi profile by the tabulated one (``tabulated_donor_profile``, the
+    very function whose values the devsim builders set on the mesh); N_D_junction /
+    N_D_bulk / L_transition / buffer are then ignored for the profile (buffer must be
+    None).
     """
     x = np.asarray(x, dtype=float)[None, :]
     if np.any(np.asarray(L_transition) <= 0):
@@ -93,7 +100,11 @@ def graded_doping(
     col = lambda a: np.atleast_1d(np.asarray(a, dtype=float))[:, None]
     NA, NJ, NB, Lt = col(N_A_ion), col(N_D_junction), col(N_D_bulk), col(L_transition)
     p_side = (junction_pos - x >= 0).astype(float)
-    if buffer is None:
+    if donor_table is not None:
+        if buffer is not None:
+            raise ValueError("donor_table and buffer are exclusive")
+        donors = tabulated_donor_profile(x, junction_pos, donor_table)
+    elif buffer is None:
         donors = donor_profile(x, junction_pos, NJ, NB, Lt)
     else:
         x_end, Lb, N_end = buffer

@@ -95,6 +95,10 @@ def _run_sweep(config: DeviceConfig) -> SimResult:
         ),
         buffer_end_doping=config.buffer_end_doping,
     )
+    # tabulated epi profile (opt-in): the table replaces the graded doping of every
+    # config; the sweep's N_D_bulk column is then only the config's informative value
+    if config.donor_table is not None:
+        nplus.update(donor_table=config.donor_table)
     for hw in _SWEEP_HALF_WIDTHS:
         for vb in _SWEEP_BIASES:
             # the sweep builds graded, N_A 1e19, 300 K devices: the gate sees the config's
@@ -136,6 +140,11 @@ def _run_sweep(config: DeviceConfig) -> SimResult:
         )
         if config.epi_thickness_um != _TRANSITION_FIT_EPI_UM:
             summary += f" [{TRANSITION_EXTRAPOLATION_NOTE}]"
+    if config.donor_table is not None:
+        summary += (
+            f" (tabulated epi profile, {len(config.donor_table)} knots: the table defines "
+            "the doping of every row; the N_D_bulk column is the config's informative value)"
+        )
     if best["is_valid"]:
         summary += (
             f"; best: half-width {best['half_width_um']:g} um at "

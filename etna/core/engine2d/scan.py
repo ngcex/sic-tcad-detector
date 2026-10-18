@@ -104,6 +104,14 @@ ENGINE2D_BUFFER_BOX = {
     "buffer_thickness_cm": (0.5e-4, 2.5e-4),
     "buffer_end_doping": (1e16, 1e19),
 }
+# Optional TABULATED epi profile (create_sic_2d_device donor_table; the engine reads the
+# doping rows devsim evaluated, so only the eligibility box is needed). The box bounds the
+# table's N_D range (its minimum and maximum); the parametric N_D_junction / N_D_bulk /
+# L_transition boxes do not apply (the builder ignores those keywords with a table) and a
+# graded transition is excluded by the builder. Parity vs devsim: lab/tabulated_profile/
+# bench/table_parity2d.py (dark psi, lateral CCE; the 19-knot measured-C-V table and the
+# table scaled by -0.3 / +0.3 dex, hw 25, 20-100 V), tests/test_measured_cv_tabulated.py.
+ENGINE2D_TABLE_BOX = {"donor_table_N_D": (5e12, 5e16)}
 # Relative tolerance of the box bounds: a value given in um and converted to cm (e.g.
 # L_transition_um=3.0 -> 3.0 * 1e-4 = 3.0000000000000003e-4) must not fall outside a
 # bound it equals.
@@ -143,12 +151,44 @@ def _nplus_reason(device_kwargs, allow_generation=True):
     return None, True
 
 
-def _buffer_reason(device_kwargs, epi_thickness_cm):
+def _table_reason(device_kwargs, epi_thickness_cm):
+    """(reason or None, has_table) for a ``donor_table`` keyword in ``device_kwargs``
+    (popped): the table must be valid for this epi (``donor_table_spec``) and its N_D
+    range inside ENGINE2D_TABLE_BOX."""
+    from etna.core.device import donor_table_spec
+
+    table = device_kwargs.pop("donor_table", None)
+    if table is None:
+        return None, False
+    try:
+        spec = donor_table_spec(epi_thickness_cm, table)
+    except ValueError as e:
+        return f"donor_table: {e}", True
+    lo, hi = ENGINE2D_TABLE_BOX["donor_table_N_D"]
+    n_min, n_max = 10.0 ** np.min(spec[1]), 10.0 ** np.max(spec[1])
+    if not (_in_box(n_min, lo, hi) and _in_box(n_max, lo, hi)):
+        return (
+            f"donor_table N_D range [{n_min:g}, {n_max:g}] outside [{lo:g}, {hi:g}] "
+            "(table parity box)"
+        ), True
+    return None, True
+
+
+def _buffer_reason(device_kwargs, epi_thickness_cm, has_table=False):
     """Reason (or None) for the graded n-/n+ transition keywords in ``device_kwargs``
     (popped). An absent keyword means create_sic_2d_device's default (the default
-    stack's transition); both explicitly None = abrupt epi end (no transition)."""
+    stack's transition); both explicitly None = abrupt epi end (no transition). With a
+    tabulated profile the builder drops the default transition (and refuses an explicit
+    one), so the default values count as none."""
     t = device_kwargs.pop("buffer_thickness_cm", _BUFFER_THICKNESS_DEFAULT_CM)
     nd = device_kwargs.pop("buffer_end_doping", _BUFFER_END_DOPING_DEFAULT)
+    if has_table and (
+        (t is None and nd is None)
+        or (t == _BUFFER_THICKNESS_DEFAULT_CM and nd == _BUFFER_END_DOPING_DEFAULT)
+    ):
+        return None
+    if has_table:
+        return "donor_table and a graded n-/n+ transition are exclusive"
     if t is None and nd is None:
         return None
     if t is None or nd is None:
@@ -216,7 +256,10 @@ def engine2d_unsupported_reason(
     np_reason, has_nplus = _nplus_reason(device_kwargs)
     if np_reason is not None:
         return np_reason
-    buf_reason = _buffer_reason(device_kwargs, epi_thickness_cm)
+    tab_reason, has_table = _table_reason(device_kwargs, epi_thickness_cm)
+    if tab_reason is not None:
+        return tab_reason
+    buf_reason = _buffer_reason(device_kwargs, epi_thickness_cm, has_table)
     if buf_reason is not None:
         return buf_reason
     boxed = dict(_BOXED_DEFAULTS)
@@ -241,13 +284,18 @@ def engine2d_unsupported_reason(
         n_lateral_points=n_lateral_points,
         **boxed,
     )
+    if (
+        has_table
+    ):  # the table defines the profile: its box replaces these (ENGINE2D_TABLE_BOX)
+        for key in ("N_D_bulk", "N_D_junction", "L_transition"):
+            vals.pop(key)
     for name, value in vals.items():
         lo, hi = (
             ENGINE2D_NPLUS_BOX if has_nplus and name == "V_bias" else ENGINE2D_BOX
         )[name]
         if not _in_box(value, lo, hi):
             return f"{name}={value} outside [{lo:g}, {hi:g}]"
-    if nd >= boxed["N_D_junction"]:
+    if not has_table and nd >= boxed["N_D_junction"]:
         return "N_D_bulk >= N_D_junction"
     return None
 
@@ -338,7 +386,9 @@ def lateral_cce_scan_2d(
         for m, xp in enumerate(x_positions):
             G = _generation(dev, xp, gen_rate, stripe_sigma_cm)
             I = dev.illuminated_current(G)
-            I_gen = float(np.sum(vol * G))  # box rule over injected nodes, as compute_cce_2d
+            I_gen = float(
+                np.sum(vol * G)
+            )  # box rule over injected nodes, as compute_cce_2d
             cce[m] = float(np.clip(abs(I) / I_gen, 0.0, 1.0)) if I_gen > 0 else 0.0
     except EngineNotConverged as e:
         raise Engine2DFallback(str(e)) from e
@@ -389,11 +439,16 @@ def engine2d_dark_unsupported_reason(half_width_um, V_cathode, **device_kwargs):
     np_reason, has_nplus = _nplus_reason(device_kwargs, allow_generation=False)
     if np_reason is not None:
         return np_reason
-    buf_reason = _buffer_reason(
-        device_kwargs, device_kwargs.get("epi_thickness_cm", 10e-4)
-    )
+    epi = device_kwargs.get("epi_thickness_cm", 10e-4)
+    tab_reason, has_table = _table_reason(device_kwargs, epi)
+    if tab_reason is not None:
+        return tab_reason
+    buf_reason = _buffer_reason(device_kwargs, epi, has_table)
     if buf_reason is not None:
         return buf_reason
+    if has_table:  # the table's box replaces the parametric doping boxes
+        for key in ("N_D_bulk", "N_D_junction", "L_transition"):
+            device_kwargs.pop(key, None)
     for key, value in device_kwargs.items():
         if key in _DARK_FIXED:
             ref = _DARK_FIXED[key]

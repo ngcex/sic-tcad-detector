@@ -96,9 +96,23 @@ def analytic_vfd_from_info(params, V_bi):
     -10..-60 V creep of the measured C-V.
     """
     from etna.core.analytical import full_depletion_voltage_profile
-    from etna.core.device import donor_profile
+    from etna.core.device import (
+        donor_profile,
+        donor_table_spec,
+        table_sensitive_end_cm,
+        tabulated_donor_profile,
+    )
 
     t = params["epi_thickness_cm"]
+    if params.get("donor_table") is not None:
+        # tabulated profile: moment integral to the table's sensitive-epi end (one decade
+        # above its minimum, etna.core.device.table_sensitive_end_cm; a definition, as
+        # the transition-start rule below)
+        spec = donor_table_spec(t, params["donor_table"])
+        y = np.linspace(0.0, table_sensitive_end_cm(spec), 20001)
+        return full_depletion_voltage_profile(
+            y, tabulated_donor_profile(y, 0.0, spec), V_bi
+        )
     if params.get("buffer_thickness_cm") is None:
         return full_depletion_voltage_graded(
             epi_thickness=t,
@@ -370,6 +384,7 @@ def microdosimetric_sweep(
     L_transition=None,
     buffer_thickness_cm=DEFAULT_STACK["buffer_thickness_cm"],
     buffer_end_doping=DEFAULT_STACK["buffer_end_doping"],
+    donor_table=None,
 ):
     """Sweep SV geometry and doping parameters with a validity gate and operating-point ranking.
 
@@ -430,6 +445,13 @@ def microdosimetric_sweep(
         (same Lb before the epi end, same end doping) to every epi thickness of the
         grid, so the rows at other thicknesses (e.g. the default 5 and 20 um) are a
         model extrapolation, not a calibrated device.
+    donor_table : tuple or None
+        Tabulated epi profile ((depth_um, N_D), ...; create_sic_2d_device keyword) for
+        every config: it REPLACES the graded doping, so the ``N_D_bulks`` grid no longer
+        changes the device (the column is kept as the label of the row) and the V_fd gate
+        integrates the table to its sensitive-epi end (``analytic_vfd_from_info``). The
+        table must cover every epi thickness of the grid. "auto" serves it inside
+        ENGINE2D_TABLE_BOX.
 
     Returns
     -------
@@ -482,6 +504,8 @@ def microdosimetric_sweep(
     # "abrupt epi end" (its default is the stack's graded transition)
     dkw["buffer_thickness_cm"] = buffer_thickness_cm
     dkw["buffer_end_doping"] = buffer_end_doping
+    if donor_table is not None:
+        dkw["donor_table"] = tuple((float(d), float(n)) for d, n in donor_table)
     tasks = [
         (i, total, hw, epi, nd, vb, n_lateral_points, solver) + ((dkw,) if dkw else ())
         for i, (hw, epi, nd, vb) in enumerate(grid)

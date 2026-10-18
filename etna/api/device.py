@@ -15,13 +15,22 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Tuple
 
-from etna.core.devsim_lock import quiet_devsim, serialized  # noqa: F401  (quiet_devsim re-exported)
+from etna.core.devsim_lock import (
+    quiet_devsim,
+    serialized,
+)  # noqa: F401  (quiet_devsim re-exported)
 from etna.core.device2d import create_sic_2d_device
 from etna.core.drift_diffusion import create_dd_device, setup_sic_drift_diffusion
 from etna.core.poisson import setup_poisson, solve_equilibrium
-from etna.core.device import DEFAULT_STACK, LEGACY_STACK, NPLUS_CALIBRATION
+from etna.core.device import (
+    DEFAULT_STACK,
+    LEGACY_STACK,
+    MEASURED_CV_TABULATED_STACK,
+    NPLUS_CALIBRATION,
+    donor_table_spec,
+)
 
 
 def _um(cm):
@@ -68,6 +77,14 @@ class DeviceConfig:
     # transition needs buffer_thickness_um=None (or a thinner transition).
     buffer_thickness_um: Optional[float] = _um(DEFAULT_STACK["buffer_thickness_cm"])
     buffer_end_doping: Optional[float] = DEFAULT_STACK["buffer_end_doping"]
+    # OPT-IN TABULATED epi donor profile: ((depth_um below the junction, N_D cm^-3), ...)
+    # knots, log-linear between them (etna.core.device.donor_table_spec); None (default) =
+    # the parametric profile above. When set (doping_profile must be "graded") the table
+    # IS the epi profile: N_D_junction / N_D_bulk / L_transition are informative only and
+    # the graded n-/n+ transition must be off (the stack's default transition is dropped
+    # here; an explicit one is an error). Preset: measured_cv_tabulated_config() (the
+    # 19-knot inversion of the digitised measured C-V, etna.core.device.MEASURED_CV_TABLE).
+    donor_table: Optional[Tuple[Tuple[float, float], ...]] = None
 
     def __post_init__(self) -> None:
         """Reject physically meaningless values early, with a clear message.
@@ -99,13 +116,40 @@ class DeviceConfig:
         if self.nplus_thickness_um is not None:
             _positive("nplus_thickness_um", self.nplus_thickness_um)
             _positive("N_D_nplus", self.N_D_nplus)
-        if self.doping_profile == "uniform" and (
+        buffer_at_default = (
             self.buffer_thickness_um == _um(DEFAULT_STACK["buffer_thickness_cm"])
             and self.buffer_end_doping == DEFAULT_STACK["buffer_end_doping"]
-        ):
+        )
+        if self.doping_profile == "uniform" and buffer_at_default:
             # the measured-C-V transition was fitted with the graded epi profile: a
             # uniform-doping device keeps the abrupt epi end unless set explicitly
             self.buffer_thickness_um = self.buffer_end_doping = None
+        if self.donor_table is not None:
+            # tabulated epi profile: normalise to a tuple of (depth_um, N_D) pairs,
+            # validate it against the epi, drop the default transition, refuse an explicit one
+            try:
+                self.donor_table = tuple(
+                    (float(d), float(n)) for d, n in self.donor_table
+                )
+                if self.epi_thickness_um is not None and self.epi_thickness_um > 0:
+                    donor_table_spec(self.epi_thickness_um * 1e-4, self.donor_table)
+            except (TypeError, ValueError) as e:
+                problems.append(f"donor_table: {e}")
+            if self.doping_profile != "graded":
+                problems.append(
+                    f"donor_table requires doping_profile='graded' (got "
+                    f"{self.doping_profile!r})"
+                )
+            if buffer_at_default:
+                self.buffer_thickness_um = self.buffer_end_doping = None
+            elif (
+                self.buffer_thickness_um is not None
+                or self.buffer_end_doping is not None
+            ):
+                problems.append(
+                    "donor_table and a graded n-/n+ transition (buffer_thickness_um / "
+                    "buffer_end_doping) are exclusive: the table describes the epi end"
+                )
         if (self.buffer_thickness_um is None) != (self.buffer_end_doping is None):
             problems.append(
                 "buffer_thickness_um and buffer_end_doping must be given together "
@@ -130,6 +174,8 @@ class DeviceConfig:
                 donors = {"N_D": self.N_D}
             else:
                 donors = {"N_D_junction": self.N_D_junction, "N_D_bulk": self.N_D_bulk}
+            if self.donor_table is not None:
+                donors["max N_D of donor_table"] = max(n for _, n in self.donor_table)
             for name, value in donors.items():
                 if not (value < self.N_A):
                     problems.append(
@@ -177,6 +223,9 @@ def device_kwargs(config: DeviceConfig) -> dict:
         )
     else:
         kw.update(buffer_thickness_cm=None, buffer_end_doping=None)
+    # the tabulated profile is emitted only when set (the builders' default is no table)
+    if config.donor_table is not None:
+        kw.update(donor_table=config.donor_table)
     return kw
 
 
@@ -258,6 +307,44 @@ def nplus_calibrated_config(**overrides) -> DeviceConfig:
 def has_buffer(config) -> bool:
     """True when ``config`` carries the graded n-/n+ transition (buffer fields set)."""
     return getattr(config, "buffer_thickness_um", None) is not None
+
+
+# OPT-IN TABULATED measured-C-V preset (NOT the default; etna.core.device.
+# MEASURED_CV_TABULATED_STACK): the 19-knot log-linear donor profile from the
+# model-independent inversion of the digitised Photons Fig. 4b C-V (chi2 32 / 211, knee rms
+# 0.014 um, plateau rms 0.007 um vs the parametric default's knee rms 0.24 um), on the
+# default geometry (p+ 0.3 um, n+ 1 um 1e19), no parametric transition (the table carries
+# the n-/n+ rise), N_t refitted to the 18 pA bound. It is an inversion of ONE C-V curve,
+# not a SIMS profile (provenance, robustness and limits in etna.core.device).
+MEASURED_CV_TABULATED_PRESET = {
+    "substrate_thickness_um": _um(
+        MEASURED_CV_TABULATED_STACK["substrate_thickness_cm"]
+    ),
+    "nplus_thickness_um": _um(MEASURED_CV_TABULATED_STACK["nplus_thickness_cm"]),
+    "N_D_nplus": MEASURED_CV_TABULATED_STACK["N_D_nplus"],
+    "doping_profile": "graded",
+    "donor_table": MEASURED_CV_TABULATED_STACK["donor_table"],
+    # informative (the table defines the profile): junction value and minimum of the table
+    "N_D_junction": MEASURED_CV_TABULATED_STACK["N_D_junction"],
+    "N_D_bulk": MEASURED_CV_TABULATED_STACK["N_D_bulk"],
+    "L_transition_um": _um(MEASURED_CV_TABULATED_STACK["L_transition"]),
+    "buffer_thickness_um": None,
+    "buffer_end_doping": None,
+    "N_t": MEASURED_CV_TABULATED_STACK["N_t"],
+    "E_t": MEASURED_CV_TABULATED_STACK["E_t"],
+}
+
+
+def measured_cv_tabulated_config(**overrides) -> DeviceConfig:
+    """DeviceConfig of the OPT-IN tabulated measured-C-V profile (19 knots, the inversion
+    of the digitised Fig. 4b curve; MEASURED_CV_TABULATED_PRESET), plus ``overrides``.
+    """
+    return DeviceConfig(**{**MEASURED_CV_TABULATED_PRESET, **overrides})
+
+
+def has_table(config) -> bool:
+    """True when ``config`` carries a tabulated epi donor profile (``donor_table``)."""
+    return getattr(config, "donor_table", None) is not None
 
 
 # MICRODOSIMETER preset (Petringa et al. 2025, Physica Medica 140, 105675, pp.2-3): 5x5 mm2
