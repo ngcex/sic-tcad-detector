@@ -88,7 +88,7 @@ def test_v3_cce_center_100um_preserved():
 
 
 @pytest.mark.slow
-@pytest.mark.exhaustive  # laterally uniform: same value as the 100 um test (0.95394391)
+@pytest.mark.exhaustive  # laterally uniform: same value as the 100 um test (0.95452362)
 def test_v3_cce_center_300um_preserved():
     """Calibrated 2D defaults must reproduce v3.0 CCE at the 300 um SV center."""
     from etna.core.devsim_reset import reset_devsim_fully

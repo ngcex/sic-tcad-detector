@@ -147,14 +147,16 @@ def test_contact_current_sharing_conserves_and_restores(guard_device):
 
 
 def test_zero_on_contacts_removes_the_never_injected_generation(guard_device):
-    """Generation on contact nodes is counted by the box-rule I_gen but never injected
-    (contact equation = Dirichlet). zero_on_contacts=True drops exactly that share:
-    the collected current is unchanged, so CCE scales by 1 / (1 - share)."""
+    """Generation on contact nodes is never injected (contact equation = Dirichlet).
+    zero_on_contacts=True (default since 2026-10-18) drops exactly that share from the
+    array, and the CCE normalisation uses the injected generation in both cases, so the
+    fractions no longer depend on the flag (before 2026-10-18 the raw array scaled the
+    CCE by 1 - share: the mesh-dependent deficit)."""
     info, _ = guard_device
     d, r = info["device_name"], info["region_name"]
     x0 = info["sv_half_width_cm"]
-    G0 = alpha_stripe_generation(info, x0, stripe_sigma_cm=1e-4)
-    G1 = alpha_stripe_generation(info, x0, stripe_sigma_cm=1e-4, zero_on_contacts=True)
+    G0 = alpha_stripe_generation(info, x0, stripe_sigma_cm=1e-4, zero_on_contacts=False)
+    G1 = alpha_stripe_generation(info, x0, stripe_sigma_cm=1e-4)
     contact_nodes = set()
     for c in info["contacts"]:
         contact_nodes |= _contact_node_indices(d, r, c)
@@ -173,7 +175,7 @@ def test_zero_on_contacts_removes_the_never_injected_generation(guard_device):
         ns = guard_ring_node_sets(info)
         f0, _ = contact_current_sharing(info, G0, node_sets=ns)
         f1, _ = contact_current_sharing(info, G1, node_sets=ns)
-        assert f1["cathode"] == pytest.approx(f0["cathode"] / (1.0 - share), rel=1e-9)
+        assert f1["cathode"] == pytest.approx(f0["cathode"], rel=1e-9)
     finally:
         add_generation_to_dd(info, G0)
         _robust_dc_solve()

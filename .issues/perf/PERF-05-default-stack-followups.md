@@ -122,3 +122,17 @@ Parity re-run on the new default (lab/buffer_profile/bench, no-buffer cases now 
 2D 9 cases worst dpsi 1.5e-13 V (20 um epi, 100 V; 7.1e-14 before), dCCE 1.5e-14,
 engine 0.1-0.3 s vs devsim 4.5-27.5 s per case. v3 cce_center re-pinned 0.95377414 ->
 0.95394391 (+0.018 %, record in tests/baselines/v3_frozen.json).
+## 2D CCE contact-node normalisation (2026-10-18)
+
+compute_cce_2d divided by the box-rule integral of G over ALL nodes, but contact nodes are
+Dirichlet (never injected). Now: `injected_generation` (contact nodes zeroed) is the
+normaliser of compute_cce_2d and contact_current_sharing; alpha_stripe_generation /
+cce_lateral_scan default zero_on_contacts=True; engine2d `_generation` zeroes the anode and
+cathode rows. Shifts (lab/default_flip/bench/cce2d_contacts.py, devsim == engine):
+default stack alpha stripe (hw 25, 20 / 50 V) 0.9997234 / 0.9998827: unchanged (contact
+share 0: the stripe is confined to the epi); default + nplus_generation 50 V 0.962262 ->
+0.962708 (share 4.64e-4); legacy planar hw 25 50 V 0.998545 -> 0.999804, hw 50 20 V 0.996396
+-> 0.997653 (share 1.26e-3); uniform generation through the n+ (v3 recipe) 0.954383 ->
+0.954963 at 50 V (share 6.07e-4); v3 cce_center 0.95394391 -> 0.95452362; test_nplus 2D
+abrupt-n+ nplus_generation 0.9621205 -> 0.9625666. Engine vs devsim after the change: max
+|dCCE| 7.9e-15 over these cases (<= 1e-11 gate).

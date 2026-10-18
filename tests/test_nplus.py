@@ -121,7 +121,9 @@ def test_device_kwargs_carry_nplus_explicitly():
 @pytest.mark.slow
 # 0.9995626 / 0.9619415 before the hole mobility at the epi doping since 2026-10-17 (was N_A, audit-v7 A-03);
 # 0.9997212 / 0.9621150 before both mobilities at N_D_bulk (was DEFAULT_N_D 1.07e15), 2026-10-17
-@pytest.mark.parametrize("gen_in_nplus, expected", [(False, 0.9997262), (True, 0.9621205)])
+# 0.9621205 (True) before 2026-10-18: I_gen counted the never-injected cathode-row
+# generation (share 4.64e-4 with nplus_generation); now the injected generation only.
+@pytest.mark.parametrize("gen_in_nplus, expected", [(False, 0.9997262), (True, 0.9625666)])
 def test_2d_cce_with_nplus(gen_in_nplus, expected):
     """2D devsim (hw 25, -20 V, n+ 1 um): balanced raw CCE <= 1, equal to the 1D value
     (0.999562, epi-only G), laterally flat; the direct contact current gives 1.0136 here."""
@@ -130,6 +132,7 @@ def test_2d_cce_with_nplus(gen_in_nplus, expected):
         Q,
         cce_lateral_scan,
         create_2d_dd_device,
+        injected_generation,
         integrate_nodes_box_2d,
     )
     from etna.core.drift_diffusion import extract_steady_state_current
@@ -149,7 +152,10 @@ def test_2d_cce_with_nplus(gen_in_nplus, expected):
         G = confine_generation_to_epi(info, y, G)
         add_generation_to_dd(info, G)
         devsim.solve(type="dc", absolute_error=1e10, relative_error=DC_REL_ERROR, maximum_iterations=40)
-        raw = abs(extract_steady_state_current(info, "cathode")) / (Q * integrate_nodes_box_2d(info, G))
+        # normalised by the injected generation (contact nodes are Dirichlet)
+        raw = abs(extract_steady_state_current(info, "cathode")) / (
+            Q * integrate_nodes_box_2d(info, injected_generation(info, G))
+        )
         add_generation_to_dd(info, np.zeros_like(G))
         devsim.solve(type="dc", absolute_error=1e10, relative_error=DC_REL_ERROR, maximum_iterations=40)
         scan = cce_lateral_scan(info, n_points=3)

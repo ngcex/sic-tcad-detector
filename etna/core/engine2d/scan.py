@@ -265,6 +265,11 @@ def _generation(dev, x_pos, gen_rate, sigma):
         "nplus_generation", False
     ):
         row[g.ys > info["epi_end"] + 1e-12] = 0.0
+    # contact rows (anode y = 0, cathode y = max) carry no injected generation
+    # (Dirichlet rows), as alpha_stripe_generation(zero_on_contacts=True) and the
+    # injected-generation normalisation of compute_cce_2d (since 2026-10-18)
+    row[0] = 0.0
+    row[-1] = 0.0
     lat = np.exp(-0.5 * ((g.xs - x_pos) / sigma) ** 2)
     return (row[:, None] * lat[None, :]).ravel()
 
@@ -332,7 +337,7 @@ def lateral_cce_scan_2d(
         for m, xp in enumerate(x_positions):
             G = _generation(dev, xp, gen_rate, stripe_sigma_cm)
             I = dev.illuminated_current(G)
-            I_gen = float(np.sum(vol * G))  # box rule, as compute_cce_2d
+            I_gen = float(np.sum(vol * G))  # box rule over injected nodes, as compute_cce_2d
             cce[m] = float(np.clip(abs(I) / I_gen, 0.0, 1.0)) if I_gen > 0 else 0.0
     except EngineNotConverged as e:
         raise Engine2DFallback(str(e)) from e
