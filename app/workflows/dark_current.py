@@ -155,7 +155,7 @@ def render() -> None:
             else:
                 st.session_state["dark_current_result"] = etna.SimResult(
                     config=cfg,
-                    sim_type="dark_current",
+                    sim_type="dark_current_vs_T",
                     x=np.array(T_ok),
                     y=np.array(I_total),
                     metadata={

@@ -4,7 +4,7 @@ source: raw-C F6
 title: C-V and Mott-Schottky figures and the 1/C^2 CSV column carry per-area units (F/cm^2, cm^4/F^2) while run_cv returns absolute Farads
 severity: low
 category: bug
-status: open
+status: fixed
 location:
   - app/components/results.py:31 (`yaxis_title="Capacitance (F/cm²)"`)
   - app/components/results.py:43 (`yaxis_title="1/C² (cm⁴/F²)"`)
@@ -63,3 +63,8 @@ extraction workflow this tab exists for.
 ## Effort
 
 S
+
+## Status 2026-10-18 (final-c): fixed (00ce048 + f88e0bb)
+
+- 00ce048: figure axes "Capacitance (F)" and "1/C² (F⁻²)". f88e0bb: CSV column renamed to `one_over_C2_per_F2`.
+- Evidence: `uv run pytest -q tests/test_app_csv_export.py` -> 22 passed (test_cv_csv_columns_and_header with the new header, test_cv_figure_axes_are_absolute_farads).

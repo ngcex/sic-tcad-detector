@@ -37,3 +37,26 @@ class TestBuildDevice:
         info_b = build_device(DeviceConfig())
 
         assert info_a["device_name"] != info_b["device_name"]
+
+
+def test_build_device_forwards_explicit_device_name(monkeypatch):
+    """device_name= reaches the 1D and 2D core builders (audit C-13); no devsim."""
+    import etna.api.device as api_device
+
+    seen = []
+
+    def fake_builder(device_name, **kwargs):
+        seen.append(device_name)
+        return {"device_name": device_name}
+
+    monkeypatch.setattr(api_device, "create_dd_device", fake_builder)
+    monkeypatch.setattr(api_device, "create_sic_2d_device", fake_builder)
+    for fn in ("setup_poisson", "solve_equilibrium", "setup_sic_drift_diffusion"):
+        monkeypatch.setattr(api_device, fn, lambda info: None)
+
+    assert build_device(DeviceConfig(), device_name="my_1d")["device_name"] == "my_1d"
+    info_2d = build_device(DeviceConfig(half_width_um=25.0), device_name="my_2d")
+    assert info_2d["device_name"] == "my_2d"
+    assert seen == ["my_1d", "my_2d"]
+    # without a name, a unique generated one is used
+    assert build_device(DeviceConfig())["device_name"].startswith("device1d_")

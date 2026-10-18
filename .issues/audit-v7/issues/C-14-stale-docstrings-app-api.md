@@ -4,7 +4,7 @@ source: raw-C F14
 title: Stale or incorrect docstrings and user-facing text in app and API (Phase 40 promise, "7 placeholder pages", "note above", to_csv_bytes dispatch list)
 severity: info
 category: docs
-status: open
+status: fixed
 location:
   - app/workflows/cv.py:33-37 and app/workflows/cce.py:29-33 ("... arrives in Phase 40 (geometry viewer)")
   - app/main.py:5-7 ("registers Home + all 7 workflow placeholder pages")
@@ -57,3 +57,9 @@ None required. If an AppTest asserts the warning text for the 2D config, update 
 ## Effort
 
 S
+
+## Status 2026-10-18 (final-c): fixed (00ce048 + f88e0bb)
+
+- 00ce048: the "Phase 40" page text and the "placeholder pages" main.py docstring are gone (main.py now says Home + 9 workflow pages, 10 st.Page entries); run_cv points to its Returns section.
+- f88e0bb: run_cce "note above" -> "entries under Returns below"; to_csv_bytes docstring lists every sim_type.
+- Evidence: `grep -rn "Phase 40\|workflow placeholder" app | wc -l` -> 0; `grep -c "st.Page(" app/main.py` -> 10; `grep -n "note above" etna/api/simulation.py` -> none.

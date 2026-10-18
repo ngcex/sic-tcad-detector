@@ -87,7 +87,7 @@ def test_run_uses_parametric_sweep_and_caches_result(monkeypatch):
     assert at.exception == [], f"page crashed on Run click: {at.exception}"
 
     result = at.session_state["dark_current_result"]
-    assert result.sim_type == "dark_current"
+    assert result.sim_type == "dark_current_vs_T"
     n_requested = at.session_state["dark_current_n_requested"]
     assert len(result.x) == n_requested
     assert n_requested == 6  # default n_temperatures
@@ -97,6 +97,15 @@ def test_run_uses_parametric_sweep_and_caches_result(monkeypatch):
     assert np.all(np.diff(result.x) > 0)
     assert result.x.min() >= 250.0
     assert result.x.max() <= 400.0
+    # the page aggregate is exported with a temperature column (audit C-07)
+    from app.components.results import to_csv_bytes
+
+    data_rows = [
+        ln
+        for ln in to_csv_bytes(result).decode().splitlines()
+        if not ln.startswith("#")
+    ]
+    assert data_rows[0] == "T_K,I_total_A"
 
 
 def test_partial_temperature_failure_shows_warning_not_crash(monkeypatch):

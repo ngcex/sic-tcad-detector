@@ -4,7 +4,7 @@ source: raw-C F9
 title: Unbounded numeric inputs produce silent nonsense (area=0 -> inf, sv_thickness=0 -> all-zero spectrum, negative edep, header-only CSV -> y_F=nan)
 severity: low
 category: bug
-status: open
+status: fixed
 location:
   - app/components/device_sidebar.py:97-103, 109-114, 132-134 (N_A, N_D, N_D_junction, N_D_bulk, area_cm2: no min_value)
   - app/workflows/microdosimetry.py:54-59 (sv_thickness / sv_width: no min_value)
@@ -81,3 +81,9 @@ The microdosimetry page already maps ValueError to `st.error`. DeviceConfig-leve
 ## Effort
 
 S
+
+## Status 2026-10-18 (final-c): fixed (00ce048 + ae5a5b1)
+
+- 00ce048: DeviceConfig rejects area/doping/geometry <= 0 (and NaN); the microdosimetry page inputs have min_value=0.1.
+- ae5a5b1: run_microdosimetry raises ValueError for sv dimensions <= 0 or non-finite, a header-only CSV, non-finite or negative edep, and a CSV in which no event deposits energy.
+- Evidence: `uv run pytest -q tests/test_api_microdosimetry.py` -> 7 passed (test_meaningless_inputs_raise_instead_of_silent_spectrum, 5 cases).

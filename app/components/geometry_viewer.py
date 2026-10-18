@@ -3,7 +3,8 @@
 PURE module — no Streamlit calls anywhere. Turns a etna MeshData
 (irregular node coords in cm + node_values) into a go.Figure: a 2D
 scipy-griddata heatmap when y_coords is present, or a 1D depth-profile bar
-chart when y_coords is None. Unit-testable without Streamlit and without any
+chart when y_coords is None, with the mesh contacts drawn at their depth and
+(2D) the region bounding boxes outlined. Unit-testable without Streamlit and without any
 device simulator (reads only MeshData), exactly like results.to_csv_bytes.
 
 Coordinate convention (locked, x=lateral / y=depth): mesh coordinates are in
@@ -96,15 +97,75 @@ def _build_heatmap(
     return fig
 
 
+_CONTACT_COLOR = "#D32F2F"
+_REGION_COLOR = "#1A1A1A"
+
+
+def _draw_contacts(fig: go.Figure, mesh: MeshData, is_2d: bool) -> None:
+    """One dashed line per contact at its depth (``position``, cm -> µm).
+
+    1D: a vertical line on the depth (x) axis. 2D: a horizontal line on the
+    (reversed) depth (y) axis. Shapes/annotations only, so ``fig.data`` keeps
+    exactly the one quantity trace.
+    """
+    for contact in mesh.contacts or []:
+        pos = contact.get("position")
+        if pos is None:
+            continue
+        depth_um = float(pos) * 1e4
+        name = str(contact.get("name", "contact"))
+        line = dict(color=_CONTACT_COLOR, width=2, dash="dash")
+        if is_2d:
+            fig.add_hline(
+                y=depth_um,
+                line=line,
+                annotation_text=name,
+                annotation_position="right",
+            )
+        else:
+            fig.add_vline(
+                x=depth_um,
+                line=line,
+                annotation_text=name,
+                annotation_position="top",
+            )
+
+
+def _draw_regions(fig: go.Figure, mesh: MeshData) -> None:
+    """Outline each 2D region's bounding box (cm -> µm); 1D regions are skipped."""
+    for region in mesh.regions or []:
+        bounds = [region.get(k) for k in ("x_min", "x_max", "y_min", "y_max")]
+        if any(b is None for b in bounds):  # 1D region (no y extent)
+            continue
+        x0, x1, y0, y1 = (float(b) * 1e4 for b in bounds)
+        fig.add_shape(
+            type="rect",
+            x0=x0,
+            x1=x1,
+            y0=y0,
+            y1=y1,
+            line=dict(color=_REGION_COLOR, width=1),
+            fillcolor="rgba(0,0,0,0)",
+            name=str(region.get("name", "region")),
+        )
+
+
 def build_geometry_figure(mesh: MeshData, quantity: str) -> go.Figure:
     """Build a Plotly figure for one MeshData quantity.
 
     Branches on ``mesh.y_coords is None``: 1D produces a depth-profile bar,
     2D produces a griddata heatmap. Both read the same MeshData interface.
+    ``mesh.contacts`` are drawn as dashed lines at their depth and, in 2D,
+    ``mesh.regions`` are outlined; empty lists draw nothing.
     """
     key = QUANTITIES[quantity]
     z = mesh.node_values[key]
     z_scaled, colorbar_label, colorscale, title = _scale_quantity(key, z)
     if mesh.y_coords is None:
-        return _build_bar(mesh, z_scaled, colorbar_label, title)
-    return _build_heatmap(mesh, z_scaled, colorbar_label, colorscale, title)
+        fig = _build_bar(mesh, z_scaled, colorbar_label, title)
+        _draw_contacts(fig, mesh, is_2d=False)
+        return fig
+    fig = _build_heatmap(mesh, z_scaled, colorbar_label, colorscale, title)
+    _draw_regions(fig, mesh)
+    _draw_contacts(fig, mesh, is_2d=True)
+    return fig
