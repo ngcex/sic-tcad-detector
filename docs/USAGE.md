@@ -872,24 +872,45 @@ Where decisions and evidence live:
 ## 14. Tests
 
 ```bash
-uv run pytest -n auto --dist loadfile -q          # fast default run
-uv run pytest -n auto --dist loadfile -q -m exhaustive   # the deselected deep variants
+uv run pytest -n auto -q                          # default run (the local gate)
+uv run pytest -n auto -q -m exhaustive            # the deselected deep variants
 uv run pytest -q -m "" tests/test_api_cv.py       # everything in one file
 uv run pytest -n0 -x tests/test_api_cce.py        # serial, e.g. with --pdb
-uv run pytest -n auto --dist loadfile -q --durations=20  # slowest tests
+uv run pytest -n auto -q --durations=20           # slowest tests
 ```
 
-- 89 modules and 1037 tests. `pytest.ini` deselects the `exhaustive` marker (7 redundant
-  deep variants, each implied by a kept test), so the default run collects 1030.
+- 89 modules and 1041 tests. `pytest.ini` deselects the `exhaustive` marker (7 redundant
+  deep variants, each implied by a kept test), so the default run collects 1034.
   The `slow` marker labels the devsim integration tests but does not deselect them.
-- The default run took **4.1 minutes on 10 cores** (1030 passed; the only warnings are
-  SyntaxWarnings from the third-party pydub package, printed once when its bytecode is
-  first compiled). The
-  slowest tests are devsim 2D builds: `test_device2d_convergence.py` at 300 µm,
-  single-particle CCE vs bias, the 2D lateral scan and the 2D-vs-1D C-V (use
-  `--durations=20` for the current list).
-- `--dist loadfile` keeps each module's devsim devices in one worker process (devsim
-  state is process-global). Use it with `-n`.
+- `pytest.ini` adds `--dist loadgroup --no-loadscope-reorder` (inert without `-n`), so
+  `-n auto` alone uses the tuned scheduler. Do not pass `--dist loadfile` any more (it
+  overrides the tuned one), and use `-n0` rather than `-p no:xdist` (the latter makes
+  the `--dist` options unknown).
+- **Scheduling** (`tests/_xdist_schedule.py`): each test is tagged with an
+  `xdist_group`: its whole file if it uses a module-scoped fixture, alone if it is on
+  the `SPLIT_PER_TEST` list (heavy independent tests), else its class, else its file.
+  The heaviest groups (`HEAVY`, rough CPU seconds) are dispatched first. A stale
+  `HEAVY` entry only costs balance. Add a new 30 s+ test there if it becomes the tail.
+- **devsim leak guard** (`tests/conftest.py`): `devsim.solve` solves _every_ device alive
+  in the process, so one device left behind by a test made each later devsim solve in
+  that worker ~20x slower (1D `cce_vs_bias` 10 s -> 208 s with one leaked 2D device).
+  This showed up as random 100-400 s tests depending on the order. An autouse fixture
+  now deletes devices created during a test; devices owned by module- or class-scoped
+  fixtures survive. About 45 tests still leave devices (mostly `test_poisson.py`,
+  `test_device2d.py`, `test_material.py`, `test_dark_current.py` helpers). List them
+  with `ETNA_REPORT_DEVSIM_LEAKS=/tmp/leaks.txt uv run pytest -n auto -q`.
+- **Timing** (10-core M4, 4 performance + 6 efficiency cores; the machine was shared
+  with other jobs for every number here). 2026-10-18, before: `--dist loadfile`,
+  502 s wall, 2173 s user CPU. After: 248 s wall, 1682 s user CPU (load average 4-11).
+  The floor is the slowest single tests: run serially they take 87 s
+  (`test_device2d_convergence.py` -50 V at 300 µm), 69 s (`test_devsim_quiet` direct
+  core calls), 62 s (single-particle CCE vs bias), 46 s and 39 s. Inside a 10-worker
+  run they take ~2x longer, on an efficiency core or with contended memory, so
+  ~3-4 minutes is the practical wall time.
+- numba kernels use `cache=True` and cache to `etna/**/__pycache__`. A cold cache costs
+  only ~1-2 s per worker (`test_batched_engine.py`: 7.9 s cold vs 5.8 s warm), so
+  there is no warm-up fixture.
+- Threads: `tests/conftest.py` pins numba/BLAS to one thread per xdist worker (PERF-02).
 - Families: `test_api_*` (facades), `test_app_*` (Streamlit `AppTest`, mocked and
   un-mocked smoke tests per page), engine parity (`test_batched_engine.py`,
   `test_api_engine_switch.py`, `test_engine2d*.py`, `test_nplus_engine*.py`,
@@ -898,8 +919,13 @@ uv run pytest -n auto --dist loadfile -q --durations=20  # slowest tests
   `test_measured_cv_preset.py`, `test_measured_cv_tabulated.py`,
   `test_microdosimeter_preset.py`) and the core physics modules.
 - CI (`.github/workflows/ci.yml`) runs the lock check, ruff (`ruff check .` with
-  `ruff.toml`: pyflakes F, E9, W6 over etna/, app/, tests/, scripts/), notebook hygiene, the generator check and the fast run on pushes and
-  PRs. A nightly job runs `-m exhaustive` and a `pip-audit` of the locked set.
+  `ruff.toml`: pyflakes F, E9, W6 over etna/, app/, tests/, scripts/), notebook hygiene, the generator check and the default run with
+  `-n 4`. It runs only on pushes to `main`, pull requests and manual dispatch, not on
+  every branch push, because the local run is the gate. The numba cache is kept in
+  `actions/cache`, keyed on the exact hash of `etna/**/*.py` + `uv.lock`, with source
+  mtimes pinned so numba accepts it. The test timeout is 45 min and has not been
+  re-measured since the leak fix (it was 37-52 min before). A nightly job runs
+  `-m exhaustive` and a `pip-audit` of the locked set.
 
 ---
 
