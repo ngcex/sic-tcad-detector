@@ -1051,6 +1051,9 @@ def dark_current_post_anneal(
 ) -> dict:
     """Compute dark current for an irradiated + annealed device.
 
+    Public study API (no internal caller): the dark-current counterpart of
+    charge_collection.cce_post_anneal.
+
     Composes annealing recovery (Plan 17-01) with the TAT/SRV dark current
     model.  Uses the same "fresh device per point" staged creation pattern
     as dark_current_vs_fluence but with compute_annealed_params.

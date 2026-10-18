@@ -33,9 +33,11 @@ class SiC4H_Parameters:
     # --- Effective masses (density of states) ---
     m_e_dos: float = 0.77  # m0, electron DOS effective mass (Ioffe NSM)
     m_h_dos: float = 1.0  # m0, hole DOS effective mass (Ioffe NSM, approx)
-    M_c: int = 3  # equivalent conduction band minima (4H-SiC)
+    M_c: int = 3  # equivalent conduction band minima (4H-SiC); informational: already
+    # folded into m_e_dos (see compute_ni), not read by any solver
 
-    # --- Effective density of states at 300K ---
+    # --- Effective density of states at 300K (literature values; the solvers use
+    # compute_ni(T); tests/test_material.py pins compute_ni(300) to these within 1 %) ---
     NC_300: float = 1.69e19  # cm^-3, computed: 2*Mc*(2pi*m_e*kT/h^2)^1.5
     NV_300: float = 2.49e19  # cm^-3, computed: 2*(2pi*m_h*kT/h^2)^1.5
 
@@ -94,13 +96,15 @@ class SiC4H_Parameters:
     C_p: float = 2.0e-31  # cm^6/s, hole Auger (Ioffe NSM)
 
     # --- Radiative recombination ---
-    B: float = 1.5e-12  # cm^3/s, radiative coefficient (estimation)
+    B: float = 1.5e-12  # cm^3/s, radiative coefficient (estimation); informational:
+    # radiative recombination is negligible in 4H-SiC and not modelled
 
     # --- Al acceptor incomplete ionization ---
     E_A: float = 0.220  # eV, Al acceptor ionization energy (TU Wien)
     g_A: int = 4  # degeneracy factor for Al in SiC
 
-    # --- N donor ionization energies ---
+    # --- N donor ionization energies (informational: donors are taken fully ionized,
+    # the incomplete-ionization model covers the Al acceptor only) ---
     E_D_hex: float = 0.050  # eV, nitrogen on hexagonal site (TU Wien)
     E_D_cub: float = 0.092  # eV, nitrogen on cubic site (TU Wien)
 
@@ -175,6 +179,10 @@ def compute_ni(T=300):
 
 def mobility_caughey_thomas(N_total, carrier="electron"):
     """Doping-dependent mobility using Caughey-Thomas model.
+
+    Kept as the independent 300 K closed-form reference (TU Wien table) that pins
+    ``mobility_caughey_thomas_T(N, 300)`` in tests/test_material.py; the solvers call
+    the T-dependent form.
 
     mu(N) = mu_min + (mu_max - mu_min) / (1 + (N/N_ref)^alpha)
 

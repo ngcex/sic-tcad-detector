@@ -76,6 +76,9 @@ def junction_capacitance(W, eps_r=9.7, area=1.0):
 def depletion_width_from_capacitance(C, eps_r=9.7, area=1.0):
     """Compute depletion width from capacitance (inverse of junction_capacitance).
 
+    Public utility (no internal caller): W = eps A / C for measured C-V data, the
+    conversion behind the eps*A/C figures quoted in the validation notes.
+
     Parameters
     ----------
     C : float or array_like

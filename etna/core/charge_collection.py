@@ -1517,6 +1517,9 @@ def cce_anneal_vs_temperature(
 ) -> dict:
     """Sweep annealing temperature and compute CCE at each point.
 
+    Public study helper (no internal caller): the isochronal-anneal CCE curve built
+    on cce_post_anneal.
+
     Uses a fresh device per temperature point. Enables plotting CCE
     recovery vs annealing temperature at fixed fluence and anneal time.
 

@@ -324,6 +324,9 @@ def events_to_charge_profiles(
 ):
     """Convert MC events to 2D mesh charge generation profiles.
 
+    Public pipeline step (no internal caller; listed in the module docstring): Geant4
+    events -> per-event 2D generation for the single-particle solver.
+
     This is the "full path" for mesh-resolved profiles.  Each event's total
     deposited energy is converted to an effective LET, then
     ``ion_track_generation_2d`` produces a spatially-resolved charge generation
