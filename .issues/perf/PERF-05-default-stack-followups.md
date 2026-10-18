@@ -86,7 +86,7 @@ stack; `device_kwargs` always emits the buffer keys (None = abrupt epi end).
 Reproducibility (lab/default_flip/bench/snapshot.py + compare.py, 4 mm2): new default ==
 old preset, nplus_calibrated == old default, legacy == legacy, all worst rel diff 0.0
 (donors, C-V, CCE, dark, peak E, compensation fluence, sweep gate); direct core calls
-(`create_sic_device(graded)`, `cce_vs_bias()`) == `DeviceConfig()` (donors bit-equal, CCE
+(`create_sic_device(graded)`, `cce_vs_bias()`) == `DeviceConfig()` (donors to 9.3e-16 rel, CCE
 2.6e-11 devsim vs batched).
 
 | quantity (4 mm2, 300 K)                    | old default (nplus_calibrated)       | new default (measured C-V)          |
@@ -147,3 +147,9 @@ the 1.94e13 grid point is reported as fully compensated (not solved); the 2.78e1
 6.96 / 10.16 -> 3.91 / 6.47 V at N_D_bulk 5e13 / 8.5e13), baseline half-width points 7 ->
 8, center CCE 20 V 0.999726 -> 0.999723, dark at 50 V (hw 50) 4.500e-14 -> 4.441e-14 A.
 Full suite: 913 passed in 290 s (-n auto, loadfile).
+Single-particle (etna.core.single_particle) aligned to the same convention: the ion track
+zeroes the contact nodes and Q_generated is the box-rule integral (was the triangle rule
+over all nodes). Legacy hw 25, 10 V, LET 1: 0.961613 -> 0.962940 vs steady-state 0.962560
+(gap -9.5e-4 -> +3.8e-4); default hw 25, 50 V (anode): 0.999970 -> 0.999966 (box vs
+triangle only; the track touches no contact with the n+ layer), so nb16's default-stack
+CCE(LET) table moves by ~4e-6 (lab/default_flip/bench/sp_contacts.py).

@@ -29,7 +29,11 @@ import devsim
 import numpy as np
 import pandas as pd
 
-from etna.core.charge_collection_2d import create_2d_dd_device, integrate_over_mesh_2d
+from etna.core.charge_collection_2d import (
+    create_2d_dd_device,
+    injected_generation,
+    integrate_nodes_box_2d,
+)
 from etna.core.charge_collection import add_generation_to_dd
 from etna.core.drift_diffusion import extract_contact_current
 
@@ -74,8 +78,9 @@ def ion_track_generation_2d(
     generation : ndarray
         Generation density at each mesh node (pairs/cm^3).
     Q_generated_C_per_cm : float
-        Total generated charge per unit z-depth (C/cm), computed via
-        mesh area integration: integrate(generation) * q_electron.
+        Total generated charge per unit z-depth (C/cm): the box-rule integral of the
+        injected generation (contact nodes zeroed) times q_electron, the convention of
+        compute_cce_2d.
     """
     device = device_info["device_name"]
     region = device_info["region_name"]
@@ -99,9 +104,17 @@ def ion_track_generation_2d(
 
     # Generation: pairs/cm^3
     generation = np.where(in_epi, pairs_per_cm * lateral, 0.0)
+    # Contact nodes carry no injected generation (Dirichlet rows): zero them so that
+    # Q_generated counts only the pairs the solver injects, the convention of
+    # compute_cce_2d (since 2026-10-18). Matters on the legacy diode, whose cathode row
+    # is the epi end (cathode share of the track ~1e-3); with the n+ layer the track
+    # touches no contact (anode in the p+, cathode at the end of the n+).
+    generation = injected_generation(device_info, generation)
 
-    # Q_generated = integrate(generation * dA) * q  [C/cm for 2D]
-    Q_generated_C_per_cm = integrate_over_mesh_2d(device_info, generation) * Q_ELECTRON
+    # Q_generated = integrate(generation * dA) * q  [C/cm for 2D], with the solver's box
+    # rule (the quadrature that injects the source term; compute_cce_2d's I_generated).
+    # Was the triangle rule (integrate_over_mesh_2d) before 2026-10-18.
+    Q_generated_C_per_cm = integrate_nodes_box_2d(device_info, generation) * Q_ELECTRON
 
     logger.info(
         f"Ion track: LET={LET_keV_um:.1f} keV/um, x_ion={x_ion_cm*1e4:.1f} um, "
