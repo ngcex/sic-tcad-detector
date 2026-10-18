@@ -14,10 +14,13 @@ from xml.sax.saxutils import escape
 from etna.export.labels import (
     BUFFER_NOTE,
     NPLUS_THICKNESS_NOTE,
+    TABLE_NOTE,
     VALIDATION_LABEL,
     epi_donor_profile,
     has_buffer,
     has_nplus,
+    has_table,
+    table_sensitive_end_um,
 )
 
 _COLORS = {"p+": "#d6604d", "epi": "#92c5de", "buffer": "#4393c3", "n+": "#2166ac"}
@@ -42,10 +45,22 @@ def stack_layers(config) -> "list[dict]":
             note="",
         )
     ]
-    # with a graded n-/n+ transition the low-doped epi ends where the transition starts
-    t_b = config.buffer_thickness_um if has_buffer(config) else 0.0
-    t_low = t_e - t_b
-    if config.doping_profile == "uniform":
+    # with a graded n-/n+ transition the low-doped epi ends where the transition starts;
+    # with a tabulated profile where N_D has risen one decade above the table minimum
+    if has_table(config):
+        t_low = min(table_sensitive_end_um(config), t_e)
+        t_b = t_e - t_low
+    else:
+        t_b = config.buffer_thickness_um if has_buffer(config) else 0.0
+        t_low = t_e - t_b
+    if has_table(config):
+        n = [p[1] for p in config.donor_table]
+        epi_dop = (
+            f"tabulated N_D ({len(n)} knots): {n[0]:.3g} at junction, min {min(n):.3g}, "
+            f"{float(epi_donor_profile(config, t_low)):.3g} cm^-3 at the end of the "
+            "low-doped epi"
+        )
+    elif config.doping_profile == "uniform":
         epi_dop = f"N_D = {float(epi_donor_profile(config, 0.0)):.3g} cm^-3 (uniform)"
     else:
         epi_dop = (
@@ -65,7 +80,30 @@ def stack_layers(config) -> "list[dict]":
             note="",
         )
     )
-    if t_b:
+    if t_b and has_table(config):
+        n = [p[1] for p in config.donor_table]
+        layers.append(
+            dict(
+                key="buffer",
+                name="n-/n+ transition",
+                top_um=t_p + t_low,
+                bottom_um=t_p + t_e,
+                thickness_um=t_b,
+                doping=(
+                    f"N_D {float(epi_donor_profile(config, t_low)):.3g} -> "
+                    f"{float(epi_donor_profile(config, t_e)):.3g} cm^-3 (tabulated rise; "
+                    f"part of the {t_e:g} µm nominal epi)"
+                ),
+                note=TABLE_NOTE.format(
+                    k=len(n),
+                    t_end=t_low,
+                    n_min=min(n),
+                    n_end=float(epi_donor_profile(config, t_low)),
+                    n_last=float(epi_donor_profile(config, t_e)),
+                ),
+            )
+        )
+    elif t_b:
         layers.append(
             dict(
                 key="buffer",

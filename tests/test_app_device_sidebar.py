@@ -30,6 +30,9 @@ ALL_FIELDS_VALUES = {
     "E_t": 0.66,
     "buffer_thickness_um": 1.0,  # graded n-/n+ transition (opt-in measured-C-V preset)
     "buffer_end_doping": 1e17,
+    # opt-in tabulated profile: None here (a table needs the graded profile and excludes
+    # the transition above; its round trip is tests/test_measured_cv_tabulated.py)
+    "donor_table": None,
 }
 
 
