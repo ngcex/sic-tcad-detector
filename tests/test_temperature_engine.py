@@ -36,7 +36,7 @@ def test_engine_matches_devsim(cfg, method, tol):
 
 
 def test_outside_box_falls_back_to_devsim():
-    temps = np.array([300.0, 450.0])  # 450 K is outside the engine's T box
+    temps = np.array([300.0, 500.0])  # 500 K is outside the engine T box
     res = sim.run_temperature_sweep(DeviceConfig(), temps, -20.0, "hecht")
     assert list(res.metadata["solver_per_T"]) == ["batched", "devsim"]
     assert "batched engine + devsim" in res.metadata["solver"]

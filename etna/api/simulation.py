@@ -45,7 +45,12 @@ logger = logging.getLogger(__name__)
 # tests/test_api_engine_switch.py pin representative points).
 # Anything outside goes to devsim. Widening a bound only needs a parity run.
 _ENGINE_BOX = {
-    "T": (250.0, 400.0),
+    # T 250-400 -> 150-450 K (2026-10-18): run_cv C/W and run_cce CCE vs devsim at
+    # 150/200/225/425/450/500 K on the default, n+-calibrated, legacy and microdosimeter
+    # stacks, 21-point C-V to -100 V (legacy -40 V), 7-point CCE: |dC/C| <= 3.2e-8,
+    # |dW| <= 2.6e-18 cm, |dCCE| <= 1.3e-13 (lab/engine_box/notes/LOG.md,
+    # tests/test_engine_T_box.py). 100 K: devsim itself fails on the legacy stack.
+    "T": (150.0, 450.0),
     "N_A": (1e18, 1e19),
     "N_D_junction": (1e15, 1e16),
     # N_D_bulk lower bound 5e13 -> 2e13 (2026-10-18) for the measured-C-V preset (3.4e13):
@@ -1434,7 +1439,7 @@ def run_temperature_sweep(
     """Run a CCE-vs-temperature sweep at a single bias and return a SimResult.
 
     Temperatures at which the device lies in the batched engine's validated box
-    (``_ENGINE_BOX``, T 250-400 K) are solved in one batched solve, one device per
+    (``_ENGINE_BOX``, T 150-450 K) are solved in one batched solve, one device per
     T: "hecht" takes W from a dark Poisson solve, "dd" runs ``cce_sweep`` (parity
     with the devsim path: |dCCE| <= 6e-12 hecht, <= 1.1e-12 dd, 250-400 K, -10..-60 V,
     default/n+-calibrated/legacy stacks; tests/test_temperature_engine.py). The
