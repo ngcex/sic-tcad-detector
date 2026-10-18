@@ -1,7 +1,10 @@
 # lab/
 
 Research spikes. Each directory keeps its own `notes/LOG.md` (commands and numbers).
-Nothing in `etna/`, `app/` or `tests/` imports from `lab/`.
+Nothing in `etna/`, `app/` or `tests/` imports code from `lab/`, but `lab/` is NOT
+disposable: `tests/test_measured_cv_preset.py` reads the digitised C-V data in
+`lab/cv_gap/notes/` (as does `lab/buffer_profile`), and comments in `etna/` and `tests/`
+cite the `lab/*/notes/LOG.md` files as the provenance of calibrated defaults.
 
 ## Archived: `lab/gpu_solver` (tag `archive/gpu-solver-lab`)
 
