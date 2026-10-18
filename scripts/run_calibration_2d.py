@@ -44,6 +44,7 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from etna.core.device2d import calibrate_graded_doping_2d  # noqa: E402
+from etna.core.devsim_lock import set_devsim_quiet  # noqa: E402
 
 DIAGNOSIS_PATH = pathlib.Path(
     ".planning/phases/26-graded-doping-2d-calibration/26-DIAGNOSIS.md"
@@ -184,6 +185,7 @@ def write_result_md(result):
 
 
 def main():
+    set_devsim_quiet(True)  # devsim Newton log off; ETNA_DEVSIM_VERBOSE=1 shows it
     parser = argparse.ArgumentParser(
         description="Run the Phase 26 graded-doping 2D calibration end-to-end."
     )

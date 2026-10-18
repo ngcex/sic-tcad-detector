@@ -86,6 +86,8 @@ import numpy as np
 import devsim
 import logging
 
+from etna.core.devsim_lock import set_devsim_quiet
+set_devsim_quiet(True)  # drop devsim's Newton log from direct core calls; ETNA_DEVSIM_VERBOSE=1 shows it
 from etna.core.single_particle import (
     ion_track_generation_2d, simulate_single_particle,
     analyze_current_pulse, build_cce_let_table,

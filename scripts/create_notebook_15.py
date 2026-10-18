@@ -84,6 +84,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import devsim
 
+from etna.core.devsim_lock import set_devsim_quiet
+set_devsim_quiet(True)  # drop devsim's Newton log from direct core calls; ETNA_DEVSIM_VERBOSE=1 shows it
 from etna.core.device2d import create_sic_2d_device
 from etna.core.device import create_sic_device
 from etna.core.poisson import setup_poisson, solve_equilibrium
