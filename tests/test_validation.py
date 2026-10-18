@@ -212,3 +212,65 @@ class TestValidateCV:
         assert "per_point_error" in result
         assert len(result["sim_W"]) == len(result["exp_W"])
         assert "r_squared" in result["metrics"]
+
+
+class TestValidationTargetsNotReached:
+    """audit-v7 A-12: unreached validation biases are flagged, never clamped/snapped."""
+
+    def test_iv_without_minus_60V_reports_missing_target(self):
+        voltages = np.array([-20, -10, -2, -1, 0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0])
+        currents = np.array(
+            [-1e-12, -1e-12, -1e-12, -1e-13, 0, 1e-8, 1e-5, 1e-3, 0.1, 1.0, 5.0]
+        )
+        result = validate_iv({"voltages": voltages, "currents": currents})
+        assert np.isnan(result["dark_current_60V"])
+        assert result["dark_current_pass"] is False
+        assert result["dark_current_physically_meaningful"] is False
+        assert result["missing_targets"] == [-60.0]
+        assert np.isfinite(result["rectification_ratio"])
+
+    def test_iv_without_forward_2V_has_nan_rectification(self):
+        voltages = np.array([-60, -30, -10, -2, -1, 0, 0.5, 1.0])
+        currents = np.array([-1e-12, -1e-12, -1e-12, -1e-12, -1e-13, 0, 1e-8, 1e-5])
+        result = validate_iv({"voltages": voltages, "currents": currents})
+        assert np.isnan(result["rectification_ratio"])
+        assert result["rectification_pass"] is False
+        assert result["missing_targets"] == [2.0]
+
+    def test_exact_targets_have_no_missing(self):
+        voltages = np.array([-60, -30, -10, -2, -1, 0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0])
+        currents = np.array(
+            [-1e-12, -1e-12, -1e-12, -1e-12, -1e-13, 0, 1e-8, 1e-5, 1e-3, 0.1, 1.0, 5.0]
+        )
+        result = validate_iv({"voltages": voltages, "currents": currents})
+        assert result["missing_targets"] == []
+
+    def test_cv_truncated_before_minus_30V_is_flagged_not_clamped(self):
+        cv_data = {
+            "voltages": np.array([0.0, -5.0, -10.0]),
+            "depletion_widths": np.array([1.7e-4, 6e-4, 9.5e-4]),
+            "truncated": True,
+        }
+        result = validate_cv(cv_data)
+        assert result["extrapolated"] is True
+        assert result["n_extrapolated"] == 1
+        assert np.isnan(result["sim_W"][2])  # -30 V not reached: no edge value
+        assert np.isnan(result["per_point_error"][2])
+        assert result["metrics"]["r_squared"] == pytest.approx(1.0)  # 2 in-range pts
+
+    def test_cv_fully_out_of_range_raises(self):
+        cv_data = {
+            "voltages": np.array([-40.0, -50.0]),
+            "depletion_widths": np.array([1e-3, 1e-3]),
+        }
+        with pytest.raises(ValueError, match="no experimental voltage"):
+            validate_cv(cv_data)
+
+    def test_cv_in_range_not_extrapolated(self):
+        cv_data = {
+            "voltages": np.array(EXPERIMENTAL_CV["voltages"]),
+            "depletion_widths": np.array(EXPERIMENTAL_CV["depletion_widths_cm"]),
+        }
+        result = validate_cv(cv_data)
+        assert result["extrapolated"] is False
+        assert result["n_extrapolated"] == 0

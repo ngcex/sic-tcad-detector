@@ -55,7 +55,15 @@ def render() -> None:
         key="micro_sv_t",
     )
     sv_width = st.number_input(
-        "Sensitive-volume width (µm)", value=150.0, min_value=0.1, key="micro_sv_w"
+        "Sensitive-volume width (µm)",
+        value=150.0,
+        min_value=0.1,
+        key="micro_sv_w",
+        help=(
+            "Currently has no effect on the spectrum: the mean chord length uses the "
+            "slab approximation l̄ = 2 × thickness (a finite-SV l̄ needs width and "
+            "depth). DESIGN-2's SV is 100 µm wide."
+        ),
     )
     st.caption(
         "The spectrum depends only on the uploaded events and the sensitive-"

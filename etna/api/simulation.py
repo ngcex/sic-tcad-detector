@@ -35,7 +35,7 @@ from etna.core.device import (
     table_sensitive_end_cm,
     table_sensitive_end_doping,
 )
-from etna.core.devsim_reset import reset_devsim_fully
+from etna.core.devsim_reset import reset_devsim_fully, delete_device_and_mesh
 from etna.core.drift_diffusion import ramp_bias
 from etna.core.flash_recombination import cce_vs_dose_rate
 from etna.core.mc_coupling import load_mc_events_csv
@@ -755,7 +755,7 @@ def _run_cv_devsim(config: DeviceConfig, bias_array) -> SimResult:
     finally:
         # Ensure no device leaks after run_cv returns, regardless of outcome.
         try:
-            devsim.delete_device(device=device_info["device_name"])
+            delete_device_and_mesh(device_info["device_name"])
         except Exception:
             logger.warning(
                 "run_cv: delete_device(%r) failed, falling back to full reset",
@@ -1102,7 +1102,7 @@ def run_field(config: DeviceConfig, bias_V: float = -50.0) -> SimResult:
     finally:
         # Ensure no device leaks after run_field returns, regardless of outcome.
         try:
-            devsim.delete_device(device=device_info["device_name"])
+            delete_device_and_mesh(device_info["device_name"])
         except Exception:
             logger.warning(
                 "run_field: delete_device(%r) failed, falling back to full reset",
@@ -1395,7 +1395,10 @@ def run_radiation_damage(
         Reverse bias (V, conventional-negative sign). Default -40.0.
     proton_energy_MeV : float
         Incident proton energy (MeV) used for the NIEL damage model.
-        Default 5.6.
+        Default 5.6. CAUTION: the NIEL hardness table covers 30-150 MeV only, so
+        5.6 MeV uses kappa(30 MeV) (edge value, logged); the result is that of a
+        30 MeV hardness factor labelled 5.6 MeV (audit-v7 B-07, open: physics
+        owner). Pass 30-150 MeV for an in-table energy.
 
     Returns
     -------
@@ -1850,7 +1853,7 @@ def run_dark_current(
         # Ensure no device leaks after run_dark_current returns, regardless
         # of outcome (bucket-b finally block copied from run_cv).
         try:
-            devsim.delete_device(device=device_info["device_name"])
+            delete_device_and_mesh(device_info["device_name"])
         except Exception:
             logger.warning(
                 "run_dark_current: delete_device(%r) failed, falling back to "
@@ -2055,7 +2058,11 @@ def run_microdosimetry(
     sv_thickness_um : float
         Sensitive-volume thickness (um), finite and > 0. Default 10.0.
     sv_width_um : float
-        Sensitive-volume width (um), finite and > 0. Default 150.0.
+        Sensitive-volume width (um), finite and > 0. Default 150.0. Currently has NO effect:
+        mean_chord_length uses the 3D Cauchy form 4V/S only when both width and
+        depth are given, so with width alone it returns the slab value
+        l_bar = 2 * sv_thickness_um (audit-v7 D-15; DESIGN-2's 100 um SV gives the
+        same l_bar). Whether to use a finite-SV l_bar is open (physics owner).
 
     Returns
     -------

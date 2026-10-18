@@ -46,6 +46,7 @@ from etna.core.solver_tol import (
     TRANSIENT_RELAXED_REL_ERROR,
     TRANSIENT_REL_ERROR,
 )
+from etna.core.devsim_reset import delete_device_and_mesh
 
 logger = logging.getLogger(__name__)
 
@@ -537,7 +538,7 @@ def build_cce_let_table(
         finally:
             if device_info is not None:
                 try:
-                    devsim.delete_device(device=device_info["device_name"])
+                    delete_device_and_mesh(device_info["device_name"])
                 except Exception:
                     pass
 
@@ -618,6 +619,11 @@ def load_cce_let_table(filepath):
     def cce_interp(let_value):
         """Interpolate CCE at given LET using log-linear interpolation."""
         return float(np.interp(np.log10(let_value), np.log10(LET_valid), CCE_valid))
+
+    # np.interp clamps outside the table: expose the range so callers can flag it
+    # (process_mc_ensemble warns on clamped events; audit-v7 B-11)
+    cce_interp.let_min = float(LET_valid.min())
+    cce_interp.let_max = float(LET_valid.max())
 
     logger.info(
         f"Loaded CCE(LET) table from {filepath}: "

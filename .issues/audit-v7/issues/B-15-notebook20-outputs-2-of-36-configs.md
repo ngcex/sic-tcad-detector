@@ -3,7 +3,7 @@ id: B-15
 title: Notebook 20 (feasibility report) committed outputs rest on 2 of 36 sweep configurations (stale May-2026 run with a solver_callback cascade)
 severity: medium
 category: docs
-status: open
+status: closed 2026-10-18 (0907a1f re-executed notebook 20 after the B-02/B-03 fixes and retracted the claims; f6bbb28 strips all notebook outputs. Evidence: notebook 20 has 0 outputs and 0 'Valid results: 2' / 'solver_callback' hits; its cells print the valid count of the sweep explicitly)
 location: notebooks/20_feasibility_report.ipynb (sweep, ranking and scoring cells); scripts/create_notebook_20.py:190-202; etna/core/optimization.py:180-208; etna/core/devsim_reset.py:60-136
 labels:
   [

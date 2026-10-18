@@ -3,7 +3,7 @@ id: A-10
 title: Misleading docstrings/constants in core slice (missing W_simulated key, stale compute_ni note, unused M_c, divergent graded defaults, cv_sweep sign wording)
 severity: low
 category: docs
-status: open
+status: fixed 2026-10-18 (items 3 and 4 earlier: 834e1ae M_c documented informational, a78cbdf device2d uses DEFAULT_STACK; items 1, 2, 5 final-abd 4ff507a: no W_simulated promise in calibrate_graded_doping, compute_ni note says it is used by intrinsic_concentration, cv_sweep / cv_at_fluence sign wording 'negative = reverse, positive applies forward', device2d x0 is a starting guess. Evidence: grep -n W_simulated etna/core/device.py -> only the 'No W_simulated' note)
 location: etna/core/device.py:509-512 vs 632-638; etna/core/sic_material.py:105-107 vs 220/249-252 + device.py:157; sic_material.py:36 vs 131-137; etna/core/device2d.py:40-43 vs device.py:228-232; etna/core/cv_analysis.py:137
 labels: [audit-v7, slice-A, docs]
 source: raw-A-core-solvers.md F10

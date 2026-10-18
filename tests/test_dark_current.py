@@ -302,8 +302,10 @@ class TestDarkCurrentSweepConsistency:
 
     def test_components_close_total_at_full_depletion(self, swept):
         res, _ = swept[-60.0]
-        vol_sum = abs(res["I_SRH"][0] + res["I_TAT"][0])
-        assert vol_sum == pytest.approx(abs(res["I_total"][0]), rel=0.005)
+        # signed (audit D-03): the components carry the sign of I_total
+        vol_sum = res["I_SRH"][0] + res["I_TAT"][0] + res["I_SRV"][0]
+        assert res["I_total"][0] > 0 and res["I_TAT"][0] > 0
+        assert vol_sum == pytest.approx(res["I_total"][0], rel=0.005)
 
     def test_components_close_total_below_full_depletion(self, swept):
         """At -10 V (below V_fd ~10.5 V) the volume integral exceeds the terminal current
@@ -311,8 +313,9 @@ class TestDarkCurrentSweepConsistency:
         substrate) and in the p+ (f_depl floor 1e3/3.5e4) leave through the nearest contact.
         That is a property of the model, not solver lag (which made it 4.2 %)."""
         res, _ = swept[-10.0]
-        vol_sum = abs(res["I_SRH"][0] + res["I_TAT"][0])
-        assert vol_sum == pytest.approx(abs(res["I_total"][0]), rel=0.015)
+        vol_sum = res["I_SRH"][0] + res["I_TAT"][0] + res["I_SRV"][0]
+        assert res["I_TAT"][0] > 0
+        assert vol_sum == pytest.approx(res["I_total"][0], rel=0.015)
 
 
 # ---------------------------------------------------------------------------

@@ -22,6 +22,7 @@ from etna.core.sic_material import (
     mobility_caughey_thomas_T,
 )
 from etna.core.device import graded_stack_kwargs, mobility_doping
+from etna.core.devsim_reset import delete_device_and_mesh
 
 
 logger = logging.getLogger(__name__)
@@ -60,9 +61,10 @@ def sweep_iv_vs_temperature(
     -------
     df : pd.DataFrame
         DataFrame with columns: T, I_reverse, n_i, mu_n, mu_p, E_g.
-        Indexed by integer row number.
+        Indexed by integer row number. I_reverse is the magnitude of the 1D
+        reverse current DENSITY (A/cm^2, extract_steady_state_current); multiply
+        by the area for a current.
     """
-    import devsim
 
     from etna.core.drift_diffusion import create_dd_device, extract_steady_state_current, ramp_bias
     from etna.core.dark_current import create_dark_current_device, dark_current_sweep
@@ -132,7 +134,7 @@ def sweep_iv_vs_temperature(
             logger.warning(f"sweep_iv: failed at T={T:.1f}K: {e}")
         finally:
             try:
-                devsim.delete_device(device=dev_name)
+                delete_device_and_mesh(dev_name)
             except Exception:
                 pass
 
@@ -166,7 +168,6 @@ def sweep_cv_vs_temperature(
         - 'W': 2D array of depletion widths (cm), shape (len(T), len(V))
         - 'C': 2D array of capacitances (F/cm^2), shape (len(T), len(V))
     """
-    import devsim
 
     from etna.core.cv_analysis import cv_sweep as _cv_sweep
     from etna.core.drift_diffusion import create_dd_device
@@ -206,7 +207,7 @@ def sweep_cv_vs_temperature(
             C_all[i, :] = np.nan
         finally:
             try:
-                devsim.delete_device(device=dev_name)
+                delete_device_and_mesh(dev_name)
             except Exception:
                 pass
 
@@ -241,9 +242,13 @@ def sweep_cce_vs_temperature(
     Returns
     -------
     df : pd.DataFrame
-        Long-format DataFrame with columns: T, V, CCE.
+        Long-format DataFrame with columns: T, V, CCE, truncated. Only the biases
+        the solver reached are listed: when the C-V (hecht) or CCE (dd) sweep at a
+        temperature stops at a convergence wall, the remaining voltages have no row
+        and that temperature's rows carry truncated=True (audit-v7 B-05; each CCE is
+        paired with the voltage the sweep returned, never by position in
+        ``voltages``).
     """
-    import devsim
 
     from etna.core.charge_collection import hecht_cce
     from etna.core.cv_analysis import cv_sweep as _cv_sweep
@@ -273,19 +278,20 @@ def sweep_cce_vs_temperature(
             try:
                 device_info = create_dd_device(**kwargs)
                 cv_result = _cv_sweep(device_info, voltages)
-                W_arr = cv_result["depletion_widths"]
+                truncated = bool(cv_result.get("truncated", False))
 
-                for j, V in enumerate(voltages):
-                    W = W_arr[j]
+                for V, W in zip(cv_result["voltages"], cv_result["depletion_widths"]):
                     cce_val = float(hecht_cce(V, d=W, T=T))
-                    records.append({"T": T, "V": V, "CCE": cce_val})
+                    records.append(
+                        {"T": T, "V": float(V), "CCE": cce_val, "truncated": truncated}
+                    )
 
                 logger.info(f"sweep_cce(hecht): T={T:.1f}K done")
             except Exception as e:
                 logger.warning(f"sweep_cce(hecht): failed at T={T:.1f}K: {e}")
             finally:
                 try:
-                    devsim.delete_device(device=dev_name)
+                    delete_device_and_mesh(dev_name)
                 except Exception:
                     pass
 
@@ -301,16 +307,19 @@ def sweep_cce_vs_temperature(
                 )
                 dd_kwargs.update(device_kwargs)
                 result = cce_vs_bias(voltages, device_kwargs=dd_kwargs)
+                truncated = bool(result.get("truncated", False))
 
-                for j, V in enumerate(voltages):
-                    records.append({"T": T, "V": V, "CCE": result["cce_values"][j]})
+                for V, c in zip(result["voltages"], result["cce_values"]):
+                    records.append(
+                        {"T": T, "V": float(V), "CCE": float(c), "truncated": truncated}
+                    )
                 logger.info(f"sweep_cce(dd): T={T:.1f}K done")
             except Exception as e:
                 logger.warning(f"sweep_cce(dd): failed at T={T:.1f}K: {e}")
     else:
         raise ValueError(f"method must be 'hecht' or 'dd', got '{method}'")
 
-    return pd.DataFrame(records)
+    return pd.DataFrame(records, columns=["T", "V", "CCE", "truncated"])
 
 
 def extract_temperature_coefficient(temperatures, values, quantity_name="CCE"):
@@ -334,7 +343,11 @@ def extract_temperature_coefficient(temperatures, values, quantity_name="CCE"):
         - 'slope': dQuantity/dT (temperature coefficient)
         - 'intercept': fit intercept
         - 'r_squared': R^2 of the linear fit
-        - 'unit': string describing the unit (e.g., "%/K", "pA/K")
+        - 'unit': unit of the slope, assuming the units the ETNA callers pass: "1/K"
+          for a CCE given as a fraction (multiply the slope by 100 for %/K),
+          "A/cm^2/K" for a current density such as sweep_iv_vs_temperature's
+          I_reverse, else "<quantity_name>/K". No rescaling is applied (audit-v7
+          B-13: the labels used to be "%/K" and "pA/K", off by 100 and 1e12)
         - 'quantity_name': the quantity name passed in
     """
     temperatures = np.asarray(temperatures, dtype=float)
@@ -344,9 +357,9 @@ def extract_temperature_coefficient(temperatures, values, quantity_name="CCE"):
 
     # Infer unit from quantity name
     if "CCE" in quantity_name.upper():
-        unit = "%/K"
+        unit = "1/K"  # CCE is a fraction (0-1)
     elif "CURRENT" in quantity_name.upper() or quantity_name.upper().startswith("I"):
-        unit = "pA/K"
+        unit = "A/cm^2/K"  # 1D current density (extract_steady_state_current)
     else:
         unit = f"{quantity_name}/K"
 

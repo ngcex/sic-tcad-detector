@@ -3,7 +3,7 @@ id: A-09
 title: delete_device leaves the mesh alive; per-call devices in cv_at_fluence, transient_cce_vs_dose_rate and API finally-blocks leak a mesh each
 severity: low
 category: improvement
-status: open
+status: fixed 2026-10-18 (final-abd 7f1eabd: etna.core.devsim_reset.delete_device_and_mesh used by the 32 per-call finally blocks in etna/core and etna/api. Evidence: pytest tests/test_devsim_reset.py -k mesh -> helper removes {name}_mesh, run_dark_current leaves get_mesh_list() == [])
 location: etna/core/cv_analysis.py:~332-336, ~413-417; etna/core/transient.py:~644-648; etna/api/simulation.py:~133-141, ~326-334, ~758-767; contrast etna/core/device.py:~605-613 (calibrate_graded_doping deletes both)
 labels: [audit-v7, slice-A, resource-leak, devsim]
 source: raw-A-core-solvers.md F9

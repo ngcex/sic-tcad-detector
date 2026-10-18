@@ -163,3 +163,18 @@ class TestProtonGenerationProfile:
             proton_generation_profile(x, E_MeV=200)
         with pytest.raises(ValueError):
             proton_generation_profile(x, E_MeV=10)
+
+
+def test_proton_profile_is_energy_independent():
+    """audit-v7 B-10: the profile does not depend on E_MeV (only range-validated)."""
+    import numpy as np
+    import pytest
+
+    from etna.core.generation_profiles import proton_generation_profile
+
+    x = np.linspace(0.0, 10e-4, 11)
+    g30 = proton_generation_profile(x, 30, dose_rate_Gy_s=1.0)
+    np.testing.assert_array_equal(g30, proton_generation_profile(x, 150, 1.0))
+    np.testing.assert_array_equal(g30, proton_generation_profile(x, 62, 1.0))
+    with pytest.raises(ValueError):
+        proton_generation_profile(x, 5.6, 1.0)

@@ -140,11 +140,11 @@ class MeshData:
 from etna import run_cv, run_cce, run_field, run_radiation_damage, run_microdosimetry
 
 # C-V sweep
-result = run_cv(cfg, v_start=0, v_stop=-200, n_points=40)
+result = run_cv(cfg, v_start=0, v_stop=-50, n_points=40)  # facade default range
 # → SimResult with x=bias_V, y=capacitance_F_cm2, metadata includes W, 1/C^2
 
 # CCE vs bias
-result = run_cce(cfg, v_start=-10, v_stop=-200, n_points=30)
+result = run_cce(cfg, v_start=-10, v_stop=-40, n_points=30)  # facade default range
 # → SimResult with x=bias_V, y=CCE (0–1)
 
 # Field / potential profile at fixed bias
@@ -153,7 +153,7 @@ result = run_field(cfg, bias_V=-100)
 # result.mesh is populated → geometry viewer can render
 
 # Radiation damage sweep
-result = run_radiation_damage(cfg, fluences=[1e12, 1e13, 1e14], proton_energy_MeV=5.6)
+result = run_radiation_damage(cfg, fluences=[1e12, 1e13, 1e14], proton_energy_MeV=62.0)  # inside the NIEL table (30-150 MeV)
 # → SimResult with x=fluence, y=CCE_post_damage
 
 # Microdosimetry
@@ -171,7 +171,7 @@ sweep = ParametricSweep(
     param="epi_thickness_um",
     values=[5, 10, 20, 50],
     sim_fn=run_cce,
-    sim_kwargs={"v_start": -10, "v_stop": -200, "n_points": 20},
+    sim_kwargs={"v_start": -10, "v_stop": -40, "n_points": 20},
 )
 results = sweep.run()    # list[SimResult]
 ```
@@ -203,8 +203,9 @@ results = sweep.run()    # list[SimResult]
 ```python
 from etna import DeviceConfig, run_cv
 cfg = DeviceConfig()
-result = run_cv(cfg, v_start=0, v_stop=-200, n_points=20)
+result = run_cv(cfg)   # facade default: 0 .. -50 V
 print(result.y)   # capacitance array
+assert not result.metadata["truncated"]
 ```
 
 If this runs cleanly, the API design is validated before touching remaining modules.

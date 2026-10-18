@@ -45,6 +45,7 @@ logger = logging.getLogger(__name__)
 # graded-doping defaults of the fluence sweeps = cce_vs_bias = the default stack
 from etna.core.device import DEFAULT_STACK as _STACK  # noqa: E402
 from etna.core.device import graded_stack_kwargs, mobility_doping  # noqa: E402
+from etna.core.devsim_reset import delete_device_and_mesh
 
 
 def full_compensation_reason(damaged):
@@ -581,7 +582,7 @@ def cce_vs_bias(
                 # endpoint (not punch-through) -- stop here and return the
                 # converged portion rather than raising (mirrors cv_sweep).
                 logger.warning(
-                    f"cce_vs_bias: stopped sweep at V={V_target:.1f}V "
+                    f"cce_vs_bias: could not reach V={V_target:.1f}V, sweep stopped "
                     f"(requested down to {V_range.min():.1f}V): {e}"
                 )
                 truncated = True
@@ -625,7 +626,7 @@ def cce_vs_bias(
 
     finally:
         try:
-            devsim.delete_device(device=device)
+            delete_device_and_mesh(device)
         except Exception:
             pass
 
@@ -775,7 +776,7 @@ def _fluence_reference(dev_kw):
         x, donors, acceptors = get("x"), get("Donors"), get("Acceptors")
     finally:
         try:
-            devsim.delete_device(device=ref_name)
+            delete_device_and_mesh(ref_name)
         except Exception:
             pass
     epi_mask = x >= info["junction_pos"]
@@ -921,7 +922,7 @@ def _cce_fluence_devsim(dev_kw, damaged, V_bias, alpha_range_cm, generation_rate
         return compute_cce_from_dd(device_info, gen_values, contact="cathode")
     finally:
         try:
-            devsim.delete_device(device=dev_name)
+            delete_device_and_mesh(dev_name)
         except Exception:
             pass
 
@@ -1108,10 +1109,17 @@ def cce_vs_bias_at_fluence(
     -------
     result : dict
         Dictionary with:
-        - "voltages": numpy array of applied voltages (V)
-        - "cce_values": numpy array of CCE values (all NaN when not valid)
+        - "voltages": numpy array of the voltages reached (V), in the order of
+          V_range. At full donor compensation: all of V_range. If the bias ramp
+          stops converging partway (a damaged device reaches its wall at lower
+          |V|), only the converged biases, with "truncated" True (audit-v7 B-05;
+          mirrors cce_vs_bias)
+        - "cce_values": numpy array of CCE values, same length as "voltages"
+          (all NaN when not valid)
         - "valid": bool array (all False at full donor compensation)
         - "reason": list of str, "" when valid (see full_compensation_reason)
+        - "truncated": bool, True if the sweep stopped before the end of V_range
+        - "requested_v_stop": float, the deepest reverse bias requested
         - "fluence": float
         - "energy_MeV": float
         - "lifetime_model": str
@@ -1157,7 +1165,7 @@ def cce_vs_bias_at_fluence(
         pristine_N_D_profile = ref_donors[epi_mask_ref]
     finally:
         try:
-            devsim.delete_device(device=ref_name)
+            delete_device_and_mesh(ref_name)
         except Exception:
             pass
 
@@ -1179,6 +1187,8 @@ def cce_vs_bias_at_fluence(
             "cce_values": np.full(len(V_range), np.nan),
             "valid": np.zeros(len(V_range), dtype=bool),
             "reason": [reason] * len(V_range),
+            "truncated": False,
+            "requested_v_stop": float(V_range.min()) if len(V_range) else 0.0,
             "fluence": fluence,
             "energy_MeV": energy_MeV,
             "lifetime_model": lifetime_model,
@@ -1225,14 +1235,32 @@ def cce_vs_bias_at_fluence(
     sorted_V = V_range[sorted_indices]
 
     cce_sorted = np.zeros(len(V_range))
+    reached_mask = np.zeros(len(V_range), dtype=bool)
+    truncated = False
 
     try:
         for idx, V_target in zip(sorted_indices, sorted_V):
             cathode_V = -V_target  # reverse bias convention
 
-            ramp_bias(
-                device_info, cathode_V, contact="cathode", V_step=0.5, V_step_max=2.0
-            )
+            try:
+                ramp_bias(
+                    device_info,
+                    cathode_V,
+                    contact="cathode",
+                    V_step=0.5,
+                    V_step_max=2.0,
+                )
+            except RuntimeError as e:
+                # convergence wall (lower |V| on a damaged device): keep the converged
+                # points instead of losing them all to the exception (audit-v7 B-05)
+                logger.warning(
+                    f"cce_vs_bias_at_fluence: could not reach V={V_target:.1f}V, "
+                    "sweep stopped "
+                    f"(requested down to {V_range.min():.1f}V), "
+                    f"fluence={fluence:.2e}: {e}"
+                )
+                truncated = True
+                break
 
             # Add generation and solve
             add_generation_to_dd(device_info, gen_values)
@@ -1245,6 +1273,7 @@ def cce_vs_bias_at_fluence(
 
             cce = compute_cce_from_dd(device_info, gen_values, contact="cathode")
             cce_sorted[idx] = cce
+            reached_mask[idx] = True
 
             logger.info(
                 f"cce_vs_bias_at_fluence: V={V_target:.1f}V, fluence={fluence:.2e}, "
@@ -1263,15 +1292,18 @@ def cce_vs_bias_at_fluence(
 
     finally:
         try:
-            devsim.delete_device(device=dev_name)
+            delete_device_and_mesh(dev_name)
         except Exception:
             pass
 
+    n_reached = int(reached_mask.sum())
     return {
-        "voltages": V_range,
-        "cce_values": cce_sorted,
-        "valid": np.ones(len(V_range), dtype=bool),
-        "reason": [""] * len(V_range),
+        "voltages": V_range[reached_mask],
+        "cce_values": cce_sorted[reached_mask],
+        "valid": np.ones(n_reached, dtype=bool),
+        "reason": [""] * n_reached,
+        "truncated": truncated,
+        "requested_v_stop": float(V_range.min()) if len(V_range) else 0.0,
         "fluence": fluence,
         "energy_MeV": energy_MeV,
         "lifetime_model": lifetime_model,
@@ -1378,7 +1410,7 @@ def cce_post_anneal(
         pristine_N_D_profile = ref_donors[epi_mask_ref]
     finally:
         try:
-            devsim.delete_device(device=ref_name)
+            delete_device_and_mesh(ref_name)
         except Exception:
             pass
 
@@ -1498,7 +1530,7 @@ def cce_post_anneal(
         return _invalid(f"solver failure: {type(e).__name__}: {e}")
     finally:
         try:
-            devsim.delete_device(device=dev_name)
+            delete_device_and_mesh(dev_name)
         except Exception:
             pass
 
@@ -1714,7 +1746,7 @@ def cce_vs_epi_thickness(
 
         finally:
             try:
-                devsim.delete_device(device=device)
+                delete_device_and_mesh(device)
             except Exception:
                 pass
 

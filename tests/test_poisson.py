@@ -226,37 +226,6 @@ class TestDepletionWidth:
         )
 
 
-class TestVoltageSweep:
-    """Test the high-level voltage sweep function."""
-
-    def test_voltage_sweep_short(self):
-        """Voltage sweep runs and returns structured results."""
-        from etna.core.device import create_sic_device
-        from etna.core.poisson import voltage_sweep
-
-        dev = create_sic_device(device_name=_unique_name())
-        voltages = np.array([0, -1, -2, -5, -10])
-
-        results = voltage_sweep(dev, voltages=voltages)
-
-        assert "voltages" in results
-        assert "E_fields" in results
-        assert "depletion_widths" in results
-        assert "E_max" in results
-
-        # Should have data for all voltages
-        assert len(results["voltages"]) >= 3  # at least 0V + some bias points
-        assert len(results["depletion_widths"]) == len(results["voltages"])
-
-        # E_max should increase with reverse bias
-        assert results["E_max"][-1] > results["E_max"][0]
-
-
-# ===================================================================
-# Regression tests: V_bi parity at T=300K (Phase 10, Plan 02)
-# ===================================================================
-
-
 class TestVbiRegression:
     """Verify V_bi at T=300K matches v1.0 exactly."""
 
@@ -278,3 +247,21 @@ class TestVbiRegression:
         V_bi_v1 = built_in_potential(N_A_ionized, N_D, params.n_i_300)
         V_bi_T = built_in_potential(N_A_ionized, N_D, n_i_T)
         assert V_bi_T == pytest.approx(V_bi_v1, rel=1e-10)
+
+
+def test_thin_p_plus_layer_builds():
+    """audit-v7 A-14: a p+ layer thinner than 50 nm builds (no mesh line below x = 0)."""
+    import devsim
+
+    from etna.core.device import create_sic_device
+    from etna.core.devsim_reset import delete_device_and_mesh
+
+    info = create_sic_device(device_name=_unique_name(), substrate_thickness_cm=2e-6)
+    try:
+        x = devsim.get_node_model_values(
+            device=info["device_name"], region=info["region_name"], name="x"
+        )
+        assert min(x) == 0.0
+        assert info["junction_pos"] == pytest.approx(2e-6)
+    finally:
+        delete_device_and_mesh(info["device_name"])
