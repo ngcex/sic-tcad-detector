@@ -76,3 +76,16 @@ lab/engine_box/bench/dark_refactor_parity.py, area 0.04:
 - sensitivity_sweep N_t / epi_thickness_cm at -30 V: 300 K <= 4.1e-15, 400 K <= 1.1e-7.
   sensitivity_sweep could not be called twice in one process (fixed device names; devsim
   keeps the mesh after delete_device): names now carry a uuid.
+
+## run_transient: build once + dark-state snapshot (prototype; needs transient.py -> WP-A)
+
+lab/engine_box/bench/transient_build_once.py, default config, -30 V, 6 dose rates:
+transient_cce_vs_dose_rate (one create_dd_device + Auger + ramp per dose rate) 7.37 s vs
+build + Auger + ramp ONCE (1.03 s), snapshot Potential/Electrons/Holes, and per dose rate
+restore them with set_node_values before TransientSolver.initialize(): 2.13 s total,
+max |dCCE| = 0.0 (bit-identical). run_transient was 20.8 s before quiet_devsim (the
+stdout flood was most of it) and is 7.3 s now. The dose-rate loop lives in
+etna/core/transient.py (WP-A), so the change is a WP-A follow-up: hoist the build, Auger
+and ramp above the loop in transient_cce_vs_dose_rate, snapshot once, restore per rate
+(delete the device once in a finally). Side note for WP-A: the 20 Gy/s point comes out
+at exactly 1.0 (clipped) on the default stack while 50-230 Gy/s give 0.99980-0.99984.
