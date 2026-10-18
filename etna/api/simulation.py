@@ -44,7 +44,7 @@ from etna.core.device import (
 )
 from etna.core.devsim_reset import reset_devsim_fully, delete_device_and_mesh
 from etna.core.drift_diffusion import ramp_bias
-from etna.core.flash_recombination import cce_vs_dose_rate
+from etna.core.flash_recombination import cce_vs_dose_rate, flash_engine_reason
 from etna.core.mc_coupling import load_mc_events_csv
 from etna.core.microdosimetry import lineal_energy_spectrum, mean_chord_length
 from etna.core.poisson import extract_electric_field
@@ -1680,8 +1680,19 @@ def run_flash_recombination(
     dose_rates_Gy_s: "np.ndarray | None" = None,
     V_bias: float = -30.0,
     E_MeV: float = 62,
+    solver: str = "auto",
 ) -> SimResult:
     """Run a steady-state CCE-vs-dose-rate FLASH sweep and return a SimResult.
+
+    Solver (since 2026-10-18): inside ``etna.core.flash_recombination.flash_engine_reason``
+    (the engine box with the junction doping widened to 2e17, 150-450 K, legacy only to
+    -40 V) the sweep runs on the batched numba engine (parity with devsim <= ~3e-12 in
+    CCE, tests/test_flash_engine.py; ~10 ms instead of ~1 s); otherwise, or on
+    non-convergence (``metadata["fallback_reason"]``), on devsim. ``solver="devsim"``
+    forces devsim, ``"engine"`` raises outside the scope. ``metadata["validated_domain"]``
+    / ``"domain_note"`` refer to that flash scope. Both paths are SRH-only: the devsim
+    path's Auger term is overwritten by add_generation_to_dd (see cce_vs_dose_rate,
+    open physics item).
 
     Bucket-a config->kwargs adapter over
     `etna.core.flash_recombination.cce_vs_dose_rate`, which builds AND
@@ -1728,26 +1739,39 @@ def run_flash_recombination(
     # Bucket-a: cce_vs_dose_rate self-cleans. Forward config geometry/doping
     # (D-01). Do NOT reset/build/delete any device here.
     kw = device_kwargs(config)
+    scope = flash_engine_reason(kw, V_bias)
+    epi = kw.pop("epi_thickness_cm")
     result = cce_vs_dose_rate(
         dose_rates_Gy_s=dose_rates_Gy_s,
         V_bias=V_bias,
-        epi_thickness_cm=kw.pop("epi_thickness_cm"),
+        epi_thickness_cm=epi,
         E_MeV=E_MeV,
         device_kwargs=kw,
+        solver=solver,
     )
-
+    md = {
+        "V_bias": result["V_bias"],
+        "E_MeV": result["E_MeV"],
+        "solver": result["solver"],
+        "validated_domain": scope is None,
+        "domain_note": scope,
+    }
+    if result["solver"] == "batched":
+        md["cross_checked_to_V"] = FLASH_CROSS_CHECKED_TO_V
+    if "fallback_reason" in result:
+        md["fallback_reason"] = result["fallback_reason"]
     return SimResult(
         config=config,
         sim_type="flash",
         x=result["dose_rates"],
         y=result["cce_values"],
-        metadata={
-            "V_bias": result["V_bias"],
-            "E_MeV": result["E_MeV"],
-            "solver": "devsim",
-        },
+        metadata=md,
         mesh=None,
     )
+
+
+# Deepest |V| of the FLASH engine-vs-devsim parity runs (tests/test_flash_engine.py).
+FLASH_CROSS_CHECKED_TO_V = 50.0
 
 
 @serialized

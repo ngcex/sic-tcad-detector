@@ -192,7 +192,10 @@ def test_cce_vs_dose_rate_merges_device_kwargs(monkeypatch):
     got = {}
     monkeypatch.setattr(dd, "create_dd_device", _stop_after_capture(got))
     with pytest.raises(_Stop):
-        cce_vs_dose_rate([20.0], device_kwargs={"T": 350.0, "N_A": 5e18})
+        # the devsim builder path (the batched engine is the default inside its scope)
+        cce_vs_dose_rate(
+            [20.0], device_kwargs={"T": 350.0, "N_A": 5e18}, solver="devsim"
+        )
     assert (got["T"], got["N_A"]) == (350.0, 5e18)
     assert got["N_D_junction"] == 8.185880e15  # DEFAULT_STACK (was a hardcoded 2.90e15)
 

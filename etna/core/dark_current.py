@@ -42,6 +42,7 @@ from etna.core.solver_tol import (
     RELAXED_ABS_ERROR,
     RELAXED_REL_ERROR,
 )
+import inspect
 import logging
 import uuid
 
@@ -57,6 +58,15 @@ from etna.core.drift_diffusion import (
     extract_steady_state_current,
 )
 from etna.core.device import DEFAULT_STACK as _STACK, graded_stack_kwargs
+from etna.core.device import create_sic_device as _create_sic_device
+
+# create_sic_device's keyword defaults, read once at import (engine_box_reason resolves
+# missing keys with them; reading them per call would see a test spy's signature)
+_SIC_DEVICE_DEFAULTS = {
+    k: p.default
+    for k, p in inspect.signature(_create_sic_device).parameters.items()
+    if p.default is not inspect.Parameter.empty
+}
 from etna.core.devsim_reset import delete_device_and_mesh
 
 
@@ -809,21 +819,14 @@ def engine_box_reason(dev_kw, voltages, N_D_junction=None, legacy_max_V=None):
     the profile must be graded or uniform, T inside DARK_ENGINE_T, the biases reverse;
     a legacy device (``nplus_thickness_cm=None``) only to ``legacy_max_V``.
     """
-    import inspect
-
     from etna.api.simulation import _ENGINE_BOX
     from etna.core.device import (
         DEFAULT_N_D,
         DEFAULT_STACK,
-        create_sic_device,
         default_buffer_for_profile,
     )
 
-    defaults = {
-        k: p.default
-        for k, p in inspect.signature(create_sic_device).parameters.items()
-        if p.default is not inspect.Parameter.empty
-    }
+    defaults = _SIC_DEVICE_DEFAULTS
     kw = {**defaults, **{k: v for k, v in dev_kw.items() if k in defaults}}
     profile = kw["doping_profile"]
     if profile not in DARK_ENGINE_PROFILES:
@@ -857,7 +860,10 @@ def engine_box_reason(dev_kw, voltages, N_D_junction=None, legacy_max_V=None):
         )
     try:
         b_t, b_n = default_buffer_for_profile(
-            profile, kw["buffer_thickness_cm"], kw["buffer_end_doping"], kw["donor_table"]
+            profile,
+            kw["buffer_thickness_cm"],
+            kw["buffer_end_doping"],
+            kw["donor_table"],
         )
     except ValueError as e:
         return str(e)

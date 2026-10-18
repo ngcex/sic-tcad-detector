@@ -41,6 +41,11 @@ from etna.core.devsim_lock import serialized
 DARK_GUMMEL_TOL = 1e-11
 DARK_GUMMEL_MAX_ITER = 200
 
+# Gummel stop of generation_cce (FLASH): 1e-11 stagnates at round-off on undepleted
+# devices (notebook 05b's 20 um / 5e14 / -10 V corner needs >200 iterations); 1e-10
+# changes the CCE by 1.2e-11 there and converges in ~10 ms.
+FLASH_GUMMEL_TOL = 1e-10
+
 _KEYS = ("J_total", "J_SRH", "J_TAT", "J_SRV")
 
 
@@ -205,7 +210,7 @@ def generation_cce(
     C_n=0.0,
     C_p=0.0,
     tol=1e-8,
-    gummel_tol=1e-11,
+    gummel_tol=FLASH_GUMMEL_TOL,
     max_iter=DARK_GUMMEL_MAX_ITER,
     max_step_V=MAX_STEP_V,
 ):
