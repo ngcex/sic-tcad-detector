@@ -243,19 +243,11 @@ def _sweep_one(task):
         raw_edge_cce = cce_vals[-1]
         # Depletion margin (V_FD_MARGIN = 1.2): covers the +/-20 % doping tolerance.
         is_fully_depleted = abs(vb) >= V_FD_MARGIN * V_fd
-        if raw_center_cce is None or raw_edge_cce is None:
-            # Defensive: a degenerate/undepleted config can make
-            # cce_lateral_scan() yield a non-numeric (None) CCE entry
-            # instead of a float or NaN. Treat that explicitly as a
-            # floor failure rather than letting float() below raise a
-            # TypeError that gets swallowed by the generic except block.
-            center_cce = np.nan
-            edge_cce = np.nan
-            passes_cce_floor = False
-        else:
-            center_cce = float(raw_center_cce)
-            edge_cce = float(raw_edge_cce)
-            passes_cce_floor = center_cce >= CCE_FLOOR and edge_cce >= CCE_FLOOR
+        # compute_cce_2d always returns a float (NaN fails the floor comparison), so
+        # there is no None case to guard (audit B-12)
+        center_cce = float(raw_center_cce)
+        edge_cce = float(raw_edge_cce)
+        passes_cce_floor = center_cce >= CCE_FLOOR and edge_cce >= CCE_FLOOR
         record = {
             "half_width_um": hw,
             "epi_thickness_cm": epi,

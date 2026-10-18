@@ -225,7 +225,8 @@ def hecht_cce_partial_depletion(
         Hole lifetime (s). Default: srh_lifetime(T) (6e-7 at 300 K).
     L_diff_p : float
         Minority carrier (hole) diffusion length (cm). Default: 7e-4 (7 um).
-        From literature CCE fitting (Sciencedirect S0168900205006443).
+        From a literature CCE fit: Nucl. Instrum. Meth. A, ScienceDirect PII
+        S0168900205006443 (authors/title were not recorded with the value).
     N_D_mobility : float or None
         Donor density of the default mobilities (see hecht_cce).
 

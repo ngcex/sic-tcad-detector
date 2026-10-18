@@ -396,15 +396,12 @@ def proton_generation_profile(x_cm, E_MeV, dose_rate_Gy_s=1.0):
     """
     x = np.asarray(x_cm, dtype=float)
 
-    # Get range in water (mm), interpolating if needed
-    if E_MeV in PROTON_RANGE_WATER_MM:
-        R_water_mm = PROTON_RANGE_WATER_MM[E_MeV]
-    else:
-        R_water_mm = _interpolate_proton_range_water(E_MeV)
-
-    # Scale to SiC via density ratio (first-order approximation)
-    # R_SiC = R_water * (rho_water / rho_SiC)
-    _R_sic_mm = R_water_mm * (1.0 / RHO_SIC)  # noqa: F841
+    # The range lookup only validates E_MeV (raises outside the tabulated energies). The
+    # SiC range (R_water * rho_water / rho_SiC, first order) is not used: the profile
+    # below is the flat entrance-region value for every energy (audit B-10, open:
+    # energy independence of this profile).
+    if E_MeV not in PROTON_RANGE_WATER_MM:
+        _interpolate_proton_range_water(E_MeV)
 
     # Convert dose rate to generation rate
     G_entrance = dose_rate_to_generation(dose_rate_Gy_s)
