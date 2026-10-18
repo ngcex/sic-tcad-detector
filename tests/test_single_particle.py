@@ -218,9 +218,13 @@ class TestBackwardEulerEstimator:
         times = np.array([1e-12, 3e-12, 7e-12])
         currents = np.array([-2.0, -1.0, -0.5])  # sign ignored, |I| integrated
         expected = 2.0 * 1e-12 + 1.0 * 2e-12 + 0.5 * 4e-12
-        assert collected_charge(times, currents, 0.0) == pytest.approx(expected, rel=1e-12)
+        assert collected_charge(times, currents, 0.0) == pytest.approx(
+            expected, rel=1e-12
+        )
         # dark current subtracted per unit time
-        assert collected_charge(times, currents - 0.1, -0.1) == pytest.approx(expected, rel=1e-12)
+        assert collected_charge(times, currents - 0.1, -0.1) == pytest.approx(
+            expected, rel=1e-12
+        )
         assert collected_charge([], [], 0.0) == 0.0
 
     @staticmethod
@@ -400,3 +404,83 @@ class TestCCEVsBias:
         assert (
             cce_results[50.0] >= cce_results[10.0]
         ), f"CCE(50V)={cce_results[50.0]:.6f} < CCE(10V)={cce_results[10.0]:.6f}"
+
+
+class TestLinearSynthesis:
+    """synthesize_linear_response reproduces simulate_single_particle's estimator and
+    stop on a scaled series (no devsim)."""
+
+    def test_scale_one_reproduces_the_stopped_run(self, monkeypatch):
+        from etna.core.single_particle import synthesize_linear_response
+
+        run = TestBackwardEulerEstimator._run_decay
+        stopped = run(monkeypatch, 1e-9)
+        long = run(monkeypatch, 1e-9, rtol_converged=1e-12)
+        assert len(long["times"]) > len(stopped["times"])
+        Q, t, I = synthesize_linear_response(long["times"], long["currents"], 0.0, 1.0)
+        assert len(t) == len(stopped["times"])
+        assert Q == stopped["Q_collected"]
+
+    def test_linear_scaling_and_short_series(self, monkeypatch):
+        from etna.core.single_particle import synthesize_linear_response
+
+        run = TestBackwardEulerEstimator._run_decay
+        long = run(monkeypatch, 1e-9, rtol_converged=1e-12)
+        Q1, t1, _ = synthesize_linear_response(
+            long["times"], long["currents"], 0.0, 1.0
+        )
+        Q3, t3, _ = synthesize_linear_response(
+            long["times"], long["currents"], 0.0, 3.0
+        )
+        assert len(t3) == len(t1) and Q3 == pytest.approx(3.0 * Q1, rel=1e-12)
+        # a series too short for the stop gives None
+        assert (
+            synthesize_linear_response(
+                long["times"][:5], long["currents"][:5], 0.0, 1.0
+            )
+            is None
+        )
+
+    def test_unknown_method_rejected(self):
+        from etna.core.single_particle import build_cce_let_table
+
+        with pytest.raises(ValueError):
+            build_cce_let_table(method="affine", half_width_um=2.0, n_let_points=4)
+
+
+@pytest.mark.slow
+class TestBuildCCELetTableSmallMesh:
+    """build_cce_let_table on a small mesh (hw 2 um, 5 mesh columns): the shared-device
+    table equals a fresh device per LET, and method="linear" equals method="full"
+    within the table tolerance (1e-6)."""
+
+    def test_build_once_and_linear_parity(self):
+        from etna.core.charge_collection_2d import create_2d_dd_device
+        from etna.core.devsim_reset import delete_device_and_mesh
+        from etna.core.single_particle import (
+            build_cce_let_table,
+            ion_track_generation_2d,
+            simulate_single_particle,
+        )
+
+        kw = dict(
+            half_width_um=2.0, V_bias=50.0, n_let_points=5, let_min=0.5, let_max=500.0
+        )
+        full = build_cce_let_table(method="full", **kw)
+        lin = build_cce_let_table(method="linear", **kw)
+        assert full["converged"].all() and full["simulated"].all()
+        assert lin["simulated"].iloc[-1] and not lin["simulated"].all()
+        d = (lin["CCE_raw"] - full["CCE_raw"]).abs()
+        assert d.max() < 1e-6, d.tolist()
+        # simulated rows are the full-table rows (let_max: same series prefix)
+        assert d[lin["simulated"]].max() < 1e-12
+        assert (lin["t_collection_ns"] - full["t_collection_ns"]).abs().max() < 1e-12
+
+        # build-once parity: a fresh device gives the full-table row
+        info = create_2d_dd_device(half_width_um=2.0, V_bias=50.0)
+        try:
+            gen, q_gen = ion_track_generation_2d(info, full["LET_keV_um"][1])
+            fresh = simulate_single_particle(info, gen)["Q_collected"] / q_gen
+        finally:
+            delete_device_and_mesh(info["device_name"])
+        assert abs(fresh - full["CCE_raw"][1]) < 1e-12

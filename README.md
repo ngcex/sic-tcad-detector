@@ -291,7 +291,7 @@ outputs locally, re-run a notebook from `notebooks/` (`jupyter nbconvert --execu
 from the repo root, the notebook figures would write over the tracked `figures/`; set
 `ETNA_FIGURE_DIR` to redirect them. Notebook 17 also rewrites `data/synthetic_mc_events.csv`
 relative to the repo root; notebook 16 loads `data/cce_let_table_*.json` and rebuilds them
-(~70 min) only with `ETNA_REBUILD_CCE_TABLES=1`, into `$ETNA_FIGURE_DIR/data/`. Notebook run
+(~40 min) only with `ETNA_REBUILD_CCE_TABLES=1`, into `$ETNA_FIGURE_DIR/data/`. Notebook run
 times are listed in docs/USAGE.md section 12 (the slowest, 19, about 3 min).
 
 ## Development environment
