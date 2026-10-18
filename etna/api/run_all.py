@@ -47,6 +47,13 @@ def _sections() -> "dict[str, tuple[str, Callable, bool]]":
     }
 
 
+# The default graded n-/n+ transition (Lb, N_end) was fitted on the C-V of the 10 um epi;
+# the sweep applies the config's transition unchanged at any epi thickness.
+_TRANSITION_FIT_EPI_UM = 10.0
+TRANSITION_EXTRAPOLATION_NOTE = (
+    "transition Lb/N_end fitted on the 10 um epi, applied unchanged at this epi "
+    "thickness: model extrapolation"
+)
 _SWEEP_HALF_WIDTHS = (25.0, 50.0)
 _SWEEP_BIASES = (20.0, 40.0, 60.0)
 SWEEP_TITLE = "Microdosimetry sweep (2D engine)"
@@ -127,6 +134,8 @@ def _run_sweep(config: DeviceConfig) -> SimResult:
             f" (graded n-/n+ transition {config.buffer_thickness_um:g} um to "
             f"{config.buffer_end_doping:.1e} cm^-3)"
         )
+        if config.epi_thickness_um != _TRANSITION_FIT_EPI_UM:
+            summary += f" [{TRANSITION_EXTRAPOLATION_NOTE}]"
     if best["is_valid"]:
         summary += (
             f"; best: half-width {best['half_width_um']:g} um at "
