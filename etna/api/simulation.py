@@ -1433,11 +1433,15 @@ def run_temperature_sweep(
 ) -> SimResult:
     """Run a CCE-vs-temperature sweep at a single bias and return a SimResult.
 
-    Bucket-a config->kwargs adapter over
-    `etna.core.temperature_sweep.sweep_cce_vs_temperature`, which builds
-    AND deletes its own device(s) (self-cleaning). run_temperature_sweep
-    therefore does NOT call `build_device`, `reset_devsim_fully`, or
-    `devsim.delete_device`.
+    Temperatures at which the device lies in the batched engine's validated box
+    (``_ENGINE_BOX``, T 250-400 K) are solved in one batched solve, one device per
+    T: "hecht" takes W from a dark Poisson solve, "dd" runs ``cce_sweep`` (parity
+    with the devsim path: |dCCE| <= 6e-12 hecht, <= 1.1e-12 dd, 250-400 K, -10..-60 V,
+    default/n+-calibrated/legacy stacks; tests/test_temperature_engine.py). The
+    other temperatures, and any that do not converge, go through
+    `etna.core.temperature_sweep.sweep_cce_vs_temperature`, which builds AND
+    deletes its own devsim device(s) and drops a temperature that fails.
+    ``metadata["solver_per_T"]`` says which path produced each point.
 
     Axis choice (D-04): a SINGLE bias (`voltages=[voltage]`) is passed so the
     returned curve is a clean 1D CCE-vs-T profile (x=T). Temperature is the
@@ -1464,41 +1468,111 @@ def run_temperature_sweep(
         (dimensionless), metadata contains "voltage_V" and "method".
     """
     _require_1d(config, "run_temperature_sweep")
+    if method not in ("hecht", "dd"):
+        raise ValueError(f"method must be 'hecht' or 'dd', got '{method}'")
 
     if temperatures is None:
         temperatures = np.linspace(250.0, 350.0, 5)
+    temperatures = np.atleast_1d(np.asarray(temperatures, dtype=float))
 
-    # Bucket-a: sweep_cce_vs_temperature self-cleans. Pass voltages=[voltage]
-    # (single element) so x=T is a clean 1D curve. Do NOT forward config.T
-    # (T is the swept axis); DO forward every other config field.
-    kw = device_kwargs(config)
-    kw.pop("T")
-    df = sweep_cce_vs_temperature(
-        temperatures=temperatures,
-        voltages=[voltage],
-        method=method,
-        **kw,
+    # Temperatures whose device lies in the engine's validated box are solved in one
+    # batched Newton solve (T is a per-device input); the rest, and any that do not
+    # converge, go through the devsim path (sweep_cce_vs_temperature, self-cleaning),
+    # which drops a temperature that fails, as before.
+    cce = np.full(temperatures.size, np.nan)
+    solver = np.full(temperatures.size, "devsim", dtype=object)
+    bias = np.array([voltage], dtype=float)
+    on_engine = [
+        i
+        for i, T in enumerate(temperatures)
+        if _engine_unsupported_reason(_with_T(config, T), bias) is None
+    ]
+    if on_engine:
+        vals, conv = _temperature_engine(
+            config, temperatures[on_engine], voltage, method
+        )
+        for j, i in enumerate(on_engine):
+            if conv[j]:
+                cce[i], solver[i] = vals[j], "batched"
+    rest = [i for i in range(temperatures.size) if solver[i] != "batched"]
+    if rest:
+        # Do NOT forward config.T (T is the swept axis); DO forward every other field.
+        kw = device_kwargs(config)
+        kw.pop("T")
+        df = sweep_cce_vs_temperature(
+            temperatures=temperatures[rest],
+            voltages=[voltage],
+            method=method,
+            **kw,
+        )
+        got = dict(zip(df["T"].to_numpy(), df["CCE"].to_numpy()))
+        for i in rest:
+            cce[i] = got.get(temperatures[i], np.nan)
+
+    keep = np.isfinite(cce)
+    used = set(solver[keep])
+    label = {
+        ("hecht", "batched"): "hecht (analytical; W from batched engine)",
+        ("hecht", "devsim"): "hecht (analytical; W from devsim)",
+        ("dd", "batched"): "batched",
+        ("dd", "devsim"): "devsim",
+    }
+    name = (
+        label[(method, used.pop())]
+        if len(used) == 1
+        else (
+            "hecht (analytical; W from batched engine + devsim)"
+            if method == "hecht"
+            else "batched + devsim"
+        )
     )
-
-    # Return is a long-format pd.DataFrame with columns T, V, CCE (Pitfall 3).
-    x = df["T"].to_numpy()
-    y = df["CCE"].to_numpy()
-
     return SimResult(
         config=config,
         sim_type="temperature",
-        x=x,
-        y=y,
+        x=temperatures[keep],
+        y=cce[keep],
         metadata={
             "voltage_V": voltage,
             "method": method,
-            **_provenance(
-                config,
-                "hecht (analytical; W from devsim)" if method == "hecht" else "devsim",
-            ),
+            "solver_per_T": solver[keep].astype(str),
+            **_provenance(config, name),
         },
         mesh=None,
     )
+
+
+def _with_T(config: DeviceConfig, T: float) -> DeviceConfig:
+    from dataclasses import replace
+
+    return replace(config, T=float(T))
+
+
+def _temperature_engine(config: DeviceConfig, temperatures, voltage, method):
+    """Batched-engine CCE at one bias for every T: (cce (n,), converged (n,) bool).
+
+    One batch, one device per temperature, all sharing the config's mesh. "hecht":
+    the depletion edge W from a dark Poisson solve, then ``hecht_cce(V, d=W, T)``
+    exactly as ``sweep_cce_vs_temperature``; "dd": ``cce_sweep`` with the
+    ``cce_vs_bias`` generation and mobility inputs (as ``run_cce``).
+    """
+    from etna.core.charge_collection import hecht_cce
+
+    kws = [device_kwargs(_with_T(config, T)) for T in temperatures]
+    pb, x, nd = _engine_batch(kws)
+    sub, epi = kws[0]["substrate_thickness_cm"], kws[0]["epi_thickness_cm"]
+    if method == "hecht":
+        res = reverse_sweep(pb, [voltage], sub, epi, capacitance=False)
+        vals = np.array(
+            [
+                float(hecht_cce(voltage, d=W, T=T))
+                for W, T in zip(res.W[0], temperatures)
+            ]
+        )
+        return vals, res.converged[0]
+    epi_end = sub + epi if kws[0].get("nplus_thickness_cm") else None
+    G = alpha_generation(x, sub, 15e-4, 1e18, epi_end=epi_end)
+    res = cce_sweep(pb, [voltage], sub, G, T=temperatures, N_D=nd)
+    return res.cce[0], res.converged[0]
 
 
 @serialized

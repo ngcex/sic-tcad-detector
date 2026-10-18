@@ -23,7 +23,7 @@ from etna.core.sic_material import (
     mobility_caughey_thomas_T,
     srh_lifetime,
 )
-from etna.core.device import DEFAULT_STACK as _STACK
+from etna.core.device import DEFAULT_STACK as _STACK, mobility_doping
 
 
 logger = logging.getLogger(__name__)
@@ -113,10 +113,13 @@ def sweep_iv_vs_temperature(
                 I_total = extract_steady_state_current(device_info, contact="cathode")
 
             n_i_T, _, _, E_g_T = intrinsic_concentration(T, params)
-            mu_n = mobility_caughey_thomas_T(
-                params.N_ref_n * 0.001, T, "electron", params
+            # mobilities at the epi doping the device transport uses (mobility_doping:
+            # N_D uniform, N_D_bulk graded), not at a fixed 0.001 * N_ref
+            nd_mob = mobility_doping(
+                kwargs.get("N_D"), kwargs["doping_profile"], kwargs.get("N_D_bulk")
             )
-            mu_p = mobility_caughey_thomas_T(params.N_ref_p * 0.001, T, "hole", params)
+            mu_n = mobility_caughey_thomas_T(nd_mob, T, "electron", params)
+            mu_p = mobility_caughey_thomas_T(nd_mob, T, "hole", params)
 
             records.append(
                 {

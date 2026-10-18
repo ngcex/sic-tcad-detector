@@ -53,7 +53,12 @@ def _capture(monkeypatch, name):
         ("cce_vs_fluence", lambda: sim.run_radiation_damage(CFG), True),
         ("cce_vs_dose_rate", lambda: sim.run_flash_recombination(CFG), True),
         ("transient_cce_vs_dose_rate", lambda: sim.run_transient(CFG), True),
-        ("sweep_cce_vs_temperature", lambda: sim.run_temperature_sweep(CFG), False),
+        # 500 K: outside the engine box, so the devsim core is called
+        (
+            "sweep_cce_vs_temperature",
+            lambda: sim.run_temperature_sweep(CFG, np.array([500.0])),
+            False,
+        ),
     ],
 )
 def test_facades_forward_full_config(monkeypatch, name, call, nested):
