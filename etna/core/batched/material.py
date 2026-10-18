@@ -10,7 +10,16 @@ from __future__ import annotations
 
 import numpy as np
 
-from etna.core.device import EPS_0, K_B_J, Q, donor_profile
+from etna.core.device import (
+    EPS_0,
+    K_B_J,
+    Q,
+    acceptor_total_scale,
+    donor_profile,
+    edge_mobility,
+    local_mobility,
+)
+from etna.core.incomplete_ionization import ionized_acceptor_concentration
 from etna.core.sic_material import SiC4H_Parameters
 
 PARAMS = SiC4H_Parameters()
@@ -19,6 +28,35 @@ EPS = PARAMS.eps_r * EPS_0  # F/cm
 
 def thermal_voltage(T):
     return K_B_J * T / Q
+
+
+def edge_mobilities(donors, acceptors, N_A, T):
+    """Edge mobilities (mu_n, mu_p), each (N-1, B), of the devsim builders' local model.
+
+    ``donors`` / ``acceptors`` (B, N) are the doping the solver sees (acceptors
+    IONIZED, as devsim's Acceptors model); ``N_A`` and ``T`` scalar or (B,). Node
+    mobility = Caughey-Thomas at Donors + (N_A / N_A_ionized) * Acceptors
+    (etna.core.device.local_mobility), arithmetic edge average (edge_mobility): the
+    numpy twin of etna.core.device.add_local_mobility_models.
+    """
+    donors = np.atleast_2d(np.asarray(donors, dtype=float))
+    acceptors = np.broadcast_to(np.asarray(acceptors, dtype=float), donors.shape)
+    B = donors.shape[0]
+    N_A = np.broadcast_to(np.asarray(N_A, dtype=float), (B,))
+    T = np.broadcast_to(np.asarray(T, dtype=float), (B,))
+    out = []
+    for carrier in ("electron", "hole"):
+        mu = np.empty((B, donors.shape[1] - 1))
+        for b in range(B):
+            scale = acceptor_total_scale(
+                N_A[b], ionized_acceptor_concentration(float(N_A[b]), float(T[b]))
+            )
+            node = local_mobility(
+                donors[b], acceptors[b], scale, float(T[b]), carrier, PARAMS
+            )
+            mu[b] = edge_mobility(node)
+        out.append(np.ascontiguousarray(mu.T))
+    return out[0], out[1]
 
 
 def graded_doping(

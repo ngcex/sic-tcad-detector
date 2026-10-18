@@ -73,22 +73,32 @@ class TransportResult:
 
 
 class ContinuityBatch:
-    """Fixed per-batch transport data. mu/tau scalar or (B,)."""
+    """Fixed per-batch transport data.
+
+    ``mu_n`` / ``mu_p``: EDGE mobilities (N-1, B) (``material.edge_mobilities``, the
+    devsim builders' local model), or a scalar / (B,) uniform mobility (kept for unit
+    tests and callers that want one value per device). ``tau`` scalar or (B,).
+    """
 
     def __init__(self, pb, mu_n, mu_p, tau_n, tau_p):
         self.pb = pb  # PoissonBatch -- supplies mesh, doping, n_i, V_t
         B, N = pb.B, pb.N
         bc = lambda a: np.broadcast_to(np.asarray(a, dtype=float), (B,)).copy()
-        self.mu_n, self.mu_p, self.tau_n, self.tau_p = (
-            bc(mu_n),
-            bc(mu_p),
-            bc(tau_n),
-            bc(tau_p),
-        )
+
+        def edges(a):
+            a = np.asarray(a, dtype=float)
+            if a.ndim == 2:
+                if a.shape != (N - 1, B):
+                    raise ValueError(f"edge mobility shape {a.shape} != {(N - 1, B)}")
+                return a.copy()
+            return np.broadcast_to(bc(a)[None, :], (N - 1, B)).copy()
+
+        self.mu_n, self.mu_p = edges(mu_n), edges(mu_p)  # (N-1, B)
+        self.tau_n, self.tau_p = bc(tau_n), bc(tau_p)
         self.h = np.diff(pb.x)[:, None]  # (N-1, 1)
         self.v = pb.v[:, None]  # (N, 1), ends unused
-        self.kn = (Q * self.mu_n[None, :] * pb.V_t[None, :]) / self.h  # (N-1, B)
-        self.kp = (Q * self.mu_p[None, :] * pb.V_t[None, :]) / self.h
+        self.kn = (Q * self.mu_n * pb.V_t[None, :]) / self.h  # (N-1, B)
+        self.kp = (Q * self.mu_p * pb.V_t[None, :]) / self.h
         D = pb.netdop
         n_i, V_t = pb.n_i, pb.V_t
         celec = lambda d: 1e-10 + 0.5 * np.abs(d + np.sqrt(d**2 + 4 * n_i**2))

@@ -864,7 +864,7 @@ def _cce_fluence_engine(ref, damaged_list, V_bias, alpha_range_cm, generation_ra
     with generation. Returns (cce, converged), both (B,).
     """
     from etna.core.batched.material import Q as Q_ENGINE
-    from etna.core.batched.material import thermal_voltage
+    from etna.core.batched.material import edge_mobilities, thermal_voltage
     from etna.core.batched.poisson import PoissonBatch
     from etna.core.batched.sweeps import _Ramp
     from etna.core.batched.transport import ContinuityBatch
@@ -876,10 +876,13 @@ def _cce_fluence_engine(ref, damaged_list, V_bias, alpha_range_cm, generation_ra
         donors[b, ref["epi_mask"]] = damaged["N_D_profile"]
     acceptors = np.broadcast_to(ref["acceptors"], (B, N))
     pb = PoissonBatch(x, donors, acceptors, info["n_i"], thermal_voltage(info["T"]))
+    # local (per-node, edge-averaged) mobility at the DAMAGED doping, as devsim's
+    # mu_n / mu_p edge models after apply_damaged_params (was the scalar info["mu_n"])
+    mu_n, mu_p = edge_mobilities(donors, acceptors, info["N_A"], info["T"])
     cb = ContinuityBatch(
         pb,
-        info["mu_n"],
-        info["mu_p"],
+        mu_n,
+        mu_p,
         np.array([d["tau_n"] for d in damaged_list], dtype=float),
         np.array([d["tau_p"] for d in damaged_list], dtype=float),
     )

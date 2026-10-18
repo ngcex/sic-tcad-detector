@@ -171,6 +171,10 @@ class PoissonBatch:
         self.V_t = np.broadcast_to(np.asarray(V_t, dtype=float), (self.B,)).copy()
         self.N0 = np.abs(D).max(axis=1)  # (B,)
         self.donors = np.asarray(donors, dtype=float)
+        # ionized acceptors (B, N), as devsim's Acceptors node model (local mobility)
+        self.acceptors = np.broadcast_to(
+            np.asarray(acceptors, dtype=float), D.shape
+        )
         self.netdop = D
         self.lam2 = EPS * self.V_t / (Q * self.N0)  # (B,) cm^2
         self.log_ni_hat = np.log(self.n_i / self.N0)  # (B,)

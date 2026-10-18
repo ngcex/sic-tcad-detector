@@ -424,6 +424,10 @@ def create_sic_2d_device(
     # mu_p was evaluated at the p+ doping N_A (1e19: 75.7 vs 121 cm2/Vs at 1.07e15;
     # .issues/audit-v7 A-03). Scalar per region: the p+ and n+ inherit the epi values.
     # Graded profiles: the bulk epi doping N_D_bulk (mobility_doping; was DEFAULT_N_D).
+    # The 1D builder uses the LOCAL per-node mobility since 2026-10-18; 2D keeps this
+    # scalar until engine2d's kernels take per-edge mobilities (they read info["mu_n"]
+    # as one number and must stay at parity with this builder; see
+    # etna.core.device.add_local_mobility_models).
     N_D_mobility = mobility_doping(N_D, doping_profile, N_D_bulk)
     mu_n = mobility_caughey_thomas_T(N_D_mobility, T, "electron", params)
     mu_p = mobility_caughey_thomas_T(N_D_mobility, T, "hole", params)

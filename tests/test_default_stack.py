@@ -113,15 +113,17 @@ def test_legacy_preset_reproduces_the_pre_flip_numbers():
     # hole mobility at the epi doping since 2026-10-17 (was N_A, audit-v7 A-03); pre-flip values were
     # 0.9632660166 0.9961156665 0.9977188375 0.9982665005 0.9984736379; both mobilities at
     # N_D_bulk (was DEFAULT_N_D 1.07e15) since 2026-10-17: 0.9636306340 0.9962744523
-    # 0.9978247277 0.9983467119 0.9985384182 before
+    # 0.9978247277 0.9983467119 0.9985384182 before; local per-node mobility (p+ at its
+    # own 1e19, A-03) since 2026-10-18: 0.9636418771662469 0.9962794936625294
+    # 0.9978281262365173 0.9983493034607709 0.998540520801036 before
     np.testing.assert_allclose(
         cce.y,
         [
-            0.9636418771662469,
-            0.9962794936625294,
-            0.9978281262365173,
-            0.9983493034607709,
-            0.998540520801036,
+            0.9636400757290315,
+            0.9962782971599875,
+            0.9978271896050328,
+            0.9983485188030706,
+            0.9985398378691338,
         ],
         rtol=1e-9,
     )
@@ -130,8 +132,10 @@ def test_legacy_preset_reproduces_the_pre_flip_numbers():
         d.y * 1e12,
         # hole mobility at the epi doping (2026-10-17, A-03); pre-flip:
         # 1.5958223017 5.9621516945 10.4615603668 14.5641749059; mobilities at N_D_bulk
-        # (2026-10-17): 1.5988415042 5.9622111020 10.4615631238 14.5641756901 before
-        [1.5989592488465492, 5.962238289889233, 10.461588518070496, 14.564200940400156],
+        # (2026-10-17): 1.5988415042 5.9622111020 10.4615631238 14.5641756901 before;
+        # local per-node mobility (p+ electrons at their own 1e19, A-03; 2026-10-18):
+        # 1.5989592488465492 5.962238289889233 10.461588518070496 14.564200940400156 before
+        [1.5940349754412595, 5.957760064773854, 10.457105099357713, 14.5597135908548],
         rtol=1e-9,
     )
     assert d.metadata["N_t"] == 2.8e12 and d.metadata["E_t"] == 0.65
@@ -141,9 +145,11 @@ def test_default_numbers_are_the_measured_cv_record():
     """Default since 2026-10-18 (measured-C-V fit, lab/cv_gap + lab/buffer_profile):
     eps*A/C 1.655 / 9.519 / 9.750 um at 0 / -10 / -30 V (digitised labels 1.68 / 9.52 /
     9.73; the whole curve is a fit input), depletion edge 1.649 / 9.480 / 9.736 um,
-    reach-through 3.1 V (edge within one L_D of the transition start), CCE 0.999472 /
-    0.999810 / 0.999883 at -10 / -30 / -50 V, dark 6.296 / 15.763 / 18.000 pA (4 mm2;
-    N_t refitted to the 18 pA bound)."""
+    reach-through 3.1 V (edge within one L_D of the transition start), CCE 0.9994734 /
+    0.9998111 / 0.9998832 at -10 / -30 / -50 V (local per-node mobility since 2026-10-18,
+    A-03; scalar epi mobility before: 0.9994722 / 0.9998104 / 0.9998829), dark 6.296 /
+    15.763 / 18.000 pA (4 mm2; N_t refitted to the 18 pA bound; 17.99985 pA at -60 V
+    with the local mobility)."""
     c = DeviceConfig()
     cv = sim.run_cv(c, 0.0, -30.0, 31)
     WC = np.asarray(cv.metadata["W_from_C"]) * 1e4
@@ -152,7 +158,7 @@ def test_default_numbers_are_the_measured_cv_record():
     np.testing.assert_allclose(W[[0, 10, 30]], [1.649339, 9.480291, 9.736051], atol=1e-6)
     assert cv.metadata["reach_through_V"] == pytest.approx(3.1)
     cce = sim.run_cce(c, -10.0, -50.0, 3)
-    np.testing.assert_allclose(cce.y, [0.999472, 0.99981, 0.999883], atol=1e-6)
+    np.testing.assert_allclose(cce.y, [0.9994734, 0.9998111, 0.9998832], atol=1e-7)
     d = sim.run_dark_current(dataclasses.replace(c, area_cm2=0.04), 0.0, -60.0, 7)
     np.testing.assert_allclose(d.y[[1, 3, 6]] * 1e12, [6.296, 15.763, 18.000], atol=1e-3)
 
@@ -175,8 +181,9 @@ def test_previous_default_numbers_are_the_calibration_record():
     assert cv.metadata["reach_through_V"] == pytest.approx(12.3)
     cce = sim.run_cce(c, -10.0, -50.0, 3)
     # hole mobility at the epi doping since 2026-10-17 (was N_A, audit-v7 A-03): 0.998899 / 0.999707 / 0.999820 before;
-    # both mobilities at N_D_bulk (was DEFAULT_N_D 1.07e15) since 2026-10-17: 0.999303 / 0.999812 / 0.999884 before
-    np.testing.assert_allclose(cce.y, [0.999316, 0.999816, 0.999887], atol=1e-6)
+    # both mobilities at N_D_bulk (was DEFAULT_N_D 1.07e15) since 2026-10-17: 0.999303 / 0.999812 / 0.999884 before;
+    # local per-node mobility (A-03) since 2026-10-18: 0.999316 / 0.999816 / 0.999887 before
+    np.testing.assert_allclose(cce.y, [0.9993150, 0.9998155, 0.9998862], atol=1e-7)
     d = sim.run_dark_current(dataclasses.replace(c, area_cm2=0.04), 0.0, -60.0, 7)
     np.testing.assert_allclose(
         d.y[[1, 3, 6]] * 1e12, [6.077, 14.720, 18.000], atol=1e-3
@@ -300,7 +307,9 @@ def test_transient_uses_the_anode_with_nplus():
     assert r.metadata["current_contact"] == "cathode"
     # pre-flip value 0.9975336675676356; hole mobility at the epi doping since 2026-10-17 (was N_A, audit-v7 A-03)
     # 0.9976403048899449; both mobilities at N_D_bulk (was DEFAULT_N_D) since 2026-10-17
-    assert r.y[0] == pytest.approx(0.9976437322922994, rel=1e-9)
+    # 0.9976437322922994; step-end stamps/BDF1 estimator (A-04) 0.9976437319364355; local
+    # per-node mobility (A-03) since 2026-10-18
+    assert r.y[0] == pytest.approx(0.9976427859179097, rel=1e-9)
 
 
 def test_run_all_default_every_section_ok():
