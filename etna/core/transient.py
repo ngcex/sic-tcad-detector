@@ -29,9 +29,16 @@ import numpy as np
 import pandas as pd
 
 from etna.core.charge_collection import add_generation_to_dd
-from etna.core.drift_diffusion import create_dd_device, extract_contact_current, ramp_bias
+from etna.core.drift_diffusion import (
+    create_dd_device,
+    extract_contact_current,
+    ramp_bias,
+)
 from etna.core.flash_recombination import add_auger_recombination
-from etna.core.generation_profiles import confine_generation_to_epi, proton_generation_profile
+from etna.core.generation_profiles import (
+    confine_generation_to_epi,
+    proton_generation_profile,
+)
 from etna.core.device import DEFAULT_STACK as _STACK
 from etna.core.solver_tol import DC_REL_ERROR
 
@@ -657,11 +664,13 @@ def transient_cce_vs_dose_rate(
         an n+ layer, else "cathode". The direct cathode current on the n+ is the
         majority-carrier current in 1e19 material, dominated by round-off: on the
         pre-2026-10-18 stack (-30 V, 20-230 Gy/s) it scattered 0.983-1.0 (clipped) vs the
-        anode's 0.99969-0.99987. Measured 2026-10-18 on the current default stack
-        (anode): 0.999839 / 0.999841 / 0.999842 / 0.999842 / 0.999803 at 50 / 100 / 150
-        / 200 / 230 Gy/s; at 20 Gy/s 1.0 (clipped; raw 1.00028: the direct anode current
-        is quantised at ~3e-4 of q*integral(G) at this lowest signal, the balanced
-        steady-state value is 0.999808). Without n+ the cathode is kept (spread 3e-8;
+        anode's 0.99969-0.99987. Measured 2026-10-18 on the current default stack (local
+        mobility, step-end BDF1 estimator; anode): 0.999725 / 0.999868 / 0.999869 /
+        0.999870 / 0.999801 / 0.999822 at 20 / 50 / 100 / 150 / 200 / 230 Gy/s (spread
+        1.5e-4: the direct anode current carries round-off of ~1e-4 of q*integral(G);
+        the balanced steady-state CCE at 20 Gy/s is 0.999809, the direct steady-state
+        anode value 0.999729). With the scalar epi mobility (before the A-03 fix) the
+        20 Gy/s point read 1.00028 (clipped to 1). Without n+ the cathode is kept (spread 3e-8;
         legacy numbers unchanged). The balanced steady-state form is not used: it has
         no dQ/dt term.
 
@@ -686,7 +695,9 @@ def transient_cce_vs_dose_rate(
     dev_kw.update(device_kwargs or {})
     if contact is None:
         # (a missing key = create_sic_device's default, the stack's n+ layer)
-        has_nplus = dev_kw.get("nplus_thickness_cm", _STACK["nplus_thickness_cm"]) is not None
+        has_nplus = (
+            dev_kw.get("nplus_thickness_cm", _STACK["nplus_thickness_cm"]) is not None
+        )
         contact = "anode" if has_nplus else "cathode"
     if contact not in ("cathode", "anode"):
         raise ValueError(f"contact must be 'cathode' or 'anode', got {contact!r}")

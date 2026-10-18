@@ -8,6 +8,8 @@ doping profile is restated in numpy, as the same expression that
 
 from __future__ import annotations
 
+from functools import lru_cache
+
 import numpy as np
 
 from etna.core.device import (
@@ -30,6 +32,12 @@ def thermal_voltage(T):
     return K_B_J * T / Q
 
 
+@lru_cache(maxsize=4096)
+def _acceptor_scale(N_A, T):
+    """N_A / N_A_ionized (cached: the ionization root solve is per call)."""
+    return acceptor_total_scale(N_A, ionized_acceptor_concentration(N_A, T))
+
+
 def edge_mobilities(donors, acceptors, N_A, T):
     """Edge mobilities (mu_n, mu_p), each (N-1, B), of the devsim builders' local model.
 
@@ -44,13 +52,12 @@ def edge_mobilities(donors, acceptors, N_A, T):
     B = donors.shape[0]
     N_A = np.broadcast_to(np.asarray(N_A, dtype=float), (B,))
     T = np.broadcast_to(np.asarray(T, dtype=float), (B,))
+    scales = [_acceptor_scale(float(N_A[b]), float(T[b])) for b in range(B)]
     out = []
     for carrier in ("electron", "hole"):
         mu = np.empty((B, donors.shape[1] - 1))
         for b in range(B):
-            scale = acceptor_total_scale(
-                N_A[b], ionized_acceptor_concentration(float(N_A[b]), float(T[b]))
-            )
+            scale = scales[b]
             node = local_mobility(
                 donors[b], acceptors[b], scale, float(T[b]), carrier, PARAMS
             )

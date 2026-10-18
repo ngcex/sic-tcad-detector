@@ -386,6 +386,11 @@ class TestCalibration2DLeavesCallerDevices:
         finally:
             devsim.delete_device(device=sentinel)
             devsim.delete_mesh(mesh=f"{sentinel}_mesh")
+            # never leave the cylindrical leftover to later tests of this worker
+            from etna.core.devsim_reset import _CARTESIAN_DEFAULTS
+
+            for name, value in _CARTESIAN_DEFAULTS.items():
+                devsim.set_parameter(name=name, value=value)
         # same optimum as with the per-trial full reset (measured before the change)
         assert r["final_cost"] == pytest.approx(0.03182988130915616, rel=1e-9)
         assert r["W_simulated"][-2.0] == pytest.approx(3.310540237430286e-4, rel=1e-9)

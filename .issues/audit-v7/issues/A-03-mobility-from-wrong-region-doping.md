@@ -3,7 +3,7 @@ id: A-03
 title: Scalar mobilities are evaluated at the other region's doping (epi hole mobility at N_A=1e19; substrate electron mobility at N_D~1e15)
 severity: medium
 category: bug
-status: fixed in 1D 2026-10-18 (WP-A 36c8997: local per-node Caughey-Thomas, devsim 1D + batched engine + fluence engine); 2D half (device2d, alternative structures, engine2d kernels) on branch wp-a-2d-local-mobility (b91b888), held because engine2d belongs to WP-B
+status: fixed in 1D 2026-10-18 (WP-A 36c8997: local per-node Caughey-Thomas, devsim 1D + batched engine + fluence engine); 2D half (device2d, alternative structures, engine2d kernels) on branch wp-a-2d-local-mobility (83fbc82 + test re-pin 0fd93fd), held because engine2d belongs to WP-B
 location: etna/core/device.py:184-185, etna/core/device2d.py:362-363 (same pattern in etna/core/alternative_structures.py:103-104, outside slice); consumer etna/core/drift_diffusion.py (CreateElectronCurrent/CreateHoleCurrent reading mu_n/mu_p)
 labels: [audit-v7, slice-A, physics, mobility, transient]
 source: raw-A-core-solvers.md F3

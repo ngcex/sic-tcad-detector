@@ -114,10 +114,13 @@ NPLUS_CALIBRATION = {
 
 
 def mobility_doping(N_D, doping_profile, N_D_bulk):
-    """Epi donor density (cm^-3) at which BOTH scalar mobilities are evaluated.
+    """Epi donor density (cm^-3) of the REFERENCE scalar mobilities.
 
-    Single rule shared by the devsim builders (1D, 2D, alternative structures) and the
-    batched engine: uniform profile -> ``N_D`` (``DEFAULT_N_D`` when None); graded
+    Since 2026-10-18 the 1D transport (devsim and the batched engine) uses the local
+    per-node mobility (add_local_mobility_models); this scalar is what device_info
+    reports as mu_n / mu_p, the devsim parameters of that name (overridden in the
+    transport by the edge models), the 2D builders' transport mobility, and the Hecht
+    default (charge_collection). Rule: uniform profile -> ``N_D`` (``DEFAULT_N_D`` when None); graded
     profile -> the bulk epi doping ``N_D_bulk`` (``DEFAULT_STACK["N_D_bulk"]`` when
     None), the doping of most of the sensitive volume. Before 2026-10-17 graded devices
     used ``DEFAULT_N_D`` (1.07e15) whatever N_D_bulk was, so a changed N_D_bulk (e.g. the

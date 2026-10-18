@@ -53,8 +53,13 @@ def test_one_source_of_truth():
     assert core_device2d._N_D_JUNCTION_DEFAULT == DEFAULT_STACK["N_D_junction"]
     assert core_device2d._N_D_BULK_DEFAULT == DEFAULT_STACK["N_D_bulk"]
     assert core_device2d._L_TRANSITION_DEFAULT == DEFAULT_STACK["L_transition"]
-    assert core_device2d._BUFFER_THICKNESS_DEFAULT_CM == DEFAULT_STACK["buffer_thickness_cm"]
-    assert core_device2d._BUFFER_END_DOPING_DEFAULT == DEFAULT_STACK["buffer_end_doping"]
+    assert (
+        core_device2d._BUFFER_THICKNESS_DEFAULT_CM
+        == DEFAULT_STACK["buffer_thickness_cm"]
+    )
+    assert (
+        core_device2d._BUFFER_END_DOPING_DEFAULT == DEFAULT_STACK["buffer_end_doping"]
+    )
     import inspect
 
     for fn in (core_device.create_sic_device, core_device2d.create_sic_2d_device):
@@ -63,7 +68,11 @@ def test_one_source_of_truth():
         assert p["buffer_end_doping"].default == DEFAULT_STACK["buffer_end_doping"]
     # the previous default stays reproducible as a named preset
     p = nplus_calibrated_config()
-    assert (p.N_D_junction, p.N_D_bulk, p.L_transition_um) == (2.958237e15, 8.252732e13, 0.987)
+    assert (p.N_D_junction, p.N_D_bulk, p.L_transition_um) == (
+        2.958237e15,
+        8.252732e13,
+        0.987,
+    )
     assert p.buffer_thickness_um is None and p.buffer_end_doping is None
     assert (p.N_t, p.E_t) == (2.805336e12, 0.67)
     # device_kwargs always carries the transition keys (None = abrupt epi end)
@@ -153,14 +162,20 @@ def test_default_numbers_are_the_measured_cv_record():
     c = DeviceConfig()
     cv = sim.run_cv(c, 0.0, -30.0, 31)
     WC = np.asarray(cv.metadata["W_from_C"]) * 1e4
-    np.testing.assert_allclose(WC[[0, 10, 30]], [1.654732, 9.518526, 9.75029], atol=1e-6)
+    np.testing.assert_allclose(
+        WC[[0, 10, 30]], [1.654732, 9.518526, 9.75029], atol=1e-6
+    )
     W = np.asarray(cv.metadata["depletion_widths"]) * 1e4
-    np.testing.assert_allclose(W[[0, 10, 30]], [1.649339, 9.480291, 9.736051], atol=1e-6)
+    np.testing.assert_allclose(
+        W[[0, 10, 30]], [1.649339, 9.480291, 9.736051], atol=1e-6
+    )
     assert cv.metadata["reach_through_V"] == pytest.approx(3.1)
     cce = sim.run_cce(c, -10.0, -50.0, 3)
     np.testing.assert_allclose(cce.y, [0.9994734, 0.9998111, 0.9998832], atol=1e-7)
     d = sim.run_dark_current(dataclasses.replace(c, area_cm2=0.04), 0.0, -60.0, 7)
-    np.testing.assert_allclose(d.y[[1, 3, 6]] * 1e12, [6.296, 15.763, 18.000], atol=1e-3)
+    np.testing.assert_allclose(
+        d.y[[1, 3, 6]] * 1e12, [6.296, 15.763, 18.000], atol=1e-3
+    )
 
 
 def test_previous_default_numbers_are_the_calibration_record():
@@ -168,7 +183,8 @@ def test_previous_default_numbers_are_the_calibration_record():
     C; lab/solver2d/notes/LOG.md): eps*A/C 1.700 / 9.500 (inputs) / 9.979 um (out of fit,
     +2.56 %), depletion edge 1.689 / 9.267 / 9.896 um, dark 6.077 / 14.720 / 18.000 pA
     (4 mm2). Previous record (edge calibration): edge 1.700 / 9.500 / 9.899,
-    CCE 0.999021 / 0.999706 / 0.999819, dark 6.132 / 14.873 / 18.000, reach-through 10.3 V."""
+    CCE 0.999021 / 0.999706 / 0.999819, dark 6.132 / 14.873 / 18.000, reach-through 10.3 V.
+    """
     c = nplus_calibrated_config()
     cv = sim.run_cv(c, 0.0, -30.0, 31)
     WC = np.asarray(cv.metadata["W_from_C"]) * 1e4
@@ -301,8 +317,9 @@ def test_microdosimetry_builds_no_device(monkeypatch, tmp_path):
 def test_transient_uses_the_anode_with_nplus():
     r = sim.run_transient(DeviceConfig(), np.array([20.0, 100.0]))
     assert r.metadata["current_contact"] == "anode"
-    # balanced steady-state flash CCE at -30 V is 0.999703; anode scatter ~2e-4
-    assert np.all(np.abs(r.y - 0.9997) < 5e-4)
+    # 2026-10-18 (local mobility): 0.999725 / 0.999869 at 20 / 100 Gy/s; balanced
+    # steady-state CCE at 20 Gy/s 0.999809; direct anode round-off ~1e-4
+    np.testing.assert_allclose(r.y, [0.9997250, 0.9998694], atol=1e-6)
     r = sim.run_transient(legacy_config(), np.array([20.0]))
     assert r.metadata["current_contact"] == "cathode"
     # pre-flip value 0.9975336675676356; hole mobility at the epi doping since 2026-10-17 (was N_A, audit-v7 A-03)
@@ -355,16 +372,27 @@ def test_uniform_profile_does_not_inherit_the_fitted_transition():
     assert device_kwargs(c)["buffer_thickness_cm"] is None
     # an explicit non-default transition is kept
     c2 = etna.DeviceConfig(
-        doping_profile="uniform", N_D=1e14, buffer_thickness_um=0.5, buffer_end_doping=1e16
+        doping_profile="uniform",
+        N_D=1e14,
+        buffer_thickness_um=0.5,
+        buffer_end_doping=1e16,
     )
     assert c2.buffer_thickness_um == 0.5
     # the graded default keeps it
     assert etna.DeviceConfig().buffer_thickness_um is not None
     # the sidebar path (uniform chosen there) goes through the same rule
     v = dict(
-        epi_thickness_um=10.0, substrate_thickness_um=0.3, half_width_um=None, N_A=1e19,
-        doping_profile="uniform", N_D=1e14, N_D_junction=2.9e15, N_D_bulk=8e13,
-        L_transition_um=0.9, T=300.0, area_cm2=0.04,
+        epi_thickness_um=10.0,
+        substrate_thickness_um=0.3,
+        half_width_um=None,
+        N_A=1e19,
+        doping_profile="uniform",
+        N_D=1e14,
+        N_D_junction=2.9e15,
+        N_D_bulk=8e13,
+        L_transition_um=0.9,
+        T=300.0,
+        area_cm2=0.04,
     )
     assert assemble_config(v).buffer_thickness_um is None
 
@@ -406,6 +434,13 @@ def test_bare_builder_is_the_documented_uniform_test_diode():
         devsim.delete_device(device=info["device_name"])
     kw = device_kwargs(DeviceConfig())
     assert kw["doping_profile"] == "graded"
-    for key in ("substrate_thickness_cm", "nplus_thickness_cm", "N_D_junction",
-                "N_D_bulk", "L_transition", "buffer_thickness_cm", "buffer_end_doping"):
+    for key in (
+        "substrate_thickness_cm",
+        "nplus_thickness_cm",
+        "N_D_junction",
+        "N_D_bulk",
+        "L_transition",
+        "buffer_thickness_cm",
+        "buffer_end_doping",
+    ):
         assert key in kw, key
