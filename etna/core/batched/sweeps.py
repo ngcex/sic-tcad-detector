@@ -14,17 +14,19 @@ from functools import lru_cache
 import numpy as np
 
 from etna.core.batched.extract import depletion_width
-from etna.core.batched.material import PARAMS, Q, graded_doping, thermal_voltage
+from etna.core.batched.material import (
+    PARAMS,
+    Q,
+    edge_mobilities,
+    graded_doping,
+    thermal_voltage,
+)
 from etna.core.batched.poisson import PoissonBatch
 from etna.core.batched.transport import ContinuityBatch
 from etna.core.devsim_lock import serialized
 from etna.core.generation_profiles import alpha_generation_profile
 from etna.core.incomplete_ionization import ionized_acceptor_concentration
-from etna.core.sic_material import (
-    intrinsic_concentration,
-    mobility_caughey_thomas_T,
-    srh_lifetime,
-)
+from etna.core.sic_material import intrinsic_concentration, srh_lifetime
 
 
 @lru_cache(maxsize=4096)
@@ -61,8 +63,9 @@ def make_batch(
     N_D_bulk,
     L_transition,
     T=300.0,
-    nplus=None,
-    buffer=None,
+    *,
+    nplus,
+    buffer,
 ):
     """PoissonBatch for graded p+/n- diodes on mesh ``x`` (uniform: N_D_junction == N_D_bulk).
 
@@ -71,6 +74,9 @@ def make_batch(
     come from ``node_positions(..., nplus_thickness_cm)``); None = no n+.
     ``buffer`` = (x_epi_end, Lb, N_end) for the graded n-/n+ transition over the last
     Lb of the epi (``etna.core.device.create_sic_device`` buffer keywords); None = none.
+    Both are REQUIRED keywords (since 2026-10-18; they defaulted to None, so a caller
+    that forgot them silently got the legacy no-n+ / abrupt-end geometry while the
+    devsim builders default to the stack's n+ and transition).
     """
     T = np.atleast_1d(np.asarray(T, dtype=float))
     N_A_ion = _per_device(_n_a_ionized, N_A, T)
@@ -230,31 +236,25 @@ def cce_sweep(
     """CCE vs reverse bias, as ``etna.core.charge_collection.cce_vs_bias``.
 
     Per bias: dark Poisson, then Gummel with generation ``G`` (N,) and
-    CCE = |J_cathode| / (q * trapz(G)). Like the devsim path, BOTH mobilities are
-    taken at the epi doping ``N_D`` (default ``DEFAULT_N_D``; holes at ``N_A`` before
-    2026-10-17, .issues/audit-v7 A-03), and lifetimes from ``srh_lifetime(T)``.
-    Callers pass ``etna.core.device.mobility_doping`` (N_D_bulk for graded devices); the
-    ``DEFAULT_N_D`` default is right only for uniform-profile batches at that doping.
-    ``N_A`` is accepted for backward compatibility and no longer used.
+    CCE = |J_cathode| / (q * trapz(G)). Like the devsim path, the mobility is LOCAL:
+    Caughey-Thomas per node at the batch's own doping (donors + total acceptors, the
+    total from ``N_A`` per device), arithmetic edge average (material.edge_mobilities
+    = etna.core.device.add_local_mobility_models); lifetimes from ``srh_lifetime(T)``.
+    Before 2026-10-18 both mobilities were one scalar per device at the epi doping
+    ``N_D`` (and before 2026-10-17 holes at ``N_A``, .issues/audit-v7 A-03). ``N_D`` is
+    accepted for backward compatibility and no longer used (the doping is in ``pb``).
     The dark Poisson state is walked from 0 V in steps <= ``max_step_V`` (as
     run_cce_tilted_alpha): a cold jump to e.g. -50 V does not converge on low-doped
     devices; the Gummel solve runs only at the requested biases.
     """
-    from etna.core.device import DEFAULT_N_D
-
-    N_D = DEFAULT_N_D if N_D is None else N_D
     voltages = _check_voltages(voltages)
     T = np.broadcast_to(np.asarray(T, dtype=float), (pb.B,))
     N_A = np.broadcast_to(np.asarray(N_A, dtype=float), (pb.B,))
-    N_D = np.broadcast_to(np.asarray(N_D, dtype=float), (pb.B,))
+    mu_n, mu_p = edge_mobilities(pb.donors, pb.acceptors, N_A, T)
     cb = ContinuityBatch(
         pb,
-        _per_device(
-            lambda n, t: mobility_caughey_thomas_T(n, t, "electron", PARAMS), N_D, T
-        ),
-        _per_device(
-            lambda n, t: mobility_caughey_thomas_T(n, t, "hole", PARAMS), N_D, T
-        ),
+        mu_n,
+        mu_p,
         _per_device(lambda t: srh_lifetime(t, "electron", PARAMS), T),
         _per_device(lambda t: srh_lifetime(t, "hole", PARAMS), T),
     )

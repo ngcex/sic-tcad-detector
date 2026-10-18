@@ -85,7 +85,7 @@ def test_cv_and_potential_match_devsim(label, kw):
         nd = (kw["N_D_junction"], kw["N_D_bulk"])
     pb = make_batch(
         node_positions(epi, sub), sub, kw.get("N_A", 1e19), nd[0], nd[1],
-        kw.get("L_transition", 1e-4), kw.get("T", 300.0),
+        kw.get("L_transition", 1e-4), kw.get("T", 300.0), nplus=None, buffer=None,
     )
     res = reverse_sweep(pb, BIASES, sub, epi, keep_psi=True)
     assert res.converged.all()
@@ -97,16 +97,16 @@ def test_cv_and_potential_match_devsim(label, kw):
 def test_batch_equals_individual_runs():
     nd_j = np.array([1.5e15, 2.9e15, 4.0e15])
     x = node_positions(EPI, SUB)
-    both = reverse_sweep(make_batch(x, SUB, 1e19, nd_j, 8.5e13, 1e-4), BIASES, SUB, EPI)
+    both = reverse_sweep(make_batch(x, SUB, 1e19, nd_j, 8.5e13, 1e-4, nplus=None, buffer=None), BIASES, SUB, EPI)
     for i, v in enumerate(nd_j):
-        one = reverse_sweep(make_batch(x, SUB, 1e19, v, 8.5e13, 1e-4), BIASES, SUB, EPI)
+        one = reverse_sweep(make_batch(x, SUB, 1e19, v, 8.5e13, 1e-4, nplus=None, buffer=None), BIASES, SUB, EPI)
         np.testing.assert_allclose(both.W[:, i], one.W[:, 0], rtol=1e-10)
 
 
 def test_direct_jump_equals_stepwise():
     """Solving -30 V directly gives the same state as passing through intermediates."""
     x = node_positions(EPI, SUB)
-    pb = make_batch(x, SUB, 1e19, 2.9e15, 8.5e13, 1e-4)
+    pb = make_batch(x, SUB, 1e19, 2.9e15, 8.5e13, 1e-4, nplus=None, buffer=None)
     direct = reverse_sweep(pb, np.array([-30.0]), SUB, EPI)
     stepped = reverse_sweep(pb, np.array([-10.0, -20.0, -30.0]), SUB, EPI)
     np.testing.assert_allclose(direct.W[-1], stepped.W[-1], rtol=1e-8)
@@ -119,7 +119,7 @@ def test_cce_matches_devsim():
     ref = cce_vs_bias(volts, epi_thickness_cm=EPI, device_kwargs=dict(GRADED, **LEGACY_GEOM))
     assert not ref["truncated"]
     x = node_positions(EPI, SUB)
-    pb = make_batch(x, SUB, 1e19, 2.9e15, 8.5e13, 1e-4)
+    pb = make_batch(x, SUB, 1e19, 2.9e15, 8.5e13, 1e-4, nplus=None, buffer=None)
     G = alpha_generation(x, SUB, 15e-4, 1e18)
     # mobilities at the graded N_D_bulk, as the devsim builder (mobility_doping)
     res = cce_sweep(pb, volts, SUB, G, N_D=GRADED["N_D_bulk"])
@@ -131,8 +131,8 @@ def test_cce_matches_devsim():
 
 def test_non_finite_voltages_and_bad_grading_are_rejected():
     x = node_positions(EPI, SUB)
-    pb = make_batch(x, SUB, 1e19, 2.9e15, 8.5e13, 1e-4)
+    pb = make_batch(x, SUB, 1e19, 2.9e15, 8.5e13, 1e-4, nplus=None, buffer=None)
     with pytest.raises(ValueError):
         reverse_sweep(pb, np.array([0.0, np.nan]), SUB, EPI)
     with pytest.raises(ValueError):
-        make_batch(x, SUB, 1e19, 2.9e15, 8.5e13, 0.0)
+        make_batch(x, SUB, 1e19, 2.9e15, 8.5e13, 0.0, nplus=None, buffer=None)

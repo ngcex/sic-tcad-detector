@@ -424,6 +424,10 @@ def create_sic_2d_device(
     # mu_p was evaluated at the p+ doping N_A (1e19: 75.7 vs 121 cm2/Vs at 1.07e15;
     # .issues/audit-v7 A-03). Scalar per region: the p+ and n+ inherit the epi values.
     # Graded profiles: the bulk epi doping N_D_bulk (mobility_doping; was DEFAULT_N_D).
+    # The 1D builder uses the LOCAL per-node mobility since 2026-10-18; 2D keeps this
+    # scalar until engine2d's kernels take per-edge mobilities (they read info["mu_n"]
+    # as one number and must stay at parity with this builder; see
+    # etna.core.device.add_local_mobility_models).
     N_D_mobility = mobility_doping(N_D, doping_profile, N_D_bulk)
     mu_n = mobility_caughey_thomas_T(N_D_mobility, T, "electron", params)
     mu_p = mobility_caughey_thomas_T(N_D_mobility, T, "hole", params)
@@ -558,17 +562,16 @@ def calibrate_graded_doping_2d(
 ):
     """Calibrate the 2D graded epi doping profile (CONS-01).
 
-    This is the 2D analog of ``src/device.py:calibrate_graded_doping``
-    (lines 468-637): it fits ``{N_D_junction, N_D_bulk, L_transition}`` with the
+    This is the 2D analog of ``etna.core.device.calibrate_graded_doping``: it fits ``{N_D_junction, N_D_bulk, L_transition}`` with the
     same Nelder-Mead simplex, the same parameter bounds, and the same
     sum-of-squared-relative-error cost against the validated 1D-twin
     C-V targets. Two things differ from the 1D version:
 
     1. Trial devices are built with
-       :func:`src.charge_collection_2d.create_2d_dd_device` (full 2D DD setup)
+       :func:`etna.core.charge_collection_2d.create_2d_dd_device` (full 2D DD setup)
        instead of the 1D ``create_dd_device``, and the depletion width is read
        at the symmetry-plane center column with
-       :func:`src.poisson.extract_depletion_width_2d_center` (NOT the 1D
+       :func:`etna.core.poisson.extract_depletion_width_2d_center` (NOT the 1D
        depletion-width extractor, which reads ``x`` as depth and would return
        the wrong W for a 2D mesh).
     2. The cost blends the three reference W targets (0, -10, -30 V — equal
@@ -587,10 +590,14 @@ def calibrate_graded_doping_2d(
     twin's C-V at the device center (RESEARCH.md Assumption A2 / success
     criterion #2), NOT an external 2D dataset.
 
-    Between every trial, :func:`src.devsim_reset.reset_devsim_fully` is called
-    (PITFALLS P03/P30) to clear all devsim global state — including the
-    cylindrical-axis assembly globals — so trials cannot contaminate each other.
-    Unique ``uuid4`` device names avoid name collisions (PITFALLS P20).
+    Process state: on entry the cylindrical-axis assembly globals a previous
+    axisymmetric build may have left (PITFALLS P03/P30, etna.core.devsim_reset) are
+    restored to their Cartesian values; each trial deletes only its own device and
+    mesh. Other devsim devices of the caller are NOT touched. (Until 2026-10-18 every
+    trial ended with ``reset_devsim_fully``, which deleted every device in the
+    process, audit-v7 A-15; planar trials never set the cylindrical globals, so the
+    per-trial reset bought nothing.) Unique ``uuid4`` device names avoid name
+    collisions (PITFALLS P20).
 
     Parameters
     ----------
@@ -630,8 +637,16 @@ def calibrate_graded_doping_2d(
     import scipy.optimize
     from etna.core.charge_collection_2d import create_2d_dd_device
     from etna.core.poisson import extract_depletion_width_2d_center
-    from etna.core.devsim_reset import reset_devsim_fully
+    from etna.core.devsim_reset import _CARTESIAN_DEFAULTS
     import devsim.python_packages.simple_physics as simple_physics
+
+    # Planar assembly globals once, at entry (devsim_reset step 3 without deleting
+    # devices): a cylindrical build earlier in the process would otherwise corrupt
+    # the planar trials' Poisson weights.
+    # (raxis_zero / raxis_variable have no Cartesian value and devsim refuses an empty
+    # one; they are read only by the cylindrical models these five select.)
+    for name, value in _CARTESIAN_DEFAULTS.items():
+        devsim.set_parameter(name=name, value=value)
 
     if target_W_data is None:
         target_W_data = {0.0: 1.7e-4, -10.0: 9.5e-4, -30.0: 9.73e-4}
@@ -748,7 +763,15 @@ def calibrate_graded_doping_2d(
             W_sim = []
             converged_to_target = False
         finally:
-            reset_devsim_fully(preserve_solver=True)
+            # only this trial's device and mesh (A-15: was reset_devsim_fully)
+            for fn, kw in (
+                (devsim.delete_device, {"device": trial_name}),
+                (devsim.delete_mesh, {"mesh": f"{trial_name}_mesh"}),
+            ):
+                try:
+                    fn(**kw)
+                except devsim.error:
+                    pass
 
         logger.info(
             f"trial {counter[0]} N_D_j={N_D_j:.3e} N_D_b={N_D_b:.3e} "

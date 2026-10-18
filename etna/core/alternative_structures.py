@@ -19,10 +19,32 @@ All units CGS (cm, cm^-3, F/cm, eV, s) per devsim convention.
 
 Model limitations shared by every builder here (stated once, see also the
 docstrings): 2D slices (a Cartesian half-device with mirror symmetry at x=0,
-or an axisymmetric (r, z) section), the LEGACY stack (p+ 1 um on the n- epi,
-cathode directly on the epi, no n+ layer), SRH-only bulk recombination, no
-surface states, no trench/passivation charge, abrupt implant edges unless a
-``lateral_straggle_cm`` is given.
+or an axisymmetric (r, z) section), SRH-only bulk recombination, no surface
+states, no trench/passivation charge, abrupt implant edges unless a
+``lateral_straggle_cm`` is given, and the pinned stack below.
+
+STACK PIN (explicit; ``ALT_STACK``). These builders do NOT follow the default device
+(DEFAULT_STACK / DeviceConfig()). They build the LEGACY GEOMETRY (p+ 1 um on the n- epi,
+cathode contact directly on the epi, no n+ layer, no graded n-/n+ transition) with the
+PREVIOUS default's epi doping (NPLUS_CALIBRATION: graded 2.958237e15 / 8.252732e13 /
+L 0.987 um). Reasons:
+
+1. The builders have no n+ layer or transition support (each one meshes and dopes its
+   own geometry). The measured-C-V default doping (N_D_bulk 3.4e13, L 0.46 um) is only
+   meaningful WITH its transition and n+; on the legacy geometry it reaches through to
+   the contact-on-epi cathode at ~3 V, and the guard-ring diode then fails at 5.0 V on
+   every solver tier including the aggressive one (measured 2026-10-18: 4.0 V reached
+   with 2 aggressive-tier points, 5.0 V not). NPLUS_CALIBRATION's doping keeps every
+   structure convergent to its notebook bias (50 V; the thin telescope stage and the
+   no-ring reference at 10 V, see notebook 19).
+2. Notebook 19's structure-vs-structure comparison was computed on this stack, with
+   the planar baseline pinned to it (structure effects, not stack effects).
+
+Explicit arguments win (doping, substrate_thickness_cm). Moving the structures to the
+default stack needs n+/transition support in each builder (and the guard-ring
+convergence then re-checked): a feature, not a default change. Each device_info
+carries ``nplus_thickness_cm=None``, ``buffer_thickness_cm=None`` and
+``stack="ALT_STACK"`` so downstream code sees the geometry it got.
 """
 
 import logging
@@ -46,18 +68,22 @@ from etna.core.device2d import (
     K_B_J,
     DEFAULT_N_D,
 )
-from etna.core.device import NPLUS_CALIBRATION, mobility_doping
+from etna.core.device import LEGACY_STACK, NPLUS_CALIBRATION, mobility_doping
 
-# Graded-doping fallbacks of the alternative structures: the PREVIOUS default's epi doping
-# (NPLUS_CALIBRATION, 2.958237e15 / 8.252732e13 / 0.987 um), not DEFAULT_STACK. These
-# builders keep the legacy geometry (p+ 1 um, cathode on the epi, no n+, no graded n-/n+
-# transition; PERF-05), and notebook 19's structure comparison was computed on this
-# doping; the measured-C-V default (N_D_bulk 3.4e13, L 0.46 um, 2026-10-18) without its
-# transition and n+ would be a third mixed model (and the guard-ring diode does not
-# converge past 3 V with it). Explicit arguments win.
-_N_D_JUNCTION_DEFAULT = NPLUS_CALIBRATION["N_D_junction"]
-_N_D_BULK_DEFAULT = NPLUS_CALIBRATION["N_D_bulk"]
-_L_TRANSITION_DEFAULT = NPLUS_CALIBRATION["L_transition"]
+# The pinned stack of every builder here (module docstring "STACK PIN"): legacy geometry,
+# previous default's epi doping. The builders' keyword defaults read it.
+ALT_STACK = {
+    "substrate_thickness_cm": LEGACY_STACK["substrate_thickness_cm"],  # p+ 1 um
+    "nplus_thickness_cm": None,  # cathode on the epi
+    "buffer_thickness_cm": None,  # abrupt epi end
+    "buffer_end_doping": None,
+    "N_D_junction": NPLUS_CALIBRATION["N_D_junction"],
+    "N_D_bulk": NPLUS_CALIBRATION["N_D_bulk"],
+    "L_transition": NPLUS_CALIBRATION["L_transition"],
+}
+_N_D_JUNCTION_DEFAULT = ALT_STACK["N_D_junction"]
+_N_D_BULK_DEFAULT = ALT_STACK["N_D_bulk"]
+_L_TRANSITION_DEFAULT = ALT_STACK["L_transition"]
 
 logger = logging.getLogger(__name__)
 
@@ -325,11 +351,16 @@ def _build_device_info(
         "mu_p": material_info["mu_p"],
         "num_nodes": num_nodes,
         "doping_profile": doping_profile,
-        "N_D_junction": N_D_junction,
-        "N_D_bulk": N_D_bulk,
-        "L_transition": L_transition,
+        # resolved graded-doping values (never None, as device2d; audit B-03)
+        "N_D_junction": _N_D_JUNCTION_DEFAULT if N_D_junction is None else N_D_junction,
+        "N_D_bulk": _N_D_BULK_DEFAULT if N_D_bulk is None else N_D_bulk,
+        "L_transition": _L_TRANSITION_DEFAULT if L_transition is None else L_transition,
         "half_width_cm": half_width_cm,
         "dimension": 2,
+        # the pinned geometry (module docstring "STACK PIN")
+        "nplus_thickness_cm": None,
+        "buffer_thickness_cm": None,
+        "stack": "ALT_STACK",
     }
     if extra_keys:
         info.update(extra_keys)
@@ -408,7 +439,7 @@ def create_mesa_device(
     trench_width_um=10.0,
     trench_depth_um=10.0,
     epi_thickness_cm=10e-4,
-    substrate_thickness_cm=1e-4,
+    substrate_thickness_cm=ALT_STACK["substrate_thickness_cm"],
     N_A=1e19,
     T=300,
     doping_profile="graded",
@@ -734,7 +765,7 @@ def create_3d_electrode_device(
     column_radius_um=5.0,
     top_gap_um=2.0,
     epi_thickness_cm=10e-4,
-    substrate_thickness_cm=1e-4,
+    substrate_thickness_cm=ALT_STACK["substrate_thickness_cm"],
     N_A=1e19,
     T=300,
     doping_profile="graded",
@@ -989,7 +1020,7 @@ def create_delta_e_e_device(
     half_width_um=50.0,
     delta_e_thickness_um=2.0,
     e_stop_thickness_um=50.0,
-    substrate_thickness_cm=1e-4,
+    substrate_thickness_cm=ALT_STACK["substrate_thickness_cm"],
     N_A=1e19,
     T=300,
     doping_profile="graded",
@@ -1261,7 +1292,7 @@ def create_guard_ring_device(
     guard_ring_gap_um=3.0,
     guard_ring_depth_um=1.0,
     epi_thickness_cm=10e-4,
-    substrate_thickness_cm=1e-4,
+    substrate_thickness_cm=ALT_STACK["substrate_thickness_cm"],
     N_A=1e19,
     N_A_guard=5e18,
     T=300,

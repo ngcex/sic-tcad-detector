@@ -395,23 +395,30 @@ class TestHechtCCE300KRegression:
     """Verify hecht_cce at T=300K produces identical results to v1.0."""
 
     def test_hecht_cce_300k_regression(self):
-        """hecht_cce(V=30, d=9.5e-4, T=300) must match the v1.0 result
-        computed with explicit 300K default parameter values."""
-        from etna.core.sic_material import SiC4H_Parameters
+        """hecht_cce(V=30, d=9.5e-4, T=300) defaults = Caughey-Thomas at the DD epi
+        doping (mobility_doping: default stack N_D_bulk) and the 300 K lifetimes.
+
+        Before 2026-10-18 the defaults were the undoped limits mu_max (950 / 125
+        cm2/Vs): 0.9946968964068645; now 0.9946708773626582 (-2.6e-5).
+        """
+        from etna.core.device import mobility_doping
+        from etna.core.sic_material import SiC4H_Parameters, mobility_caughey_thomas_T
 
         params = SiC4H_Parameters()
-        # v1.0 call: hecht_cce(30, 9.5e-4) used _params defaults
+        nd = mobility_doping(None, "graded", None)
         cce_explicit = hecht_cce(
             30,
             9.5e-4,
-            mu_e=params.mu_n_max,
+            mu_e=mobility_caughey_thomas_T(nd, 300, "electron", params),
             tau_e=params.tau_n,
-            mu_p=params.mu_p_max,
+            mu_p=mobility_caughey_thomas_T(nd, 300, "hole", params),
             tau_p=params.tau_p,
         )
-        # New call with T=300 (should resolve to same defaults)
         cce_T300 = hecht_cce(30, 9.5e-4, T=300)
-        assert cce_T300 == pytest.approx(float(cce_explicit), rel=1e-10)
+        assert cce_T300 == pytest.approx(float(cce_explicit), rel=1e-12)
+        assert float(cce_T300) == pytest.approx(0.9946708773626582, rel=1e-12)
+        # an explicit doping is honoured (uniform 1e15 epi: lower mobility, lower CCE)
+        assert float(hecht_cce(1, 10e-4, N_D_mobility=1e15)) < float(hecht_cce(1, 10e-4))
 
     def test_hecht_cce_explicit_params_unchanged(self):
         """Passing explicit mu_e, tau_e etc. bypasses T-dependent defaults."""

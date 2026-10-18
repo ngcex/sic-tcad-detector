@@ -42,7 +42,7 @@ def engine_W(params, nplus=True, sub=SUB, observable="edge"):
     NJ, NB, L = params
     x = node_positions(EPI, sub, NPLUS if nplus else None)
     pb = make_batch(
-        x, sub, 1e19, NJ, NB, L, 300.0, nplus=(sub + EPI, N_NPLUS) if nplus else None
+        x, sub, 1e19, NJ, NB, L, 300.0, nplus=(sub + EPI, N_NPLUS) if nplus else None, buffer=None
     )
     r = reverse_sweep(pb, V_T, sub, EPI)
     if not r.converged.all():
@@ -220,7 +220,7 @@ def cce_engine(params, nplus=True, sub=SUB, V=(-10.0, -50.0)):
 
     NJ, NB, L = params
     x = node_positions(EPI, sub, NPLUS if nplus else None)
-    pb = make_batch(x, sub, 1e19, NJ, NB, L, 300.0, nplus=(sub + EPI, N_NPLUS) if nplus else None)
+    pb = make_batch(x, sub, 1e19, NJ, NB, L, 300.0, nplus=(sub + EPI, N_NPLUS) if nplus else None, buffer=None)
     G = alpha_generation(x, sub, 15e-4, 1e18, epi_end=sub + EPI if nplus else None)
     return cce_sweep(pb, np.array(V), sub, G).cce[:, 0]
 

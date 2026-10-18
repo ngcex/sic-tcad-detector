@@ -3,7 +3,7 @@ id: A-04
 title: Transient time stepper overshoots phase boundaries; the fall edge (and post-pulse) can be skipped with generation held at 100 %
 severity: medium
 category: bug
-status: open
+status: fixed 2026-10-18 (WP-A 03c7c17: pulse_time_step clips to phase edges, step-end stamps, BDF1 estimator)
 location: etna/core/transient.py:125-169 (adaptive_dt), ~289-336 (simulate_pulse loop)
 labels: [audit-v7, slice-A, transient, flash, numerics]
 source: raw-A-core-solvers.md F4

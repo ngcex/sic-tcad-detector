@@ -30,7 +30,9 @@ W_T = np.array([1.7e-4, 9.5e-4, 9.73e-4])
 def _W(NJ, NB, L):
     sub, t_np = CAL["substrate_thickness_cm"], CAL["nplus_thickness_cm"]
     x = node_positions(EPI, sub, t_np)
-    pb = make_batch(x, sub, 1e19, NJ, NB, L, 300.0, nplus=(sub + EPI, CAL["N_D_nplus"]))
+    pb = make_batch(
+        x, sub, 1e19, NJ, NB, L, 300.0, nplus=(sub + EPI, CAL["N_D_nplus"]), buffer=None
+    )
     r = reverse_sweep(pb, V_T, sub, EPI)
     assert r.converged.all()
     return EPS / r.C[:, 0]  # eps*A/C, what the measured W targets are

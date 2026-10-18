@@ -359,6 +359,43 @@ class TestResetStateLeak:
         )
 
 
+class TestCalibration2DLeavesCallerDevices:
+    """A-15: calibrate_graded_doping_2d no longer deletes every devsim device per trial."""
+
+    @pytest.mark.slow
+    def test_sentinel_survives_and_trials_clean_up(self):
+        from etna.core.device import create_sic_device
+        from etna.core.device2d import calibrate_graded_doping_2d
+
+        # a cylindrical leftover must still be neutralised at entry
+        devsim.set_parameter(name="node_volume_model", value="CylindricalNodeVolume")
+        sentinel = _unique_name()
+        create_sic_device(device_name=sentinel)
+        try:
+            r = calibrate_graded_doping_2d(
+                target_W_data={0.0: 1.7e-4, -2.0: 4e-4},
+                half_width_um=10.0,
+                maxiter=3,
+                V_target_for_convergence_only=-3.0,
+            )
+            assert devsim.get_parameter(name="node_volume_model") == "NodeVolume"
+            devs, meshes = devsim.get_device_list(), devsim.get_mesh_list()
+            assert sentinel in devs and f"{sentinel}_mesh" in meshes
+            assert not [d for d in devs if d.startswith("cal2d_")]
+            assert not [m for m in meshes if m.startswith("cal2d_")]
+        finally:
+            devsim.delete_device(device=sentinel)
+            devsim.delete_mesh(mesh=f"{sentinel}_mesh")
+            # never leave the cylindrical leftover to later tests of this worker
+            from etna.core.devsim_reset import _CARTESIAN_DEFAULTS
+
+            for name, value in _CARTESIAN_DEFAULTS.items():
+                devsim.set_parameter(name=name, value=value)
+        # same optimum as with the per-trial full reset (measured before the change)
+        assert r["final_cost"] == pytest.approx(0.03182988130915616, rel=1e-9)
+        assert r["W_simulated"][-2.0] == pytest.approx(3.310540237430286e-4, rel=1e-9)
+
+
 class TestExtractDepletionWidth2DCenter:
     """Phase 26 / Plan 02: center-column W extractor for 2D devices.
 

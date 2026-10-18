@@ -46,6 +46,7 @@ def engine_states(volts, tol=1e-12):
         S["L_transition"],
         300.0,
         nplus=(SUB + EPI, S["N_D_nplus"]),
+        buffer=None,
     )
     ramp = _Ramp(pb, tol)
     out = {}

@@ -93,6 +93,7 @@ def batch_for(kw, np_):
         L,
         kw.get("T", 300.0),
         nplus=(sub + epi, np_[1]),
+        buffer=None,
     )
     return x, pb, epi, sub
 
