@@ -50,8 +50,9 @@ What ETNA is **not**:
   breakdown model.
 - It is not validated against measurement in general. The distinction matters throughout
   this guide:
-  - **Verified against devsim** (code-to-code). The numba engines agree with devsim to
-    1e-8 or better, inside documented boxes. This shows the engines solve the same
+  - **Verified against devsim** (code-to-code). Inside documented boxes, the numba
+    engines agree with devsim to dC/C ~3e-8 (devsim's own central-difference
+    capacitance), dCCE <= ~1e-9 and dpsi ~1e-13 V. This shows the engines solve the same
     equations. It says nothing about whether the equations describe the real device.
   - **Calibrated**. The default doping profile is a fit to one digitised measured C-V
     curve (Photons paper, Fig. 4b). The dark-current trap rate `N_t` is fitted to the
@@ -71,7 +72,7 @@ What ETNA is **not**:
 
 | Quantity                                                  | Status                                         | Basis                                                                                                                                                                   | Where                                                                                                                       |
 | --------------------------------------------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Engine results (C, W, CCE, potential) vs devsim           | **verified** (code-to-code)                    | 1D: dC/C <= ~3e-8, dW <= 1e-17 cm, dCCE <= 1e-10 to -100 V; 2D: dpsi ~1e-13 V                                                                                           | `tests/test_batched_engine.py`, `tests/test_api_engine_switch.py`, `tests/test_engine2d*.py`, `lab/engine_box/notes/LOG.md` |
+| Engine results (C, W, CCE, potential) vs devsim           | **verified** (code-to-code)                    | 1D: dC/C <= ~3e-8, dW <= 1e-17 cm, dCCE <= ~1e-9 (9e-10 at the tabulated-box corners) to -100 V; 2D: dpsi ~1e-13 V                                                      | `tests/test_batched_engine.py`, `tests/test_api_engine_switch.py`, `tests/test_engine2d*.py`, `lab/engine_box/notes/LOG.md` |
 | C-V / eps*A/C of the default device                       | **calibration** (fit)                          | default doping fitted to the digitised Photons Fig. 4b: plateau rms 0.013 µm, knee rms 0.24 µm; 1.655 / 9.519 / 9.750 µm at 0 / -10 / -30 V vs paper 1.68 / 9.52 / 9.73 | `lab/cv_gap/notes/LOG.md`, `etna/core/device.py` (`DEFAULT_STACK`)                                                          |
 | Doping profile N_D(x)                                     | **inferred**, not measured                     | inversion of one C-V curve; bulk 3.4e13 is below the documented 0.5-1e14; no SIMS                                                                                       | section 8                                                                                                                   |
 | Full-depletion voltage                                    | **definition-dependent**                       | analytic V_fd 2.74 V, reach-through 3.10 V, sweep gate 1.2 V_fd = 3.28 V (default stack)                                                                                | `etna.export.labels.VFD_DEFINITION`                                                                                         |
@@ -354,6 +355,9 @@ preset. Points at or beyond it are **NaN** with a reason, not solved. Choose the
 from `compensation_fluence`, and always check `valid`. The default grid may lie largely
 past compensation (on the default stack, 5 of the 6 default points are NaN at this
 version). The NIEL kappa factors are placeholders, so read only the relative shape.
+Also, the facade's default `proton_energy_MeV=5.6` lies below the NIEL table, and kappa
+is silently clamped to its 30 MeV value. This is audit B-07, open at this version. The
+Radiation Damage page offers 30, 62, 70 and 150 MeV only.
 
 ```python
 import numpy as np
@@ -443,10 +447,12 @@ print(round(float(r.metadata["y_F"]), 2), round(float(r.metadata["y_D"]), 2), r.
   once per value (`dataclasses.replace`) and calls the facade.
 
 ```python
-from etna import DeviceConfig, ParametricSweep, run_cce, run_cv_batch
+from etna import DeviceConfig, ParametricSweep, run_cce, run_cce_batch, run_cv_batch
 
 rs = run_cv_batch([DeviceConfig(epi_thickness_um=e) for e in (8.0, 10.0, 12.0)], 0.0, -20.0, 21)
 print([r.metadata["solver"] for r in rs])                      # ['batched', 'batched', 'batched']
+cs = run_cce_batch([DeviceConfig(N_D_bulk=n) for n in (3e13, 1e14)], -5.0, -30.0, 6)
+print([round(float(r.y[-1]), 5) for r in cs])                  # CCE at -30 V per config
 
 sweep = ParametricSweep(DeviceConfig(), "epi_thickness_um", [8.0, 10.0, 12.0], run_cce,
                         {"v_start": -5.0, "v_stop": -30.0, "n_points": 6})
@@ -592,8 +598,8 @@ viz all use it, so they report one number: 9.06e4 V/cm at -30 V and 1.21e5 V/cm 
 -60 V, at x = 0.40 µm, on the default stack.
 
 **Convergence walls and the outside-validity wall.** With the n+ layer (all current
-presets except legacy) devsim converges to at least -150 V, and the engines are
-cross-checked to -100 V. The **legacy** model puts the ohmic cathode on the n- epi, so
+presets except legacy) devsim has no contact wall: on the default stack it was checked
+to converge to -150 V, and the engines are cross-checked against it to -100 V. The **legacy** model puts the ohmic cathode on the n- epi, so
 devsim stops converging around -64 V at 300 K. This is a contact artefact, not
 punch-through.
 
@@ -759,7 +765,7 @@ run is whatever `DeviceConfig()` / the core defaults are now, unless they pin a 
 | 10_cce_vs_fluence              | CCE degradation vs fluence                     | ~14 s (PERF-06)                                                           |
 | 11_dark_current_cv_evolution   | leakage and C-V vs fluence                     |                                                                           |
 | 12_multi_defect_comparison     | 3-defect vs single-defect models               | ~41 s (PERF-06)                                                           |
-| 13_parametric_optimization     | radiation-hardness sweep                       | ~16 s (PERF-06)                                                           |
+| 13_parametric_optimization     | radiation-hardness sweep                       | the `epi_um` column-key bug of PERF-06 is fixed; run time not re-measured |
 | 14_validation                  | comparison with published irradiation data     |                                                                           |
 | 15_2d_electrostatics_cce       | 2D field and CCE of the microdosimeter         | generator `create_notebook_15.py`                                         |
 | 16_single_particle_cce         | single-particle 2D transient CCE, CCE(LET)     | generator `create_notebook_16.py`                                         |

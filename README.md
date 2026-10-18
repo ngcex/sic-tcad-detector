@@ -221,7 +221,7 @@ built-in-voltage difference; <1 % with V_bi matched), not a validation of this d
 - ⚠️ **FLASH dose-rate:** the high-injection _plasma-recombination_ physics is
   **not implemented** — FLASH dose-rate outputs are exploratory sensitivity
   bounds, not a validated mechanistic prediction.
-- ✅ **Device stack (default since 2026-10-18: the measured-C-V profile):** p⁺ anode
+- ⚠️ **Device stack = calibration (default since 2026-10-18: the measured-C-V profile):** p⁺ anode
   0.3 µm / 10 µm graded n⁻ epi (N_D_junction 8.19e15, L 0.46 µm, N_D_bulk 3.38e13) with
   a graded n⁻/n⁺ transition over its last 1.14 µm (log-linear to 4.5e16 at 10 µm) /
   n⁺ substrate (1 µm modelled, 10¹⁹ cm⁻³, cathode on its far end)
