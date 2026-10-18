@@ -356,8 +356,9 @@ the profile: 1.35e13 p/cm² at 5.6 MeV on the default stack, 5.18e12 on the tabu
 preset. Points at or beyond it are **NaN** with a reason, not solved. Choose the grid
 from `compensation_fluence`, and always check `valid`. With `fluences=None` the grid
 adapts to the device (`etna.api.simulation.default_fluence_grid`): 8 log-spaced points
-from 0.01x to 3x the compensation fluence, so 6 are solved and the last 2 are NaN
-with a reason (they show where the model ends). Explicit grids are used as given. The
+from 0.01x to 3x the compensation fluence: 6 are solved, and the last 2 are normally NaN
+with a reason (the 3x point always; `compensation_fluence` is a lower bound on the mesh
+threshold), showing where the model ends. Explicit grids are used as given. The
 NIEL kappa factors are placeholders, so read only the relative shape.
 Also, the facade's default `proton_energy_MeV=5.6` lies below the NIEL table, and kappa
 is silently clamped to its 30 MeV value. This is audit B-07, open at this version. The

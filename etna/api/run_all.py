@@ -262,7 +262,9 @@ def _valid_counts(res: SimResult) -> "tuple[int, int]":
     if not y.size:
         return 0, 0
     valid = res.metadata.get("valid")
-    valid = np.isfinite(y) if valid is None else np.asarray(valid, dtype=bool)
+    valid = None if valid is None else np.asarray(valid, dtype=bool)
+    if valid is None or valid.shape != y.shape:  # absent or not per point: use finite y
+        valid = np.isfinite(y)
     return int(np.count_nonzero(valid)), int(y.size)
 
 
@@ -372,7 +374,8 @@ def run_all(config: DeviceConfig, sections: "tuple[str, ...] | None" = None) -> 
             if not err and n_pts and n_valid == 0:
                 status, why = "warning", f"no valid point (0 of {n_pts})" + (
                     f": {res.metadata['reason'][-1]}"
-                    if res.metadata.get("reason")
+                    if isinstance(res.metadata.get("reason"), (list, tuple))
+                    and res.metadata["reason"]
                     else ""
                 )
             sec = SectionResult(

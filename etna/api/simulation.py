@@ -1383,8 +1383,9 @@ def run_radiation_damage(
     fluences : np.ndarray or None
         Proton fluences (cm^-2) to sweep, used as given. Default None ->
         ``default_fluence_grid(config, proton_energy_MeV)``: 8 log-spaced points
-        from 0.01x to 3x this device's compensation fluence (6 below it, the last
-        2 beyond it, returned NaN with a reason to show where the model ends).
+        from 0.01x to 3x this device's compensation fluence (6 below it; the 2 beyond
+        it are normally NaN with a reason - the 3x point always - to show where the
+        model ends: compensation_fluence is a lower bound on the mesh threshold).
         Before 2026-10-18 the default was a fixed 1e13..1e16 grid, which lies
         beyond the compensation fluence of the default stack (1.35e13 at 5.6 MeV)
         and of the tabulated preset (5.2e12): 6 of 6 points were NaN.
@@ -1473,7 +1474,8 @@ def default_fluence_grid(
 
     ``DEFAULT_FLUENCE_GRID_POINTS`` log-spaced points from 0.01x to 3x
     ``compensation_fluence(config, proton_energy_MeV)``: six lie below full donor
-    compensation (solved), the last two beyond it (NaN with a reason), so the
+    compensation (solved), the last two beyond its nominal value (normally NaN with a
+    reason; the 3x point always, since compensation_fluence is a lower bound), so the
     curve shows the shape up to the model's validity limit and where it ends. The
     Streamlit page proposes a narrower range (0.7e-3x .. 0.7x, every point solvable)
     on purpose: there the user edits the range.
