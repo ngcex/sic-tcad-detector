@@ -41,6 +41,7 @@ logger = logging.getLogger(__name__)
 
 # graded-doping defaults of the fluence sweeps = cce_vs_bias = the default stack
 from etna.core.device import DEFAULT_STACK as _STACK  # noqa: E402
+from etna.core.device import mobility_doping  # noqa: E402
 
 
 def full_compensation_reason(damaged):
@@ -68,6 +69,18 @@ def full_compensation_reason(damaged):
 _UNSET = object()
 
 
+def _hecht_mobility(T, carrier, params, N_D_mobility):
+    """Default Hecht mobility: Caughey-Thomas at T and at the epi doping the DD
+    builders use for the scalar mobility (``mobility_doping``; default stack: N_D_bulk).
+
+    Before 2026-10-18 hecht_cce used the undoped limit mu_max(T) (950 / 125 cm2/Vs at
+    300 K; a dead mobility_caughey_thomas_T call was overwritten by it) while the DD
+    path used the doped value.
+    """
+    nd = mobility_doping(None, "graded", None) if N_D_mobility is None else N_D_mobility
+    return mobility_caughey_thomas_T(nd, T, carrier, params)
+
+
 def hecht_cce(
     V,
     d,
@@ -77,6 +90,7 @@ def hecht_cce(
     tau_p=_UNSET,
     T=300,
     params=None,
+    N_D_mobility=None,
 ):
     """Two-carrier Hecht equation for charge collection efficiency.
 
@@ -90,11 +104,12 @@ def hecht_cce(
     d : float
         Active region thickness (cm), typically depletion width.
     mu_e : float or None
-        Electron mobility (cm^2/Vs). If not provided, computed from T.
+        Electron mobility (cm^2/Vs). If not provided: Caughey-Thomas at T and at the
+        epi doping ``N_D_mobility`` (the drift-diffusion builders' rule, see below).
     tau_e : float or None
         Electron SRH lifetime (s). If not provided, computed from T.
     mu_p : float or None
-        Hole mobility (cm^2/Vs). If not provided, computed from T.
+        Hole mobility (cm^2/Vs). If not provided, as mu_e.
     tau_p : float or None
         Hole SRH lifetime (s). If not provided, computed from T.
     T : float
@@ -102,6 +117,11 @@ def hecht_cce(
         mu_e/tau_e/mu_p/tau_p are not explicitly provided.
     params : SiC4H_Parameters, optional
         Material parameters. Defaults to SiC4H_Parameters().
+    N_D_mobility : float or None
+        Donor density (cm^-3) of the default mobilities. None = the default stack's
+        bulk epi doping, ``etna.core.device.mobility_doping(None, "graded", None)``
+        (3.38e13: mu_e 945.4, mu_p 123.7 cm2/Vs at 300 K). Before 2026-10-18 the
+        defaults were the undoped limits mu_max(T) (950 / 125), unlike the DD path.
 
     Returns
     -------
@@ -132,22 +152,11 @@ def hecht_cce(
 
     # Use T-dependent defaults when caller doesn't pass explicit values
     if mu_e is _UNSET:
-        mu_e = mobility_caughey_thomas_T(params.N_ref_n * 0.001, T, "electron", params)
-        # Low-doping limit: use very low N to get mu_max(T)
-        # More precisely, use the mu_n_max formula directly
-        mu_e = (
-            params.mu_n_max * (T / 300.0) ** params.gamma_n
-            if T != 300
-            else params.mu_n_max
-        )
+        mu_e = _hecht_mobility(T, "electron", params, N_D_mobility)
     if tau_e is _UNSET:
         tau_e = srh_lifetime(T, "electron", params)
     if mu_p is _UNSET:
-        mu_p = (
-            params.mu_p_max * (T / 300.0) ** params.gamma_p
-            if T != 300
-            else params.mu_p_max
-        )
+        mu_p = _hecht_mobility(T, "hole", params, N_D_mobility)
     if tau_p is _UNSET:
         tau_p = srh_lifetime(T, "hole", params)
 
@@ -209,6 +218,7 @@ def hecht_cce_partial_depletion(
     L_diff_p=7e-4,
     T=300,
     params=None,
+    N_D_mobility=None,
 ):
     """Extended Hecht equation for partially-depleted detector.
 
@@ -226,16 +236,19 @@ def hecht_cce_partial_depletion(
         Function W(V) returning depletion width (cm) at voltage V.
         Can be obtained from C-V data or DD simulation.
     mu_e : float
-        Electron mobility (cm^2/Vs). Default: 950.
+        Electron mobility (cm^2/Vs). Default: Caughey-Thomas at T and ``N_D_mobility``
+        (as hecht_cce; 945.4 at 300 K on the default stack).
     tau_e : float
-        Electron lifetime (s). Default: 1e-9.
+        Electron lifetime (s). Default: srh_lifetime(T) (1e-9 at 300 K).
     mu_p : float
-        Hole mobility (cm^2/Vs). Default: 125.
+        Hole mobility (cm^2/Vs). Default: as mu_e (123.7 at 300 K).
     tau_p : float
-        Hole lifetime (s). Default: 6e-7.
+        Hole lifetime (s). Default: srh_lifetime(T) (6e-7 at 300 K).
     L_diff_p : float
         Minority carrier (hole) diffusion length (cm). Default: 7e-4 (7 um).
         From literature CCE fitting (Sciencedirect S0168900205006443).
+    N_D_mobility : float or None
+        Donor density of the default mobilities (see hecht_cce).
 
     Returns
     -------
@@ -254,19 +267,11 @@ def hecht_cce_partial_depletion(
     if params is None:
         params = SiC4H_Parameters()
     if mu_e is _UNSET:
-        mu_e = (
-            params.mu_n_max * (T / 300.0) ** params.gamma_n
-            if T != 300
-            else params.mu_n_max
-        )
+        mu_e = _hecht_mobility(T, "electron", params, N_D_mobility)
     if tau_e is _UNSET:
         tau_e = srh_lifetime(T, "electron", params)
     if mu_p is _UNSET:
-        mu_p = (
-            params.mu_p_max * (T / 300.0) ** params.gamma_p
-            if T != 300
-            else params.mu_p_max
-        )
+        mu_p = _hecht_mobility(T, "hole", params, N_D_mobility)
     if tau_p is _UNSET:
         tau_p = srh_lifetime(T, "hole", params)
 
@@ -1798,15 +1803,20 @@ def compare_cce_hecht_vs_dd(V_range, epi_thickness_cm=10e-4, **kwargs):
     # compare on the biases the DD sweep reached (a truncated sweep is shorter)
     V_range = np.asarray(dd_result["voltages"], dtype=float)
 
-    # Hecht equation CCE (fully depleted approximation, d = epi thickness)
-    cce_hecht = hecht_cce(V_range, d=epi_thickness_cm)
+    # Hecht equation CCE (fully depleted approximation, d = epi thickness), with the
+    # mobilities at the DD sweep's epi doping (mobility_doping; cce_vs_bias builds a
+    # graded device unless device_kwargs says otherwise)
+    _dk = kwargs.get("device_kwargs") or {}
+    nd_mob = mobility_doping(
+        _dk.get("N_D"), _dk.get("doping_profile", "graded"), _dk.get("N_D_bulk")
+    )
+    cce_hecht = hecht_cce(V_range, d=epi_thickness_cm, N_D_mobility=nd_mob)
 
     # Partial depletion Hecht using a simple W(V) model
     # W ~ sqrt(2 * eps * V / (q * N_D)) with calibrated N_D
     # For graded doping, use an effective N_D ~ geometric mean
     # (the device doping of the DD sweep: device_kwargs, else DEFAULT_STACK; was a
     # hardcoded 2.90e15 / 8.50e13)
-    _dk = kwargs.get("device_kwargs") or {}
     N_D_eff = np.sqrt(
         (_dk.get("N_D_junction") or _STACK["N_D_junction"])
         * (_dk.get("N_D_bulk") or _STACK["N_D_bulk"])
@@ -1823,7 +1833,9 @@ def compare_cce_hecht_vs_dd(V_range, epi_thickness_cm=10e-4, **kwargs):
         W = np.sqrt(2 * eps_sic * V_total / (Q_val * N_D_eff))
         return min(W, epi_thickness_cm)
 
-    cce_hecht_partial = hecht_cce_partial_depletion(V_range, epi_thickness_cm, W_func)
+    cce_hecht_partial = hecht_cce_partial_depletion(
+        V_range, epi_thickness_cm, W_func, N_D_mobility=nd_mob
+    )
 
     # Compute maximum deviation
     max_dev = float(np.max(np.abs(cce_dd - np.asarray(cce_hecht, dtype=float))))
