@@ -53,8 +53,13 @@ def test_one_source_of_truth():
     assert core_device2d._N_D_JUNCTION_DEFAULT == DEFAULT_STACK["N_D_junction"]
     assert core_device2d._N_D_BULK_DEFAULT == DEFAULT_STACK["N_D_bulk"]
     assert core_device2d._L_TRANSITION_DEFAULT == DEFAULT_STACK["L_transition"]
-    assert core_device2d._BUFFER_THICKNESS_DEFAULT_CM == DEFAULT_STACK["buffer_thickness_cm"]
-    assert core_device2d._BUFFER_END_DOPING_DEFAULT == DEFAULT_STACK["buffer_end_doping"]
+    assert (
+        core_device2d._BUFFER_THICKNESS_DEFAULT_CM
+        == DEFAULT_STACK["buffer_thickness_cm"]
+    )
+    assert (
+        core_device2d._BUFFER_END_DOPING_DEFAULT == DEFAULT_STACK["buffer_end_doping"]
+    )
     import inspect
 
     for fn in (core_device.create_sic_device, core_device2d.create_sic_2d_device):
@@ -63,7 +68,11 @@ def test_one_source_of_truth():
         assert p["buffer_end_doping"].default == DEFAULT_STACK["buffer_end_doping"]
     # the previous default stays reproducible as a named preset
     p = nplus_calibrated_config()
-    assert (p.N_D_junction, p.N_D_bulk, p.L_transition_um) == (2.958237e15, 8.252732e13, 0.987)
+    assert (p.N_D_junction, p.N_D_bulk, p.L_transition_um) == (
+        2.958237e15,
+        8.252732e13,
+        0.987,
+    )
     assert p.buffer_thickness_um is None and p.buffer_end_doping is None
     assert (p.N_t, p.E_t) == (2.805336e12, 0.67)
     # device_kwargs always carries the transition keys (None = abrupt epi end)
@@ -147,14 +156,20 @@ def test_default_numbers_are_the_measured_cv_record():
     c = DeviceConfig()
     cv = sim.run_cv(c, 0.0, -30.0, 31)
     WC = np.asarray(cv.metadata["W_from_C"]) * 1e4
-    np.testing.assert_allclose(WC[[0, 10, 30]], [1.654732, 9.518526, 9.75029], atol=1e-6)
+    np.testing.assert_allclose(
+        WC[[0, 10, 30]], [1.654732, 9.518526, 9.75029], atol=1e-6
+    )
     W = np.asarray(cv.metadata["depletion_widths"]) * 1e4
-    np.testing.assert_allclose(W[[0, 10, 30]], [1.649339, 9.480291, 9.736051], atol=1e-6)
+    np.testing.assert_allclose(
+        W[[0, 10, 30]], [1.649339, 9.480291, 9.736051], atol=1e-6
+    )
     assert cv.metadata["reach_through_V"] == pytest.approx(3.1)
     cce = sim.run_cce(c, -10.0, -50.0, 3)
     np.testing.assert_allclose(cce.y, [0.999472, 0.99981, 0.999883], atol=1e-6)
     d = sim.run_dark_current(dataclasses.replace(c, area_cm2=0.04), 0.0, -60.0, 7)
-    np.testing.assert_allclose(d.y[[1, 3, 6]] * 1e12, [6.296, 15.763, 18.000], atol=1e-3)
+    np.testing.assert_allclose(
+        d.y[[1, 3, 6]] * 1e12, [6.296, 15.763, 18.000], atol=1e-3
+    )
 
 
 def test_previous_default_numbers_are_the_calibration_record():
@@ -162,7 +177,8 @@ def test_previous_default_numbers_are_the_calibration_record():
     C; lab/solver2d/notes/LOG.md): eps*A/C 1.700 / 9.500 (inputs) / 9.979 um (out of fit,
     +2.56 %), depletion edge 1.689 / 9.267 / 9.896 um, dark 6.077 / 14.720 / 18.000 pA
     (4 mm2). Previous record (edge calibration): edge 1.700 / 9.500 / 9.899,
-    CCE 0.999021 / 0.999706 / 0.999819, dark 6.132 / 14.873 / 18.000, reach-through 10.3 V."""
+    CCE 0.999021 / 0.999706 / 0.999819, dark 6.132 / 14.873 / 18.000, reach-through 10.3 V.
+    """
     c = nplus_calibrated_config()
     cv = sim.run_cv(c, 0.0, -30.0, 31)
     WC = np.asarray(cv.metadata["W_from_C"]) * 1e4
@@ -189,18 +205,20 @@ def test_dark_sweep_reaches_minus_100V():
     assert np.all(np.isfinite(d.y))
 
 
-def test_legacy_dark_sweep_truncates_honestly_at_the_wall():
-    """Legacy (cathode on the n- epi): the contact-artefact wall stops devsim near -60 V.
+def test_legacy_dark_sweep_reaches_v_stop_with_the_2V_ramp():
+    """Legacy (cathode on the n- epi) dark sweep: the "wall" near -60 V was a ramp artefact.
 
-    Until 2026-10-17 this sweep reached -100 V, but only with both mobilities at
-    DEFAULT_N_D = 1.07e15: at N_D_bulk (8.82e13, the legacy epi doping) it fails at
-    -60.77 V, and so do 1.2e14 / 2e14 / 5e14 (-52.6 to -63.2 V reached). The contract is
-    an honest truncation, not a reach."""
+    With 0.5 V ramp steps (before 2026-10-18) the TAT sweep stopped converging at
+    -57.9 V (single refresh) / -63.2 V (fixed point); with the 2 V steps of
+    DARK_RAMP_STEP_V (and with 2 V steps on the old code too) it converges to -100 V,
+    agrees with the 0.5 V points to 1.9e-14 where both exist, and the current is a
+    smooth plateau (4.489e-14 -> 4.490e-14 A from -60 to -100 V). The truncation record
+    itself is pinned by test_dark_current.py::test_sweep_reports_truncation."""
     d = sim.run_dark_current(legacy_config(), 0.0, -100.0, 20)
-    assert d.metadata["truncated"] and d.metadata["requested_v_stop"] == -100.0
-    assert d.metadata["reached_v_stop"] == pytest.approx(d.x[-1])
-    assert -100.0 < d.x[-1] <= -50.0
-    assert np.all(np.isfinite(d.y)) and len(d.y) == len(d.x)
+    assert not d.metadata["truncated"] and d.metadata["reached_v_stop"] == -100.0
+    assert np.all(np.isfinite(d.y)) and len(d.y) == 20
+    plateau = d.y[d.x <= -60.0]
+    assert np.all(np.diff(plateau) >= 0) and plateau[-1] / plateau[0] - 1 < 1e-3
 
 
 class _Spy:
@@ -346,16 +364,27 @@ def test_uniform_profile_does_not_inherit_the_fitted_transition():
     assert device_kwargs(c)["buffer_thickness_cm"] is None
     # an explicit non-default transition is kept
     c2 = etna.DeviceConfig(
-        doping_profile="uniform", N_D=1e14, buffer_thickness_um=0.5, buffer_end_doping=1e16
+        doping_profile="uniform",
+        N_D=1e14,
+        buffer_thickness_um=0.5,
+        buffer_end_doping=1e16,
     )
     assert c2.buffer_thickness_um == 0.5
     # the graded default keeps it
     assert etna.DeviceConfig().buffer_thickness_um is not None
     # the sidebar path (uniform chosen there) goes through the same rule
     v = dict(
-        epi_thickness_um=10.0, substrate_thickness_um=0.3, half_width_um=None, N_A=1e19,
-        doping_profile="uniform", N_D=1e14, N_D_junction=2.9e15, N_D_bulk=8e13,
-        L_transition_um=0.9, T=300.0, area_cm2=0.04,
+        epi_thickness_um=10.0,
+        substrate_thickness_um=0.3,
+        half_width_um=None,
+        N_A=1e19,
+        doping_profile="uniform",
+        N_D=1e14,
+        N_D_junction=2.9e15,
+        N_D_bulk=8e13,
+        L_transition_um=0.9,
+        T=300.0,
+        area_cm2=0.04,
     )
     assert assemble_config(v).buffer_thickness_um is None
 

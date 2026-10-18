@@ -89,3 +89,11 @@ etna/core/transient.py (WP-A), so the change is a WP-A follow-up: hoist the buil
 and ramp above the loop in transient_cce_vs_dose_rate, snapshot once, restore per rate
 (delete the device once in a finally). Side note for WP-A: the 20 Gy/s point comes out
 at exactly 1.0 (clipped) on the default stack while 50-230 Gy/s give 0.99980-0.99984.
+
+## Legacy dark-current "wall" was a 0.5 V-ramp artefact
+
+Legacy (no n+) dark sweep, 0..-100 V, 20 points (lab/engine_box/bench/legacy_dark_wall.py):
+old code 0.5 V stops at -57.9 V, new code 0.5 V at -63.2 V, old and new code with 2 V steps
+reach -100 V; 2 V vs old 0.5 V on the common points 1.9e-14; smooth plateau 4.489e-14 ->
+4.490e-14 A from -60 to -100 V. (The plain-DD legacy wall of run_cv / run_field is a
+different path.) tests/test_default_stack.py now pins the reach.
