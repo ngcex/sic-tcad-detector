@@ -98,6 +98,52 @@ def test_net_doping_2d_heatmap_log10_finite_where_interpolated():
     assert np.all(finite >= 0.0)
 
 
+def _with_layout(mesh: MeshData, regions, contacts) -> MeshData:
+    mesh.regions = regions
+    mesh.contacts = contacts
+    return mesh
+
+
+def test_empty_regions_and_contacts_draw_no_shapes():
+    for mesh in (_mesh_1d(), _mesh_2d()):
+        fig = build_geometry_figure(mesh, "Electric field")
+        assert len(fig.layout.shapes) == 0
+        assert len(fig.data) == 1
+
+
+def test_1d_contacts_are_vertical_lines_at_their_depth():
+    mesh = _with_layout(
+        _mesh_1d(),
+        [{"name": "sic", "x_min": 0.0, "x_max": 2e-4, "y_min": None, "y_max": None}],
+        [{"name": "anode", "position": 0.0}, {"name": "cathode", "position": 2e-4}],
+    )
+    fig = build_geometry_figure(mesh, "Net doping")
+    assert len(fig.data) == 1  # still only the quantity trace
+    lines = [s for s in fig.layout.shapes if s.type == "line"]
+    assert len(lines) == 2  # the 1D region (no y extent) is not outlined
+    assert sorted((s.x0, s.x1) for s in lines) == [(0.0, 0.0), (2.0, 2.0)]  # µm
+    labels = {a.text for a in fig.layout.annotations}
+    assert {"anode", "cathode"} <= labels
+
+
+def test_2d_contacts_are_horizontal_lines_and_regions_outlined():
+    mesh = _with_layout(
+        _mesh_2d(),
+        [{"name": "sic", "x_min": 0.0, "x_max": 1e-3, "y_min": 0.0, "y_max": 5e-4}],
+        [{"name": "anode", "position": 0.0}, {"name": "cathode", "position": 5e-4}],
+    )
+    fig = build_geometry_figure(mesh, "Electric field")
+    assert len(fig.data) == 1 and fig.data[0].type == "heatmap"
+    rects = [s for s in fig.layout.shapes if s.type == "rect"]
+    assert len(rects) == 1
+    r = rects[0]
+    assert (r.x0, r.x1, r.y0, r.y1) == pytest.approx((0.0, 10.0, 0.0, 5.0))  # µm
+    lines = [s for s in fig.layout.shapes if s.type == "line"]
+    assert sorted(s.y0 for s in lines) == pytest.approx([0.0, 5.0])
+    assert all(s.y0 == s.y1 for s in lines)  # horizontal (constant depth)
+    assert fig.layout.yaxis.autorange == "reversed"
+
+
 def test_quantities_map_contract():
     assert list(QUANTITIES)[0] == "Electric field"
     assert QUANTITIES == {
