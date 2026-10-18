@@ -75,6 +75,8 @@ code(
 import sys
 sys.path.insert(0, '..')
 import os
+FIG_DIR = os.path.abspath(os.environ.get("ETNA_FIGURE_DIR", "figures"))  # before the chdir: notebooks/figures/ (untracked)
+os.makedirs(FIG_DIR, exist_ok=True)
 os.chdir('..')
 
 %matplotlib inline
@@ -163,7 +165,7 @@ plot_doping_2d(device_info_100['device_name'], device_info_100['region_name'],
 axes[2].set_title('Doping Profile (cm$^{-3}$)')
 
 plt.tight_layout()
-plt.savefig('notebooks/fig_2d_electrostatics.png', dpi=150, bbox_inches='tight')
+plt.savefig(os.path.join(FIG_DIR, 'fig_2d_electrostatics.png'), dpi=150, bbox_inches='tight')
 plt.show()
 """
 )
@@ -348,7 +350,7 @@ ax.grid(True, alpha=0.3)
 ax.set_ylim(0, 1.05)
 
 plt.tight_layout()
-plt.savefig('notebooks/fig_cce_vs_bias_lateral.png', dpi=150, bbox_inches='tight')
+plt.savefig(os.path.join(FIG_DIR, 'fig_cce_vs_bias_lateral.png'), dpi=150, bbox_inches='tight')
 plt.show()
 
 print("\\nEdge-to-center ratio summary:")
@@ -435,7 +437,7 @@ ax.grid(True, alpha=0.3)
 ax.set_ylim(0, 1.05)
 
 plt.tight_layout()
-plt.savefig('notebooks/fig_cce_size_comparison.png', dpi=150, bbox_inches='tight')
+plt.savefig(os.path.join(FIG_DIR, 'fig_cce_size_comparison.png'), dpi=150, bbox_inches='tight')
 plt.show()
 
 print(f"\\nAt {best_bias:.0f} V:")
@@ -485,7 +487,7 @@ ax.axvline(-hw_um, color='white', linestyle=':', linewidth=1.5, alpha=0.7)
 ax.set_title(f'2D CCE Heatmap — 100 µm SV at {best_bias:.0f} V')
 
 plt.tight_layout()
-plt.savefig('notebooks/fig_cce_heatmap_2d.png', dpi=150, bbox_inches='tight')
+plt.savefig(os.path.join(FIG_DIR, 'fig_cce_heatmap_2d.png'), dpi=150, bbox_inches='tight')
 plt.show()
 
 devsim.delete_device(device=dev_hm['device_name'])

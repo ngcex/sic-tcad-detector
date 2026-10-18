@@ -171,7 +171,7 @@ and the presets `measured_cv_config`, `measured_cv_tabulated_config`,
 | `etna/`         | Installable Python package: `etna/api/` (public facades — `DeviceConfig`, `run_cv`, `run_cce`, …) and `etna/core/` (internal solver modules — material params, Poisson, drift-diffusion, CCE, dark current, radiation damage, microdosimetry, 2D devices, …) |
 | `app/`          | Streamlit UI: `app/main.py` (navigation shell), `app/workflows/` (one page per simulation type), `app/components/` (sidebar, plotting, CSV export)                                                                                                           |
 | `notebooks/`    | 21 analysis notebooks (validation, characterisation, FLASH, radiation damage, microdosimetry, feasibility); committed without outputs                                                                                                                        |
-| `tests/`        | 89 pytest modules (1037 tests; 1030 in the default run): `test_api_*.py` (library facades), `test_app_*.py` (Streamlit AppTest, incl. un-mocked per-page smoke tests), engine/devsim parity, presets, plus the core-physics modules                            |
+| `tests/`        | 89 pytest modules (1037 tests; 1030 in the default run): `test_api_*.py` (library facades), `test_app_*.py` (Streamlit AppTest, incl. un-mocked per-page smoke tests), engine/devsim parity, presets, plus the core-physics modules                          |
 | `docs/`         | `docs/USAGE.md`, the usage guide                                                                                                                                                                                                                             |
 | `lab/`          | Research spikes, each with `notes/LOG.md` (commands and numbers behind calibrated defaults; see `lab/README.md`)                                                                                                                                             |
 | `scripts/`      | Notebook generators, the generator drift check, validation scripts (`scripts/README.md`)                                                                                                                                                                     |
@@ -288,8 +288,9 @@ Notebook outputs are stripped on commit (`.gitattributes` + `nbstripout`). After
 the filter. CI rejects tracked notebooks with outputs (`nbstripout --verify`) and generators
 that drift from their notebooks (`scripts/check_notebook_generators.py`). To regenerate
 outputs locally, re-run a notebook from `notebooks/` (`jupyter nbconvert --execute`). Run
-from the repo root, `save_figure` would write over the tracked `figures/`; set
-`ETNA_FIGURE_DIR` to redirect it.
+from the repo root, the notebook figures would write over the tracked `figures/`; set
+`ETNA_FIGURE_DIR` to redirect them. Notebooks 16 and 17 also (re)write
+`data/cce_let_table_*.json` and `data/synthetic_mc_events.csv` relative to the repo root.
 
 ## Development environment
 

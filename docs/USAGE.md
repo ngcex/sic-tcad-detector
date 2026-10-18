@@ -772,35 +772,37 @@ print(sec.status, sec.solver, sec.result.metadata["summary"])
 
 `notebooks/` holds 21 notebooks, committed **without outputs**. `.gitattributes` routes
 `*.ipynb` through nbstripout, and CI checks `nbstripout --verify notebooks/*.ipynb`. Run
-them from `notebooks/` (`uv run jupyter lab`), so that figures saved by
-`save_figure` land in `notebooks/figures/` (gitignored).
+them from `notebooks/` (`uv run jupyter lab`), so that their figures land in
+`notebooks/figures/` (gitignored). Every notebook figure, whether written by `save_figure`
+or by a direct `savefig`, goes to `$ETNA_FIGURE_DIR` or `./figures` of the directory the
+kernel started in; notebooks 15-20 resolve it before their `os.chdir('..')`.
 
 Notebooks written before 2026-10-18 may state numbers for older defaults; the model they
 run is whatever `DeviceConfig()` / the core defaults are now, unless they pin a preset.
 
-| notebook                       | topic                                          | notes                                                                     |
-| ------------------------------ | ---------------------------------------------- | ------------------------------------------------------------------------- |
-| 01_phase1_validation           | material parameters, analytical electrostatics |                                                                           |
-| 02_electrical_characterization | C-V, Mott-Schottky, doping profile, I-V        |                                                                           |
-| 03_charge_collection           | CCE vs bias, generation profiles, Hecht        | generator `scripts/create_notebook_03.py`                                 |
-| 04_flash_recombination         | FLASH Auger/SRH CCE vs dose rate               | sensitivity bound only                                                    |
-| 05_dark_current_vs_fluence     | dark current vs proton fluence                 | TAT on devsim                                                             |
-| 05b_flash_parametric_studies   | FLASH parametric sweeps                        | runs its 60-condition sweep when the untracked cache is missing          |
-| 06_temperature_dependence      | material properties and CCE vs T               |                                                                           |
-| 07_dark_current                | TAT / SRH / surface terms                      |                                                                           |
-| 08_transient_flash             | FLASH pulse transients                         | generator `create_notebook_08.py`                                         |
-| 09_radiation_damage            | defect introduction, lifetimes, NIEL scaling   | kappa placeholders                                                        |
-| 10_cce_vs_fluence              | CCE degradation vs fluence                     |                                                                           |
-| 11_dark_current_cv_evolution   | leakage and C-V vs fluence                     |                                                                           |
-| 12_multi_defect_comparison     | 3-defect vs single-defect models               |                                                                           |
-| 13_parametric_optimization     | radiation-hardness sweep                       |                                                                           |
-| 14_validation                  | comparison with published irradiation data     |                                                                           |
-| 15_2d_electrostatics_cce       | 2D field and CCE of the microdosimeter         | generator `create_notebook_15.py`                                         |
-| 16_single_particle_cce         | single-particle 2D transient CCE, CCE(LET)     | generator `create_notebook_16.py`; rebuilds the CCE(LET) tables (~1 h)    |
-| 17_mc_coupling                 | MC energy deposition to pulse height           | generator executes it in place                                            |
-| 18_microdosimetric_spectra     | lineal energy spectra, y_F / y_D               | kappa placeholders; generator executes it                                 |
-| 19_alternative_structures      | mesa, 3D electrode, ΔE-E, guard ring           | pins the previous-default doping on the legacy geometry (PERF-06)         |
-| 20_feasibility_report          | microdosimeter design study                    | outside-validity rows reported                                            |
+| notebook                       | topic                                          | notes                                                                  |
+| ------------------------------ | ---------------------------------------------- | ---------------------------------------------------------------------- |
+| 01_phase1_validation           | material parameters, analytical electrostatics |                                                                        |
+| 02_electrical_characterization | C-V, Mott-Schottky, doping profile, I-V        |                                                                        |
+| 03_charge_collection           | CCE vs bias, generation profiles, Hecht        | generator `scripts/create_notebook_03.py`                              |
+| 04_flash_recombination         | FLASH Auger/SRH CCE vs dose rate               | sensitivity bound only                                                 |
+| 05_dark_current_vs_fluence     | dark current vs proton fluence                 | TAT on devsim                                                          |
+| 05b_flash_parametric_studies   | FLASH parametric sweeps                        | runs its 60-condition sweep when the untracked cache is missing        |
+| 06_temperature_dependence      | material properties and CCE vs T               |                                                                        |
+| 07_dark_current                | TAT / SRH / surface terms                      |                                                                        |
+| 08_transient_flash             | FLASH pulse transients                         | generator `create_notebook_08.py`                                      |
+| 09_radiation_damage            | defect introduction, lifetimes, NIEL scaling   | kappa placeholders                                                     |
+| 10_cce_vs_fluence              | CCE degradation vs fluence                     |                                                                        |
+| 11_dark_current_cv_evolution   | leakage and C-V vs fluence                     |                                                                        |
+| 12_multi_defect_comparison     | 3-defect vs single-defect models               |                                                                        |
+| 13_parametric_optimization     | radiation-hardness sweep                       |                                                                        |
+| 14_validation                  | comparison with published irradiation data     |                                                                        |
+| 15_2d_electrostatics_cce       | 2D field and CCE of the microdosimeter         | generator `create_notebook_15.py`                                      |
+| 16_single_particle_cce         | single-particle 2D transient CCE, CCE(LET)     | generator `create_notebook_16.py`; rebuilds the CCE(LET) tables (~1 h) |
+| 17_mc_coupling                 | MC energy deposition to pulse height           | generator executes it in place                                         |
+| 18_microdosimetric_spectra     | lineal energy spectra, y_F / y_D               | kappa placeholders; generator executes it                              |
+| 19_alternative_structures      | mesa, 3D electrode, ΔE-E, guard ring           | pins the previous-default doping on the legacy geometry (PERF-06)      |
+| 20_feasibility_report          | microdosimeter design study                    | outside-validity rows reported                                         |
 
 Run times measured on 2026-10-18 (Apple M4, executed into a scratch copy, the machine shared
 with other jobs): 01 3 s, 02 17 s, 03 15 s, 04 5 s, 05 57 s, 05b 76 s (full sweep), 06 63 s,
