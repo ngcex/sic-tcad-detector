@@ -118,8 +118,8 @@ cd notebooks && uv run jupyter lab 01_phase1_validation.ipynb
 > pytest from `.venv`. `uv run pytest` may then fall through to a system pytest
 > (audit C-15).
 >
-> **Tests:** there are 1041 tests in 89 modules. `pytest.ini` deselects the 7 `exhaustive`
-> tests (run them with `-m exhaustive`), so the default run is 1034 tests, and it is the
+> **Tests:** there are 1088 tests in 92 modules. `pytest.ini` deselects the 7 `exhaustive`
+> tests (run them with `-m exhaustive`), so the default run is 1081 tests, and it is the
 > real gate. On a 10-core machine `-n auto` takes about 4 minutes (248 s, down from
 > 502 s with `--dist loadfile` on the same shared machine). `pytest.ini` supplies
 > `--dist loadgroup`; `tests/_xdist_schedule.py` balances the work and
@@ -148,7 +148,10 @@ Each facade, its return values and metadata keys, with an example that runs, is 
 **Solvers.** `run_cv` / `run_cce` (and their `run_*_batch` twins used by
 `ParametricSweep`) run on a batched numba 1D engine (`etna.core.batched`) when
 the device lies in the cross-check parameter box, where it was cross-checked
-against devsim, and fall back to devsim otherwise or on non-convergence. 2D
+against devsim, and fall back to devsim otherwise or on non-convergence. The same
+engine serves `run_dark_current` (TAT/SRH/SRV model), `run_flash_recombination`, the
+temperature and fluence sweeps and the 2D dark current of laterally uniform devices
+(milliseconds instead of seconds; parity with devsim <= ~1e-11). 2D
 `run_field` uses a numba 2D engine (`etna.core.engine2d`) where eligible.
 `metadata["solver"]`, `metadata["validated_domain"]` / `"domain_note"` record
 what ran; C-V/CCE results also carry `metadata["reach_through_V"]`, the
@@ -173,7 +176,7 @@ and the presets `measured_cv_config`, `measured_cv_tabulated_config`,
 | `etna/`         | Installable Python package: `etna/api/` (public facades — `DeviceConfig`, `run_cv`, `run_cce`, …) and `etna/core/` (internal solver modules — material params, Poisson, drift-diffusion, CCE, dark current, radiation damage, microdosimetry, 2D devices, …) |
 | `app/`          | Streamlit UI: `app/main.py` (navigation shell), `app/workflows/` (one page per simulation type), `app/components/` (sidebar, plotting, CSV export)                                                                                                           |
 | `notebooks/`    | 21 analysis notebooks (validation, characterisation, FLASH, radiation damage, microdosimetry, feasibility); committed without outputs                                                                                                                        |
-| `tests/`        | 89 pytest modules (1037 tests; 1030 in the default run): `test_api_*.py` (library facades), `test_app_*.py` (Streamlit AppTest, incl. un-mocked per-page smoke tests), engine/devsim parity, presets, plus the core-physics modules                          |
+| `tests/`        | 92 pytest modules (1088 tests; 1081 in the default run): `test_api_*.py` (library facades), `test_app_*.py` (Streamlit AppTest, incl. un-mocked per-page smoke tests), engine/devsim parity, presets, plus the core-physics modules                          |
 | `docs/`         | `docs/USAGE.md`, the usage guide                                                                                                                                                                                                                             |
 | `lab/`          | Research spikes, each with `notes/LOG.md` (commands and numbers behind calibrated defaults; see `lab/README.md`)                                                                                                                                             |
 | `scripts/`      | Notebook generators, the generator drift check, validation scripts (`scripts/README.md`)                                                                                                                                                                     |
@@ -212,7 +215,8 @@ built-in-voltage difference; <1 % with V_bi matched), not a validation of this d
 
 - ✅ **Verified numerics (code-to-code, not against measurement):** the batched 1D and
   2D numba engines reproduce devsim inside their parameter boxes (1D dC/C ≲ 3e-8,
-  dCCE ≲ 1e-10 to −100 V; 2D potential ~1e-13 V), and the 2D graded model's C–V
+  dCCE ≲ 1e-10 to −100 V, dark current ≲ 1.4e-11 relative, FLASH CCE ≲ 3e-12; 2D
+  potential ~1e-13 V), and the 2D graded model's C–V
   matches its 1D twin (R² ≥ 0.99 over 0…−50 V). Electrostatics, C–V and CCE-vs-bias are
   therefore solved consistently, but their agreement with this device rests on the
   C–V calibration below: the C–V is a fit, and no measured CCE of the dosimeter has been

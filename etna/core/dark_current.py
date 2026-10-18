@@ -42,6 +42,7 @@ from etna.core.solver_tol import (
     RELAXED_ABS_ERROR,
     RELAXED_REL_ERROR,
 )
+import inspect
 import logging
 import uuid
 
@@ -57,6 +58,15 @@ from etna.core.drift_diffusion import (
     extract_steady_state_current,
 )
 from etna.core.device import DEFAULT_STACK as _STACK, graded_stack_kwargs
+from etna.core.device import create_sic_device as _create_sic_device
+
+# create_sic_device's keyword defaults, read once at import (engine_box_reason resolves
+# missing keys with them; reading them per call would see a test spy's signature)
+_SIC_DEVICE_DEFAULTS = {
+    k: p.default
+    for k, p in inspect.signature(_create_sic_device).parameters.items()
+    if p.default is not inspect.Parameter.empty
+}
 from etna.core.devsim_reset import delete_device_and_mesh
 
 
@@ -76,6 +86,71 @@ _HBAR_SI = 1.0546e-34  # J*s
 _M0_SI = 9.109e-31  # kg
 _Q_SI = 1.602e-19  # C (also J/eV)
 _K_B_EV = 8.617e-5  # eV/K
+
+
+# Reference field of the f_depl = min(E / E_REF_TAT, 1) effective-generation proxy (V/cm):
+# a heuristic (half the ~70 kV/cm built-in junction field), not physics. Shared by the
+# devsim model (setup_tat_model) and the batched engine (etna.core.batched.dark).
+E_REF_TAT = 3.5e4
+# Floor of the node field (V/cm), avoids a division by zero in Kt.
+E_NODE_FLOOR = 1e3
+
+
+def tat_constants(T, n_i, E_g, params, E_t=None, m_t=None, N_t=None):
+    """Scalar constants of the TAT model at temperature ``T`` (single source for the
+    devsim model and the batched engine).
+
+    Returns a dict: ``n1_tat`` / ``p1_tat`` (Z1/2 SRH trap densities, cm^-3), ``G0``
+    (= N_t * nt_temperature_scale(T), cm^-3 s^-1), ``T_scale``, ``Kt_numerator`` /
+    ``Kt_denom_const`` (Kt = Kt_numerator / (Kt_denom_const * E_node)), ``E_ref`` and the
+    resolved ``E_t``, ``m_t``, ``N_t``. ``n_i`` / ``E_g`` are the device's (cm^-3, eV).
+    """
+    E_t = params.E_t if E_t is None else E_t
+    m_t = params.m_t if m_t is None else m_t
+    N_t = params.N_t if N_t is None else N_t
+    kT_eV = _K_B_EV * T
+    m_tunnel_kg = m_t * _M0_SI
+    E_t_J = E_t * _Q_SI
+    E_t_from_midgap = E_g / 2.0 - E_t
+    T_scale = nt_temperature_scale(T, params)
+    return {
+        "E_t": E_t,
+        "m_t": m_t,
+        "N_t": N_t,
+        "n1_tat": n_i * np.exp(E_t_from_midgap / kT_eV),
+        "p1_tat": n_i * np.exp(-E_t_from_midgap / kT_eV),
+        "T_scale": T_scale,
+        "G0": N_t * T_scale,
+        "Kt_numerator": (4.0 / 3.0) * np.sqrt(2.0 * m_tunnel_kg) * E_t_J**1.5,
+        "Kt_denom_const": _Q_SI * _HBAR_SI * 100.0,
+        "E_ref": E_REF_TAT,
+    }
+
+
+def node_field_1d(abs_E_edge):
+    """1D node field from edge |E| (last axis = edges): end nodes take their single
+    edge, interior nodes the mean of the two adjacent edges; floored at E_NODE_FLOOR."""
+    abs_E = np.asarray(abs_E_edge, dtype=float)
+    shape = abs_E.shape[:-1] + (abs_E.shape[-1] + 1,)
+    E_node = np.empty(shape)
+    E_node[..., 0] = abs_E[..., 0]
+    E_node[..., -1] = abs_E[..., -1]
+    E_node[..., 1:-1] = 0.5 * (abs_E[..., :-1] + abs_E[..., 1:])
+    return np.maximum(E_node, E_NODE_FLOOR)
+
+
+def gamma_from_kt(Kt):
+    """Hurkx/Schenk field-enhancement factor (see _compute_gamma_factors): 1 for
+    Kt >= 4, sqrt(pi)/(2 Kt) exp(1/(4 Kt^2)) below (Kt clamped at 0.05)."""
+    Kt = np.asarray(Kt, dtype=float)
+    Gamma = np.ones_like(Kt)
+    high_field = Kt < 4.0
+    if np.any(high_field):
+        Kt_hf = np.maximum(Kt[high_field], 0.05)
+        Gamma[high_field] = (np.sqrt(np.pi) / (2.0 * Kt_hf)) * np.exp(
+            1.0 / (4.0 * Kt_hf**2)
+        )
+    return Gamma
 
 
 def nt_temperature_scale(T, params=None):
@@ -155,17 +230,12 @@ def setup_tat_model(device_info, E_t=None, m_t=None, N_t=None):
     region = device_info["region_name"]
     params = device_info["params"]
 
-    if E_t is None:
-        E_t = params.E_t
-    if m_t is None:
-        m_t = params.m_t
-    if N_t is None:
-        N_t = params.N_t
-
     T = device_info["T"]
-    kT_eV = _K_B_EV * T
+    c = tat_constants(
+        T, device_info["n_i"], device_info["E_g"], params, E_t=E_t, m_t=m_t, N_t=N_t
+    )
+    E_t, m_t, N_t = c["E_t"], c["m_t"], c["N_t"]
     n_i = device_info["n_i"]
-    E_g = device_info["E_g"]
 
     # Store TAT parameters
     devsim.set_parameter(device=device, region=region, name="E_t", value=E_t)
@@ -176,22 +246,13 @@ def setup_tat_model(device_info, E_t=None, m_t=None, N_t=None):
     _compute_node_efield(device, region)
 
     # --- Step 2: Kt and Gamma from Hurkx model ---
-    m_tunnel_kg = m_t * _M0_SI
-    E_t_J = E_t * _Q_SI
-
-    Kt_numerator = (4.0 / 3.0) * np.sqrt(2.0 * m_tunnel_kg) * E_t_J**1.5
-    Kt_denom_const = _Q_SI * _HBAR_SI * 100.0
-
-    Kt_expr = f"{Kt_numerator} / ({Kt_denom_const} * E_field_node)"
+    Kt_expr = f"{c['Kt_numerator']} / ({c['Kt_denom_const']} * E_field_node)"
     CreateNodeModel(device, region, "Kt_TAT", Kt_expr)
 
     _compute_gamma_factors(device, region)
 
     # --- Step 3: Trap-level n1, p1 for Z1/2 ---
-    E_t_from_midgap = E_g / 2.0 - E_t
-    n1_tat = n_i * np.exp(E_t_from_midgap / kT_eV)
-    p1_tat = n_i * np.exp(-E_t_from_midgap / kT_eV)
-
+    n1_tat, p1_tat = c["n1_tat"], c["p1_tat"]
     devsim.set_parameter(device=device, region=region, name="n1_tat", value=n1_tat)
     devsim.set_parameter(device=device, region=region, name="p1_tat", value=p1_tat)
 
@@ -211,19 +272,19 @@ def setup_tat_model(device_info, E_t=None, m_t=None, N_t=None):
     #   This gives ~1 in depletion, ~0 in quasi-neutral regions.
     #
     # The contact current from devsim captures the net effect of both.
-
-    # Reference field for depletion identification (heuristic, not physics):
-    # built-in field at junction is ~70 kV/cm; use half as reference. f_depl sets the
-    # whole bias dependence of the leakage (Gamma = 1 at these fields).
-    E_ref = 3.5e4  # V/cm
+    #
+    # Reference field E_REF_TAT (heuristic, not physics): built-in field at junction is
+    # ~70 kV/cm; use half as reference. f_depl sets the whole bias dependence of the
+    # leakage (Gamma = 1 at these fields).
+    E_ref = c["E_ref"]
 
     # AUDIT C8: temperature-dependent effective generation, ASSUMED to follow
     # classical depletion generation G ∝ n_i(T) ∝ exp(-E_g/2kT):
     # N_t_eff(T) = N_t * n_i(T)/n_i(300). The factor is 1.0 at 300 K, so the 300 K
     # fit is kept; at other temperatures the leakage follows this assumed
     # E_a = E_g/2 (~x15 per +13 K), which is not fitted to data.
-    T_scale = nt_temperature_scale(T, params)
-    N_t_eff = N_t * T_scale
+    T_scale = c["T_scale"]
+    N_t_eff = c["G0"]
     # Store G0_TAT = N_t_eff as generation rate parameter
     devsim.set_parameter(device=device, region=region, name="G0_TAT", value=N_t_eff)
     devsim.set_parameter(device=device, region=region, name="E_ref_TAT", value=E_ref)
@@ -288,13 +349,19 @@ def _compute_node_efield(device, region):
             device=device, region=region, node_model="Potential", calc_type="default"
         )
         gx = np.array(
-            devsim.get_node_model_values(device=device, region=region, name="Potential_gradx")
+            devsim.get_node_model_values(
+                device=device, region=region, name="Potential_gradx"
+            )
         )
         gy = np.array(
-            devsim.get_node_model_values(device=device, region=region, name="Potential_grady")
+            devsim.get_node_model_values(
+                device=device, region=region, name="Potential_grady"
+            )
         )
         E_node = np.maximum(np.hypot(gx, gy), 1e3)
-        devsim.node_model(device=device, region=region, name="E_field_node", equation="1e3")
+        devsim.node_model(
+            device=device, region=region, name="E_field_node", equation="1e3"
+        )
         devsim.set_node_values(
             device=device, region=region, name="E_field_node", values=E_node.tolist()
         )
@@ -309,13 +376,9 @@ def _compute_node_efield(device, region):
     n_nodes = len(node_x)
     n_edges = len(E_edge)
 
-    abs_E = np.abs(E_edge)
-    E_node = np.empty(n_nodes)
-    E_node[0] = abs_E[0]
-    E_node[-1] = abs_E[n_edges - 1]
-    E_node[1:-1] = 0.5 * (abs_E[: n_nodes - 2] + abs_E[1 : n_nodes - 1])
-
-    E_node = np.maximum(E_node, 1e3)
+    if n_edges != n_nodes - 1:
+        raise ValueError(f"1D mesh expected: {n_edges} edges for {n_nodes} nodes")
+    E_node = node_field_1d(np.abs(E_edge))
 
     devsim.node_model(device=device, region=region, name="E_field_node", equation="1e3")
     devsim.set_node_values(
@@ -342,15 +405,7 @@ def _compute_gamma_factors(device, region):
         devsim.get_node_model_values(device=device, region=region, name="Kt_TAT")
     )
 
-    Gamma = np.ones_like(Kt)
-    high_field = Kt < 4.0
-
-    if np.any(high_field):
-        Kt_hf = Kt[high_field]
-        Kt_hf = np.maximum(Kt_hf, 0.05)
-        Gamma[high_field] = (np.sqrt(np.pi) / (2.0 * Kt_hf)) * np.exp(
-            1.0 / (4.0 * Kt_hf**2)
-        )
+    Gamma = gamma_from_kt(Kt)
 
     devsim.node_model(device=device, region=region, name="Gamma_n", equation="1.0")
     devsim.set_node_values(
@@ -559,7 +614,9 @@ def _resolve_self_consistent(device, region):
 
     def field():
         return np.asarray(
-            devsim.get_node_model_values(device=device, region=region, name="E_field_node")
+            devsim.get_node_model_values(
+                device=device, region=region, name="E_field_node"
+            )
         )
 
     # Pass k sets E_k = E(state_{k-1}) and solves state_k. E_k ~ E_{k-1} means state_{k-1}
@@ -587,7 +644,16 @@ def _resolve_self_consistent(device, region):
 # 4.3 / 3.3 / 2.5 / 3.6 / 3.6 s for run_dark_current's grid; larger steps need more
 # Newton iterations). lab/engine_box/bench/dark_vstep.py, lab/engine_box/notes/LOG.md.
 DARK_RAMP_STEP_V = 2.0
-_SWEEP_KEYS = ("I_total", "I_SRH", "I_TAT", "I_SRV", "J_total", "J_SRH", "J_TAT", "J_SRV")
+_SWEEP_KEYS = (
+    "I_total",
+    "I_SRH",
+    "I_TAT",
+    "I_SRV",
+    "J_total",
+    "J_SRH",
+    "J_TAT",
+    "J_SRV",
+)
 
 
 def _anode_bias_name():
@@ -726,10 +792,248 @@ def create_dark_current_device(T=300, N_t=None, S_n=None, S_p=None, E_t=None, **
     return device_info
 
 
+# ---------------------------------------------------------------------------
+# Batched-engine path (etna.core.batched.dark): same model, numba 1D engine
+# ---------------------------------------------------------------------------
+
+# Scope of the dark-current engine: the doping profiles and the T box in which it was
+# cross-checked against this module's devsim path (tests/test_dark_current_engine.py:
+# default, tabulated, nplus_calibrated and legacy presets, 150-450 K, 0..-100 V, damaged
+# doping for the fluence path).
+DARK_ENGINE_PROFILES = ("graded", "uniform")
+DARK_ENGINE_T = (150.0, 450.0)
+# Legacy geometry (ohmic cathode on the n- epi, no n+): devsim's dark sweep stops
+# converging at a platform-dependent depth (-78.9 V on the ubuntu CI runner, -100 V on
+# macOS); the engine is cross-checked down to this depth only and the whole sweep goes to
+# devsim beyond it (so the documented legacy truncation record stays devsim's).
+DARK_ENGINE_LEGACY_MAX_V = 60.0
+
+
+def engine_box_reason(dev_kw, voltages, N_D_junction=None, legacy_max_V=None):
+    """Why the batched 1D engine cannot serve a device given as create_sic_device
+    keywords ``dev_kw`` at anode biases ``voltages`` (None = it can).
+
+    The device (with create_sic_device's defaults for missing keys) must lie in the
+    C-V/CCE engine box ``etna.api.simulation._ENGINE_BOX`` (the box where the engine was
+    cross-checked against devsim; ``N_D_junction`` overrides its junction-doping range),
+    the profile must be graded or uniform, T inside DARK_ENGINE_T, the biases reverse;
+    a legacy device (``nplus_thickness_cm=None``) only to ``legacy_max_V``.
+    """
+    from etna.api.simulation import _ENGINE_BOX
+    from etna.core.device import (
+        DEFAULT_N_D,
+        DEFAULT_STACK,
+        default_buffer_for_profile,
+    )
+
+    defaults = _SIC_DEVICE_DEFAULTS
+    kw = {**defaults, **{k: v for k, v in dev_kw.items() if k in defaults}}
+    profile = kw["doping_profile"]
+    if profile not in DARK_ENGINE_PROFILES:
+        return f"doping_profile={profile!r}"
+    T = float(kw["T"])
+    lo, hi = DARK_ENGINE_T
+    if not lo <= T <= hi:
+        return f"T={T:g} outside [{lo:g}, {hi:g}]"
+    v = np.atleast_1d(np.asarray(voltages, dtype=float))
+    if v.size == 0 or not np.all(np.isfinite(v)):
+        return "empty or non-finite bias grid"
+    if np.any(v > 0):
+        return "forward bias requested"
+    if kw["nplus_thickness_cm"] is None and legacy_max_V is not None:
+        if np.max(np.abs(v)) > legacy_max_V:
+            return (
+                f"legacy geometry (no n+) beyond {legacy_max_V:g} V "
+                "(engine not cross-checked there)"
+            )
+    box = dict(_ENGINE_BOX)
+    if N_D_junction is not None:
+        box["N_D_junction"] = N_D_junction
+    checks = {
+        "N_A": kw["N_A"],
+        "epi_thickness_um": kw["epi_thickness_cm"] * 1e4,
+        "substrate_thickness_um": kw["substrate_thickness_cm"] * 1e4,
+    }
+    if kw["nplus_thickness_cm"] is not None:
+        checks.update(
+            nplus_thickness_um=kw["nplus_thickness_cm"] * 1e4, N_D_nplus=kw["N_D_nplus"]
+        )
+    try:
+        b_t, b_n = default_buffer_for_profile(
+            profile,
+            kw["buffer_thickness_cm"],
+            kw["buffer_end_doping"],
+            kw["donor_table"],
+        )
+    except ValueError as e:
+        return str(e)
+    if b_t is not None:
+        checks.update(buffer_thickness_um=b_t * 1e4, buffer_end_doping=b_n)
+    if kw["donor_table"] is not None:
+        lo, hi = box["donor_table_N_D"]
+        n = [p[1] for p in kw["donor_table"]]
+        if not (lo <= min(n) and max(n) <= hi):
+            return f"donor_table N_D range [{min(n):g}, {max(n):g}] outside [{lo:g}, {hi:g}]"
+    elif profile == "graded":
+        pick = lambda key: DEFAULT_STACK[key] if kw[key] is None else kw[key]
+        checks.update(
+            N_D_junction=pick("N_D_junction"),
+            N_D_bulk=pick("N_D_bulk"),
+            L_transition_um=pick("L_transition") * 1e4,
+        )
+    else:
+        checks["N_D_uniform"] = DEFAULT_N_D if kw["N_D"] is None else kw["N_D"]
+    for name, value in checks.items():
+        lo, hi = box[name]
+        if not lo <= value <= hi:
+            return f"{name}={value:g} outside [{lo:g}, {hi:g}]"
+    return None
+
+
+def dark_engine_reason(dev_kw, voltages):
+    """Why the batched engine cannot serve this dark-current call (None = it can).
+
+    ``dev_kw`` are create_dd_device keywords, ``voltages`` the anode biases: the engine
+    box of ``engine_box_reason`` (graded/uniform 1D device in the C-V/CCE engine box,
+    T in DARK_ENGINE_T, reverse bias), legacy devices (``nplus_thickness_cm=None``)
+    only to DARK_ENGINE_LEGACY_MAX_V.
+    """
+    # create_dd_device's default profile is graded (create_sic_device's is uniform)
+    dev_kw = {"doping_profile": "graded", **dev_kw}
+    return engine_box_reason(dev_kw, voltages, legacy_max_V=DARK_ENGINE_LEGACY_MAX_V)
+
+
+def dark_reference(dev_kw):
+    """Mesh, doping and material constants of the devsim device ``create_dd_device(
+    **dev_kw)`` builds (mesh and doping only, no equation solved; its default profile,
+    graded, is applied): x, Donors, Acceptors (ionized) and the device-info dict. The
+    engine takes everything from here, so both solvers work on the identical
+    discretisation and doping."""
+    from etna.core.device import create_sic_device
+
+    dev_kw = {k: v for k, v in dev_kw.items() if k != "device_name"}
+    dev_kw.setdefault("doping_profile", "graded")
+    name = f"dark_ref_{uuid.uuid4().hex[:8]}"
+    info = create_sic_device(device_name=name, **dev_kw)
+    try:
+        get = lambda key: np.array(
+            devsim.get_node_model_values(
+                device=name, region=info["region_name"], name=key
+            )
+        )
+        x, donors, acceptors = get("x"), get("Donors"), get("Acceptors")
+    finally:
+        try:
+            delete_device_and_mesh(name)
+        except Exception:
+            pass
+    return {"info": info, "x": x, "donors": donors, "acceptors": acceptors}
+
+
+def dark_current_engine(
+    refs,
+    V_range,
+    area=AREA_DOSIMETER_CM2,
+    N_t=None,
+    E_t=None,
+    S_n=None,
+    S_p=None,
+    m_t=None,
+    damaged=None,
+):
+    """Dark-current sweeps of several devices on the batched engine, in one batch.
+
+    ``refs``: list of ``dark_reference`` dicts sharing one mesh (e.g. one per
+    temperature). ``damaged`` (optional, one per ref): ``compute_damaged_params`` dicts
+    whose lifetimes and epi donor profile replace the pristine ones, exactly as
+    ``apply_damaged_params`` does on the devsim device. N_t / E_t / m_t / S_n / S_p as
+    ``create_dark_current_device`` (None = the material defaults).
+
+    Returns a list (one per ref) of dicts with the ``dark_current_sweep`` arrays
+    (voltages, I_total, I_SRH, I_TAT, I_SRV, J_*) and ``converged`` (bool per bias,
+    cumulative). A device whose sweep did not converge everywhere must be re-run on
+    devsim by the caller.
+    """
+    from etna.core.batched.dark import dark_sweep
+    from etna.core.sic_material import srh_lifetime
+
+    x = refs[0]["x"]
+    for r in refs[1:]:
+        if r["x"].shape != x.shape or np.any(r["x"] != x):
+            raise ValueError("dark_current_engine: every device must share one mesh")
+    B = len(refs)
+    donors = np.array([r["donors"] for r in refs])
+    acceptors = np.array([r["acceptors"] for r in refs])
+    infos = [r["info"] for r in refs]
+    tau_n = np.array([srh_lifetime(i["T"], "electron", i["params"]) for i in infos])
+    tau_p = np.array([srh_lifetime(i["T"], "hole", i["params"]) for i in infos])
+    if damaged is not None:
+        for b, (r, d) in enumerate(zip(refs, damaged)):
+            epi_mask = r["x"] >= r["info"]["junction_pos"]
+            nd = np.zeros_like(r["x"])
+            prof = np.asarray(d["N_D_profile"], dtype=float)
+            nd[epi_mask] = prof if prof.size == int(epi_mask.sum()) else prof[epi_mask]
+            donors[b] = nd
+            tau_n[b], tau_p[b] = d["tau_n"], d["tau_p"]
+    consts = [
+        tat_constants(
+            i["T"], i["n_i"], i["E_g"], i["params"], E_t=E_t, m_t=m_t, N_t=N_t
+        )
+        for i in infos
+    ]
+    col = lambda key: np.array([c[key] for c in consts])
+    epi_ends = {
+        i["epi_end"] if i["nplus_thickness_cm"] is not None else None for i in infos
+    }
+    if len(epi_ends) != 1:
+        raise ValueError("dark_current_engine: every device must share one geometry")
+    V_range = np.asarray(V_range, dtype=float)
+    res = dark_sweep(
+        x,
+        donors,
+        acceptors,
+        [i["T"] for i in infos],
+        [i["N_A"] for i in infos],
+        [i["n_i"] for i in infos],
+        V_range,
+        tau_n=tau_n,
+        tau_p=tau_p,
+        n1=col("n1_tat"),
+        p1=col("p1_tat"),
+        G0=col("G0"),
+        Kt_numerator=col("Kt_numerator"),
+        Kt_denom_const=col("Kt_denom_const"),
+        E_ref=E_REF_TAT,
+        epi_end=epi_ends.pop(),
+        S_n=[i["params"].S_n if S_n is None else S_n for i in infos],
+        S_p=[i["params"].S_p if S_p is None else S_p for i in infos],
+    )
+    out = []
+    for b in range(B):
+        d = {"voltages": V_range.copy(), "converged": res.converged[:, b].copy()}
+        for key in ("total", "SRH", "TAT", "SRV"):
+            J = getattr(res, f"J_{key}")[:, b].copy()
+            d[f"J_{key}"] = J
+            d[f"I_{key}"] = J * area
+        out.append(d)
+    return out
+
+
 def sensitivity_sweep(
-    param_name, param_values, V_eval=-30.0, T=300, area=AREA_DOSIMETER_CM2, base_kwargs=None
+    param_name,
+    param_values,
+    V_eval=-30.0,
+    T=300,
+    area=AREA_DOSIMETER_CM2,
+    base_kwargs=None,
+    solver="auto",
 ):
     """Sweep a single parameter and evaluate dark current at a fixed voltage.
+
+    Each value inside ``dark_engine_reason`` runs on the batched engine (same model,
+    parity tests/test_dark_current_engine.py), the others (and unconverged ones) on a
+    fresh devsim device. ``solver``: "auto", "engine" (raise outside the scope) or
+    "devsim". ``df.attrs["solver"]`` lists the path per row.
 
     Creates a fresh device for each parameter value, ramps to V_eval, extracts
     dark current components, and cleans up the device.
@@ -758,7 +1062,6 @@ def sensitivity_sweep(
     """
     import pandas as pd
 
-
     if base_kwargs is None:
         base_kwargs = {}
 
@@ -774,8 +1077,44 @@ def sensitivity_sweep(
             f"Must be one of {sorted(dd_device_params | dark_current_params)}"
         )
 
+    if solver not in ("auto", "engine", "devsim"):
+        raise ValueError(
+            f"solver must be 'auto', 'engine' or 'devsim' (got {solver!r})"
+        )
     records = []
+    solvers = []
     for i, val in enumerate(param_values):
+        if solver != "devsim":
+            ekw = dict(base_kwargs)
+            ekw["T"] = T
+            dc_e = {k: ekw.pop(k) for k in ("N_t", "S_n", "S_p", "E_t") if k in ekw}
+            if param_name in dd_device_params:
+                ekw[param_name] = val
+            else:
+                dc_e[param_name] = val
+            reason = dark_engine_reason(ekw, [V_eval])
+            if reason is not None and solver == "engine":
+                raise ValueError(f"sensitivity_sweep: engine unavailable ({reason})")
+            if reason is None:
+                r = dark_current_engine(
+                    [dark_reference(ekw)], [V_eval], area=area, **dc_e
+                )[0]
+                if r["converged"].all():
+                    records.append(
+                        {
+                            param_name: val,
+                            **{
+                                k: r[k][-1]
+                                for k in ("I_total", "I_SRH", "I_TAT", "I_SRV")
+                            },
+                        }
+                    )
+                    solvers.append("batched")
+                    continue
+                logger.warning(
+                    f"sensitivity_sweep: {param_name}={val}: engine did not converge"
+                )
+        solvers.append("devsim")
         # unique: devsim keeps the mesh after delete_device, so a fixed name made a
         # second sensitivity_sweep call in the same process fail ("mesh already exists")
         device_name = f"sweep_{param_name}_{i}_{uuid.uuid4().hex[:8]}"
@@ -825,7 +1164,9 @@ def sensitivity_sweep(
             except Exception:
                 pass
 
-    return pd.DataFrame(records)
+    df = pd.DataFrame(records)
+    df.attrs["solver"] = solvers
+    return df
 
 
 def dark_current_vs_fluence(
@@ -843,8 +1184,18 @@ def dark_current_vs_fluence(
     S_n=None,
     S_p=None,
     device_kwargs=None,
+    solver="auto",
 ):
     """Compute dark current vs proton fluence at fixed reverse bias.
+
+    Solver (since 2026-10-18): by default every fluence point is solved in ONE batch on
+    the numba engine (``dark_current_engine``: same mesh, damaged doping and lifetimes,
+    TAT/SRH/SRV model and frozen-field fixed point as the devsim path below; parity
+    tests/test_dark_current_engine.py) when ``dark_engine_reason`` allows; points the
+    engine does not converge, and everything outside its scope, use the devsim path
+    (one staged device per point). ``solver``: "auto" (default), "engine" (raise
+    ValueError outside the scope) or "devsim" (reference). ``result["solver"]`` records
+    the path per point ("batched", "devsim" or "" for points not solved).
 
     Creates a fresh DD device for each fluence point (fluence-as-temperature
     pattern) using staged device creation so that damaged doping is applied
@@ -904,7 +1255,12 @@ def dark_current_vs_fluence(
         - ``delta_I``: numpy array (I_total - I_baseline), only if first
           fluence is 0.0
         - ``V_bias``, ``energy_MeV``, ``lifetime_model``: echo-back scalars
+        - ``solver``: list of str per point ("batched", "devsim", "")
     """
+    if solver not in ("auto", "engine", "devsim"):
+        raise ValueError(
+            f"solver must be 'auto', 'engine' or 'devsim' (got {solver!r})"
+        )
     dev_kw = dict(
         epi_thickness_cm=epi_thickness_cm,
         doping_profile="graded",
@@ -913,7 +1269,6 @@ def dark_current_vs_fluence(
         L_transition=L_transition,
     )
     dev_kw.update(device_kwargs or {})
-
 
     from etna.core.device import apply_damaged_params, create_sic_device
     from etna.core.drift_diffusion import setup_sic_drift_diffusion
@@ -928,30 +1283,9 @@ def dark_current_vs_fluence(
     pristine_tau_n = srh_lifetime(300.0, "electron")
     pristine_tau_p = srh_lifetime(300.0, "hole")
 
-    ref_id = uuid.uuid4().hex[:8]
-    ref_name = f"dc_fluence_ref_{ref_id}"
-    ref_info = create_sic_device(
-        device_name=ref_name,
-        **dev_kw,
-    )
-    try:
-        ref_x = np.array(
-            devsim.get_node_model_values(
-                device=ref_name, region=ref_info["region_name"], name="x"
-            )
-        )
-        ref_donors = np.array(
-            devsim.get_node_model_values(
-                device=ref_name, region=ref_info["region_name"], name="Donors"
-            )
-        )
-        epi_mask_ref = ref_x >= ref_info["junction_pos"]
-        pristine_N_D_profile = ref_donors[epi_mask_ref]
-    finally:
-        try:
-            delete_device_and_mesh(ref_name)
-        except Exception:
-            pass
+    ref = dark_reference(dev_kw)
+    epi_mask_ref = ref["x"] >= ref["info"]["junction_pos"]
+    pristine_N_D_profile = ref["donors"][epi_mask_ref]
 
     # --- Sweep fluence ---
     n_pts = len(fluence_range)
@@ -962,10 +1296,9 @@ def dark_current_vs_fluence(
     valid = np.zeros(n_pts, dtype=bool)
     reasons = [""] * n_pts
 
+    solvers = [""] * n_pts
+    todo = []  # (i, damaged) to solve
     for i, fluence in enumerate(fluence_range):
-        dev_id = uuid.uuid4().hex[:8]
-        dev_name = f"dc_fluence_{dev_id}"
-
         try:
             # Compute damaged parameters
             damaged = compute_damaged_params(
@@ -977,12 +1310,56 @@ def dark_current_vs_fluence(
                 damage_params=damage_params,
                 lifetime_model=lifetime_model,
             )
-            reason = full_compensation_reason(damaged)
-            if reason:
-                logger.warning(f"dark_current_vs_fluence: fluence={fluence:.2e}: {reason}")
-                reasons[i] = reason
-                continue
+        except Exception as e:
+            logger.warning(
+                f"dark_current_vs_fluence: failed at fluence={fluence:.2e}: {e}"
+            )
+            reasons[i] = f"solver failure: {type(e).__name__}: {e}"
+            continue
+        reason = full_compensation_reason(damaged)
+        if reason:
+            logger.warning(f"dark_current_vs_fluence: fluence={fluence:.2e}: {reason}")
+            reasons[i] = reason
+            continue
+        todo.append((i, damaged))
 
+    engine_reason = dark_engine_reason(dev_kw, [V_bias])
+    if solver == "engine" and engine_reason is not None:
+        raise ValueError(
+            f"dark_current_vs_fluence: batched engine unavailable ({engine_reason})"
+        )
+    remaining = todo
+    if solver != "devsim" and engine_reason is None and todo:
+        res = dark_current_engine(
+            [ref] * len(todo),
+            [V_bias],
+            area=area,
+            N_t=N_t,
+            S_n=S_n,
+            S_p=S_p,
+            damaged=[d for _, d in todo],
+        )
+        remaining = []
+        for (i, damaged), r in zip(todo, res):
+            if r["converged"].all():
+                I_total[i], I_SRH[i] = r["I_total"][-1], r["I_SRH"][-1]
+                I_TAT[i], I_SRV[i] = r["I_TAT"][-1], r["I_SRV"][-1]
+                valid[i], solvers[i] = True, "batched"
+            else:
+                logger.warning(
+                    f"dark_current_vs_fluence: batched engine did not converge at "
+                    f"fluence={fluence_range[i]:.2e}, using devsim"
+                )
+                remaining.append((i, damaged))
+    elif engine_reason is not None and solver == "auto":
+        logger.info("dark_current_vs_fluence: using devsim (%s)", engine_reason)
+
+    for i, damaged in remaining:
+        fluence = fluence_range[i]
+        dev_id = uuid.uuid4().hex[:8]
+        dev_name = f"dc_fluence_{dev_id}"
+
+        try:
             # Staged device creation
             device_info = create_sic_device(
                 device_name=dev_name,
@@ -1008,7 +1385,7 @@ def dark_current_vs_fluence(
             I_SRH[i] = components["I_SRH"]
             I_TAT[i] = components["I_TAT"]
             I_SRV[i] = components["I_SRV"]
-            valid[i] = True
+            valid[i], solvers[i] = True, "devsim"
 
             logger.info(
                 f"dark_current_vs_fluence: fluence={fluence:.2e}, "
@@ -1039,6 +1416,7 @@ def dark_current_vs_fluence(
         "V_bias": V_bias,
         "energy_MeV": energy_MeV,
         "lifetime_model": lifetime_model,
+        "solver": solvers,
     }
 
     # Delta-J decomposition (only if first fluence is 0.0)
@@ -1122,7 +1500,6 @@ def dark_current_post_anneal(
         **graded_stack_kwargs(),
     )
     dev_kw.update(device_kwargs or {})
-
 
     from etna.core.device import apply_damaged_params, create_sic_device
     from etna.core.drift_diffusion import setup_sic_drift_diffusion

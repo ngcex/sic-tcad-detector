@@ -28,7 +28,14 @@ from etna.core.batched import (
 from etna.core.batched.material import EPS
 from etna.core.charge_collection import cce_vs_bias, cce_vs_fluence
 from etna.core.cv_analysis import cv_sweep
-from etna.core.dark_current import create_dark_current_device, dark_current_sweep
+from etna.core.dark_current import (
+    DARK_ENGINE_LEGACY_MAX_V,
+    create_dark_current_device,
+    dark_current_engine,
+    dark_current_sweep,
+    dark_engine_reason,
+    dark_reference,
+)
 from etna.core.device import (
     DEFAULT_N_D,
     donor_table_spec,
@@ -37,7 +44,7 @@ from etna.core.device import (
 )
 from etna.core.devsim_reset import reset_devsim_fully, delete_device_and_mesh
 from etna.core.drift_diffusion import ramp_bias
-from etna.core.flash_recombination import cce_vs_dose_rate
+from etna.core.flash_recombination import cce_vs_dose_rate, flash_engine_reason
 from etna.core.mc_coupling import load_mc_events_csv
 from etna.core.microdosimetry import lineal_energy_spectrum, mean_chord_length
 from etna.core.poisson import extract_electric_field
@@ -1673,8 +1680,19 @@ def run_flash_recombination(
     dose_rates_Gy_s: "np.ndarray | None" = None,
     V_bias: float = -30.0,
     E_MeV: float = 62,
+    solver: str = "auto",
 ) -> SimResult:
     """Run a steady-state CCE-vs-dose-rate FLASH sweep and return a SimResult.
+
+    Solver (since 2026-10-18): inside ``etna.core.flash_recombination.flash_engine_reason``
+    (the engine box with the junction doping widened to 2e17, 150-450 K, legacy only to
+    -40 V) the sweep runs on the batched numba engine (parity with devsim <= ~3e-12 in
+    CCE, tests/test_flash_engine.py; ~10 ms instead of ~1 s); otherwise, or on
+    non-convergence (``metadata["fallback_reason"]``), on devsim. ``solver="devsim"``
+    forces devsim, ``"engine"`` raises outside the scope. ``metadata["validated_domain"]``
+    / ``"domain_note"`` refer to that flash scope. Both paths are SRH-only: the devsim
+    path's Auger term is overwritten by add_generation_to_dd (see cce_vs_dose_rate,
+    open physics item).
 
     Bucket-a config->kwargs adapter over
     `etna.core.flash_recombination.cce_vs_dose_rate`, which builds AND
@@ -1721,26 +1739,39 @@ def run_flash_recombination(
     # Bucket-a: cce_vs_dose_rate self-cleans. Forward config geometry/doping
     # (D-01). Do NOT reset/build/delete any device here.
     kw = device_kwargs(config)
+    scope = flash_engine_reason(kw, V_bias)
+    epi = kw.pop("epi_thickness_cm")
     result = cce_vs_dose_rate(
         dose_rates_Gy_s=dose_rates_Gy_s,
         V_bias=V_bias,
-        epi_thickness_cm=kw.pop("epi_thickness_cm"),
+        epi_thickness_cm=epi,
         E_MeV=E_MeV,
         device_kwargs=kw,
+        solver=solver,
     )
-
+    md = {
+        "V_bias": result["V_bias"],
+        "E_MeV": result["E_MeV"],
+        "solver": result["solver"],
+        "validated_domain": scope is None,
+        "domain_note": scope,
+    }
+    if result["solver"] == "batched":
+        md["cross_checked_to_V"] = FLASH_CROSS_CHECKED_TO_V
+    if "fallback_reason" in result:
+        md["fallback_reason"] = result["fallback_reason"]
     return SimResult(
         config=config,
         sim_type="flash",
         x=result["dose_rates"],
         y=result["cce_values"],
-        metadata={
-            "V_bias": result["V_bias"],
-            "E_MeV": result["E_MeV"],
-            "solver": "devsim",
-        },
+        metadata=md,
         mesh=None,
     )
+
+
+# Deepest |V| of the FLASH engine-vs-devsim parity runs (tests/test_flash_engine.py).
+FLASH_CROSS_CHECKED_TO_V = 50.0
 
 
 @serialized
@@ -1752,8 +1783,19 @@ def run_dark_current(
     N_t: "float | None" = None,
     S_n: "float | None" = None,
     S_p: "float | None" = None,
+    solver: str = "auto",
 ) -> SimResult:
     """Run a reverse-bias dark-current sweep and return a SimResult.
+
+    Solver (since 2026-10-18): inside the engine box (``validated_domain_reason`` and
+    ``etna.core.dark_current.dark_engine_reason``: graded/uniform 1D, 150-450 K, reverse
+    bias, legacy geometry only to -60 V) the sweep runs on the batched numba engine
+    (``etna.core.batched.dark``): the same TAT/SRH/SRV model, solved to the same
+    frozen-field fixed point, parity with devsim <= ~1e-11 relative on I_total
+    (tests/test_dark_current_engine.py), milliseconds instead of seconds. Outside it, or
+    if the engine does not converge (``metadata["fallback_reason"]``), the devsim path
+    below runs. ``solver="devsim"`` forces the devsim reference, ``"engine"`` raises
+    ValueError outside the box. ``metadata["solver"]`` is ``"batched"`` or ``"devsim"``.
 
     Bucket-b: run_dark_current owns the FULL device lifecycle
     (reset -> build -> try -> finally delete -> fallback reset), mirroring
@@ -1799,14 +1841,44 @@ def run_dark_current(
 
     Warning
     -------
-    Calling this function deletes all devsim devices currently in the
-    process (see run_cv). `run_dark_current` calls `reset_devsim_fully()`
-    unconditionally at entry — devsim state is process-global, not
-    etna-scoped.
+    On the devsim path, calling this function deletes all devsim devices currently
+    in the process (see run_cv): `run_dark_current` then calls
+    `reset_devsim_fully()` at entry — devsim state is process-global, not
+    etna-scoped. The engine path builds and deletes only its own mesh probe.
     """
     _require_1d(config, "run_dark_current")
+    if solver not in ("auto", "engine", "devsim"):
+        raise ValueError(f"solver must be 'auto', 'engine' or 'devsim' (got {solver!r})")
 
     bias_array = np.linspace(v_start, v_stop, n_points)
+    N_t_used = config.N_t if N_t is None else N_t
+    fallback = None
+    if solver != "devsim":
+        kw = device_kwargs(config)
+        reason = validated_domain_reason(config) or dark_engine_reason(kw, bias_array)
+        if reason is not None and solver == "engine":
+            raise ValueError(f"run_dark_current: batched engine unavailable ({reason})")
+        if reason is None:
+            try:
+                res = dark_current_engine(
+                    [dark_reference(kw)],
+                    bias_array,
+                    area=config.area_cm2,
+                    N_t=N_t_used,
+                    E_t=config.E_t,
+                    S_n=S_n,
+                    S_p=S_p,
+                )[0]
+            except Exception as e:  # pragma: no cover - defensive
+                logger.warning("run_dark_current: batched engine failed (%s)", e)
+                fallback = f"batched engine failed: {type(e).__name__}: {e}"
+            else:
+                if res["converged"].all():
+                    return _dark_result(config, res, N_t_used, "batched")
+                logger.warning("run_dark_current: batched engine did not converge")
+                fallback = _ENGINE_FALLBACK
+        else:
+            logger.info("run_dark_current: using devsim (%s)", reason)
 
     # Bucket-b: full lifecycle owned here (identical to run_cv). Build via
     # create_dark_current_device so TAT + SRV models are set up (the bare
@@ -1825,30 +1897,10 @@ def run_dark_current(
         result = dark_current_sweep(
             device_info, V_range=bias_array, area=config.area_cm2
         )
-
-        return SimResult(
-            config=config,
-            sim_type="dark_current",
-            x=result["voltages"],
-            y=result["I_total"],
-            metadata={
-                "I_SRH": result["I_SRH"],
-                "I_TAT": result["I_TAT"],
-                "I_SRV": result["I_SRV"],
-                "area_cm2": config.area_cm2,
-                "N_t": config.N_t if N_t is None else N_t,
-                "E_t": config.E_t,
-                # requested vs reached range: devsim may stop converging before v_stop
-                "truncated": result["truncated"],
-                "requested_v_start": result["requested_v_start"],
-                "requested_v_stop": result["requested_v_stop"],
-                "reached_v_stop": result["reached_v_stop"],
-                # legacy (cathode-on-epi) model: points past reach-through flagged
-                **_legacy_dark_validity(config, result["voltages"]),
-                **_provenance(config, "devsim"),
-            },
-            mesh=None,
-        )
+        out = _dark_result(config, result, N_t_used, "devsim")
+        if fallback is not None:
+            out.metadata["fallback_reason"] = fallback
+        return out
     finally:
         # Ensure no device leaks after run_dark_current returns, regardless
         # of outcome (bucket-b finally block copied from run_cv).
@@ -1862,6 +1914,51 @@ def run_dark_current(
                 exc_info=True,
             )
             reset_devsim_fully()
+
+
+def _dark_result(config: DeviceConfig, result: dict, N_t_used, solver: str) -> SimResult:
+    """SimResult of a dark sweep (devsim ``dark_current_sweep`` dict, or the engine's)."""
+    if solver == "batched":
+        v = np.asarray(result["voltages"], dtype=float)
+        trunc = dict(
+            truncated=False,
+            requested_v_start=float(v[0]),
+            requested_v_stop=float(v[-1]),
+            reached_v_stop=float(v[-1]),
+        )
+        extra = dict(
+            cross_checked_to_V=(
+                ENGINE_CROSS_CHECKED_TO_V_NPLUS
+                if config.nplus_thickness_um is not None
+                else DARK_ENGINE_LEGACY_MAX_V
+            )
+        )
+    else:
+        trunc = {
+            k: result[k]
+            for k in ("truncated", "requested_v_start", "requested_v_stop", "reached_v_stop")
+        }
+        extra = {}
+    return SimResult(
+        config=config,
+        sim_type="dark_current",
+        x=np.asarray(result["voltages"]),
+        y=np.asarray(result["I_total"]),
+        metadata={
+            "I_SRH": np.asarray(result["I_SRH"]),
+            "I_TAT": np.asarray(result["I_TAT"]),
+            "I_SRV": np.asarray(result["I_SRV"]),
+            "area_cm2": config.area_cm2,
+            "N_t": N_t_used,
+            "E_t": config.E_t,
+            # requested vs reached range: devsim may stop converging before v_stop
+            **trunc,
+            # legacy (cathode-on-epi) model: points past reach-through flagged
+            **_legacy_dark_validity(config, result["voltages"]),
+            **_provenance(config, solver, **extra),
+        },
+        mesh=None,
+    )
 
 
 LEGACY_DARK_VALIDITY_NOTE = (

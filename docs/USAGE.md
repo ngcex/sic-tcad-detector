@@ -375,7 +375,7 @@ r = run_radiation_damage(cfg, fluences=np.geomspace(1e11, 0.9 * phi_c, 5), V_bia
 print(f"{phi_c:.3g}", r.metadata["valid"].all(), np.round(r.y, 4))
 ```
 
-### `run_dark_current(config, v_start=0.0, v_stop=-100.0, n_points=20, N_t=None, S_n=None, S_p=None)`
+### `run_dark_current(config, v_start=0.0, v_stop=-100.0, n_points=20, N_t=None, S_n=None, S_p=None, solver="auto")`
 
 Returns the total reverse leakage. `x` is bias (V), `y` is the total current (A, for
 `area_cm2`). Metadata:
@@ -388,8 +388,11 @@ Returns the total reverse leakage. `x` is bias (V), `y` is the total current (A,
 - `reach_through_V`, `past_reach_through`, `validity_note` (filled for the legacy model
   only)
 
-Runs on devsim (trap-assisted tunnelling), about 1-2 s. Quote the result as a budget
-estimate (section 2).
+Runs on the batched 1D engine inside its box (section 7; the same TAT/SRH/SRV model
+and frozen-field fixed point as devsim, parity <= ~1e-11 relative, about 20 ms for 20
+points), otherwise on devsim (about 2-3 s). `solver="devsim"` forces the devsim reference,
+`solver="engine"` raises outside the box. Quote the result as a budget estimate
+(section 2).
 
 ```python
 from etna import DeviceConfig, run_dark_current
@@ -414,12 +417,17 @@ r = run_temperature_sweep(DeviceConfig(), np.array([250.0, 300.0, 350.0]), volta
 print(r.metadata["solver"], np.round(r.y, 4))
 ```
 
-### `run_flash_recombination(config, dose_rates_Gy_s=None, V_bias=-30.0, E_MeV=62)` and `run_transient(config, dose_rates=None, V_bias=-30.0, epi_thickness_cm=None)`
+### `run_flash_recombination(config, dose_rates_Gy_s=None, V_bias=-30.0, E_MeV=62, solver="auto")` and `run_transient(config, dose_rates=None, V_bias=-30.0, epi_thickness_cm=None)`
 
 FLASH dose-rate sweeps. `x` is dose rate (Gy/s), `y` is CCE. `run_transient` also
-returns `transient_cce_raw` (unclipped). Both run on devsim (about 0.7 s and 2 s). At
-20-230 Gy/s only SRH and Auger act, so any variation is a **numerical sensitivity
-bound**. No plasma or high-injection physics is modelled.
+returns `transient_cce_raw` (unclipped). `run_flash_recombination` runs on the batched
+engine inside its scope (section 7; about 40 ms, parity <= ~3e-12), otherwise on devsim
+(about 1-3 s); `run_transient` runs on devsim (about 2 s). Any variation with dose rate is
+a **numerical sensitivity bound**. No plasma or high-injection physics is modelled. Both
+solvers of the steady-state sweep are **SRH-only**: the devsim path's Auger term is
+overwritten when the generation is added (`add_generation_to_dd`), and the engine
+reproduces that; with Auger really active CCE would drop by up to 5.6e-5 (heavily doped
+layers), dose-rate independent. Open physics item (`.issues/TECH-DEBT-2026-10-18.md`).
 
 ```python
 from etna import DeviceConfig, run_flash_recombination, run_transient
@@ -475,7 +483,8 @@ for r in sweep.run():
 Runs, in one process: `cv`, `cce`, `field`, `damage`, `dark`, `temperature`, `flash`,
 and, on request, `sweep` (a small 2D-engine microdosimetric grid; section 11). It asserts
 between sections that no devsim device leaked. On the default device the whole run takes
-about 3 s with every fast path active. A section's `status` is `ok`, `warning` (it ran
+about 0.5 s with every fast path active (all sections but the 1D `field` on the engines;
+legacy preset 2.1 s: its 0..-100 V dark sweep runs on devsim). A section's `status` is `ok`, `warning` (it ran
 but returned no valid point; `reason` says why), `error` or `skipped`; `rep.ok` is
 True when no section is `error` or `warning` (skipped sections do not count). A curve with invalid points starts its key
 figures with "k of n points valid", and the damage row adds the compensation fluence.
@@ -499,7 +508,7 @@ Every `SimResult.metadata` carries:
 | `solver`                        | what produced the numbers: `"batched"` (1D numba engine), `"engine2d"` (2D numba engine), `"devsim"`, `"failed"` (batch slot that raised), or a descriptive string (temperature sweep: `"hecht (analytical; W from batched engine)"`) |
 | `validated_domain`              | True if the device lies in the box where the engine was cross-checked against devsim                                                                                                                                                  |
 | `domain_note`                   | why not (None inside)                                                                                                                                                                                                                 |
-| `cross_checked_to_V`            | engine results only: the deepest reverse bias pinned against devsim by the parity tests (100 V with an n+ layer, 40 V for the legacy model)                                                                                           |
+| `cross_checked_to_V`            | engine results only: the deepest reverse bias pinned against devsim by the parity tests (100 V with an n+ layer, 40 V for the legacy model; dark current: 100 V, legacy 60 V; FLASH: 50 V)                                          |
 | `fallback_reason`               | present when an engine was tried and devsim took over (e.g. `"batched engine did not converge"`, or `run_field`'s `"2D engine not applicable: ..."`)                                                                                  |
 | `truncated`, `requested_v_stop` | a devsim sweep stopped before `v_stop` (convergence wall); `x` holds only the reached points                                                                                                                                          |
 
@@ -537,8 +546,23 @@ Which solver runs:
 - **2D `run_field`** and the microdosimetric sweep use the 2D engine
   (`etna/core/engine2d/`) inside its boxes (`ENGINE2D_BOX` / `ENGINE2D_DARK_BOX`, epi
   5-30 µm, n+ and transition boxes). Otherwise devsim runs.
-- **devsim only**: 1D `run_field`, `run_dark_current`, `run_flash_recombination`,
-  `run_transient`, and any engine fallback.
+- **Dark current and FLASH** (since 2026-10-18): `run_dark_current`,
+  `run_flash_recombination` and the core `dark_current_vs_fluence`,
+  `sweep_iv_vs_temperature`, `sensitivity_sweep`, `cce_vs_dose_rate` and
+  `parametric_cce_sweep` run on the batched engine (`etna/core/batched/dark.py`) when
+  the device is in the box above (graded/uniform, 150-450 K, reverse bias). Limits on
+  top of it: the legacy model only to -60 V for the dark current (deeper sweeps go to
+  devsim, whose legacy truncation record is the documented one) and -40 V for FLASH;
+  FLASH widens N_D_junction to 1e15-2e17 (notebook 05b's scaled junction doping). Each
+  takes `solver="auto" | "engine" | "devsim"`. Parity: `tests/test_dark_current_engine.py`
+  (I_total, I_TAT <= 1e-9 relative, measured <= 1.4e-11), `tests/test_flash_engine.py`
+  (CCE <= 1e-9, measured <= 2.5e-12).
+- **2D dark current** (`etna.core.optimization.get_dark_current_2d`): a device the 2D
+  engine accepts is laterally uniform, so its current is the 1D engine's J times the SV
+  area (vs the devsim 2D solve: 2.4e-7 / 3.3e-7, the f_depl node field discretisation;
+  `tests/test_dark_current_2d_engine.py`); otherwise devsim 2D.
+- **devsim only**: 1D `run_field`, `run_transient`, `dark_current_sweep(device_info)` (a
+  devsim device you built), and any engine fallback.
 - **Fluence sweeps**: `run_radiation_damage` (through the core `cce_vs_fluence`) uses the
   batched engine where its box allows (`tests/test_fluence_engine.py`) and devsim
   otherwise. `metadata["solver"]` names the solver that ran the points and
@@ -787,7 +811,7 @@ run is whatever `DeviceConfig()` / the core defaults are now, unless they pin a 
 | 02_electrical_characterization | C-V, Mott-Schottky, doping profile, I-V        |                                                                        |
 | 03_charge_collection           | CCE vs bias, generation profiles, Hecht        | generator `scripts/create_notebook_03.py`                              |
 | 04_flash_recombination         | FLASH Auger/SRH CCE vs dose rate               | sensitivity bound only                                                 |
-| 05_dark_current_vs_fluence     | dark current vs proton fluence                 | TAT on devsim                                                          |
+| 05_dark_current_vs_fluence     | dark current vs proton fluence                 | TAT on the batched engine                                              |
 | 05b_flash_parametric_studies   | FLASH parametric sweeps                        | runs its 60-condition sweep when the untracked cache is missing        |
 | 06_temperature_dependence      | material properties and CCE vs T               |                                                                        |
 | 07_dark_current                | TAT / SRH / surface terms                      |                                                                        |
@@ -811,12 +835,15 @@ Every notebook calls `set_devsim_quiet(True)` (`etna.core.devsim_lock`, exported
 brings it back. Use it in your own scripts too.
 
 Run times measured on 2026-10-18 (Apple M4, executed into a scratch copy, the machine shared
-with other jobs): 01 3 s, 02 17 s, 03 15 s, 04 5 s, 05 29 s, 05b 65 s (full sweep), 06 37 s,
-07 23 s, 08 21 s, 09 4 s, 10 11 s, 11 34 s, 12 27 s, 13 17 s, 14 18 s, 15 60 s, 16 71 s (tables
-loaded; one 2D ion-track transient remains), 17 4 s, 18 3 s, 19 193 s, 20 137 s. Rebuilding the
-notebook-16 tables (`ETNA_REBUILD_CCE_TABLES=1`) takes about 40 min (100 um ~15 min, 300 um
-~26 min; one device per table, linear-response synthesis of the non-simulated LETs, was
-~70-90 min with a device and a transient per LET) and writes them to
+with other jobs): 01 3 s, 02 17 s, 03 15 s, 04 5 s, 05 6.5 s, 05b 5.3 s (full 60-condition sweep, on
+the engine; it still prints its old "~80 s" estimate), 06 29 s, 07 5.6 s, 08 21 s, 09 4 s, 10 11 s, 11 34 s, 12 27 s, 13 17 s, 14 18 s, 15 60 s, 16 71 s (tables
+loaded; one 2D ion-track transient remains), 17 4 s, 18 3 s, 19 193 s, 20 123 s. Notebooks 05, 05b, 06, 07, 20
+were re-timed on 2026-10-19 after the dark-current / FLASH engine port, back to back with the
+previous code (scratch copies, same session): 05 35.9 -> 6.5 s, 05b 91.2 -> 5.3 s, 06 50.6 ->
+28.5 s (its C-V / CCE-vs-T sweeps are still devsim), 07 27.2 -> 5.6 s (its
+dark_current_sweep on a user-built devsim device stays devsim), 20 271.6 -> 123.1 s (the
+2D dark current; the rest is the 2D CCE scans). Rebuilding the
+notebook-16 tables (`ETNA_REBUILD_CCE_TABLES=1`) takes about 40 min (100 um ~15 min, 300 um ~26 min; one device per table, linear-response synthesis of the non-simulated LETs) and writes them to
 `$ETNA_FIGURE_DIR/data/`, never over `data/`. Notebook 17 rewrites `data/synthetic_mc_events.csv` (bit-identical, seeded) relative to the repo root (they `chdir('..')`):
 run them from a scratch copy unless you mean to regenerate those tracked files. The test suite and CI do not
 execute notebooks (only the no-outputs and generator checks run);
@@ -879,8 +906,8 @@ uv run pytest -n0 -x tests/test_api_cce.py        # serial, e.g. with --pdb
 uv run pytest -n auto -q --durations=20           # slowest tests
 ```
 
-- 89 modules and 1041 tests. `pytest.ini` deselects the `exhaustive` marker (7 redundant
-  deep variants, each implied by a kept test), so the default run collects 1034.
+- 92 modules and 1088 tests. `pytest.ini` deselects the `exhaustive` marker (7 redundant
+  deep variants, each implied by a kept test), so the default run collects 1081.
   The `slow` marker labels the devsim integration tests but does not deselect them.
 - `pytest.ini` adds `--dist loadgroup --no-loadscope-reorder` (inert without `-n`), so
   `-n auto` alone uses the tuned scheduler. Do not pass `--dist loadfile` any more (it
@@ -914,7 +941,8 @@ uv run pytest -n auto -q --durations=20           # slowest tests
 - Families: `test_api_*` (facades), `test_app_*` (Streamlit `AppTest`, mocked and
   un-mocked smoke tests per page), engine parity (`test_batched_engine.py`,
   `test_api_engine_switch.py`, `test_engine2d*.py`, `test_nplus_engine*.py`,
-  `test_engine_T_box.py`, `test_temperature_engine.py`, `test_fluence_engine.py`),
+  `test_engine_T_box.py`, `test_temperature_engine.py`, `test_fluence_engine.py`,
+  `test_dark_current_engine.py`, `test_dark_current_2d_engine.py`, `test_flash_engine.py`),
   presets (`test_default_stack.py`, `test_nplus_calibration.py`,
   `test_measured_cv_preset.py`, `test_measured_cv_tabulated.py`,
   `test_microdosimeter_preset.py`) and the core physics modules.

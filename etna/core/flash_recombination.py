@@ -273,8 +273,27 @@ def cce_vs_dose_rate(
     N_D_bulk=_STACK["N_D_bulk"],
     L_transition=_STACK["L_transition"],
     device_kwargs=None,
+    solver="auto",
 ):
     """Compute CCE vs dose rate across the FLASH range (exploratory sensitivity bound).
+
+    Solver (since 2026-10-18): inside ``flash_engine_reason`` every dose rate (and the
+    no-Auger reference) is solved in one batch on the numba engine
+    (``etna.core.batched.dark.generation_cce``: same mesh, doping, midgap SRH + Auger
+    (C_n n + C_p p)(n p - n_i^2), proton generation and balanced cathode current as the
+    devsim path below; parity tests/test_flash_engine.py). Outside it, or if the engine
+    does not converge, the devsim continuation path runs. ``solver``: "auto",
+    "engine" (raise outside the scope) or "devsim" (reference); ``result["solver"]``
+    says which ran.
+
+    KNOWN (2026-10-18, open, physics owner): on the devsim path the Auger term added by
+    add_auger_recombination is overwritten by add_generation_to_dd (SRH-only
+    ElectronGeneration / HoleGeneration), so the "with Auger" CCE equals the no-Auger
+    reference bit for bit: both paths are SRH-only. The engine reproduces that (C_n =
+    C_p = 0). With Auger truly active, CCE drops by up to 5.6e-5 (minority recombination
+    in the 1e18-1e19 p+/n+ layers, where C n is comparable to 1/(tau n)), essentially
+    independent of the dose rate (<= 2e-9 across 20-230 Gy/s): the "Auger 9-14 orders
+    below SRH" statement holds in the epi, not in those layers.
 
     Sweeps dose rates (typically 20-230 Gy/s) at fixed reference conditions.
     NOTE (audit C2/C3): at these dose rates the Auger (n^3) term is ~9-14 orders
@@ -323,6 +342,8 @@ def cce_vs_dose_rate(
     """
     from etna.core.drift_diffusion import create_dd_device, ramp_bias
 
+    if solver not in ("auto", "engine", "devsim"):
+        raise ValueError(f"solver must be 'auto', 'engine' or 'devsim' (got {solver!r})")
     dose_rates = np.asarray(dose_rates_Gy_s, dtype=float)
     sorted_idx = np.argsort(dose_rates)
     dose_rates_sorted = dose_rates[sorted_idx]
@@ -337,6 +358,32 @@ def cce_vs_dose_rate(
         L_transition=L_transition,
     )
     dev_kw.update(device_kwargs or {})
+
+    fallback = None
+    if solver != "devsim":
+        reason = flash_engine_reason(dev_kw, V_bias)
+        if reason is not None and solver == "engine":
+            raise ValueError(f"cce_vs_dose_rate: batched engine unavailable ({reason})")
+        if reason is None:
+            out = _cce_vs_dose_rate_engine(dose_rates, V_bias, E_MeV, dev_kw)
+            if out is not None:
+                cce_values, cce_no_auger = out
+                return {
+                    "dose_rates": dose_rates,
+                    "cce_values": cce_values,
+                    "cce_no_auger_ref": float(cce_no_auger),
+                    "V_bias": V_bias,
+                    "epi_thickness_cm": epi_thickness_cm,
+                    "E_MeV": E_MeV,
+                    "N_D_junction": dev_kw["N_D_junction"],
+                    "N_D_bulk": dev_kw["N_D_bulk"],
+                    "L_transition": dev_kw["L_transition"],
+                    "solver": "batched",
+                }
+            fallback = "batched engine did not converge"
+            logger.warning("cce_vs_dose_rate: batched engine did not converge, using devsim")
+        else:
+            logger.info("cce_vs_dose_rate: using devsim (%s)", reason)
 
     # --- Device with Auger ---
     dev_id = uuid.uuid4().hex[:8]
@@ -449,7 +496,62 @@ def cce_vs_dose_rate(
         "N_D_junction": dev_kw["N_D_junction"],
         "N_D_bulk": dev_kw["N_D_bulk"],
         "L_transition": dev_kw["L_transition"],
+        "solver": "devsim",
+        **({"fallback_reason": fallback} if fallback else {}),
     }
+
+
+# Doping scope of the FLASH engine path: the C-V/CCE engine box
+# (etna.api.simulation._ENGINE_BOX) with the junction doping widened to 2e17, which
+# covers notebook 05b's proportionally scaled junction doping (N_D_junction =
+# 8.19e15 * N_D_bulk / 3.38e13, up to 1.2e17 at N_D_bulk 5e14); parity at the 05b grid
+# corners in tests/test_flash_engine.py.
+FLASH_ENGINE_N_D_JUNCTION = (1e15, 2e17)
+
+
+def flash_engine_reason(dev_kw, V_bias):
+    """Why the batched engine cannot serve cce_vs_dose_rate (None = it can)."""
+    from etna.core.dark_current import engine_box_reason
+
+    return engine_box_reason(
+        dev_kw, [V_bias], N_D_junction=FLASH_ENGINE_N_D_JUNCTION, legacy_max_V=40.0
+    )
+
+
+def _cce_vs_dose_rate_engine(dose_rates, V_bias, E_MeV, dev_kw):
+    """(cce per dose rate, no-Auger CCE at the lowest rate) on the engine, or None if a
+    point did not converge. Generation exactly as the devsim path: the proton profile on
+    the mesh nodes, zero in the p+, confined to the epi."""
+    from etna.core.batched.dark import generation_cce
+    from etna.core.dark_current import dark_reference
+    from etna.core.sic_material import srh_lifetime
+
+    ref = dark_reference(dev_kw)
+    info, x = ref["info"], ref["x"]
+    G = []
+    for rate in list(dose_rates) + [float(np.min(dose_rates))]:
+        g = proton_generation_profile(x, E_MeV, rate)
+        g[x < info["junction_pos"]] = 0.0
+        G.append(confine_generation_to_epi(info, x, g))
+    G = np.array(G)
+    params = info["params"]
+    common = dict(
+        tau_n=srh_lifetime(info["T"], "electron", params),
+        tau_p=srh_lifetime(info["T"], "hole", params),
+    )
+    args = (x, ref["donors"], ref["acceptors"], info["T"], info["N_A"], info["n_i"], V_bias)
+    # C_n = C_p = 0 on purpose: the devsim path's Auger term is NOT active during its
+    # solves (add_auger_recombination's ElectronGeneration / HoleGeneration are
+    # overwritten by add_generation_to_dd with the SRH-only expressions, so its "Auger"
+    # sweep is bit-equal to its no-Auger reference). The engine reproduces the existing
+    # numbers; switching Auger on is a physics decision (with Auger truly active CCE moves
+    # by up to 5.6e-5 at notebook 05b's N_D_bulk 5e14 corners, dose-rate independent to
+    # 2e-9; the engine's Auger term matches devsim's to 4e-13, tests/test_flash_engine.py).
+    cce, ok = generation_cce(*args, G[:-1], C_n=0.0, C_p=0.0, **common)
+    cce0, ok0 = generation_cce(*args, G[-1:], **common)
+    if not (ok.all() and ok0.all()):
+        return None
+    return cce, cce0[0]
 
 
 def parametric_cce_sweep(

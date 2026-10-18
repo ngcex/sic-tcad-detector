@@ -664,7 +664,8 @@ def test_run_dark_current_carries_the_truncation_record(monkeypatch):
         }
 
     monkeypatch.setattr(sim, "dark_current_sweep", fake_sweep)
-    r = sim.run_dark_current(DeviceConfig(), 0.0, -100.0, 3)
+    # the devsim path (the engine never truncates; it is the default inside its box)
+    r = sim.run_dark_current(DeviceConfig(), 0.0, -100.0, 3, solver="devsim")
     md = r.metadata
     assert md["truncated"] is True and md["reached_v_stop"] == -10.0
     assert (md["requested_v_start"], md["requested_v_stop"]) == (0.0, -100.0)

@@ -168,7 +168,10 @@ def test_api_call_leaves_no_mesh_behind():
     from etna.api.device import DeviceConfig
     from etna.api.simulation import run_dark_current
 
-    res = run_dark_current(DeviceConfig(), v_start=-10.0, v_stop=-20.0, n_points=2)
+    # the devsim path (the batched engine is the default inside its box since 2026-10-18)
+    res = run_dark_current(
+        DeviceConfig(), v_start=-10.0, v_stop=-20.0, n_points=2, solver="devsim"
+    )
     assert res.metadata["solver"] == "devsim"  # a devsim mesh was really built
     assert list(devsim.get_mesh_list()) == []
     assert list(devsim.get_device_list()) == []
