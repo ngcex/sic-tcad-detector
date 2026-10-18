@@ -418,7 +418,7 @@ class TestDarkCurrentVsFluence:
     def test_pristine_baseline_matches_calibration(self):
         """At fluence=0, dark current should match v1.1 calibrated pristine.
 
-        Expecting ~18.5 pA at -30V with area=0.04 cm^2.  Accept 5-100 pA.
+        Model gives 15.76 pA at -30 V, 0.04 cm^2 on the default stack (2026-10-18). Accept 5-200 pA.
         """
         result = dark_current_vs_fluence(
             fluence_range=np.array([0.0]),
