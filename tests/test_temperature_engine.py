@@ -65,3 +65,15 @@ def test_engine_batch_gets_full_config_per_temperature(monkeypatch):
 def test_bad_method_raises():
     with pytest.raises(ValueError, match="method"):
         sim.run_temperature_sweep(DeviceConfig(), TEMPS, method="nope")
+
+
+def test_no_temperature_converged_is_labelled(monkeypatch):
+    import pandas as pd
+
+    monkeypatch.setattr(
+        sim,
+        "sweep_cce_vs_temperature",
+        lambda **k: pd.DataFrame({"T": [], "V": [], "CCE": []}),
+    )
+    res = sim.run_temperature_sweep(DeviceConfig(), np.array([500.0]))
+    assert res.metadata["solver"].startswith("failed") and len(res.y) == 0

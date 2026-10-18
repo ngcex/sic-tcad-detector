@@ -87,7 +87,10 @@ def validated_domain_reason(config: DeviceConfig) -> "str | None":
     cross-check.
     """
     if config.half_width_um is not None:
-        from etna.core.engine2d import ENGINE2D_DARK_BOX, engine2d_dark_unsupported_reason
+        from etna.core.engine2d import (
+            ENGINE2D_DARK_BOX,
+            engine2d_dark_unsupported_reason,
+        )
 
         reason = engine2d_dark_unsupported_reason(
             config.half_width_um,
@@ -1535,12 +1538,16 @@ def run_temperature_sweep(
         ("dd", "devsim"): "devsim",
     }
     name = (
-        label[(method, used.pop())]
-        if len(used) == 1
+        "failed (no temperature converged)"
+        if not used
         else (
-            "hecht (analytical; W from batched engine + devsim)"
-            if method == "hecht"
-            else "batched + devsim"
+            label[(method, used.pop())]
+            if len(used) == 1
+            else (
+                "hecht (analytical; W from batched engine + devsim)"
+                if method == "hecht"
+                else "batched + devsim"
+            )
         )
     )
     return SimResult(
