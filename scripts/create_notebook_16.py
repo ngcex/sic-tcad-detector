@@ -72,8 +72,7 @@ md(
 
 **CCE(LET) tables: loaded, not rebuilt.** Sections 6-7 load the committed
 tables `data/cce_let_table_100um.json` and `data/cce_let_table_300um.json`, so
-the notebook runs in about a minute (the remaining time is the four
-single-particle transients of Sections 4-5). Rebuilding the tables takes about
+the default run only simulates the Section 3-4 ion track and current pulse. Rebuilding the tables takes about
 70 minutes (20 + 10 transient 2D solves); to do it, set
 `ETNA_REBUILD_CCE_TABLES=1` in the environment (or `REBUILD_CCE_TABLES = True`
 below). Rebuilt tables are written to `$ETNA_FIGURE_DIR/data/` (default
@@ -228,8 +227,7 @@ ax.set_aspect('equal')
 plt.tight_layout()
 plt.show()
 
-# Clean up
-devsim.delete_device(device=device_info['device_name'])
+# The device is kept for Section 4 (ion_track_generation_2d only reads the mesh)
 print(f"\\nThe Gaussian track is confined to the epi layer ({epi_um:.0f} um thick)")
 print(f"with a lateral sigma of 1 um, centered at x = 0.")
 """
@@ -260,9 +258,8 @@ carriers drift and diffuse to the contacts.
 
 code(
     """
-# Create fresh device for transient simulation
-device_info = create_2d_dd_device(half_width_um=50.0, V_bias=50.0,
-                                   device_name='sv100_pulse')
+# Reuse the Section 3 device (same 100 um SV at 50 V, still at its biased
+# steady state: building it again would only cost ~20 s)
 
 # Generate and inject ion track
 generation, Q_gen = ion_track_generation_2d(device_info, LET_demo, x_ion_cm=0.0)
@@ -332,6 +329,13 @@ below 1%.
 
 This directly validates requirement SPRT-03: charge conservation in transient
 simulations.
+
+**Default run:** the three transients are not re-simulated; the check reads the
+rows of the committed 100 um table (`data/cce_let_table_100um.json`, which stores
+Q_generated, Q_collected, the raw CCE and the 95% collection time of every
+simulation) nearest to 1, 10 and 100 keV/um (LET = 1.03, 9.16 and 117 keV/um), and
+then checks every row of both tables (30 transients). With
+`ETNA_REBUILD_CCE_TABLES=1` the three LETs are simulated afresh (~3 min).
 """
 )
 
@@ -340,25 +344,39 @@ code(
 validation_LETs = [1.0, 10.0, 100.0]
 val_results = []
 
-for LET in validation_LETs:
-    print(f"Simulating LET = {LET:.0f} keV/um...")
-    dev = create_2d_dd_device(half_width_um=50.0, V_bias=50.0)
-    gen, Q_gen = ion_track_generation_2d(dev, LET, x_ion_cm=0.0)
-    sim = simulate_single_particle(dev, gen)
-    pulse_info = analyze_current_pulse(sim['times'], sim['currents'], sim['I_dark'])
+if REBUILD_CCE_TABLES:
+    for LET in validation_LETs:
+        print(f"Simulating LET = {LET:.0f} keV/um...")
+        dev = create_2d_dd_device(half_width_um=50.0, V_bias=50.0)
+        gen, Q_gen = ion_track_generation_2d(dev, LET, x_ion_cm=0.0)
+        sim = simulate_single_particle(dev, gen)
+        pulse_info = analyze_current_pulse(sim['times'], sim['currents'], sim['I_dark'])
 
-    cce = sim['Q_collected'] / Q_gen if Q_gen > 0 else float('nan')
+        cce = sim['Q_collected'] / Q_gen if Q_gen > 0 else float('nan')
 
-    val_results.append({
-        'LET': LET,
-        'Q_gen_fC': Q_gen * 1e15,
-        'Q_col_fC': sim['Q_collected'] * 1e15,
-        'CCE': cce,
-        't_col_ns': pulse_info['t_collection'] * 1e9,
-    })
+        val_results.append({
+            'LET': LET,
+            'Q_gen_fC': Q_gen * 1e15,
+            'Q_col_fC': sim['Q_collected'] * 1e15,
+            'CCE': cce,
+            't_col_ns': pulse_info['t_collection'] * 1e9,
+        })
 
-    devsim.delete_device(device=dev['device_name'])
-    print(f"  CCE = {cce:.4f}, t_collection = {pulse_info['t_collection']*1e9:.1f} ns")
+        devsim.delete_device(device=dev['device_name'])
+        print(f"  CCE = {cce:.4f}, t_collection = {pulse_info['t_collection']*1e9:.1f} ns")
+else:
+    # Rows of the committed table nearest to the validation LETs (no re-simulation)
+    tab = table_from_json('data/cce_let_table_100um.json')
+    for LET in validation_LETs:
+        r = tab.loc[(np.log(tab['LET_keV_um']) - np.log(LET)).abs().idxmin()]
+        val_results.append({
+            'LET': r['LET_keV_um'],
+            'Q_gen_fC': r['Q_generated_fC'],
+            'Q_col_fC': r['Q_collected_fC'],
+            'CCE': r['CCE_raw'],  # Q_collected / Q_generated, unclipped
+            't_col_ns': r['t_collection_ns'],
+        })
+    print("From data/cce_let_table_100um.json (set ETNA_REBUILD_CCE_TABLES=1 to re-simulate)")
 
 print("\\n" + "=" * 80)
 print(f"{'LET (keV/um)':>14} | {'Q_gen (fC/cm)':>14} | {'Q_col (fC/cm)':>14} | "
@@ -375,6 +393,15 @@ print("=" * 80)
 all_valid = all(0.5 <= r['CCE'] <= 1.02 for r in val_results)
 print(f"\\nCharge conservation check: {'PASS' if all_valid else 'FAIL'}")
 print(f"All CCE values in [0.5, 1.02]: {all_valid}")
+
+if not REBUILD_CCE_TABLES:
+    # every simulation stored in the committed tables
+    for path in ('data/cce_let_table_100um.json', 'data/cce_let_table_300um.json'):
+        t = table_from_json(path)
+        raw = t['Q_collected_fC'] / t['Q_generated_fC']
+        ok = bool(((raw >= 0.5) & (raw <= 1.02)).all() and t['converged'].all())
+        print(f"{path}: {len(t)} transients, raw CCE {raw.min():.6f} -- {raw.max():.6f}, "
+              f"all converged = {bool(t['converged'].all())}: {'PASS' if ok else 'FAIL'}")
 """
 )
 
