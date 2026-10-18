@@ -230,6 +230,11 @@ class TestCompareCCE2Dvs1D:
         # 1D twin with the same (epi-confined) generation: the laterally uniform device
         # gives the same CCE (the 1D side used to generate in the n+ too: 0.9543 vs 0.9998)
         assert result["cce_1d"] == pytest.approx(result["cce_2d_center"], abs=1e-3)
+        # B-14: the centre key is the lateral scan's x = 0 point, not the full-area value
+        assert result["cce_2d_center"] == result["lateral_scan"]["cce_values"][0]
+        assert result["cce_2d_full_area"] == pytest.approx(
+            result["cce_2d_center"], abs=1e-6
+        )  # laterally uniform device
 
 
 # ---------------------------------------------------------------------------
