@@ -14,6 +14,7 @@ assume pytest was invoked from the repo root).
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from etna import DeviceConfig, run_microdosimetry
 from etna.api.results import SimResult
@@ -52,3 +53,42 @@ def test_run_microdosimetry_data_pipeline():
     assert "y_F" in result.metadata
     assert "y_D" in result.metadata
     assert result.metadata["y_D"] >= result.metadata["y_F"]
+
+
+def test_in_memory_stream_gives_the_same_spectrum_as_the_path():
+    """audit C-17: a file-like object is accepted (the app passes io.BytesIO)."""
+    import io
+
+    by_path = run_microdosimetry(DeviceConfig(), mc_csv_path=str(MC_CSV_PATH))
+    by_stream = run_microdosimetry(
+        DeviceConfig(), mc_csv_path=io.BytesIO(MC_CSV_PATH.read_bytes())
+    )
+    assert by_stream.metadata["y_F"] == by_path.metadata["y_F"]
+    assert by_stream.metadata["y_D"] == by_path.metadata["y_D"]
+    np.testing.assert_array_equal(by_stream.y, by_path.y)
+
+
+@pytest.mark.parametrize(
+    "csv, kwargs, match",
+    [
+        (
+            b"event_id,x,y,z,edep\n0,0,0,0,100\n",
+            {"sv_thickness_um": 0.0},
+            "sv_thickness_um",
+        ),
+        (
+            b"event_id,x,y,z,edep\n0,0,0,0,100\n",
+            {"sv_width_um": float("nan")},
+            "sv_width_um",
+        ),
+        (b"event_id,x,y,z,edep\n", {}, "no events"),
+        (b"event_id,x,y,z,edep\n0,0,0,0,100\n1,0,0,0,-5\n", {}, "negative"),
+        (b"event_id,x,y,z,edep\n0,0,0,0,0\n1,0,0,0,0\n", {}, "deposits any energy"),
+    ],
+)
+def test_meaningless_inputs_raise_instead_of_silent_spectrum(csv, kwargs, match):
+    """audit C-09: no more y_F = 0 / nan 'successful' results."""
+    import io
+
+    with pytest.raises(ValueError, match=match):
+        run_microdosimetry(DeviceConfig(), mc_csv_path=io.BytesIO(csv), **kwargs)

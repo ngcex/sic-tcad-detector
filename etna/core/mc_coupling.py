@@ -109,8 +109,9 @@ def load_mc_events_csv(filepath, column_map=None, pos_unit="cm", energy_unit="ke
 
     Parameters
     ----------
-    filepath : str or pathlib.Path
-        Path to the CSV file.
+    filepath : str, pathlib.Path or file-like
+        Path to the CSV file, or an open stream (anything ``pd.read_csv``
+        accepts, e.g. ``io.BytesIO``).
     column_map : dict or None
         Maps standard column names to CSV column names.
         Keys are standard names (event_id, x_cm, y_cm, z_cm, edep_keV),
