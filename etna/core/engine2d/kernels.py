@@ -7,7 +7,9 @@ rectangular dual cells). Equations are divided by q.
 Poisson (scaled u = psi/V_t, lam = eps V_t / q):
     F_k = lam sum_b C_kb/L_kb (u_k - u_b) - V_k (p - n + D),
     n = exp(u - u_n + ln n_i), p = exp(u_p - u + ln n_i)      (quasi-Fermi form)
-Electrons (kn = mu_n V_t), flux k->b = kn C/L [n_b B(u_b-u_k) - n_k B(u_k-u_b)]:
+Electrons (kn = mu_n V_t per edge: kv[j] on the vertical edge rows j-j+1, kh[j] on the
+lateral edges of row j; laterally uniform doping makes the local mobility a function
+of the row), flux k->b = kn C/L [n_b B(u_b-u_k) - n_k B(u_k-u_b)]:
     R_k = sum_b flux_n(k->b) - V_k U + V_k G
 Holes, flux k->b = kp C/L [p_k B(u_b-u_k) - p_b B(u_k-u_b)]:
     R_k = sum_b flux_p(k->b) + V_k U - V_k G
@@ -110,7 +112,8 @@ def continuity_system(
     ni,
     taun,
     taup,
-    kc,
+    kv,
+    kh,
     hx,
     hy,
     dxd,
@@ -160,23 +163,23 @@ def continuity_system(
             for d in range(4):
                 if d == 0:
                     b = k - nx
-                    cl = kc * dxd[i] / hy[j - 1]
+                    cl = kv[j - 1] * dxd[i] / hy[j - 1]
                     off = -nx
                 elif d == 1:
                     b = k + nx
-                    cl = kc * dxd[i] / hy[j]
+                    cl = kv[j] * dxd[i] / hy[j]
                     off = nx
                 elif d == 2:
                     if i == 0:
                         continue
                     b = k - 1
-                    cl = kc * dyd[j] / hx[i - 1]
+                    cl = kh[j] * dyd[j] / hx[i - 1]
                     off = -1
                 else:
                     if i == nx - 1:
                         continue
                     b = k + 1
-                    cl = kc * dyd[j] / hx[i]
+                    cl = kh[j] * dyd[j] / hx[i]
                     off = 1
                 Bkb = bern(u[b] - uk)  # B(u_b - u_k)
                 Bbk = bern(uk - u[b])  # B(u_k - u_b)
@@ -196,7 +199,7 @@ def continuity_system(
 
 
 @njit(cache=True)
-def cathode_current(u, n, p, kn, kp, hy, dxd, nx, ny):
+def cathode_current(u, n, p, knv, kpv, hy, dxd, nx, ny):
     """devsim get_contact_current('cathode') / q for electrons + holes: sum over the
     cathode row of the edge fluxes leaving each contact node (no NodeVolume term;
     in-row horizontal edges cancel)."""
@@ -209,13 +212,15 @@ def cathode_current(u, n, p, kn, kp, hy, dxd, nx, ny):
         cl = dxd[i] / hy[j - 1]
         Bkb = bern(u[b] - u[k])
         Bbk = bern(u[k] - u[b])
-        Ie += kn * cl * (n[b] * Bkb - n[k] * Bbk)
-        Ih += kp * cl * (p[k] * Bkb - p[b] * Bbk)
+        Ie += knv[j - 1] * cl * (n[b] * Bkb - n[k] * Bbk)
+        Ih += kpv[j - 1] * cl * (p[k] * Bkb - p[b] * Bbk)
     return Ie, Ih
 
 
 @njit(cache=True)
-def cathode_current_balanced(u, n, p, G, ni, taun, taup, kn, kp, hy, dxd, dyd, nx, ny):
+def cathode_current_balanced(
+    u, n, p, G, ni, taun, taup, knv, kpv, hy, dxd, dyd, nx, ny
+):
     """Same quantity as ``cathode_current`` at a converged state, but well conditioned.
 
     The electron flux into the cathode row is a small difference of two huge SG terms
@@ -238,12 +243,12 @@ def cathode_current_balanced(u, n, p, G, ni, taun, taup, kn, kp, hy, dxd, dyd, n
         k = nx + i  # row 1
         b = i  # anode row
         cl = dxd[i] / hy[0]
-        Ie += kn * cl * (n[b] * bern(u[b] - u[k]) - n[k] * bern(u[k] - u[b]))
+        Ie += knv[0] * cl * (n[b] * bern(u[b] - u[k]) - n[k] * bern(u[k] - u[b]))
     j = ny - 1
     Ih = 0.0
     for i in range(nx):
         k = j * nx + i
         b = k - nx
         cl = dxd[i] / hy[j - 1]
-        Ih += kp * cl * (p[k] * bern(u[b] - u[k]) - p[b] * bern(u[k] - u[b]))
+        Ih += kpv[j - 1] * cl * (p[k] * bern(u[b] - u[k]) - p[b] * bern(u[k] - u[b]))
     return Ie, Ih

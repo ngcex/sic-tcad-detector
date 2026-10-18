@@ -21,6 +21,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from etna.core.batched.poisson import contact_values
+from etna.core.device import acceptor_total_scale, edge_mobility, local_mobility
 from etna.core.device2d import EPS_0, K_B_J, Q
 from etna.core.sic_material import SiC4H_Parameters, srh_lifetime
 
@@ -68,8 +69,14 @@ class Device2D:
         self.taun = srh_lifetime(T, "electron", prm)
         self.taup = srh_lifetime(T, "hole", prm)
         self.lam = prm.eps_r * EPS_0 * self.Vt / Q
-        self.kn = info["mu_n"] * self.Vt
-        self.kp = info["mu_p"] * self.Vt
+        # local per-node mobility of the devsim builder (add_local_mobility_models) on
+        # the evaluated doping rows: kv per vertical edge (arithmetic average of the two
+        # rows), kh per row (lateral edges join nodes of one row)
+        scale = acceptor_total_scale(info["N_A"], info["N_A_ionized"])
+        for carrier, tag in (("electron", "n"), ("hole", "p")):
+            row = local_mobility(grid.donors, grid.acceptors, scale, T, carrier, prm)
+            setattr(self, f"k{tag}_v", np.ascontiguousarray(edge_mobility(row) * self.Vt))
+            setattr(self, f"k{tag}_h", np.ascontiguousarray(row * self.Vt))
         self.donors = grid.donors
         self.D = grid.donors - grid.acceptors  # (ny,) devsim NetDoping per row
         ni, D0, D1 = self.ni, self.D[0], self.D[-1]
@@ -180,7 +187,7 @@ class Device2D:
     def _cont(self, which, u, n, p, G, A, R, build):
         g = self.g2
         bc = self.n_bc if which == 0 else self.p_bc
-        kc = self.kn if which == 0 else self.kp
+        kv, kh = (self.kn_v, self.kn_h) if which == 0 else (self.kp_v, self.kp_h)
         continuity_system(
             which,
             u,
@@ -190,7 +197,8 @@ class Device2D:
             self.ni,
             self.taun,
             self.taup,
-            kc,
+            kv,
+            kh,
             g.hx,
             g.hy,
             g.dxd,
@@ -265,8 +273,8 @@ class Device2D:
                 self.ni,
                 self.taun,
                 self.taup,
-                self.kn,
-                self.kp,
+                self.kn_v,
+                self.kp_v,
                 g.hy,
                 g.dxd,
                 g.dyd,
@@ -281,7 +289,7 @@ class Device2D:
             if np.abs(du).max() < tol and dI < tol_I:
                 self.gummel_iterations.append(it)
                 Ie, Ih = cathode_current(
-                    u, n, p, self.kn, self.kp, g.hy, g.dxd, g.nx, g.ny
+                    u, n, p, self.kn_v, self.kp_v, g.hy, g.dxd, g.nx, g.ny
                 )
                 self.last_I_direct = (
                     Ie + Ih

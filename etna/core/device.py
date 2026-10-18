@@ -119,7 +119,7 @@ def mobility_doping(N_D, doping_profile, N_D_bulk):
     Since 2026-10-18 the 1D transport (devsim and the batched engine) uses the local
     per-node mobility (add_local_mobility_models); this scalar is what device_info
     reports as mu_n / mu_p, the devsim parameters of that name (overridden in the
-    transport by the edge models), the 2D builders' transport mobility, and the Hecht
+    transport by the edge models; 1D and 2D), and the Hecht
     default (charge_collection). Rule: uniform profile -> ``N_D`` (``DEFAULT_N_D`` when None); graded
     profile -> the bulk epi doping ``N_D_bulk`` (``DEFAULT_STACK["N_D_bulk"]`` when
     None), the doping of most of the sensitive volume. Before 2026-10-17 graded devices
@@ -179,7 +179,9 @@ def edge_mobility(node_mu):
     return (node_mu[..., :-1] + node_mu[..., 1:]) * 0.5
 
 
-def add_local_mobility_models(device, region, T, acceptor_scale, params=None):
+def add_local_mobility_models(
+    device, region, T, acceptor_scale, params=None, acceptor_total_expr=None
+):
     """Doping-dependent mobility PER NODE, edge-averaged for the currents (A-03).
 
     Node models ``mu_n_node`` / ``mu_p_node`` = Caughey-Thomas at T and the local total
@@ -190,7 +192,9 @@ def add_local_mobility_models(device, region, T, acceptor_scale, params=None):
     scales the current), so the region-wide scalar parameters ``mu_n`` / ``mu_p`` (the
     epi value, kept for reference and the device_info dict) no longer enter the
     transport. Must be called after the doping node models exist; overriding Donors
-    later (apply_damaged_params) updates the mobility with it.
+    later (apply_damaged_params) updates the mobility with it. ``acceptor_total_expr``
+    (default ``acceptor_scale * Acceptors``) is the total-acceptor expression for
+    regions whose Acceptors combine layers of different N_A (guard ring).
 
     Before 2026-10-18 the mobility was one scalar per device evaluated at the epi
     doping, so the 1e19 p+ anode and n+ substrate carried the epi mobility (electrons
@@ -200,15 +204,16 @@ def add_local_mobility_models(device, region, T, acceptor_scale, params=None):
     <= 1.2e-6 from -2 to -100 V; C-V <= 1e-12 relative; dark current -8.7e-6 relative
     (legacy model: CCE -1.8e-6, dark current -0.3 % at 0 V).
 
-    Used by the 1D builder (create_sic_device); the batched 1D engine computes the same
-    edges (etna.core.batched.material.edge_mobilities; parity 2.6e-11 in CCE). The 2D
-    builders (device2d.create_sic_2d_device, alternative_structures) still use the
-    scalar epi mobility: the 2D engine (etna.core.engine2d) takes one kn/kp per device
-    in its numba kernels and must stay at parity with devsim 2D (the local model moves
-    the 2D CCE by 1.2e-6 at 20 V, hw 25); switching 2D needs the per-edge kernel change
-    in engine2d, a different work package.
+    Used by every devsim builder: 1D (create_sic_device), 2D (device2d), the alternative
+    structures (per solved region; the guard ring sums its two implants with their own
+    ionization). The engines build the same edges: batched 1D
+    (etna.core.batched.material.edge_mobilities; CCE parity 2.6e-11) and engine2d
+    (per-row node mobility from devsim's evaluated doping rows, vertical edges averaged;
+    2D CCE parity 4e-15 at 20 V, hw 25). 2D effect: CCE +1.2e-6 at 20 V, hw 25.
     """
-    N_expr = f"Donors + {float(acceptor_scale)!r} * Acceptors"
+    if acceptor_total_expr is None:
+        acceptor_total_expr = f"{float(acceptor_scale)!r} * Acceptors"
+    N_expr = f"Donors + {acceptor_total_expr}"
     for name, carrier in (("mu_n", "electron"), ("mu_p", "hole")):
         devsim.node_model(
             device=device,

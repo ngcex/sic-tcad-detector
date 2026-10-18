@@ -68,7 +68,13 @@ from etna.core.device2d import (
     K_B_J,
     DEFAULT_N_D,
 )
-from etna.core.device import LEGACY_STACK, NPLUS_CALIBRATION, mobility_doping
+from etna.core.device import (
+    LEGACY_STACK,
+    NPLUS_CALIBRATION,
+    acceptor_total_scale,
+    add_local_mobility_models,
+    mobility_doping,
+)
 
 # The pinned stack of every builder here (module docstring "STACK PIN"): legacy geometry,
 # previous default's epi doping. The builders' keyword defaults read it.
@@ -628,6 +634,10 @@ def create_mesa_device(
         L_transition,
     )
 
+    add_local_mobility_models(
+        device_name, region_name, T, acceptor_total_scale(N_A, N_A_ionized)
+    )
+
     # -- Zero doping on trench fill --
     devsim.node_model(
         device=device_name,
@@ -970,6 +980,9 @@ def create_3d_electrode_device(
         name="NetDoping",
         equation="Donors - Acceptors",
     )
+    add_local_mobility_models(
+        device_name, region_name, T, acceptor_total_scale(N_A, N_A_ionized)
+    )
 
     device_info = _build_device_info(
         device_name,
@@ -1218,6 +1231,11 @@ def create_delta_e_e_device(
         N_D_bulk,
         L_transition,
     )
+
+    for _r in (region_name_de, region_name_e):
+        add_local_mobility_models(
+            device_name, _r, T, acceptor_total_scale(N_A, N_A_ionized)
+        )
 
     def _layer(region, layer, contacts, junction, total, mat):
         return _build_device_info(
@@ -1496,6 +1514,15 @@ def create_guard_ring_device(
         region=region_name,
         name="NetDoping",
         equation="Donors - Acceptors",
+    )
+    # total acceptors per implant (anode N_A, ring N_A_guard: different ionization)
+    _tot = f"{acceptor_total_scale(N_A, N_A_ionized)!r} * Acceptors_anode"
+    if with_guard:
+        _tot += (
+            f" + {acceptor_total_scale(N_A_guard, N_A_guard_ionized)!r} * Acceptors_GR"
+        )
+    add_local_mobility_models(
+        device_name, region_name, T, None, acceptor_total_expr=_tot
     )
 
     device_info = _build_device_info(
