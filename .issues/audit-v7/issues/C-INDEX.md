@@ -11,7 +11,7 @@ Streamlit bind check).
 | C-02 | medium   | open   | Batch Sweep offers sweep parameters the selected facade ignores (identical curves)           | S      |
 | C-03 | medium   | open   | devsim.error is not a RuntimeError; pages crash with a raw traceback                         | S      |
 | C-04 | high     | fixed  | No devsim serialization; concurrent facade calls segfault the process (reproduced, exit 139) | S      |
-| C-05 | medium   | open   | uv.lock pins transitive deps with advisories (runtime + dev; tornado corrected)              | S      |
+| C-05 | medium   | resolved (a6ce6da) | uv.lock pins transitive deps with advisories (runtime + dev; tornado corrected)              | S      |
 | C-06 | low      | open   | C-V / Mott-Schottky labels and 1/C^2 CSV column use per-area units; values are in Farads     | S      |
 | C-07 | low      | open   | sim_type="dark_current" has two shapes; bias sweep mislabeled T_K; no truncation flag        | S      |
 | C-08 | low      | open   | Radiation page: fluence 0 crashes, negative gives NaN fluences, min>max accepted             | S      |

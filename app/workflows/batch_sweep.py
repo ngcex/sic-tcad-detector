@@ -123,7 +123,8 @@ def render() -> None:
     if SIM_FACADES[sim_label] == "run_temperature_sweep":
         st.caption(
             "CCE vs temperature uses the analytical Hecht model (method='hecht') "
-            "on a devsim depletion width at −30 V, over 250–350 K; it is not a "
+            "on the depletion width at −30 V from the batched engine (devsim "
+            "outside its box), over 250–350 K; it is not a "
             "drift-diffusion CCE."
         )
         if param == "T":
