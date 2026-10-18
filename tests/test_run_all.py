@@ -204,3 +204,8 @@ def test_all_nan_section_is_a_labelled_warning(monkeypatch):
     assert sec.status == "warning" and not rep.ok
     assert sec.reason.startswith("no valid point (0 of 2)") and "compensation" in sec.reason
     assert "all NaN" in sec.summary and "1.35e+13" in sec.summary
+
+
+def test_ok_ignores_skipped_sections():
+    rep = etna.run_all(etna.DeviceConfig(half_width_um=25.0), ("cv", "field"))
+    assert rep.get("cv").status == "skipped" and rep.ok

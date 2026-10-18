@@ -191,7 +191,8 @@ class Report:
 
     @property
     def ok(self) -> bool:
-        return all(s.status == "ok" for s in self.sections)
+        """True when no section failed or warned (skipped sections do not count)."""
+        return all(s.status in ("ok", "skipped") for s in self.sections)
 
     def get(self, name: str) -> SectionResult:
         for s in self.sections:
