@@ -37,3 +37,6 @@ build/
 htmlcov/
 .scratch/
 .claude/worktrees/
+
+# numba JIT cache dir used by CI (NUMBA_CACHE_DIR)
+.numba-cache/
