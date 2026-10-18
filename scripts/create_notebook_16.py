@@ -69,6 +69,16 @@ scored without re-running TCAD for each event.
 md(
     """
 ## Section 2: Setup and Imports
+
+**CCE(LET) tables: loaded, not rebuilt.** Sections 6-7 load the committed
+tables `data/cce_let_table_100um.json` and `data/cce_let_table_300um.json`, so
+the notebook runs in about a minute (the remaining time is the four
+single-particle transients of Sections 4-5). Rebuilding the tables takes about
+70 minutes (20 + 10 transient 2D solves); to do it, set
+`ETNA_REBUILD_CCE_TABLES=1` in the environment (or `REBUILD_CCE_TABLES = True`
+below). Rebuilt tables are written to `$ETNA_FIGURE_DIR/data/` (default
+`notebooks/figures/data/`, untracked), never over the tracked `data/`; copy
+them to `data/` by hand only if you mean to update the committed tables.
 """
 )
 
@@ -77,14 +87,21 @@ code(
 import sys
 sys.path.insert(0, '..')
 import os
+# Rebuild the CCE(LET) tables (~70 min) instead of loading data/*.json
+REBUILD_CCE_TABLES = os.environ.get('ETNA_REBUILD_CCE_TABLES', '').strip() not in ('', '0')
+FIG_DIR = os.path.abspath(os.environ.get("ETNA_FIGURE_DIR", "figures"))  # before the chdir: notebooks/figures/ (untracked)
+REBUILT_DIR = os.path.join(FIG_DIR, 'data')  # rebuilt tables go here, never over data/
 os.chdir('..')
 
 %matplotlib inline
+import json
+import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.tri as mtri
 import numpy as np
 import devsim
 import logging
+import time
 
 from etna.core.devsim_lock import set_devsim_quiet
 set_devsim_quiet(True)  # drop devsim's Newton log from direct core calls; ETNA_DEVSIM_VERBOSE=1 shows it
@@ -112,7 +129,35 @@ logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger('etna.core.single_particle')
 logger.setLevel(logging.INFO)
 
-print("Setup complete.")
+
+def table_from_json(path):
+    \"\"\"CCE(LET) table saved by save_cce_let_table, as the DataFrame build_cce_let_table returns.\"\"\"
+    with open(path) as f:
+        data = json.load(f)
+    cols = ['LET_keV_um', 'CCE', 'Q_generated_fC', 'Q_collected_fC',
+            't_collection_ns', 'CCE_raw', 'converged']
+    return pd.DataFrame({c: data[c] for c in cols if c in data})
+
+
+def cce_table(path, build_kwargs, geometry_info):
+    \"\"\"Load the committed table at ``path``; rebuild it into REBUILT_DIR only on request.\"\"\"
+    if not REBUILD_CCE_TABLES:
+        if not os.path.exists(path):
+            raise FileNotFoundError(
+                f"{path} is missing: set ETNA_REBUILD_CCE_TABLES=1 to rebuild it (~70 min)")
+        print(f"Loaded {path} (set ETNA_REBUILD_CCE_TABLES=1 to rebuild)")
+        return table_from_json(path), path
+    os.makedirs(REBUILT_DIR, exist_ok=True)
+    out = os.path.join(REBUILT_DIR, os.path.basename(path))
+    t0 = time.time()
+    table = build_cce_let_table(**build_kwargs)
+    print(f"Rebuilt in {(time.time() - t0)/60:.1f} minutes ({len(table)} LET points)")
+    save_cce_let_table(table, out, geometry_info=geometry_info)
+    print(f"Saved to {out} (tracked {path} left untouched)")
+    return table, out
+
+
+print(f"Setup complete. REBUILD_CCE_TABLES = {REBUILD_CCE_TABLES}")
 """
 )
 
@@ -344,36 +389,22 @@ We build the CCE(LET) lookup table for the 100 um SV at 50 V bias. This sweeps
 20 LET values logarithmically from 0.5 to 500 keV/um.
 
 Each LET value creates a fresh device, injects an ion track, runs a transient
-simulation (~30-60 s each), and extracts CCE. Total sweep time: ~10-20 minutes.
-
-The resulting table is saved to `data/cce_let_table_100um.json` for downstream
-Monte Carlo coupling (Phase 22).
+simulation and extracts CCE. By default the committed table
+`data/cce_let_table_100um.json` (consumed by the Monte Carlo coupling, notebook
+17) is loaded; with `ETNA_REBUILD_CCE_TABLES=1` the sweep is re-run (~30 min)
+and saved to `$ETNA_FIGURE_DIR/data/` (see Section 2).
 """
 )
 
 code(
     """
-import time
-
-os.makedirs('data', exist_ok=True)
-
-print("Building CCE(LET) table for 100 um SV (50 V bias)...")
-print("This will take approximately 10-20 minutes.\\n")
-
-t0 = time.time()
-table_100 = build_cce_let_table(
-    half_width_um=50.0, V_bias=50.0,
-    n_let_points=20, let_min=0.5, let_max=500.0,
-    x_ion_cm=0.0,
+table_100, path_100 = cce_table(
+    'data/cce_let_table_100um.json',
+    build_kwargs=dict(half_width_um=50.0, V_bias=50.0,
+                      n_let_points=20, let_min=0.5, let_max=500.0, x_ion_cm=0.0),
+    geometry_info={'half_width_um': 50.0, 'epi_um': 10.0,
+                   'bias_V': 50.0, 'x_ion_um': 0.0},
 )
-t_elapsed = time.time() - t0
-print(f"\\nCompleted in {t_elapsed/60:.1f} minutes ({len(table_100)} LET points)")
-
-# Save table
-save_cce_let_table(table_100, 'data/cce_let_table_100um.json',
-                   geometry_info={'half_width_um': 50.0, 'epi_um': 10.0,
-                                  'bias_V': 50.0, 'x_ion_um': 0.0})
-print(f"Saved to data/cce_let_table_100um.json")
 
 # Display table
 print("\\n" + table_100.to_string(index=False, float_format=lambda x: f"{x:.4f}"))
@@ -421,7 +452,8 @@ md(
 
 We now build the CCE(LET) table for the 300 um SV (half_width = 150 um) at
 the same 50 V bias, using 10 LET points for reasonable runtime (the larger mesh
-requires ~3x longer per simulation).
+requires ~3x longer per simulation). As in Section 6 the committed
+`data/cce_let_table_300um.json` is loaded unless `ETNA_REBUILD_CCE_TABLES=1`.
 
 **Expected result:** At center injection (x = 0), the wider SV should show
 similar CCE values because edge effects are negligible at 50 V full depletion
@@ -432,23 +464,14 @@ the lateral boundary in both geometries.
 
 code(
     """
-print("Building CCE(LET) table for 300 um SV (50 V bias)...")
-print("This will take approximately 15-30 minutes.\\n")
-
-t0 = time.time()
-table_300 = build_cce_let_table(
-    half_width_um=150.0, V_bias=50.0,
-    n_let_points=10, let_min=0.5, let_max=500.0,
-    x_ion_cm=0.0,
+table_300, path_300 = cce_table(
+    'data/cce_let_table_300um.json',
+    build_kwargs=dict(half_width_um=150.0, V_bias=50.0,
+                      n_let_points=10, let_min=0.5, let_max=500.0, x_ion_cm=0.0),
+    geometry_info={'half_width_um': 150.0, 'epi_um': 10.0,
+                   'bias_V': 50.0, 'x_ion_um': 0.0},
 )
-t_elapsed = time.time() - t0
-print(f"\\nCompleted in {t_elapsed/60:.1f} minutes ({len(table_300)} LET points)")
-
-# Save table
-save_cce_let_table(table_300, 'data/cce_let_table_300um.json',
-                   geometry_info={'half_width_um': 150.0, 'epi_um': 10.0,
-                                  'bias_V': 50.0, 'x_ion_um': 0.0})
-print(f"Saved to data/cce_let_table_300um.json")
+print("\\n" + table_300.to_string(index=False, float_format=lambda x: f"{x:.4f}"))
 """
 )
 
@@ -546,9 +569,9 @@ Q_collected = Q_generated * cce
 
 code(
     """
-# Verify saved tables can be loaded
-cce_100, meta_100 = load_cce_let_table('data/cce_let_table_100um.json')
-cce_300, meta_300 = load_cce_let_table('data/cce_let_table_300um.json')
+# Verify the tables used above load through the public loader
+cce_100, meta_100 = load_cce_let_table(path_100)
+cce_300, meta_300 = load_cce_let_table(path_300)
 
 # Test interpolation
 test_LETs = [1.0, 10.0, 50.0, 100.0, 500.0]
