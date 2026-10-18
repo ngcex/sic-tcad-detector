@@ -99,6 +99,13 @@ class DeviceConfig:
         if self.nplus_thickness_um is not None:
             _positive("nplus_thickness_um", self.nplus_thickness_um)
             _positive("N_D_nplus", self.N_D_nplus)
+        if self.doping_profile == "uniform" and (
+            self.buffer_thickness_um == _um(DEFAULT_STACK["buffer_thickness_cm"])
+            and self.buffer_end_doping == DEFAULT_STACK["buffer_end_doping"]
+        ):
+            # the measured-C-V transition was fitted with the graded epi profile: a
+            # uniform-doping device keeps the abrupt epi end unless set explicitly
+            self.buffer_thickness_um = self.buffer_end_doping = None
         if (self.buffer_thickness_um is None) != (self.buffer_end_doping is None):
             problems.append(
                 "buffer_thickness_um and buffer_end_doping must be given together "

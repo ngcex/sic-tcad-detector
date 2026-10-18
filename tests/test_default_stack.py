@@ -333,3 +333,44 @@ def test_run_all_default_every_section_ok():
     )
     assert t3["solver"].tolist() == ["engine2d"]
     assert t3["nplus_thickness_um"].isna().all() and not t3["nplus_generation"].any()
+
+
+def test_uniform_profile_does_not_inherit_the_fitted_transition():
+    """The transition was fitted with the graded epi: a uniform device stays abrupt."""
+    import etna
+    from app.components.device_sidebar import assemble_config
+    from etna.api.device import device_kwargs
+
+    c = etna.DeviceConfig(doping_profile="uniform", N_D=1e14)
+    assert c.buffer_thickness_um is None and c.buffer_end_doping is None
+    assert device_kwargs(c)["buffer_thickness_cm"] is None
+    # an explicit non-default transition is kept
+    c2 = etna.DeviceConfig(
+        doping_profile="uniform", N_D=1e14, buffer_thickness_um=0.5, buffer_end_doping=1e16
+    )
+    assert c2.buffer_thickness_um == 0.5
+    # the graded default keeps it
+    assert etna.DeviceConfig().buffer_thickness_um is not None
+    # the sidebar path (uniform chosen there) goes through the same rule
+    v = dict(
+        epi_thickness_um=10.0, substrate_thickness_um=0.3, half_width_um=None, N_A=1e19,
+        doping_profile="uniform", N_D=1e14, N_D_junction=2.9e15, N_D_bulk=8e13,
+        L_transition_um=0.9, T=300.0, area_cm2=0.04,
+    )
+    assert assemble_config(v).buffer_thickness_um is None
+
+
+def test_core_builders_uniform_profile_is_abrupt():
+    import uuid
+
+    import devsim
+
+    from etna.core.device import create_sic_device
+
+    info = create_sic_device(
+        device_name=f"u_{uuid.uuid4().hex[:6]}", doping_profile="uniform", N_D=1e14
+    )
+    try:
+        assert info.get("buffer_thickness_cm") is None
+    finally:
+        devsim.delete_device(device=info["device_name"])

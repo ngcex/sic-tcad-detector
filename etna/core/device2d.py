@@ -42,6 +42,7 @@ from etna.core.device import (
     _check_nplus,
     _nplus_term,
     buffer_spec,
+    default_buffer_for_profile,
     graded_base_expr,
     mobility_doping,
 )
@@ -263,6 +264,9 @@ def create_sic_2d_device(
     epi_end = substrate_thickness_cm + epi_thickness_cm
     _check_nplus(nplus_thickness_cm, N_D_nplus)
     nplus = None if nplus_thickness_cm is None else (epi_end, N_D_nplus)
+    buffer_thickness_cm, buffer_end_doping = default_buffer_for_profile(
+        doping_profile, buffer_thickness_cm, buffer_end_doping
+    )
     buffer = buffer_spec(
         epi_end, epi_thickness_cm, buffer_thickness_cm, buffer_end_doping
     )

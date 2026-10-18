@@ -300,6 +300,9 @@ def create_sic_device(
     epi_end = substrate_thickness_cm + epi_thickness_cm
     _check_nplus(nplus_thickness_cm, N_D_nplus)
     nplus = None if nplus_thickness_cm is None else (epi_end, N_D_nplus)
+    buffer_thickness_cm, buffer_end_doping = default_buffer_for_profile(
+        doping_profile, buffer_thickness_cm, buffer_end_doping
+    )
     buffer = buffer_spec(
         epi_end, epi_thickness_cm, buffer_thickness_cm, buffer_end_doping
     )
@@ -483,6 +486,22 @@ def create_sic_device(
         "buffer_thickness_cm": buffer_thickness_cm if buffer is not None else None,
         "buffer_end_doping": buffer_end_doping if buffer is not None else None,
     }
+
+
+def default_buffer_for_profile(doping_profile, buffer_thickness_cm, buffer_end_doping):
+    """The measured-C-V transition belongs to the GRADED epi profile it was fitted with.
+
+    A uniform-doping device that still carries the stack's default transition values
+    gets an abrupt epi end instead (a user-defined uniform device is neither model);
+    an explicit non-default transition is kept.
+    """
+    if (
+        doping_profile == "uniform"
+        and buffer_thickness_cm == DEFAULT_STACK["buffer_thickness_cm"]
+        and buffer_end_doping == DEFAULT_STACK["buffer_end_doping"]
+    ):
+        return None, None
+    return buffer_thickness_cm, buffer_end_doping
 
 
 def buffer_spec(epi_end, epi_thickness_cm, buffer_thickness_cm, buffer_end_doping):
