@@ -906,8 +906,8 @@ uv run pytest -n0 -x tests/test_api_cce.py        # serial, e.g. with --pdb
 uv run pytest -n auto -q --durations=20           # slowest tests
 ```
 
-- 92 modules and 1088 tests. `pytest.ini` deselects the `exhaustive` marker (7 redundant
-  deep variants, each implied by a kept test), so the default run collects 1081.
+- 92 modules and 1092 tests. `pytest.ini` deselects the `exhaustive` marker (7 redundant
+  deep variants, each implied by a kept test), so the default run collects 1085.
   The `slow` marker labels the devsim integration tests but does not deselect them.
 - `pytest.ini` adds `--dist loadgroup --no-loadscope-reorder` (inert without `-n`), so
   `-n auto` alone uses the tuned scheduler. Do not pass `--dist loadfile` any more (it
