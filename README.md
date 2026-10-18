@@ -118,8 +118,8 @@ cd notebooks && uv run jupyter lab 01_phase1_validation.ipynb
 > pytest from `.venv`. `uv run pytest` may then fall through to a system pytest
 > (audit C-15).
 >
-> **Tests:** there are 1037 tests in 89 modules. `pytest.ini` deselects the 7 `exhaustive`
-> tests (run them with `-m exhaustive`), so the default run is 1030 tests. With `-n auto`
+> **Tests:** there are 1088 tests in 92 modules. `pytest.ini` deselects the 7 `exhaustive`
+> tests (run them with `-m exhaustive`), so the default run is 1081 tests. With `-n auto`
 > it takes about 4 minutes on a 10-core machine. `--dist loadfile` keeps each module's
 > devsim devices in one worker process, because devsim state is process-global. Use
 > `-n0` when debugging with pdb.
@@ -174,7 +174,7 @@ and the presets `measured_cv_config`, `measured_cv_tabulated_config`,
 | `etna/`         | Installable Python package: `etna/api/` (public facades — `DeviceConfig`, `run_cv`, `run_cce`, …) and `etna/core/` (internal solver modules — material params, Poisson, drift-diffusion, CCE, dark current, radiation damage, microdosimetry, 2D devices, …) |
 | `app/`          | Streamlit UI: `app/main.py` (navigation shell), `app/workflows/` (one page per simulation type), `app/components/` (sidebar, plotting, CSV export)                                                                                                           |
 | `notebooks/`    | 21 analysis notebooks (validation, characterisation, FLASH, radiation damage, microdosimetry, feasibility); committed without outputs                                                                                                                        |
-| `tests/`        | 89 pytest modules (1037 tests; 1030 in the default run): `test_api_*.py` (library facades), `test_app_*.py` (Streamlit AppTest, incl. un-mocked per-page smoke tests), engine/devsim parity, presets, plus the core-physics modules                          |
+| `tests/`        | 92 pytest modules (1088 tests; 1081 in the default run): `test_api_*.py` (library facades), `test_app_*.py` (Streamlit AppTest, incl. un-mocked per-page smoke tests), engine/devsim parity, presets, plus the core-physics modules                          |
 | `docs/`         | `docs/USAGE.md`, the usage guide                                                                                                                                                                                                                             |
 | `lab/`          | Research spikes, each with `notes/LOG.md` (commands and numbers behind calibrated defaults; see `lab/README.md`)                                                                                                                                             |
 | `scripts/`      | Notebook generators, the generator drift check, validation scripts (`scripts/README.md`)                                                                                                                                                                     |

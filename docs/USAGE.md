@@ -906,10 +906,10 @@ uv run pytest -n0 -x tests/test_api_cce.py        # serial, e.g. with --pdb
 uv run pytest -n auto --dist loadfile -q --durations=20  # slowest tests
 ```
 
-- 89 modules and 1037 tests. `pytest.ini` deselects the `exhaustive` marker (7 redundant
-  deep variants, each implied by a kept test), so the default run collects 1030.
+- 92 modules and 1088 tests. `pytest.ini` deselects the `exhaustive` marker (7 redundant
+  deep variants, each implied by a kept test), so the default run collects 1081.
   The `slow` marker labels the devsim integration tests but does not deselect them.
-- The default run took **4.1 minutes on 10 cores** (1030 passed; the only warnings are
+- The default run took **4.1 minutes on 10 cores** (1030 passed; 9.9 min for 1081 passed on 2026-10-19 on a machine shared with other jobs; the only warnings are
   SyntaxWarnings from the third-party pydub package, printed once when its bytecode is
   first compiled). The
   slowest tests are devsim 2D builds: `test_device2d_convergence.py` at 300 µm,
