@@ -106,11 +106,16 @@ def quiet_devsim():
 
 _GLOBAL_LOCK = threading.Lock()
 _patched: list[tuple[object, str, object]] = []  # (module, name, original)
+_enabled = False  # read by the wrappers at call time
 
 
 def _quiet_call(fn):
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
+        if (
+            not _enabled
+        ):  # a copy taken while on (e.g. a later ``from devsim import *``)
+            return fn(*args, **kwargs)
         with quiet_devsim():
             return fn(*args, **kwargs)
 
@@ -127,12 +132,15 @@ def set_devsim_quiet(enabled: bool = True) -> None:
     calls from notebooks, scripts and labs stop streaming the Newton log, while
     the caller's own ``print`` output between devsim calls is unaffected.
     ``set_devsim_quiet(False)`` restores the original functions (the default
-    state). ``ETNA_DEVSIM_VERBOSE=1`` still forces devsim's output (checked at
+    state); wrappers copied while it was on (a module imported later with
+    ``from devsim import *``) then pass through. ``ETNA_DEVSIM_VERBOSE=1`` still forces devsim's output (checked at
     call time). Idempotent; no effect on results: it only discards text.
     """
+    global _enabled
     import devsim
 
     with _GLOBAL_LOCK:
+        _enabled = bool(enabled)
         if enabled and not _patched:
             originals = {
                 name: obj
@@ -162,7 +170,7 @@ def set_devsim_quiet(enabled: bool = True) -> None:
 
 def devsim_quiet_enabled() -> bool:
     """True while :func:`set_devsim_quiet` (process-wide) is on."""
-    return bool(_patched)
+    return _enabled
 
 
 def serialized(fn):

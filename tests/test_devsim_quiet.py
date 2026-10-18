@@ -108,10 +108,22 @@ def test_set_devsim_quiet_silences_direct_core_calls(capsys, monkeypatch):
         monkeypatch.setenv(VERBOSE_ENV, "1")
         forced = _direct_core_field()
         assert capsys.readouterr().out.count("\n") > 20
+        monkeypatch.delenv(VERBOSE_ENV)
+        leaked = devsim.solve  # a copy taken while on (``from devsim import *``)
     finally:
         set_devsim_quiet(False)
     assert not devsim_quiet_enabled()
     assert devsim.solve is original_solve
+    # off means off everywhere: a wrapper copied while on passes devsim's log through
+    from etna.core import devsim_lock
+
+    assert not devsim_lock._enabled
+    assert leaked.__etna_quiet_original__ is original_solve
+    monkeypatch.setattr(devsim, "solve", leaked)
+    capsys.readouterr()
+    after = _direct_core_field()
+    assert capsys.readouterr().out.count("\n") > 20
+    np.testing.assert_array_equal(after, loud)
 
     # zero numeric impact
     np.testing.assert_array_equal(quiet, loud)
