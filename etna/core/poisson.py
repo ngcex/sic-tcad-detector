@@ -1,8 +1,11 @@
 """devsim Poisson equation solver for 4H-SiC p+/n- diode.
 
 Provides functions to set up and solve the Poisson equation on a 4H-SiC
-device created by device.py. Includes voltage ramping for reverse bias
-sweeps and extraction of electric field and depletion width.
+device created by device.py, and extract the electric field and depletion width.
+Bias sweeps belong to the drift-diffusion model (drift_diffusion.ramp_bias,
+cv_analysis.cv_sweep): this Poisson-only model has no quasi-Fermi levels, so under
+bias it drops the applied voltage across the first cell at the contact (audit A-06;
+the Poisson-only ramp_voltage / voltage_sweep were removed for that reason).
 
 The solver uses a Poisson-only formulation with clamped exponentials
 to handle SiC's extremely low n_i (~5e-9 cm^-3), which causes overflow
@@ -183,89 +186,6 @@ def solve_equilibrium(device_info):
                 logger.info("Equilibrium solve converged (aggressive)")
             except devsim.error as e:
                 raise RuntimeError(f"Equilibrium solve failed to converge: {e}") from e
-
-
-def ramp_voltage(
-    device_info,
-    contact_name="cathode",
-    V_start=0.0,
-    V_end=-60.0,
-    V_step=-0.5,
-    abs_err=1e10,
-    rel_err=1e-10,
-    max_iter=40,
-):
-    """Ramp bias voltage on a contact in small steps.
-
-    For reverse bias on the cathode, use negative V_end and V_step.
-
-    Parameters
-    ----------
-    device_info : dict
-        Device info dict.
-    contact_name : str
-        Contact to ramp ("anode" or "cathode").
-    V_start : float
-        Starting voltage (V).
-    V_end : float
-        Ending voltage (V).
-    V_step : float
-        Voltage step (V). Negative for reverse bias ramp.
-    abs_err : float
-        Absolute error tolerance for solver.
-    rel_err : float
-        Relative error tolerance for solver.
-    max_iter : int
-        Maximum Newton iterations.
-
-    Returns
-    -------
-    results : list of tuple
-        List of (voltage, x_array, E_field_array) at each solved bias point.
-    """
-    device = device_info["device_name"]
-    bias_name = simple_physics.GetContactBiasName(contact_name)
-
-    results = []
-    V = V_start + V_step
-
-    if V_step < 0:
-        condition = lambda v: v >= V_end
-    else:
-        condition = lambda v: v <= V_end
-
-    while condition(V):
-        devsim.set_parameter(device=device, name=bias_name, value=V)
-        try:
-            devsim.solve(
-                type="dc",
-                absolute_error=abs_err,
-                relative_error=rel_err,
-                maximum_iterations=max_iter,
-            )
-        except devsim.error:
-            logger.warning(f"Solve failed at V={V:.2f}V, trying relaxed settings")
-            try:
-                devsim.solve(
-                    type="dc",
-                    absolute_error=abs_err * 100,
-                    relative_error=rel_err * 10,
-                    maximum_iterations=max_iter * 3,
-                )
-            except devsim.error as e:
-                logger.error(
-                    f"Solve failed at V={V:.2f}V even with relaxed settings: {e}"
-                )
-                break
-
-        x, E = extract_electric_field(device_info)
-        results.append((V, x, E))
-        logger.debug(f"Solved at V={V:.2f}V, E_max={np.max(np.abs(E)):.2e} V/cm")
-
-        V += V_step
-        V = round(V, 10)
-
-    return results
 
 
 def extract_electric_field(device_info):
@@ -556,71 +476,3 @@ def extract_depletion_width_2d_center(device_info, center_x_tol_cm=1e-6):
     W = float(edge - junction_pos)
     return min(max(W, 0.0), float(epi_thickness))
 
-
-def voltage_sweep(device_info, voltages=None):
-    """High-level function: solve Poisson at multiple bias voltages.
-
-    Solves equilibrium first, then ramps through voltages, extracting
-    E-field at each bias and computing depletion width analytically.
-
-    Parameters
-    ----------
-    device_info : dict
-        Device info dict.
-    voltages : array_like or None
-        Array of bias voltages (V). If None, uses 0 to -60V in -0.5V steps.
-
-    Returns
-    -------
-    results : dict
-        Dictionary with keys:
-        - 'voltages': array of solved voltages
-        - 'E_fields': list of (x, E) tuples at each voltage
-        - 'depletion_widths': array of W values (cm)
-        - 'E_max': array of peak |E| values (V/cm)
-    """
-    if voltages is None:
-        voltages = np.arange(0, -60.5, -0.5)
-
-    # Set up and solve equilibrium
-    setup_poisson(device_info)
-    solve_equilibrium(device_info)
-
-    x0, E0 = extract_electric_field(device_info)
-    W0 = extract_depletion_width(device_info, V_applied=0.0)
-
-    solved_voltages = [0.0]
-    E_fields = [(x0, E0)]
-    depletion_widths = [W0]
-    E_max_values = [np.max(np.abs(E0))]
-
-    nonzero_voltages = voltages[voltages != 0]
-    if len(nonzero_voltages) > 0:
-        V_end = np.min(nonzero_voltages)
-        V_step = (
-            nonzero_voltages[1] - nonzero_voltages[0]
-            if len(nonzero_voltages) > 1
-            else -0.5
-        )
-
-        ramp_results = ramp_voltage(
-            device_info,
-            contact_name="cathode",
-            V_start=0.0,
-            V_end=V_end,
-            V_step=V_step,
-        )
-
-        for V, x, E in ramp_results:
-            W = extract_depletion_width(device_info, V_applied=V)
-            solved_voltages.append(V)
-            E_fields.append((x, E))
-            depletion_widths.append(W)
-            E_max_values.append(np.max(np.abs(E)))
-
-    return {
-        "voltages": np.array(solved_voltages),
-        "E_fields": E_fields,
-        "depletion_widths": np.array(depletion_widths),
-        "E_max": np.array(E_max_values),
-    }
