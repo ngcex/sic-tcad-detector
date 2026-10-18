@@ -361,7 +361,7 @@ with a reason (the 3x point always; `compensation_fluence` is a lower bound on t
 threshold), showing where the model ends. Explicit grids are used as given. The
 NIEL kappa factors are placeholders, so read only the relative shape.
 Also, the facade's default `proton_energy_MeV=5.6` lies below the NIEL table, and kappa
-is silently clamped to its 30 MeV value. This is audit B-07, open at this version. The
+is clamped to its 30 MeV value (logged once per energy; an edge value, not an extrapolation). This is audit B-07, open at this version. The
 Radiation Damage page offers 30, 62, 70 and 150 MeV only.
 
 ```python
@@ -381,7 +381,8 @@ Returns the total reverse leakage. `x` is bias (V), `y` is the total current (A,
 `area_cm2`). Metadata:
 
 - `I_SRH`, `I_TAT`, `I_SRV` (a model partition, not a measured decomposition; I_SRV is
-  zero at the ohmic cathode)
+  zero at the ohmic cathode). They carry the sign of I_total (generation positive):
+  I_SRH + I_TAT + I_SRV ≈ I_total, with I_SRH a tiny negative net-recombination term
 - `N_t`, `E_t`, `area_cm2`
 - `truncated`, `reached_v_stop`
 - `reach_through_V`, `past_reach_through`, `validity_note` (filled for the legacy model
@@ -436,7 +437,8 @@ energy spectrum: `x` is y (keV/µm), `y` is y·d(y). Metadata holds `y_F`, `y_D`
 `l_bar_um` (mean chord length). `config` is carried for provenance only. `mc_csv_path` may be
 a path or a file-like object (e.g. `io.BytesIO`). It raises `ValueError` for non-positive or
 non-finite sensitive-volume dimensions, a CSV with no events, non-finite or negative `edep`,
-or no event depositing energy.
+or no event depositing energy. `sv_width_um` currently has no effect: l̄ = 2·`sv_thickness_um`
+(slab approximation; a finite-SV 4V/S chord is an open physics choice, audit D-15).
 
 ```python
 from etna import DeviceConfig, run_microdosimetry
