@@ -146,7 +146,10 @@ Each facade, its return values and metadata keys, with an example that runs, is 
 **Solvers.** `run_cv` / `run_cce` (and their `run_*_batch` twins used by
 `ParametricSweep`) run on a batched numba 1D engine (`etna.core.batched`) when
 the device lies in the cross-check parameter box, where it was cross-checked
-against devsim, and fall back to devsim otherwise or on non-convergence. 2D
+against devsim, and fall back to devsim otherwise or on non-convergence. The same
+engine serves `run_dark_current` (TAT/SRH/SRV model), `run_flash_recombination`, the
+temperature and fluence sweeps and the 2D dark current of laterally uniform devices
+(milliseconds instead of seconds; parity with devsim <= ~1e-11). 2D
 `run_field` uses a numba 2D engine (`etna.core.engine2d`) where eligible.
 `metadata["solver"]`, `metadata["validated_domain"]` / `"domain_note"` record
 what ran; C-V/CCE results also carry `metadata["reach_through_V"]`, the
@@ -210,7 +213,8 @@ built-in-voltage difference; <1 % with V_bi matched), not a validation of this d
 
 - ✅ **Verified numerics (code-to-code, not against measurement):** the batched 1D and
   2D numba engines reproduce devsim inside their parameter boxes (1D dC/C ≲ 3e-8,
-  dCCE ≲ 1e-10 to −100 V; 2D potential ~1e-13 V), and the 2D graded model's C–V
+  dCCE ≲ 1e-10 to −100 V, dark current ≲ 1.4e-11 relative, FLASH CCE ≲ 3e-12; 2D
+  potential ~1e-13 V), and the 2D graded model's C–V
   matches its 1D twin (R² ≥ 0.99 over 0…−50 V). Electrostatics, C–V and CCE-vs-bias are
   therefore solved consistently, but their agreement with this device rests on the
   C–V calibration below: the C–V is a fit, and no measured CCE of the dosimeter has been
