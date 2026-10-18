@@ -477,7 +477,7 @@ and, on request, `sweep` (a small 2D-engine microdosimetric grid; section 11). I
 between sections that no devsim device leaked. On the default device the whole run takes
 about 3 s with every fast path active. A section's `status` is `ok`, `warning` (it ran
 but returned no valid point; `reason` says why), `error` or `skipped`; `rep.ok` is
-True only when every section is `ok`. A curve with invalid points starts its key
+True when no section is `error` or `warning` (skipped sections do not count). A curve with invalid points starts its key
 figures with "k of n points valid", and the damage row adds the compensation fluence.
 
 ```python
