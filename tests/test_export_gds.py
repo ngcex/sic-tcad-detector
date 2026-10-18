@@ -16,6 +16,17 @@ from etna.export import gds
 ROOT = Path(__file__).resolve().parents[1]
 DOC = ROOT / "deliverables" / "DIMENSIONS-provenance.md"
 
+
+def _polygon_area_um2(points) -> float:
+    """Shoelace area (um^2) of a simple / keyhole polygon (test oracle for the layout)."""
+    s = 0.0
+    n = len(points)
+    for i in range(n):
+        x0, y0 = points[i]
+        x1, y1 = points[(i + 1) % n]
+        s += x0 * y1 - x1 * y0
+    return abs(s) / 2.0
+
 # The simulation model's guard-ring mesh defaults (written here only as regexes).
 FORBIDDEN = [
     re.compile(r"(?<![\d.])(50|5|3|1)(\.0+)?\s*(um|µm|micron)", re.I),
@@ -116,14 +127,14 @@ def test_active_areas_4_and_25_mm2():
         d: next(s for s in gds.build_layout(d).shapes if s.layer == "ACTIVE")
         for d in gds.DEVICES
     }
-    assert gds.polygon_area_um2(act["dosimeter"].points_um) / 1e6 == pytest.approx(4.0)
-    assert gds.polygon_area_um2(act["microdosimeter"].points_um) / 1e6 == pytest.approx(
+    assert _polygon_area_um2(act["dosimeter"].points_um) / 1e6 == pytest.approx(4.0)
+    assert _polygon_area_um2(act["microdosimeter"].points_um) / 1e6 == pytest.approx(
         25.0
     )
     zone = next(
         s for s in gds.build_layout("dosimeter").shapes if s.layer == "TERMINATION_ZONE"
     )
-    assert gds.polygon_area_um2(zone.points_um) / 1e6 == pytest.approx(2.7**2 - 4.0)
+    assert _polygon_area_um2(zone.points_um) / 1e6 == pytest.approx(2.7**2 - 4.0)
 
 
 @pytest.mark.parametrize("device", gds.DEVICES)
@@ -209,7 +220,7 @@ def test_gds_round_trip_geometry(readback, device):
     by_layer = {(p.layer, p.datatype): p for p in top.polygons}
     for s in lay.shapes:
         p = by_layer[gds.LAYERS[s.layer]]
-        assert p.area() == pytest.approx(gds.polygon_area_um2(s.points_um), rel=1e-9)
+        assert p.area() == pytest.approx(_polygon_area_um2(s.points_um), rel=1e-9)
     act = by_layer[gds.LAYERS["ACTIVE"]]
     assert act.area() / 1e6 == pytest.approx(4.0 if device == "dosimeter" else 25.0)
     assert set(by_layer) <= set(gds.LAYERS.values())

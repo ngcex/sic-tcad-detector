@@ -166,6 +166,9 @@ def load_mc_events_csv(filepath, column_map=None, pos_unit="cm", energy_unit="ke
 def list_root_trees(filepath):
     """List TTree names in a ROOT file.
 
+    Kept as public API (no internal caller): the discovery step for
+    ``load_mc_events_root(tree_name=...)`` when a Geant4 file does not use "Hits".
+
     Parameters
     ----------
     filepath : str or pathlib.Path

@@ -13,7 +13,6 @@ later build depend on an earlier one, so it is reported as an error).
 
 from __future__ import annotations
 
-import hashlib
 import json
 import time
 from dataclasses import asdict, dataclass, field
@@ -243,13 +242,6 @@ def _json_default(o):
     if isinstance(o, np.ndarray):
         return o.tolist()
     return str(o)
-
-
-def config_key(config: DeviceConfig) -> str:
-    """Stable hash of a DeviceConfig, for caching a Report."""
-    return hashlib.sha256(
-        json.dumps(asdict(config), sort_keys=True, default=str).encode()
-    ).hexdigest()[:16]
 
 
 def _truncation_note(res: SimResult) -> str:

@@ -328,6 +328,9 @@ def mobility_caughey_thomas_T(N_total, T, carrier="electron", params=None):
 def effective_dos(T, params=None):
     """Temperature-dependent effective density of states.
 
+    Kept as public material API (no internal caller yet): N_V(T) is the input of the
+    low-doping incomplete-ionization fix proposed in audit-v7 A-02 (open).
+
     Wraps compute_ni() to extract NC(T) and NV(T), which scale as T^(3/2).
 
     Parameters

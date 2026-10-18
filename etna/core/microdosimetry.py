@@ -223,32 +223,6 @@ def lineal_energy_spectrum(
 # ---------------------------------------------------------------------------
 
 
-def compute_microdosimetric_means(bin_centers, f_y, bin_widths):
-    """Compute y_F and y_D from a pre-computed f(y) distribution.
-
-    Parameters
-    ----------
-    bin_centers : ndarray
-        Bin center values (keV/um).
-    f_y : ndarray
-        Frequency distribution values.
-    bin_widths : ndarray
-        Bin widths (dy).
-
-    Returns
-    -------
-    dict
-        y_F : float -- frequency-mean lineal energy
-        y_D : float -- dose-mean lineal energy
-    """
-    y_F = np.sum(bin_centers * f_y * bin_widths)
-    if y_F > 0:
-        y_D = np.sum(bin_centers**2 * f_y * bin_widths) / y_F
-    else:
-        y_D = 0.0
-    return {"y_F": y_F, "y_D": y_D}
-
-
 # ---------------------------------------------------------------------------
 # Stopping power loading and kappa computation
 # ---------------------------------------------------------------------------

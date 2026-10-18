@@ -15,7 +15,6 @@ import numpy as np
 
 from etna.core.plotting import (
     plot_electric_field,
-    plot_electric_field_multi,
     plot_depletion_width_vs_bias,
     plot_doping_profile,
     save_figure,
@@ -53,32 +52,6 @@ class TestPlotElectricField:
         ax = plot_electric_field(x, E)
         assert ax.get_xlabel() != ""
         assert ax.get_ylabel() != ""
-
-
-class TestPlotElectricFieldMulti:
-    """Test plot_electric_field_multi function."""
-
-    def teardown_method(self):
-        plt.close("all")
-
-    def _make_results_dict(self):
-        voltages = [0, -5, -10, -20, -30]
-        E_fields = []
-        for V in voltages:
-            x = np.linspace(0, 10e-4, 100)
-            E = np.linspace(5e4 * (1 + abs(V) / 10), 0, 100)
-            E_fields.append((x, E))
-        return {"voltages": voltages, "E_fields": E_fields}
-
-    def test_returns_axes(self):
-        results = self._make_results_dict()
-        ax = plot_electric_field_multi(results)
-        assert isinstance(ax, matplotlib.axes.Axes)
-
-    def test_plots_multiple_curves(self):
-        results = self._make_results_dict()
-        ax = plot_electric_field_multi(results)
-        assert len(ax.get_lines()) > 1
 
 
 class TestPlotDepletionWidthVsBias:

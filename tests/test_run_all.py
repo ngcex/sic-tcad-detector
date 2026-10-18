@@ -64,12 +64,6 @@ def test_leaked_device_is_reported(monkeypatch):
     assert deleted == ["leaky"]
 
 
-def test_config_key_distinguishes_configs():
-    a, b = etna.DeviceConfig(), etna.DeviceConfig(epi_thickness_um=12.0)
-    assert ra.config_key(a) == ra.config_key(etna.DeviceConfig())
-    assert ra.config_key(a) != ra.config_key(b)
-
-
 def test_sweep_is_opt_in_and_reports_rows():
     assert "sweep" in ra.SECTION_NAMES and "sweep" not in ra.DEFAULT_SECTIONS
     rep = etna.run_all(etna.DeviceConfig(), ("sweep",))

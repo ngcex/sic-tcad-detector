@@ -21,7 +21,6 @@ import pytest
 
 from etna.core.microdosimetry import (
     compute_kappa_table,
-    compute_microdosimetric_means,
     lineal_energy_spectrum,
     make_y_bins,
     mean_chord_length,
@@ -189,23 +188,6 @@ class TestLinealEnergySpectrum:
         # Most bins should be zero
         n_nonzero = np.count_nonzero(result["f_y"])
         assert n_nonzero < 10  # only a few bins hit
-
-
-# ---------------------------------------------------------------------------
-# Compute microdosimetric means (standalone)
-# ---------------------------------------------------------------------------
-
-
-class TestComputeMicrodosimetricMeans:
-    def test_agrees_with_spectrum(self, spectrum_broad):
-        """Standalone means should match those from lineal_energy_spectrum."""
-        means = compute_microdosimetric_means(
-            spectrum_broad["bin_centers"],
-            spectrum_broad["f_y"],
-            spectrum_broad["bin_widths"],
-        )
-        assert means["y_F"] == pytest.approx(spectrum_broad["y_F"], rel=1e-6)
-        assert means["y_D"] == pytest.approx(spectrum_broad["y_D"], rel=1e-6)
 
 
 # ---------------------------------------------------------------------------

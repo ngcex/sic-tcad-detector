@@ -186,32 +186,6 @@ def hecht_cce(
     return np.clip(cce, 0.0, 1.0)
 
 
-def compute_cce_from_current(I_collected, I_generated):
-    """Compute CCE as ratio of collected to generated current.
-
-    Used by the DD solver (Plan 02) to extract CCE from simulation.
-
-    Parameters
-    ----------
-    I_collected : float or array_like
-        Collected current (A/cm^2) at the contact.
-    I_generated : float or array_like
-        Total generated current (A/cm^2) from radiation.
-
-    Returns
-    -------
-    cce : float or ndarray
-        Charge collection efficiency, clipped to [0, 1].
-    """
-    I_collected = np.abs(np.asarray(I_collected, dtype=float))
-    I_generated = np.asarray(I_generated, dtype=float)
-
-    with np.errstate(divide="ignore", invalid="ignore"):
-        cce = np.where(I_generated > 0, I_collected / I_generated, 0.0)
-
-    return np.clip(cce, 0.0, 1.0)
-
-
 def hecht_cce_partial_depletion(
     V,
     d_epi,

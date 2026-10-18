@@ -19,7 +19,6 @@ from etna.core.charge_collection import (
     cce_vs_bias_at_fluence,
     cce_vs_fluence,
     compare_cce_hecht_vs_dd,
-    compute_cce_from_current,
     hecht_cce,
     hecht_cce_partial_depletion,
 )
@@ -88,42 +87,6 @@ class TestHechtEquation:
         cce = hecht_cce(V, d=10e-4)
         assert np.all(cce >= 0.0)
         assert np.all(cce <= 1.0)
-
-
-class TestCCEFromCurrent:
-    """Tests for compute_cce_from_current."""
-
-    def test_cce_from_current_ratio(self):
-        """Simple ratio: I_collected / I_generated."""
-        cce = compute_cce_from_current(0.5, 1.0)
-        assert abs(cce - 0.5) < 1e-15
-
-    def test_cce_from_current_full_collection(self):
-        """Full collection: CCE = 1.0."""
-        cce = compute_cce_from_current(1.0, 1.0)
-        assert abs(cce - 1.0) < 1e-15
-
-    def test_cce_from_current_zero_generated(self):
-        """Zero generated current should give CCE = 0."""
-        cce = compute_cce_from_current(0.5, 0.0)
-        assert cce == 0.0
-
-    def test_cce_from_current_clipped(self):
-        """CCE should be clipped to [0, 1]."""
-        cce = compute_cce_from_current(2.0, 1.0)
-        assert cce == 1.0
-
-    def test_cce_from_current_negative_collected(self):
-        """Should use absolute value of collected current."""
-        cce = compute_cce_from_current(-0.7, 1.0)
-        assert abs(cce - 0.7) < 1e-15
-
-    def test_cce_from_current_vectorized(self):
-        """Should work with array inputs."""
-        I_c = np.array([0.0, 0.5, 1.0])
-        I_g = np.array([1.0, 1.0, 1.0])
-        cce = compute_cce_from_current(I_c, I_g)
-        np.testing.assert_allclose(cce, [0.0, 0.5, 1.0])
 
 
 class TestHechtPartialDepletion:
