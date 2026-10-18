@@ -498,3 +498,42 @@ class TestGuardRingDevice:
             assert np.all(acc_gr == 0)
         finally:
             devsim.delete_device(device=name)
+
+
+# ---------------------------------------------------------------------------
+# Explicit stack pin (WP-A, 2026-10-18)
+# ---------------------------------------------------------------------------
+
+
+def test_alt_stack_pin_is_explicit():
+    """Legacy geometry + the previous default's epi doping, read by every builder."""
+    import inspect
+
+    from etna.core import alternative_structures as alt
+    from etna.core.device import LEGACY_STACK, NPLUS_CALIBRATION
+
+    S = alt.ALT_STACK
+    assert S["substrate_thickness_cm"] == LEGACY_STACK["substrate_thickness_cm"] == 1e-4
+    assert S["nplus_thickness_cm"] is None and S["buffer_thickness_cm"] is None
+    for k in ("N_D_junction", "N_D_bulk", "L_transition"):
+        assert S[k] == NPLUS_CALIBRATION[k]
+    for fn in (
+        alt.create_mesa_device,
+        alt.create_3d_electrode_device,
+        alt.create_delta_e_e_device,
+        alt.create_guard_ring_device,
+    ):
+        p = inspect.signature(fn).parameters
+        assert p["substrate_thickness_cm"].default == S["substrate_thickness_cm"]
+    assert "STACK PIN" in alt.__doc__
+    name = _uid()
+    dev = alt.create_guard_ring_device(device_name=name)
+    try:
+        assert dev["stack"] == "ALT_STACK"
+        assert dev["nplus_thickness_cm"] is None and dev["buffer_thickness_cm"] is None
+        assert (dev["N_D_junction"], dev["N_D_bulk"]) == (
+            S["N_D_junction"],
+            S["N_D_bulk"],
+        )
+    finally:
+        devsim.delete_device(device=name)
