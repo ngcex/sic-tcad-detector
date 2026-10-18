@@ -523,7 +523,7 @@ def cce_lateral_scan(
         cce_values.append(cce)
 
         logger.info(
-            f"Lateral scan [{i+1}/{n_points}]: " f"x={x_pos*1e4:.1f} um, CCE={cce:.4f}"
+            f"Lateral scan [{i + 1}/{n_points}]: x={x_pos * 1e4:.1f} um, CCE={cce:.4f}"
         )
 
         # Reset generation to zero and restore the baseline. The first reset is
@@ -638,44 +638,52 @@ def cce_heatmap_2d(device_info, cce_lateral, cce_1d_depth=None):
     }
 
 
-def compare_cce_2d_vs_1d(half_width_um=50.0, V_bias=50.0, gen_rate=1e18):
-    """Compare 2D and 1D CCE for the same device parameters.
+def _engine_scan_or_none(half_width_um, V_bias, n_points, gen_rate, full_area=False):
+    """``lateral_cce_scan_2d`` for ``solver="auto"``; None when the 2D engine declines
+    (outside its validated box, not converged), so the caller runs devsim."""
+    from etna.core.engine2d import (
+        Engine2DFallback,
+        Engine2DOutsideValidity,
+        engine2d_unsupported_reason,
+        lateral_cce_scan_2d,
+    )
 
-    Creates both a 2D device and a 1D device, applies uniform epi
-    generation, and computes CCE for each.  Also runs a lateral scan
-    on the 2D device to quantify edge effects and compute the
-    active-to-geometric volume ratio.
-
-    Parameters
-    ----------
-    half_width_um : float
-        Half-width of 2D SV in micrometers.
-    V_bias : float
-        Reverse bias voltage (V, positive).
-    gen_rate : float
-        Uniform generation rate in epi (cm^-3 s^-1).
-
-    Returns
-    -------
-    result : dict
-        Dictionary with keys:
-        - "cce_1d": 1D CCE value
-        - "cce_2d_center": 2D CCE of the centre column (lateral scan, x = 0)
-        - "cce_2d_full_area": 2D CCE with uniform epi generation over the full area
-          (before 2026-10-18 "cce_2d_center" returned this value too: audit B-14)
-        - "active_to_geometric_ratio": effective active / geometric area
-        - "lateral_scan": result from cce_lateral_scan
-        - "half_width_um": half-width used
-        - "V_bias": bias voltage used
-    """
-    from etna.core.drift_diffusion import create_dd_device
-    from etna.core.charge_collection import compute_cce_from_dd
-
-    device_info_2d = None
-    device_info_1d = None
-
+    reason = engine2d_unsupported_reason(
+        half_width_um, V_bias, n_lateral_points=n_points
+    )
+    if reason is not None:
+        logger.info(f"engine2d unsupported ({reason}); using devsim")
+        return None
     try:
-        # --- 2D device ---
+        return lateral_cce_scan_2d(
+            half_width_um,
+            V_bias,
+            n_lateral_points=n_points,
+            gen_rate=gen_rate,
+            full_area=full_area,
+        )
+    except (Engine2DFallback, Engine2DOutsideValidity) as e:
+        logger.info(f"engine2d declined ({e}); using devsim")
+        return None
+
+
+def _devsim_scan_keys(scan):
+    """The keys ``cce_lateral_scan`` returns, from an engine result."""
+    keys = (
+        "x_positions_cm",
+        "x_positions_um",
+        "cce_values",
+        "edge_to_center_ratio",
+        "in_mesh_generation_fraction",
+        "q_collected_over_deposited",
+    )
+    return {k: scan[k] for k in keys}
+
+
+def _compare_2d_devsim(half_width_um, V_bias, gen_rate):
+    """devsim 2D half of compare_cce_2d_vs_1d: (full-area CCE, lateral scan, half width cm)."""
+    device_info_2d = None
+    try:
         device_info_2d = create_2d_dd_device(half_width_um=half_width_um, V_bias=V_bias)
         device_2d = device_info_2d["device_name"]
         region_2d = device_info_2d["region_name"]
@@ -706,14 +714,84 @@ def compare_cce_2d_vs_1d(half_width_um=50.0, V_bias=50.0, gen_rate=1e18):
         # Lateral scan for edge effects
         lateral_scan = cce_lateral_scan(device_info_2d, n_points=10, gen_rate=gen_rate)
 
-        # Save 2D results and delete 2D device before creating 1D device.
+        # Delete the 2D device before compare_cce_2d_vs_1d creates the 1D device:
         # devsim.solve() is global across all loaded devices, so the 2D device
         # (with residual DD state from lateral scan) causes convergence failure
         # when the 1D device tries its initial equilibrium solve.
         half_width_cm = device_info_2d["half_width_cm"]
         delete_device_and_mesh(device_info_2d["device_name"])
         device_info_2d = None  # Prevent double-delete in finally
+        return cce_2d_full, lateral_scan, half_width_cm
 
+    finally:
+        if device_info_2d is not None:
+            try:
+                delete_device_and_mesh(device_info_2d["device_name"])
+            except Exception:
+                pass
+
+
+def compare_cce_2d_vs_1d(
+    half_width_um=50.0, V_bias=50.0, gen_rate=1e18, solver="devsim"
+):
+    """Compare 2D and 1D CCE for the same device parameters.
+
+    Creates both a 2D device and a 1D device, applies uniform epi
+    generation, and computes CCE for each.  Also runs a lateral scan
+    on the 2D device to quantify edge effects and compute the
+    active-to-geometric volume ratio.
+
+    Parameters
+    ----------
+    half_width_um : float
+        Half-width of 2D SV in micrometers.
+    V_bias : float
+        Reverse bias voltage (V, positive).
+    gen_rate : float
+        Uniform generation rate in epi (cm^-3 s^-1).
+    solver : {"devsim", "auto"}
+        ``"auto"``: the 2D half (full-area CCE and lateral scan) runs on the 2D engine
+        (``lateral_cce_scan_2d(..., full_area=True)``, parity with devsim ~1e-14) when
+        the device is inside its box, else on devsim. The 1D half is always devsim.
+
+    Returns
+    -------
+    result : dict
+        Dictionary with keys:
+        - "solver_2d": "engine2d" or "devsim"
+        - "cce_1d": 1D CCE value
+        - "cce_2d_center": 2D CCE of the centre column (lateral scan, x = 0)
+        - "cce_2d_full_area": 2D CCE with uniform epi generation over the full area
+          (before 2026-10-18 "cce_2d_center" returned this value too: audit B-14)
+        - "active_to_geometric_ratio": effective active / geometric area
+        - "lateral_scan": result from cce_lateral_scan
+        - "half_width_um": half-width used
+        - "V_bias": bias voltage used
+    """
+    from etna.core.drift_diffusion import create_dd_device
+    from etna.core.charge_collection import compute_cce_from_dd
+
+    if solver not in ("devsim", "auto"):
+        raise ValueError(f"solver must be 'devsim' or 'auto', got {solver!r}")
+    device_info_1d = None
+    engine = (
+        _engine_scan_or_none(half_width_um, V_bias, 10, gen_rate, full_area=True)
+        if solver == "auto"
+        else None
+    )
+
+    if engine is not None:
+        cce_2d_full = engine["cce_full_area"]
+        lateral_scan = _devsim_scan_keys(engine)
+        half_width_cm = engine["device_info"]["half_width_cm"]
+    else:
+        # devsim.solve() is global across all loaded devices: the 2D device is deleted
+        # (inside the helper) before the 1D device is created.
+        cce_2d_full, lateral_scan, half_width_cm = _compare_2d_devsim(
+            half_width_um, V_bias, gen_rate
+        )
+
+    try:
         # --- 1D device ---
         dev_id_1d = uuid.uuid4().hex[:8]
         device_info_1d = create_dd_device(
@@ -753,6 +831,7 @@ def compare_cce_2d_vs_1d(half_width_um=50.0, V_bias=50.0, gen_rate=1e18):
             active_to_geometric = 0.0
 
         return {
+            "solver_2d": "devsim" if engine is None else "engine2d",
             "cce_1d": float(cce_1d),
             "cce_2d_center": float(cce_center),
             "cce_2d_full_area": float(cce_2d_full),
@@ -764,11 +843,6 @@ def compare_cce_2d_vs_1d(half_width_um=50.0, V_bias=50.0, gen_rate=1e18):
 
     finally:
         # Clean up devices
-        if device_info_2d is not None:
-            try:
-                delete_device_and_mesh(device_info_2d["device_name"])
-            except Exception:
-                pass
         if device_info_1d is not None:
             try:
                 delete_device_and_mesh(device_info_1d["device_name"])
@@ -776,7 +850,9 @@ def compare_cce_2d_vs_1d(half_width_um=50.0, V_bias=50.0, gen_rate=1e18):
                 pass
 
 
-def cce_vs_bias_lateral(half_width_um=50.0, biases=None, n_points=5, gen_rate=1e18):
+def cce_vs_bias_lateral(
+    half_width_um=50.0, biases=None, n_points=5, gen_rate=1e18, solver="devsim"
+):
     """Compute lateral CCE profiles at multiple bias voltages.
 
     Shows how edge effects evolve from partial to full depletion.
@@ -795,21 +871,35 @@ def cce_vs_bias_lateral(half_width_um=50.0, biases=None, n_points=5, gen_rate=1e
         Number of lateral positions per scan.
     gen_rate : float
         Generation rate (cm^-3 s^-1).
+    solver : {"devsim", "auto"}
+        ``"auto"``: each bias runs on the 2D engine (``lateral_cce_scan_2d``, parity
+        with devsim ~1e-14) when inside its box, else on devsim.
 
     Returns
     -------
     result : dict
         Dictionary with keys:
         - "biases": list of bias voltages
+        - "solvers": per-bias "engine2d" / "devsim"
         - "scans": list of cce_lateral_scan results (one per bias)
         - "half_width_um": half-width used
     """
     if biases is None:
         biases = [5.0, 10.0, 20.0, 30.0, 50.0]
 
+    if solver not in ("devsim", "auto"):
+        raise ValueError(f"solver must be 'devsim' or 'auto', got {solver!r}")
     scans = []
+    solvers = []
     for V in biases:
         logger.info(f"Bias scan: V={V:.0f}V, half_width={half_width_um:.0f}um")
+        if solver == "auto":
+            engine = _engine_scan_or_none(half_width_um, V, n_points, gen_rate)
+            if engine is not None:
+                scans.append(_devsim_scan_keys(engine))
+                solvers.append("engine2d")
+                continue
+        solvers.append("devsim")
         device_info = None
         try:
             device_info = create_2d_dd_device(half_width_um=half_width_um, V_bias=V)
@@ -825,5 +915,6 @@ def cce_vs_bias_lateral(half_width_um=50.0, biases=None, n_points=5, gen_rate=1e
     return {
         "biases": biases,
         "scans": scans,
+        "solvers": solvers,
         "half_width_um": half_width_um,
     }

@@ -236,6 +236,45 @@ class TestCompareCCE2Dvs1D:
             result["cce_2d_center"], abs=1e-6
         )  # laterally uniform device
 
+    @pytest.mark.slow
+    def test_engine_2d_half_matches_devsim(self):
+        """solver="auto" runs the 2D half on the engine: same numbers as devsim to ~1e-14
+        (measured 2026-10-18 at hw 50 / 150, 50 V: <= 7e-15 on every key)."""
+        ref = compare_cce_2d_vs_1d(half_width_um=25.0, V_bias=30.0, gen_rate=1e18)
+        eng = compare_cce_2d_vs_1d(
+            half_width_um=25.0, V_bias=30.0, gen_rate=1e18, solver="auto"
+        )
+        assert ref["solver_2d"] == "devsim" and eng["solver_2d"] == "engine2d"
+        for key in (
+            "cce_1d",
+            "cce_2d_center",
+            "cce_2d_full_area",
+            "active_to_geometric_ratio",
+        ):
+            assert eng[key] == pytest.approx(ref[key], abs=1e-10), key
+        np.testing.assert_allclose(
+            eng["lateral_scan"]["cce_values"],
+            ref["lateral_scan"]["cce_values"],
+            atol=1e-10,
+        )
+        assert set(eng["lateral_scan"]) == set(ref["lateral_scan"])
+
+
+def test_cce_vs_bias_lateral_auto_uses_engine_and_falls_back():
+    """solver="auto": engine inside its box (V 5-80), devsim outside (here V = 2)."""
+    from etna.core.charge_collection_2d import cce_vs_bias_lateral
+    from etna.core.engine2d import lateral_cce_scan_2d
+
+    res = cce_vs_bias_lateral(
+        half_width_um=25.0, biases=[20.0, 2.0], n_points=3, solver="auto"
+    )
+    assert res["solvers"] == ["engine2d", "devsim"]
+    direct = lateral_cce_scan_2d(25.0, 20.0, n_lateral_points=3)
+    np.testing.assert_array_equal(res["scans"][0]["cce_values"], direct["cce_values"])
+    assert set(res["scans"][0]) == set(res["scans"][1])
+    with pytest.raises(ValueError):
+        cce_vs_bias_lateral(biases=[20.0], solver="gpu")
+
 
 # ---------------------------------------------------------------------------
 # Tests on the shared module-scoped 2D device. They stay LAST on purpose:
