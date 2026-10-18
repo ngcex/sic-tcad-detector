@@ -4,7 +4,7 @@ source: raw-C F4
 title: No serialization of devsim access; two concurrent facade calls (two Streamlit sessions or tabs) segfault the process or delete each other's devices
 severity: high
 category: bug
-status: fixed
+status: fixed  # 2026-10-18 sync: 5d20634 (file status already fixed)
 location:
   - etna/api/simulation.py:102, ~203, 725 (`reset_devsim_fully()` at entry of run_cv / run_field / run_dark_current)
   - etna/core/devsim_reset.py:102-107 (deletes every device in `devsim.get_device_list()`)

@@ -3,7 +3,7 @@ id: D-02
 title: DESIGN-1 quotes model leakage "~18 pA at -30 V" with no area; the code gives 141 pA (0.05 cm2) or 0.28 pA (API default area)
 severity: high
 category: docs
-status: open
+status: fixed  # 2026-10-18 sync: d7f4b24: see B-06 (PERF-02 section 7)
 location: deliverables/DESIGN-1-dosimetry-pn.md:103-106; etna/core/dark_current.py:13,20,68,117,187; etna/core/sic_material.py:68; notebooks/07_dark_current.ipynb (committed output); .planning/MILESTONES.md:35,61; .planning/PHYSICS_AUDIT_v5.md
 labels: [docs, foundry-deliverable, dark-current, calibration]
 source: raw-D F2

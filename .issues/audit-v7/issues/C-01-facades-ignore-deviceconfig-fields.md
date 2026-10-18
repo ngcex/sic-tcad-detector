@@ -4,7 +4,7 @@ source: raw-C F1
 title: Most simulation facades silently ignore DeviceConfig fields (T, N_A, substrate, doping_profile/N_D); results and CSV provenance are mislabeled
 severity: high
 category: bug
-status: fixed
+status: fixed  # 2026-10-18 sync: 8fd9602 + a0bd37c (file status already fixed)
 location:
   - etna/api/simulation.py:422-430 (run_cce)
   - etna/api/simulation.py:501-509 (run_radiation_damage)

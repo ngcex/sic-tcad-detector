@@ -3,7 +3,7 @@ id: B-03
 title: microdosimetric_sweep fails every configuration when N_D_junction / L_transition are not passed (create_sic_2d_device stores raw None)
 severity: high
 category: bug
-status: open
+status: fixed  # 2026-10-18 sync: 845a66b: create_sic_2d_device returns the resolved N_D_junction/N_D_bulk/L_transition, never None (device2d.py 'audit B-03')
 location: etna/core/optimization.py:116-144 (Mj-3 gate), 180-208 (broad except plus reset); etna/core/device2d.py:405-410 (resolves defaults), 462-464 (returns the raw args)
 labels: [microdosimetry, 2d, optimization, silent-failure, raw-F3]
 ---

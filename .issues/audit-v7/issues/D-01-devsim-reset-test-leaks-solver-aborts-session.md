@@ -3,7 +3,7 @@ id: D-01
 title: test_devsim_reset.py leaks a non-existent direct_solver into global devsim state and SIGABRTs the pytest session
 severity: high
 category: bug
-status: fixed
+status: fixed  # 2026-10-18 sync: 306b657 (file status already fixed)
 location: tests/test_devsim_reset.py:39-46 (test_idempotent_on_empty_state), tests/test_devsim_reset.py:75-82 (test_preserves_direct_solver); etna/core/devsim_reset.py:60-139
 labels: [tests, devsim, global-state, crash]
 source: raw-D F1
