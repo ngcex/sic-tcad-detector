@@ -62,6 +62,17 @@ cell), SRH-only bulk recombination, abrupt implant edges, no surface states, no
 trench-fill or passivation charge, no metal/dead layer between telescope stages.
 Where a structure's physics reduces to the planar problem in this model, the
 notebook says so instead of claiming a difference.
+
+**Stack pin (explicit, `etna.core.alternative_structures.ALT_STACK`).** The structure
+builders, and the planar baseline pinned to them, do NOT use the default device: they
+use the legacy geometry above with the PREVIOUS default's epi doping
+(`NPLUS_CALIBRATION`: graded 2.958e15 / 8.253e13 cm^-3, L 0.987 um). Reason: the
+builders have no n+ layer or graded n-/n+ transition, and the measured-C-V default doping
+(N_D_bulk 3.4e13) is only meaningful with them; on this geometry it reaches through to
+the contact-on-epi cathode at ~3 V and the guard-ring diode fails at 5.0 V on every
+solver tier (measured 2026-10-18). The comparison here is structure vs structure on one
+stack; moving the structures to the default stack needs n+/transition support in each
+builder.
 """
 )
 

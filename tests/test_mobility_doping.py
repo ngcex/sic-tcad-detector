@@ -48,9 +48,18 @@ def test_devsim_builders_follow_N_D_bulk(half_width_um):
 
 
 def test_engine_batch_follows_N_D_bulk():
+    """The batch doping (from which the engine's local mobility is computed, A-03)
+    follows each config's N_D_bulk. Until 2026-10-18 _engine_batch also returned a
+    scalar mobility doping passed to cce_sweep(N_D=...), which ignores it since A-03:
+    removed, so this test checks the doping the engine actually uses."""
     cfgs = [DeviceConfig(), DeviceConfig(N_D_bulk=N_D_BULK_ALT)]
-    _, _, nd_mob = sim._engine_batch([device_kwargs(c) for c in cfgs])
-    np.testing.assert_array_equal(nd_mob, [DEFAULT_STACK["N_D_bulk"], N_D_BULK_ALT])
+    pb, x = sim._engine_batch([device_kwargs(c) for c in cfgs])
+    # 8 um into the epi: the junction exponential is < 1e-5 of N_D_bulk and the graded
+    # n-/n+ transition (last 1.14 um of the 10 um epi) has not started
+    k = int(np.argmin(np.abs(x - (DEFAULT_STACK["substrate_thickness_cm"] + 8e-4))))
+    np.testing.assert_allclose(
+        pb.donors[:, k], [DEFAULT_STACK["N_D_bulk"], N_D_BULK_ALT], rtol=1e-4
+    )
 
 
 def test_engine_devsim_cce_parity_non_default_N_D_bulk():
@@ -126,7 +135,8 @@ def test_engine_scalar_mobility_still_accepted_and_shape_checked():
 
 def test_local_mobility_2d_devsim_and_engine2d():
     """2D builder and engine2d use the same local mobility (per row; vertical edges
-    averaged). The 2D CCE parity tests (engine2d vs devsim, 1e-10) cover the transport."""
+    averaged). The 2D CCE parity tests (engine2d vs devsim, 1e-10) cover the transport.
+    """
     from etna.core.device import acceptor_total_scale, edge_mobility, local_mobility
     from etna.core.engine2d.device import Device2D
     from etna.core.engine2d.grid import grid_from_devsim
@@ -140,7 +150,9 @@ def test_local_mobility_2d_devsim_and_engine2d():
     finally:
         devsim.delete_device(device=d)
     scale = acceptor_total_scale(cfg.N_A, info["N_A_ionized"])
-    np.testing.assert_allclose(mu, local_mobility(don, acc, scale, cfg.T, "electron"), rtol=1e-13)
+    np.testing.assert_allclose(
+        mu, local_mobility(don, acc, scale, cfg.T, "electron"), rtol=1e-13
+    )
     kw = device_kwargs(cfg)
     kw.pop("half_width_um", None)
     grid, ginfo = grid_from_devsim(half_width_um=20.0, **kw)

@@ -916,8 +916,25 @@ def plot_parametric_bias(
     return fig
 
 
+FIGURE_DIR_ENV = "ETNA_FIGURE_DIR"
+
+
+def figure_dir():
+    """Directory save_figure writes to: ``$ETNA_FIGURE_DIR`` if set, else ``./figures``
+    relative to the current working directory (read at call time).
+
+    Before 2026-10-18 it was ``etna/figures`` next to the package, i.e. inside
+    site-packages for an installed etna.
+    """
+    return os.path.abspath(os.environ.get(FIGURE_DIR_ENV) or "figures")
+
+
 def save_figure(fig, filename, dpi=300):
-    """Save figure to figures/ directory in both PNG and PDF formats.
+    """Save figure in both PNG and PDF formats into ``figure_dir()``.
+
+    ``figure_dir()`` is ``$ETNA_FIGURE_DIR`` or ``./figures`` relative to the current
+    working directory (created if missing; e.g. ``notebooks/figures`` for a notebook
+    run from ``notebooks/``).
 
     Parameters
     ----------
@@ -927,10 +944,18 @@ def save_figure(fig, filename, dpi=300):
         Filename without extension (e.g., "efield_profile").
     dpi : int
         Resolution for PNG.
+
+    Returns
+    -------
+    list of str
+        The written paths (PNG, PDF).
     """
-    fig_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "figures")
+    fig_dir = figure_dir()
     os.makedirs(fig_dir, exist_ok=True)
 
+    paths = []
     for ext in ("png", "pdf"):
         path = os.path.join(fig_dir, f"{filename}.{ext}")
+        paths.append(path)
         fig.savefig(path, dpi=dpi, bbox_inches="tight")
+    return paths

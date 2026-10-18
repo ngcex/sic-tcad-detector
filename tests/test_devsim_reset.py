@@ -1,7 +1,7 @@
-"""Tests for src/devsim_reset.py — the single-responsibility full reset utility.
+"""Tests for etna/core/devsim_reset.py — the single-responsibility full reset utility.
 
 Covers PITFALLS P03/P30 (cylindrical-axis globals leak from
-src/alternative_structures.py) and P20 (enumerate devices, never hardcode).
+etna/core/alternative_structures.py) and P20 (enumerate devices, never hardcode).
 
 The pure-constant tests (import + _CYLINDRICAL_GLOBALS contents) run without
 devsim. The behavioural tests (device deletion, cylindrical-state restore,
@@ -100,6 +100,38 @@ class TestResetClearsState:
         devsim.set_parameter(name="direct_solver", value="mkl_pardiso")
         reset_devsim_fully(preserve_solver=True)
         assert devsim.get_parameter(name="direct_solver") == "mkl_pardiso"
+
+
+def test_reset_undoes_every_cylindrical_global_without_the_removed_step():
+    """devsim.reset_devsim() alone (the former "restore Cartesian defaults" step was
+    dead and is removed) restores the five assembly models to devsim's own Cartesian
+    values == _CARTESIAN_DEFAULTS and removes raxis_zero / raxis_variable."""
+    devsim = pytest.importorskip("devsim")
+    from etna.core.devsim_reset import (
+        _CARTESIAN_DEFAULTS,
+        _CYLINDRICAL_GLOBALS,
+        reset_devsim_fully,
+    )
+
+    # exactly what alternative_structures._activate_cylindrical_coords sets
+    cyl = {
+        "raxis_zero": 0.0,
+        "raxis_variable": "x",
+        "node_volume_model": "CylindricalNodeVolume",
+        "edge_couple_model": "CylindricalEdgeCouple",
+        "element_edge_couple_model": "ElementCylindricalEdgeCouple",
+        "element_node0_volume_model": "ElementCylindricalNodeVolume@en0",
+        "element_node1_volume_model": "ElementCylindricalNodeVolume@en1",
+    }
+    assert set(cyl) == set(_CYLINDRICAL_GLOBALS)
+    for name, value in cyl.items():
+        devsim.set_parameter(name=name, value=value)
+    reset_devsim_fully()
+    for name, value in _CARTESIAN_DEFAULTS.items():
+        assert devsim.get_parameter(name=name) == value
+    for name in ("raxis_zero", "raxis_variable"):
+        with pytest.raises(devsim.error):
+            devsim.get_parameter(name=name)
 
 
 def test_solve_still_works_after_reset_tests():

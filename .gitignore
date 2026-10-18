@@ -18,7 +18,9 @@ papers/
 .playwright-mcp/
 scratchpad/
 
-# save_figure() output written next to the package by notebooks 02-05 (not package data)
+# save_figure() output of notebooks 02-05 run from notebooks/ (./figures of the CWD since
+# 2026-10-18; etna/figures/ = the old location next to the package)
+notebooks/figures/
 etna/figures/
 
 # lab/solver2d devsim reference dumps: regenerated on demand (lab/solver2d/README.md)
