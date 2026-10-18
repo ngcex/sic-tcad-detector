@@ -101,8 +101,11 @@ the Schottky-vs-pn built-in-voltage difference (abrupt estimate 4.24 um with V_b
 4.33 um with 2.9 V): with V_bi matched the solver's absolute scale agrees to < 1 %. It places no
 constraint on this device's N_D_bulk (30x the doping). The only dataset that tests THIS device is
 the measured C-V of Photons Fig. 4b (digitised in lab/cv_gap/): it puts the depletion-width knee
-at -1...-4 V (W(-2 V) = 7.18 um, W(-5 V) = 9.27 um) whereas the calibrated model has W(-2 V) =
-2.99 um and W(-5 V) = 5.93 um; see .issues/perf/PERF-05-default-stack-followups.md.
+at -1...-4 V (W(-2 V) = 7.18 um, W(-5 V) = 9.27 um) whereas the previous 3-point-calibrated
+model (now etna.nplus_calibrated_config()) had W(-2 V) = 2.99 um and W(-5 V) = 5.93 um. Since
+2026-10-18 the default doping is FITTED on that digitised curve (W(-2 V) 6.94, W(-5 V) 9.25 um;
+plateau rms 0.013 um, knee rms 0.24 um), so it is a calibration input of the default, no longer
+an independent test; see .issues/perf/PERF-05-default-stack-followups.md.
 
 ---
 
@@ -137,7 +140,8 @@ from this document.
   "100% CCE above 20 V for alpha particles" in unrelated 4H-SiC detectors —
   not a tabulated CCE-vs-bias curve from a device with matching geometry/
   doping. This is _consistent_ with ETNA's simulated full-depletion onset
-  (~8–15 V for the default device — see the CCE bias-range UI enhancement
+  (~8–15 V for the default device of that time; ~3 V on the measured-C-V default since
+  2026-10-18 — see the CCE bias-range UI enhancement
   added after the v5.0 audit) but is a qualitative sanity check, not a
   matched plot-to-plot validation. Revisit if a specific tabulated CCE(V)
   dataset with stated device geometry becomes available.
