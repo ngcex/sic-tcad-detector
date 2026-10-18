@@ -1,15 +1,15 @@
-"""Generate the C-V comparison figure: ETNA simulation (configured to Bruzzi &
-Verroi 2023 device parameters) vs the paper's reported W(V) endpoints and Vbi.
+"""Generate the C-V solver-scale check: ETNA (uniform p-n, configured to the Bruzzi &
+Verroi 2023 Schottky diode's epi) vs the paper's reported W(V) endpoints.
 
-See .planning/VALIDATION_LITERATURE.md for the full writeup and caveats.
-Panel 1 (W vs bias) is the genuine independent check: high-bias agreement
-(+3.1 % at -40 V) confirms correct absolute C-V scale for an independently-fabricated
-device; the low-bias offset is an expected p-n vs Schottky Vbi difference,
-not a discrepancy. Panel 2 (1/C^2 slope) is a solver self-consistency
-round-trip -- N_D was a simulation INPUT (set to match the paper's device),
-not something extracted from Bruzzi's raw data -- so it does NOT independently
-validate against the paper; it confirms the DD solver reproduces the analytic
-Mott-Schottky relation, which it should by construction.
+Framing (corrected 2026-10-18, see .planning/VALIDATION_LITERATURE.md): this is a
+SOLVER-SCALE check on a DIFFERENT device (a Schottky diode on another wafer, 30x lower
+doping than the ETNA default), NOT a validation of the ETNA dosimeter. The +3.1 % at
+-40 V is the Schottky (V_bi = 1.2 V) vs p-n (V_bi ~ 2.9 V) built-in-voltage difference:
+reading the simulation at the same total band bending (V_R + V_bi), i.e. with V_bi
+matched, the absolute scale agrees to < 1 %. Panel 1 overlays the abrupt-junction
+W = sqrt(2 eps (V_bi + V_R) / (q N_D)) for both V_bi values to make that explicit.
+Panel 2 (1/C^2 slope) is a solver self-consistency round-trip -- N_D was a simulation
+INPUT, not extracted from Bruzzi's data -- so it does not validate against the paper.
 """
 
 from pathlib import Path
@@ -34,40 +34,79 @@ eps_r = 9.7
 W_um = eps_r * eps0 * cfg.area_cm2 / result.y * 1e4
 V_reverse = -result.x  # plot as positive reverse bias, matching paper convention
 
+q = 1.602e-19
+eps = eps_r * eps0
+V_BI_SCHOTTKY = 1.2  # V, held in Bruzzi & Verroi's fit
+W_PAPER = {0.0: 0.7, 40.0: 4.2}  # um, reported endpoints
+
+# p-n built-in voltage of the simulated diode from the Mott-Schottky intercept
+inv_C2 = 1.0 / result.y**2
+mask = result.x <= -5.0
+slope, intercept = np.polyfit(result.x[mask], inv_C2[mask], 1)
+N_D_recovered = -2.0 / (q * eps * cfg.area_cm2**2 * slope)
+V_bi_pn = -intercept / slope  # 1/C^2 = 0 at V = +V_bi (forward)
+
+
+def w_abrupt_um(v_r, v_bi):
+    return np.sqrt(2.0 * eps * (v_bi + v_r) / (q * cfg.N_D)) * 1e4
+
+
+# V_bi-matched read-out: same total band bending V_R + V_bi as the paper at 40 V
+V_R_matched = 40.0 + V_BI_SCHOTTKY - V_bi_pn
+order = np.argsort(V_reverse)
+W_matched = float(np.interp(V_R_matched, V_reverse[order], W_um[order]))
+W_at_40 = float(W_um[np.argmin(np.abs(result.x - (-40.0)))])
+
 fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
 
 # Panel 1: W(V)
 ax = axes[0]
 ax.plot(
-    V_reverse, W_um, "b-", lw=2, label="ETNA simulation\n(p-n junction, same $N_D$)"
+    V_reverse, W_um, "b-", lw=2, label="ETNA DD solver\n(uniform p-n, same epi $N_D$)"
+)
+v_grid = np.linspace(0.0, 45.0, 200)
+ax.plot(
+    v_grid,
+    w_abrupt_um(v_grid, V_bi_pn),
+    "b:",
+    lw=1.2,
+    label=f"abrupt analytic, $V_{{bi}}$={V_bi_pn:.2f} V (p-n)",
 )
 ax.plot(
-    [0, 40],
-    [0.7, 4.2],
+    v_grid,
+    w_abrupt_um(v_grid, V_BI_SCHOTTKY),
+    "r:",
+    lw=1.2,
+    label=f"abrupt analytic, $V_{{bi}}$={V_BI_SCHOTTKY:.1f} V (Schottky)",
+)
+ax.plot(
+    list(W_PAPER.keys()),
+    list(W_PAPER.values()),
     "ro",
     ms=10,
     mfc="none",
     mew=2,
-    label="Bruzzi & Verroi 2023\n(Schottky, reported endpoints)",
+    label="Bruzzi & Verroi 2023\n(Schottky, other wafer; reported endpoints)",
 )
 ax.set_xlabel("Reverse bias |V| (V)")
 ax.set_ylabel("Depletion width W (µm)")
 ax.set_xlim(0, 45)
-ax.set_title("Depletion width vs bias")
-ax.legend(fontsize=8, loc="lower right")
+ax.set_title("Depletion width vs bias (solver-scale check)")
+ax.legend(fontsize=7, loc="lower right")
 ax.grid(alpha=0.3)
 ax.annotate(
-    "Junction-type offset\n(V$_{bi}$ differs: p-n vs Schottky)",
-    xy=(0, 1.127),
-    xytext=(8, 2.3),
+    "Offset = $V_{bi}$ (p-n vs Schottky)",
+    xy=(0, W_um[np.argmin(np.abs(result.x))]),
+    xytext=(14, 1.4),
     fontsize=8,
     color="darkred",
     arrowprops=dict(arrowstyle="->", color="darkred", alpha=0.6),
 )
 ax.annotate(
-    "Converges at high |V|\n(V$_R \\gg V_{bi}$ for both)",
-    xy=(40, 4.330),
-    xytext=(15, 4.6),
+    f"-40 V: {W_at_40:.3f} vs 4.2 um ({100 * (W_at_40 / 4.2 - 1):+.1f} %)\n"
+    f"$V_{{bi}}$ matched: {W_matched:.3f} um ({100 * (W_matched / 4.2 - 1):+.1f} %)",
+    xy=(40, W_at_40),
+    xytext=(12, 4.7),
     fontsize=8,
     color="darkgreen",
     arrowprops=dict(arrowstyle="->", color="darkgreen", alpha=0.6),
@@ -75,12 +114,7 @@ ax.annotate(
 
 # Panel 2: 1/C^2 vs V (Mott-Schottky) -- the junction-type-independent check
 ax = axes[1]
-inv_C2 = 1.0 / result.y**2
 ax.plot(V_reverse, inv_C2, "b-", lw=2, label="ETNA simulation")
-mask = result.x <= -5.0
-slope, intercept = np.polyfit(result.x[mask], inv_C2[mask], 1)
-q = 1.602e-19
-N_D_recovered = -2.0 / (q * eps_r * eps0 * cfg.area_cm2**2 * slope)
 ax.plot(
     V_reverse[mask],
     np.polyval([slope, intercept], result.x[mask]),
@@ -96,7 +130,8 @@ ax.legend(fontsize=7.5, loc="upper left", framealpha=0.9)
 ax.grid(alpha=0.3)
 
 plt.suptitle(
-    "ETNA C-V validation vs Bruzzi & Verroi 2023 (MDPI Materials 16:3643, open access)",
+    "Solver-scale C-V check on a different device (Schottky diode, Bruzzi & Verroi 2023,"
+    " MDPI Materials 16:3643) -- V_bi matched; not a validation of the ETNA dosimeter",
     fontsize=10,
     y=1.02,
 )
@@ -109,8 +144,14 @@ print("Saved plot.")
 print(
     f"W(0V) sim={W_um[np.argmin(np.abs(result.x-0.0))]:.3f} um, paper endpoint=0.7 um"
 )
+print(f"W(-40V) sim={W_at_40:.3f} um, paper endpoint=4.2 um ({100 * (W_at_40 / 4.2 - 1):+.1f} %)")
 print(
-    f"W(-40V) sim={W_um[np.argmin(np.abs(result.x-(-40.0)))]:.3f} um, paper endpoint=4.2 um"
+    f"V_bi(p-n, 1/C^2 intercept)={V_bi_pn:.2f} V; V_bi-matched W(V_R={V_R_matched:.2f} V)"
+    f"={W_matched:.3f} um ({100 * (W_matched / 4.2 - 1):+.1f} %)"
+)
+print(
+    f"abrupt analytic W(40 V): V_bi={V_BI_SCHOTTKY} V -> {w_abrupt_um(40.0, V_BI_SCHOTTKY):.3f} um,"
+    f" V_bi={V_bi_pn:.2f} V -> {w_abrupt_um(40.0, V_bi_pn):.3f} um"
 )
 print(
     f"N_D recovered={N_D_recovered:.3e}, input={cfg.N_D:.3e}, agreement={100*(1-abs(N_D_recovered-cfg.N_D)/cfg.N_D):.1f}%"
