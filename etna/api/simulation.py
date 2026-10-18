@@ -76,15 +76,25 @@ _ENGINE_MAX_JUMP_V_300K = 100.0
 
 
 def validated_domain_reason(config: DeviceConfig) -> "str | None":
-    """Why ``config`` lies outside the validated 1D domain (None = inside).
+    """Why ``config`` lies outside the validated domain (None = inside).
 
-    The validated domain is the ``_ENGINE_BOX`` parameter box in which the
-    batched engine was cross-checked against the devsim reference. It concerns
-    the device parameters only (bias limits are checked per call). Results for
-    devices outside it come from devsim alone and have no engine cross-check.
+    1D: the ``_ENGINE_BOX`` parameter box in which the batched engine was
+    cross-checked against the devsim reference. 2D (``half_width_um`` set): the
+    2D engine's dark-state envelope (``ENGINE2D_DARK_BOX`` / n+ / transition
+    boxes; epi 5-30 um since 2026-10-18), checked at its lowest parity bias. It
+    concerns the device parameters only (bias limits are checked per call).
+    Results for devices outside it come from devsim alone and have no engine
+    cross-check.
     """
     if config.half_width_um is not None:
-        return "2D device"
+        from etna.core.engine2d import ENGINE2D_DARK_BOX, engine2d_dark_unsupported_reason
+
+        reason = engine2d_dark_unsupported_reason(
+            config.half_width_um,
+            ENGINE2D_DARK_BOX["V_cathode"][0],
+            **device_kwargs(config),
+        )
+        return None if reason is None else f"2D engine: {reason}"
     if config.doping_profile not in ("graded", "uniform"):
         return f"doping_profile={config.doping_profile!r}"
     checks = {
@@ -119,6 +129,8 @@ def validated_domain_reason(config: DeviceConfig) -> "str | None":
 
 def _engine_unsupported_reason(config: DeviceConfig, bias_array) -> "str | None":
     """Why the batched engine cannot serve this call (None = it can)."""
+    if config.half_width_um is not None:
+        return "2D device (the batched engine is 1D)"
     reason = validated_domain_reason(config)
     if reason is not None:
         return reason

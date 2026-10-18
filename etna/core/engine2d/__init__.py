@@ -1,7 +1,7 @@
 """numba float64 2D drift-diffusion engine for laterally uniform 4H-SiC p+/n- diodes.
 
 Promoted from lab/solver2d (PERF-03). Serves ``microdosimetric_sweep(solver="auto")``
-only; see ``scan.lateral_cce_scan_2d``.
+(``scan.lateral_cce_scan_2d``) and the 2D ``run_field`` dark state (``scan.dark_state_2d``).
 """
 
 from .scan import (
@@ -9,6 +9,7 @@ from .scan import (
     FIELD_NAN_MIN,
     ENGINE2D_BOX,
     ENGINE2D_BUFFER_BOX,
+    ENGINE2D_DARK_BOX,
     ENGINE2D_NPLUS_BOX,
     Engine2DFallback,
     Engine2DOutsideValidity,
@@ -24,6 +25,7 @@ __all__ = [
     "FIELD_NAN_MIN",
     "ENGINE2D_BOX",
     "ENGINE2D_BUFFER_BOX",
+    "ENGINE2D_DARK_BOX",
     "ENGINE2D_NPLUS_BOX",
     "Engine2DFallback",
     "Engine2DOutsideValidity",

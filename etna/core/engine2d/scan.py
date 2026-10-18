@@ -55,10 +55,11 @@ from .grid import NotLaterallyUniform, grid_from_devsim
 # ranges as ENGINE2D_DARK_BOX. A None keyword means create_sic_2d_device's default.
 ENGINE2D_BOX = {
     "half_width_um": (25.0, 150.0),
-    "epi_thickness_cm": (
-        5e-4,
-        20e-4,
-    ),  # parity grid: lab/solver2d/notes/LOG.md "box widening"
+    # parity grid: lab/solver2d/notes/LOG.md "box widening"; 20 -> 30 um (2026-10-18):
+    # dark psi <= 3.1e-13 V and lateral CCE <= 3.3e-14 vs devsim at 22/25/30 um, hw 25-150,
+    # 20-100 V, default stack (with/without the graded transition), N_D_bulk 2e13 and the
+    # legacy no-n+ stack (lab/engine_box/bench/epi30_parity2d.py, lab/engine_box/notes/LOG.md)
+    "epi_thickness_cm": (5e-4, 30e-4),
     # N_D_bulk lower bound 5e13 -> 2e13 (2026-10-18, measured-C-V preset 3.4e13):
     # lab/buffer_profile/bench/buffer_parity2d.py, dark psi + lateral CCE vs devsim with
     # the n+ layer, with and without the graded transition (lab/buffer_profile/notes/LOG.md).
@@ -365,7 +366,7 @@ def lateral_cce_scan_2d(
 # graded box. Parity vs devsim run_field: tests/test_api_field_engine.py.
 ENGINE2D_DARK_BOX = {
     "half_width_um": (25.0, 150.0),
-    "epi_thickness_cm": (5e-4, 20e-4),
+    "epi_thickness_cm": (5e-4, 30e-4),  # 30 um: see ENGINE2D_BOX
     "N_D_bulk": (2e13, 5e14),  # lower bound: see ENGINE2D_BOX
     "N_D_junction": (1e15, 1e16),
     "L_transition": (0.3e-4, 3e-4),
