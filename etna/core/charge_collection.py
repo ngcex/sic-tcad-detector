@@ -75,7 +75,9 @@ def _hecht_mobility(T, carrier, params, N_D_mobility):
 
     Before 2026-10-18 hecht_cce used the undoped limit mu_max(T) (950 / 125 cm2/Vs at
     300 K; a dead mobility_caughey_thomas_T call was overwritten by it) while the DD
-    path used the doped value.
+    path used the doped value. The 1D DD transport is now LOCAL (per-node mobility,
+    etna.core.device.add_local_mobility_models); this one-number model keeps the bulk
+    value of the sensitive volume.
     """
     nd = mobility_doping(None, "graded", None) if N_D_mobility is None else N_D_mobility
     return mobility_caughey_thomas_T(nd, T, carrier, params)
