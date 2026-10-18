@@ -451,6 +451,13 @@ def extract_dark_current_components(device_info, area=AREA_DOSIMETER_CM2):
     differ from the terminal J_total by the carriers leaving through the "wrong"
     ohmic contact (~0.3 % at -60 V, ~0.9 % at -10 V on the default device).
 
+    Sign: the components use the sign of J_total (the cathode current, positive
+    under reverse bias), i.e. J = -q * integral(U) with devsim's U < 0 for net
+    generation. Net generation gives a positive component, net recombination a
+    negative one, and J_SRH + J_TAT + J_SRV ~ J_total (audit-v7 D-03: they used to
+    carry devsim's recombination sign, so the TAT term was negative and the sum
+    was ~ -J_total).
+
     Parameters
     ----------
     device_info : dict
@@ -483,8 +490,9 @@ def extract_dark_current_components(device_info, area=AREA_DOSIMETER_CM2):
         U_TAT = np.array(
             devsim.get_node_model_values(device=device, region=region, name="U_TAT")
         )
-        J_SRH = q * np.trapezoid(U_SRH_only, x)
-        J_TAT_bulk = q * np.trapezoid(U_TAT - U_SRH_only, x)
+        # contact-current sign: generation (U < 0) -> positive reverse current
+        J_SRH = -q * np.trapezoid(U_SRH_only, x)
+        J_TAT_bulk = -q * np.trapezoid(U_TAT - U_SRH_only, x)
     else:
         J_SRH = J_total
         J_TAT_bulk = 0.0
@@ -510,7 +518,8 @@ def extract_dark_current_components(device_info, area=AREA_DOSIMETER_CM2):
 
         ni2 = n_i**2
         if S_n > 0 and S_p > 0:
-            J_SRV = q * (n_c * p_c - ni2) / ((n_c + n_i) / S_p + (p_c + n_i) / S_n)
+            # same sign convention: surface generation (n p < n_i^2) is positive
+            J_SRV = -q * (n_c * p_c - ni2) / ((n_c + n_i) / S_p + (p_c + n_i) / S_n)
 
     return {
         "J_total": J_total,
