@@ -56,6 +56,8 @@ V_R_matched = 40.0 + V_BI_SCHOTTKY - V_bi_pn
 order = np.argsort(V_reverse)
 W_matched = float(np.interp(V_R_matched, V_reverse[order], W_um[order]))
 W_at_40 = float(W_um[np.argmin(np.abs(result.x - (-40.0)))])
+# solver vs its own abrupt analytic at the same V_bi: the solver-scale number proper
+solver_vs_abrupt = 100 * (W_at_40 / w_abrupt_um(40.0, V_bi_pn) - 1)
 
 fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
 
@@ -91,22 +93,24 @@ ax.plot(
 ax.set_xlabel("Reverse bias |V| (V)")
 ax.set_ylabel("Depletion width W (µm)")
 ax.set_xlim(0, 45)
+ax.set_ylim(0, 5.9)
 ax.set_title("Depletion width vs bias (solver-scale check)")
 ax.legend(fontsize=7, loc="lower right")
 ax.grid(alpha=0.3)
 ax.annotate(
     "Offset = $V_{bi}$ (p-n vs Schottky)",
     xy=(0, W_um[np.argmin(np.abs(result.x))]),
-    xytext=(14, 1.4),
+    xytext=(1.5, 3.4),
     fontsize=8,
     color="darkred",
     arrowprops=dict(arrowstyle="->", color="darkred", alpha=0.6),
 )
 ax.annotate(
     f"-40 V: {W_at_40:.3f} vs 4.2 um ({100 * (W_at_40 / 4.2 - 1):+.1f} %)\n"
-    f"$V_{{bi}}$ matched: {W_matched:.3f} um ({100 * (W_matched / 4.2 - 1):+.1f} %)",
+    f"$V_{{bi}}$ matched: {W_matched:.3f} um ({100 * (W_matched / 4.2 - 1):+.1f} %,\n"
+    f"  paper W quoted to 2 s.f.); solver vs abrupt at same $V_{{bi}}$: {solver_vs_abrupt:+.1f} %",
     xy=(40, W_at_40),
-    xytext=(12, 4.7),
+    xytext=(1.5, 5.0),
     fontsize=8,
     color="darkgreen",
     arrowprops=dict(arrowstyle="->", color="darkgreen", alpha=0.6),
@@ -147,8 +151,9 @@ print(
 print(f"W(-40V) sim={W_at_40:.3f} um, paper endpoint=4.2 um ({100 * (W_at_40 / 4.2 - 1):+.1f} %)")
 print(
     f"V_bi(p-n, 1/C^2 intercept)={V_bi_pn:.2f} V; V_bi-matched W(V_R={V_R_matched:.2f} V)"
-    f"={W_matched:.3f} um ({100 * (W_matched / 4.2 - 1):+.1f} %)"
+    f"={W_matched:.3f} um ({100 * (W_matched / 4.2 - 1):+.1f} %; paper W quoted to 2 s.f.)"
 )
+print(f"solver vs abrupt analytic at the same V_bi, -40 V: {solver_vs_abrupt:+.2f} %")
 print(
     f"abrupt analytic W(40 V): V_bi={V_BI_SCHOTTKY} V -> {w_abrupt_um(40.0, V_BI_SCHOTTKY):.3f} um,"
     f" V_bi={V_bi_pn:.2f} V -> {w_abrupt_um(40.0, V_bi_pn):.3f} um"
