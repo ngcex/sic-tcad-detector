@@ -1807,8 +1807,10 @@ def _legacy_dark_validity(config: DeviceConfig, voltages) -> dict:
     The legacy dark sweep reaches -100 V since the 2 V ramp (WP-B, LOG.md "Legacy
     dark-current wall"), far past the legacy reach-through (17.0 V on the mesh rule
     of _reach_through_V for the legacy default). The reach-through is the C-V/CCE
-    one (dark Poisson on the batched engine, refined to 0.05 V); None if the engine
-    cannot give it (then every point is flagged unknown: ``past_reach_through`` None).
+    one (dark Poisson on the batched engine over a fixed 0..-max(100, |V|) lattice,
+    refined to 0.05 V). Three states: reached (``past_reach_through`` = |V| > it);
+    not reached within the lattice (reach_through_V None, every point valid); engine
+    unavailable (``past_reach_through`` None: unknown).
     With an n+ layer there is no contact on the epi: empty validity record.
     """
     if config.nplus_thickness_um is not None:
@@ -1818,11 +1820,15 @@ def _legacy_dark_validity(config: DeviceConfig, voltages) -> dict:
             "validity_note": None,
         }
     v = np.asarray(voltages, dtype=float)
+    # fixed lattice (independent of the caller's grid, so a short sweep still knows
+    # where reach-through lies); refined to 0.05 V like run_cv / run_cce
+    v_max = max(100.0, float(np.max(np.abs(v))) if v.size else 0.0)
+    grid = np.linspace(0.0, -v_max, 201)
+    state = "unknown"
     rt = None
     try:
         kws = [device_kwargs(config)]
         pb, _ = _engine_batch(kws)
-        grid = -np.abs(v)
         dark = reverse_sweep(
             pb,
             grid,
@@ -1834,12 +1840,21 @@ def _legacy_dark_validity(config: DeviceConfig, voltages) -> dict:
             rt = _refine_reach_through(
                 config, _reach_through_V(dark.W[:, 0], grid, config), grid
             )
+            state = "reached" if rt is not None else "not_reached"
     except Exception as e:  # pragma: no cover - defensive (outside the engine box)
         logger.info("legacy dark sweep: reach-through not available (%s)", e)
-    past = None if rt is None else np.abs(v) > rt + 1e-9
-    note = LEGACY_DARK_VALIDITY_NOTE
-    if rt is not None:
-        note = f"reach-through {rt:g} V; " + note
+    if state == "reached":
+        past = np.abs(v) > rt + 1e-9
+        note = f"reach-through {rt:g} V; " + LEGACY_DARK_VALIDITY_NOTE
+    elif state == "not_reached":
+        past = np.zeros(v.shape, dtype=bool)
+        note = (
+            f"legacy model: no reach-through within 0..-{v_max:g} V (dark Poisson on "
+            "the batched engine): every point is inside the depletion-edge validity."
+        )
+    else:
+        past = None
+        note = "reach-through unknown (engine unavailable); " + LEGACY_DARK_VALIDITY_NOTE
     return {"reach_through_V": rt, "past_reach_through": past, "validity_note": note}
 
 
