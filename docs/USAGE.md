@@ -784,25 +784,30 @@ run is whatever `DeviceConfig()` / the core defaults are now, unless they pin a 
 | 02_electrical_characterization | C-V, Mott-Schottky, doping profile, I-V        |                                                                           |
 | 03_charge_collection           | CCE vs bias, generation profiles, Hecht        | generator `scripts/create_notebook_03.py`                                 |
 | 04_flash_recombination         | FLASH Auger/SRH CCE vs dose rate               | sensitivity bound only                                                    |
-| 05_dark_current_vs_fluence     | dark current vs proton fluence                 | ~146 s (TAT on devsim; PERF-06)                                           |
-| 05b_flash_parametric_studies   | FLASH parametric sweeps                        |                                                                           |
+| 05_dark_current_vs_fluence     | dark current vs proton fluence                 | TAT on devsim                                                             |
+| 05b_flash_parametric_studies   | FLASH parametric sweeps                        | runs its 60-condition sweep when the untracked cache is missing          |
 | 06_temperature_dependence      | material properties and CCE vs T               |                                                                           |
 | 07_dark_current                | TAT / SRH / surface terms                      |                                                                           |
 | 08_transient_flash             | FLASH pulse transients                         | generator `create_notebook_08.py`                                         |
 | 09_radiation_damage            | defect introduction, lifetimes, NIEL scaling   | kappa placeholders                                                        |
-| 10_cce_vs_fluence              | CCE degradation vs fluence                     | ~14 s (PERF-06)                                                           |
+| 10_cce_vs_fluence              | CCE degradation vs fluence                     |                                                                           |
 | 11_dark_current_cv_evolution   | leakage and C-V vs fluence                     |                                                                           |
-| 12_multi_defect_comparison     | 3-defect vs single-defect models               | ~41 s (PERF-06)                                                           |
-| 13_parametric_optimization     | radiation-hardness sweep                       | the `epi_um` column-key bug of PERF-06 is fixed; run time not re-measured |
+| 12_multi_defect_comparison     | 3-defect vs single-defect models               |                                                                           |
+| 13_parametric_optimization     | radiation-hardness sweep                       |                                                                           |
 | 14_validation                  | comparison with published irradiation data     |                                                                           |
 | 15_2d_electrostatics_cce       | 2D field and CCE of the microdosimeter         | generator `create_notebook_15.py`                                         |
-| 16_single_particle_cce         | single-particle 2D transient CCE, CCE(LET)     | generator `create_notebook_16.py`                                         |
+| 16_single_particle_cce         | single-particle 2D transient CCE, CCE(LET)     | generator `create_notebook_16.py`; rebuilds the CCE(LET) tables (~1 h)    |
 | 17_mc_coupling                 | MC energy deposition to pulse height           | generator executes it in place                                            |
 | 18_microdosimetric_spectra     | lineal energy spectra, y_F / y_D               | kappa placeholders; generator executes it                                 |
-| 19_alternative_structures      | mesa, 3D electrode, ΔE-E, guard ring           | ~200 s; pins the previous-default doping on the legacy geometry (PERF-06) |
+| 19_alternative_structures      | mesa, 3D electrode, ΔE-E, guard ring           | pins the previous-default doping on the legacy geometry (PERF-06)         |
 | 20_feasibility_report          | microdosimeter design study                    | outside-validity rows reported                                            |
 
-Run times not listed were not measured for this guide. The test suite and CI do not
+Run times measured on 2026-10-18 (Apple M4, executed into a scratch copy, the machine shared
+with other jobs): 01 3 s, 02 17 s, 03 15 s, 04 5 s, 05 57 s, 05b 76 s (full sweep), 06 63 s,
+07 38 s, 08 21 s, 09 4 s, 10 11 s, 11 34 s, 12 27 s, 13 17 s, 14 18 s, 15 548 s, 16 4252 s (both CCE(LET) tables),
+17 4 s, 18 3 s, 19 209 s, 20 137 s. Notebook 16 writes `data/cce_let_table_*.json` and
+notebook 17 rewrites `data/synthetic_mc_events.csv` (bit-identical, seeded) relative to the repo root (they `chdir('..')`):
+run them from a scratch copy unless you mean to regenerate those tracked files. The test suite and CI do not
 execute notebooks (only the no-outputs and generator checks run);
 `scripts/regression_sweep_v3_notebooks.py` is a historical manual tool for the v3
 deliverables.

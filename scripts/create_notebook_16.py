@@ -255,7 +255,7 @@ ax.annotate(f"$I_{{peak}}$ = {pulse['I_peak']:.2e} A/cm",
 
 # Mark collection time
 ax.axvline(pulse['t_collection'] * 1e9, color='green', linestyle='--', alpha=0.6,
-           label=f"$t_{{95\\%}}$ = {pulse['t_collection']*1e9:.1f} ns")
+           label=rf"$t_{{95\\%}}$ = {pulse['t_collection']*1e9:.1f} ns")
 
 ax.set_xlabel('Time (ns)')
 ax.set_ylabel('Signal Current (A/cm)')
