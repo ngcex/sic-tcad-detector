@@ -25,6 +25,7 @@ dev = [
     "pytest-xdist>=3.8.0",
 ]
 viz = [
+    "gdstk>=1.0.1",
     "manim>=0.22.0",
 ]
 
