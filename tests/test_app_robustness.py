@@ -453,9 +453,19 @@ def test_stale_warning_when_page_inputs_change(monkeypatch):
 
 
 def test_devsim_only_pages_do_not_claim_cross_check():
+    # the damage sweep reports the solver that ran each point: on the default stack the
+    # batched engine (cross-checked against devsim in tests/test_fluence_engine.py) ...
     res = sim.run_radiation_damage(
         DeviceConfig(), fluences=np.array([1e12]), V_bias=-20.0, proton_energy_MeV=62
     )
+    assert res.metadata["solver"] == "batched"
+    assert res.metadata["solver_per_point"] == ["batched"]
+    # ... and devsim outside the engine's box (450 K), labelled as not cross-checked
+    res = sim.run_radiation_damage(
+        DeviceConfig(T=450.0), fluences=np.array([1e12]), V_bias=-20.0,
+        proton_energy_MeV=62,
+    )
+    assert res.metadata["solver"] == "devsim"
     badge = solver_badge_text(res.metadata)
     assert "devsim result; not cross-checked" in badge
     assert "cross-check domain" not in badge

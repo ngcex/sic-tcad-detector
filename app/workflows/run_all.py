@@ -56,8 +56,11 @@ def render() -> None:
     show_stale_warning(report.config, cfg, None, None)
     n_bad = sum(s.status == "error" for s in report.sections)
     st.caption(f"{len(report.sections)} sections, {report.wall_s:.1f} s total")
+    n_warn = sum(s.status == "warning" for s in report.sections)
     if n_bad:
         st.warning(f"{n_bad} section(s) failed; see the reason column.")
+    if n_warn:
+        st.warning(f"{n_warn} section(s) ran but returned no valid point; see the reason column.")
     st.dataframe(pd.DataFrame(report.rows()), hide_index=True)
     for sec in report.sections:
         if sec.result is not None and sec.status == "ok":
