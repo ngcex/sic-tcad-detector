@@ -66,6 +66,7 @@ def make_batch(
     *,
     nplus,
     buffer,
+    donor_table=None,
 ):
     """PoissonBatch for graded p+/n- diodes on mesh ``x`` (uniform: N_D_junction == N_D_bulk).
 
@@ -77,6 +78,10 @@ def make_batch(
     Both are REQUIRED keywords (since 2026-10-18; they defaulted to None, so a caller
     that forgot them silently got the legacy no-n+ / abrupt-end geometry while the
     devsim builders default to the stack's n+ and transition).
+    ``donor_table`` (optional, one ``etna.core.device.donor_table_spec`` for the whole
+    batch): the tabulated epi profile instead of the exponential one (the
+    ``create_sic_device`` donor_table keyword); then buffer must be None and the
+    N_D_junction / N_D_bulk / L_transition values are not used.
     """
     T = np.atleast_1d(np.asarray(T, dtype=float))
     N_A_ion = _per_device(_n_a_ionized, N_A, T)
@@ -89,6 +94,7 @@ def make_batch(
         L_transition,
         nplus=nplus,
         buffer=buffer,
+        donor_table=donor_table,
     )
     B = donors.shape[0]
     T = np.broadcast_to(T, (B,))

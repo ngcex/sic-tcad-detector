@@ -113,7 +113,7 @@ NPLUS_CALIBRATION = {
 }
 
 
-def mobility_doping(N_D, doping_profile, N_D_bulk):
+def mobility_doping(N_D, doping_profile, N_D_bulk, donor_table=None):
     """Epi donor density (cm^-3) of the REFERENCE scalar mobilities.
 
     Since 2026-10-18 the 1D transport (devsim and the batched engine) uses the local
@@ -122,10 +122,14 @@ def mobility_doping(N_D, doping_profile, N_D_bulk):
     transport by the edge models; 1D and 2D), and the Hecht
     default (charge_collection). Rule: uniform profile -> ``N_D`` (``DEFAULT_N_D`` when None); graded
     profile -> the bulk epi doping ``N_D_bulk`` (``DEFAULT_STACK["N_D_bulk"]`` when
-    None), the doping of most of the sensitive volume. Before 2026-10-17 graded devices
+    None), the doping of most of the sensitive volume; tabulated profile
+    (``donor_table``, a ``donor_table_spec``) -> the table's minimum (its bulk). Before
+    2026-10-17 graded devices
     used ``DEFAULT_N_D`` (1.07e15) whatever N_D_bulk was, so a changed N_D_bulk (e.g. the
     app sidebar) was silently ignored by the transport.
     """
+    if donor_table is not None:
+        return table_min_doping(donor_table)
     if doping_profile == "graded":
         return float(DEFAULT_STACK["N_D_bulk"] if N_D_bulk is None else N_D_bulk)
     return float(DEFAULT_N_D if N_D is None else N_D)
@@ -168,7 +172,9 @@ def acceptor_total_scale(N_A, N_A_ionized):
 def local_mobility(donors, acceptors, acceptor_scale, T, carrier, params=None):
     """Node mobility (cm2/Vs) at the local total doping, numpy twin of the devsim
     ``mu_n_node`` / ``mu_p_node`` models (add_local_mobility_models)."""
-    N = np.asarray(donors, dtype=float) + acceptor_scale * np.asarray(acceptors, dtype=float)
+    N = np.asarray(donors, dtype=float) + acceptor_scale * np.asarray(
+        acceptors, dtype=float
+    )
     return mobility_caughey_thomas_T(N, T, carrier, params)
 
 
@@ -229,6 +235,69 @@ def add_local_mobility_models(
             average_type="arithmetic",
         )
 
+
+# OPT-IN TABULATED donor profile (NOT the default): the model-independent 19-knot
+# piecewise log-linear inversion of the digitised Photons Fig. 4b C-V (lab/cv_gap/run_knots.py,
+# fitlib.fit_knots, curvature penalty lam 1; lab/cv_gap/notes/knots.json "knots lam 1.0 Qf
+# None"; log10 N_D vs depth below the junction in um). Fit quality against the 230 digitised
+# points: chi2 32 / 211 dof, knee (-3.25..-0.25 V) rms 0.014 um, plateau (-5..-59 V) rms
+# 0.007 um -- the parametric DEFAULT_STACK leaves 0.24 um rms in the knee (its exponential
+# epi cannot make the 1.3e13 dip at 4-6 um). Between knots N_D is log-linear; beyond the last
+# knot (the epi end) the last value holds and the n+ step is added as for every stack.
+# HONESTY: this is an INVERSION OF ONE C-V CURVE (a regularised fit of W(V)), NOT a SIMS or
+# SRP profile. Robustness (lab/cv_gap LOG section 3): stable to +-0.2 dex for lam 0.3..3
+# EXCEPT the first 0.5 um (inside the zero-bias depletion width, unresolved by C-V:
+# 15.1..15.9 at x = 0) and the 8.5-9.25 um stretch (where a fringe term, if forced in, is
+# absorbed). The knots are the lab values to full precision: rounding to 2 digits moves
+# eps*A/C(0 V) at the 0.01 um level (the knee is that sensitive).
+_MEASURED_CV_KNOT_DEPTHS_UM = (
+    0.0, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 8.5, 9.0,
+    9.25, 9.5, 9.75, 10.0,
+)  # fmt: skip
+_MEASURED_CV_KNOT_LOG10N = (
+    15.772801150269284, 15.579609995433998, 15.390699104783875, 15.20570781029884,
+    15.008383248556012, 14.716064954038618, 14.23424292213302, 13.701401160537118,
+    13.27748922016406, 13.112336571315666, 13.341287619256954, 13.745782105180805,
+    13.811523507002931, 13.523466906840031, 13.571061474264805, 14.22569522409533,
+    15.376091219822525, 16.00569594291923, 16.125022847901135,
+)  # fmt: skip
+# The table as DeviceConfig / the builders take it: ((depth_um, N_D cm^-3), ...).
+MEASURED_CV_TABLE = tuple(
+    (d, 10.0**l) for d, l in zip(_MEASURED_CV_KNOT_DEPTHS_UM, _MEASURED_CV_KNOT_LOG10N)
+)
+# Sensitive-epi end of a TABULATED profile (TABLE_SENSITIVE_END_FACTOR): the depth of the
+# last upward crossing of factor x min N_D on the final rise toward the n+. A table has no
+# analytic "transition start" (the buffer rule's point), so the end of the low-doped epi
+# is where the doping has risen one decade above the bulk minimum. Chosen for stability:
+# 9.21 / 9.19 / 9.17 um for the lam 1 / 0.3 / 3 inversions (the last-local-minimum rule
+# jumps 8.5 <-> 9 um between them). V_fd (moment integral) and the engine reach-through
+# (edge within one L_D, at the doping there, of this depth) both use it; it is NOT the
+# same point as the parametric buffer's transition start (8.86 um, where N_D starts
+# rising): both are definitions, stated in etna.export.labels. On the preset: sensitive
+# end 9.207 um (N_D 1.3e14), reach-through 4.85 V (0.05 V lattice), the parametric default
+# 8.86 um / 3.10 V; the measured curve has W(-4 V) = 9.0 and W(-5 V) = 9.27 um.
+TABLE_SENSITIVE_END_FACTOR = 10.0
+
+# OPT-IN preset built on the table (etna.measured_cv_tabulated_config()): the default
+# geometry (p+ 0.3 um, n+ 1 um 1e19), no parametric transition (the table carries the
+# rise), N_t refitted to I(300 K, -60 V, 4 mm2) = 18 pA on this profile
+# (lab/tabulated_profile/bench/nt_refit.py). N_D_junction / N_D_bulk are INFORMATIVE only
+# (the table defines the profile): the table value at the junction and its minimum; they
+# feed the reference scalar mobility (mobility_doping), V_bi of the analytic V_fd and the
+# config validation (donors < N_A). L_transition is unused (kept at the default).
+MEASURED_CV_TABULATED_STACK = {
+    "substrate_thickness_cm": DEFAULT_STACK["substrate_thickness_cm"],
+    "nplus_thickness_cm": DEFAULT_STACK["nplus_thickness_cm"],
+    "N_D_nplus": DEFAULT_N_D_NPLUS,
+    "donor_table": MEASURED_CV_TABLE,
+    "N_D_junction": MEASURED_CV_TABLE[0][1],  # 5.927e15
+    "N_D_bulk": min(n for _, n in MEASURED_CV_TABLE),  # 1.295e13 at 5 um
+    "L_transition": DEFAULT_STACK["L_transition"],  # unused with a table
+    "buffer_thickness_cm": None,  # the table carries the n-/n+ rise
+    "buffer_end_doping": None,
+    "N_t": 2.849219e12,  # refit (lab/tabulated_profile/notes/LOG.md section 4)
+    "E_t": DEFAULT_STACK["E_t"],
+}
 
 # LEGACY model (the default before the n+ flip, 2026-10-17), kept so old numbers stay reproducible:
 # cathode contact directly on the n- epi (no n+; non-convergence wall at deep reverse bias,
@@ -330,11 +399,19 @@ def create_sic_device(
     nplus_generation=False,
     buffer_thickness_cm=DEFAULT_STACK["buffer_thickness_cm"],
     buffer_end_doping=DEFAULT_STACK["buffer_end_doping"],
+    donor_table=None,
 ):
     """Create a 1D p+/n- 4H-SiC diode device in devsim.
 
     Structure: p+ anode layer (left, anode) | n- epitaxial layer [| graded n-/n+
     transition] | [n+ layer] (right, cathode)
+
+    ``donor_table`` (opt-in, default None): a TABULATED epi donor profile, a sequence of
+    (depth_um below the junction, N_D cm^-3) knots interpolated log-linearly
+    (``donor_table_spec`` / ``tabulated_donor_profile``), e.g. ``MEASURED_CV_TABLE``.
+    It replaces the exponential / uniform epi expression AND the graded n-/n+
+    transition (the stack's default transition is dropped; an explicit one is an
+    error); the n+ step follows as usual. ``doping_profile`` must then be "graded".
 
     A BARE call is NOT the default device (DeviceConfig()): it builds a UNIFORM epi
     at DEFAULT_N_D (1.07e15) on the default geometry (p+ 0.3 um, n+ 1 um) with an
@@ -412,8 +489,13 @@ def create_sic_device(
     epi_end = substrate_thickness_cm + epi_thickness_cm
     _check_nplus(nplus_thickness_cm, N_D_nplus)
     nplus = None if nplus_thickness_cm is None else (epi_end, N_D_nplus)
+    table = donor_table_spec(epi_thickness_cm, donor_table)
+    if table is not None and doping_profile != "graded":
+        raise ValueError(
+            f"donor_table requires doping_profile='graded' (got {doping_profile!r})"
+        )
     buffer_thickness_cm, buffer_end_doping = default_buffer_for_profile(
-        doping_profile, buffer_thickness_cm, buffer_end_doping
+        doping_profile, buffer_thickness_cm, buffer_end_doping, donor_table
     )
     buffer = buffer_spec(
         epi_end, epi_thickness_cm, buffer_thickness_cm, buffer_end_doping
@@ -479,7 +561,7 @@ def create_sic_device(
     # reported in device_info and kept as devsim parameters. The TRANSPORT uses the local
     # per-node mobility (add_local_mobility_models, after the doping below), whose edge
     # models mu_n / mu_p take precedence over these parameters.
-    N_D_mobility = mobility_doping(N_D, doping_profile, N_D_bulk)
+    N_D_mobility = mobility_doping(N_D, doping_profile, N_D_bulk, table)
     mu_n = mobility_caughey_thomas_T(N_D_mobility, T, "electron", params)
     mu_p = mobility_caughey_thomas_T(N_D_mobility, T, "hole", params)
     devsim.set_parameter(
@@ -524,7 +606,16 @@ def create_sic_device(
     # --- Set doping profile ---
     N_A_ionized = ionized_acceptor_concentration(N_A, T)
 
-    if doping_profile == "graded":
+    if table is not None:
+        set_tabulated_doping_profile(
+            device_name, region_name, junction_pos, N_A_ionized, table, nplus=nplus
+        )
+        logger.info(
+            f"Tabulated doping: {len(table[0])} knots, N_D {10.0 ** table[1][0]:.2e} at "
+            f"the junction, min {table_min_doping(table):.2e}, "
+            f"{10.0 ** table[1][-1]:.2e} at the epi end"
+        )
+    elif doping_profile == "graded":
         # graded-doping fallbacks: the default stack (DEFAULT_STACK)
         _N_D_junction = (
             N_D_junction if N_D_junction is not None else DEFAULT_STACK["N_D_junction"]
@@ -599,21 +690,40 @@ def create_sic_device(
         "nplus_generation": bool(nplus_generation),
         "buffer_thickness_cm": buffer_thickness_cm if buffer is not None else None,
         "buffer_end_doping": buffer_end_doping if buffer is not None else None,
+        # tabulated epi profile ((depth_um, N_D), ...) or None; read by the sweep's V_fd
+        # gate (analytic_vfd_from_info) and the 2D engine's device_info
+        "donor_table": (
+            None
+            if table is None
+            else tuple((float(d), float(n)) for d, n in donor_table)
+        ),
     }
 
 
-def default_buffer_for_profile(doping_profile, buffer_thickness_cm, buffer_end_doping):
-    """The measured-C-V transition belongs to the GRADED epi profile it was fitted with.
+def default_buffer_for_profile(
+    doping_profile, buffer_thickness_cm, buffer_end_doping, donor_table=None
+):
+    """The measured-C-V transition belongs to the GRADED EXPONENTIAL epi profile it was
+    fitted with.
 
-    A uniform-doping device that still carries the stack's default transition values
-    gets an abrupt epi end instead (a user-defined uniform device is neither model);
-    an explicit non-default transition is kept.
+    A uniform-doping device, or a TABULATED one (``donor_table``), that still carries
+    the stack's default transition values gets an abrupt epi end instead (a
+    user-defined uniform device is neither model; a table carries its own n-/n+
+    rise); an explicit non-default transition is kept for a uniform device and is an
+    error with a table (the two would both describe the epi end).
     """
-    if (
-        doping_profile == "uniform"
-        and buffer_thickness_cm == DEFAULT_STACK["buffer_thickness_cm"]
+    at_default = (
+        buffer_thickness_cm == DEFAULT_STACK["buffer_thickness_cm"]
         and buffer_end_doping == DEFAULT_STACK["buffer_end_doping"]
-    ):
+    )
+    if donor_table is not None:
+        if at_default or (buffer_thickness_cm is None and buffer_end_doping is None):
+            return None, None
+        raise ValueError(
+            "donor_table and a graded n-/n+ transition (buffer_thickness_cm / "
+            "buffer_end_doping) are exclusive: the table already describes the epi end"
+        )
+    if doping_profile == "uniform" and at_default:
         return None, None
     return buffer_thickness_cm, buffer_end_doping
 
@@ -687,6 +797,124 @@ def donor_profile(
     graded = np.exp((1.0 - t) * np.log(base) + t * np.log(N_end))
     m = (x >= x0) & (x < x_end)
     return d + np.where(m, np.maximum(base, graded) - base, 0.0)
+
+
+def donor_table_spec(epi_thickness_cm, donor_table):
+    """Validated tabulated epi donor profile -> (depth_cm (K,), log10 N_D (K,)); None
+    without a table.
+
+    ``donor_table`` is a sequence of (depth_um below the junction, N_D cm^-3) knots:
+    at least two, depths strictly increasing from 0 and covering the epi (last depth
+    >= epi_thickness_cm, the n+ step follows at the epi end), N_D finite and > 0.
+    Shared by the devsim builders (1D/2D), the batched engine, the 2D engine gate, the
+    API and the exports, so every path interpolates the identical table.
+    """
+    if donor_table is None:
+        return None
+    try:
+        pts = [(float(d), float(n)) for d, n in donor_table]
+    except (TypeError, ValueError) as e:
+        raise ValueError(
+            "donor_table must be a sequence of (depth_um, N_D_cm3) pairs"
+        ) from e
+    if len(pts) < 2:
+        raise ValueError("donor_table needs at least two (depth_um, N_D) knots")
+    d = np.array([p[0] for p in pts])
+    n = np.array([p[1] for p in pts])
+    if not (np.all(np.isfinite(d)) and np.all(np.isfinite(n)) and np.all(n > 0)):
+        raise ValueError("donor_table depths and N_D must be finite, N_D > 0")
+    if d[0] != 0.0:
+        raise ValueError(f"donor_table must start at depth 0 um (got {d[0]!r})")
+    if np.any(np.diff(d) <= 0):
+        raise ValueError("donor_table depths must be strictly increasing")
+    epi_um = epi_thickness_cm * 1e4
+    if d[-1] < epi_um * (1.0 - 1e-9):
+        raise ValueError(
+            f"donor_table must cover the epi: last depth {d[-1]!r} um < epi thickness "
+            f"{epi_um!r} um"
+        )
+    return d * 1e-4, np.log10(n)
+
+
+def tabulated_donor_profile(x, junction_pos, spec, n_side=True):
+    """Epi donors (cm^-3) of a tabulated profile at ``x`` (cm), no n+ step.
+
+    log10 N_D is linear between the knots of ``spec`` (``donor_table_spec``), the first
+    / last value holds outside them (the C-V never probes past the deepest knot).
+    Zero for x < junction_pos unless ``n_side=False``. Any ``x`` shape; the numpy twin
+    is the ONLY implementation: the devsim builders set these values on the mesh
+    (``set_tabulated_doping_profile``), so devsim and the engines are bit-identical.
+    """
+    x = np.asarray(x, dtype=float)
+    depth_cm, log_n = spec
+    logN = np.interp(np.clip(x - junction_pos, 0.0, depth_cm[-1]), depth_cm, log_n)
+    d = 10.0**logN
+    return d * (x >= junction_pos) if n_side else d
+
+
+def table_min_doping(spec):
+    """Minimum N_D (cm^-3) of a tabulated profile (its bulk value)."""
+    return float(10.0 ** np.min(spec[1]))
+
+
+def table_sensitive_end_cm(spec, factor=TABLE_SENSITIVE_END_FACTOR):
+    """Depth (cm, below the junction) where the low-doped epi of a tabulated profile
+    ends: the LAST upward crossing of ``factor`` x min N_D (log-linear between knots).
+    See TABLE_SENSITIVE_END_FACTOR. Falls back to the last knot when the table never
+    rises that far (then the sensitive epi is the whole table)."""
+    depth_cm, log_n = spec
+    level = float(np.min(log_n)) + np.log10(factor)
+    for k in range(len(log_n) - 1, 0, -1):
+        if log_n[k - 1] < level <= log_n[k]:
+            t = (level - log_n[k - 1]) / (log_n[k] - log_n[k - 1])
+            return float(depth_cm[k - 1] + t * (depth_cm[k] - depth_cm[k - 1]))
+    return float(depth_cm[-1])
+
+
+def table_sensitive_end_doping(spec, factor=TABLE_SENSITIVE_END_FACTOR):
+    """N_D (cm^-3) at ``table_sensitive_end_cm`` (factor x the minimum, or the last
+    knot's value when the table never rises that far)."""
+    return float(
+        tabulated_donor_profile(table_sensitive_end_cm(spec, factor), 0.0, spec)
+    )
+
+
+def set_tabulated_doping_profile(
+    device_name, region_name, junction_pos, N_A_ionized, spec, nplus=None, coord="x"
+):
+    """Tabulated epi donors on a built device: Acceptors step, Donors as a devsim
+    node SOLUTION holding the numpy twin's values (``tabulated_donor_profile`` plus the
+    n+ step), NetDoping = Donors - Acceptors.
+
+    A node solution (not an expression) because a 19-segment interpolation string would
+    be re-evaluated by devsim's own exp/log at round-off from numpy; here both engines
+    (batched 1D: the twin; engine2d: devsim's rows) see the identical float per node.
+    Downstream models reference "Donors" as any node model (mobility, NetDoping) and
+    ``apply_damaged_params`` overrides it with set_node_values as before.
+    """
+    coords = np.array(
+        devsim.get_node_model_values(device=device_name, region=region_name, name=coord)
+    )
+    donors = tabulated_donor_profile(coords, junction_pos, spec)
+    if nplus is not None:
+        x_end, N_np = nplus
+        donors = donors + N_np * (coords - x_end >= 0)
+    devsim.node_model(
+        device=device_name,
+        region=region_name,
+        name="Acceptors",
+        equation=f"{N_A_ionized}*step({junction_pos}-{coord})",
+    )
+    devsim.node_solution(device=device_name, region=region_name, name="Donors")
+    devsim.set_node_values(
+        device=device_name, region=region_name, name="Donors", values=list(donors)
+    )
+    devsim.node_model(
+        device=device_name,
+        region=region_name,
+        name="NetDoping",
+        equation="Donors - Acceptors",
+    )
 
 
 def _check_nplus(nplus_thickness_cm, N_D_nplus):

@@ -11,6 +11,7 @@ from .scan import (
     ENGINE2D_BUFFER_BOX,
     ENGINE2D_DARK_BOX,
     ENGINE2D_NPLUS_BOX,
+    ENGINE2D_TABLE_BOX,
     Engine2DFallback,
     Engine2DOutsideValidity,
     Engine2DPunchThrough,
@@ -27,6 +28,7 @@ __all__ = [
     "ENGINE2D_BUFFER_BOX",
     "ENGINE2D_DARK_BOX",
     "ENGINE2D_NPLUS_BOX",
+    "ENGINE2D_TABLE_BOX",
     "Engine2DFallback",
     "Engine2DOutsideValidity",
     "Engine2DPunchThrough",  # backward-compatible alias of Engine2DOutsideValidity

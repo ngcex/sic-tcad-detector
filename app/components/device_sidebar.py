@@ -61,7 +61,11 @@ def assemble_config(values: dict) -> DeviceConfig:
         buffer_thickness_um=values.get(
             "buffer_thickness_um", DeviceConfig.buffer_thickness_um
         ),
-        buffer_end_doping=values.get("buffer_end_doping", DeviceConfig.buffer_end_doping),
+        buffer_end_doping=values.get(
+            "buffer_end_doping", DeviceConfig.buffer_end_doping
+        ),
+        # opt-in tabulated epi profile (the measured-C-V knots preset); default none
+        donor_table=values.get("donor_table", DeviceConfig.donor_table),
     )
 
 
@@ -86,6 +90,7 @@ FIELD_LABELS = {
     "E_t": "E_t trap level (eV)",
     "buffer_thickness_um": "n-/n+ transition thickness (µm)",
     "buffer_end_doping": "N_D at the epi end (cm⁻³)",
+    "donor_table": "tabulated epi profile (knots)",
 }
 
 
@@ -164,6 +169,18 @@ def render_device_sidebar() -> None:
         "measured-C-V profile: a fit to the digitised Photons Fig. 4b (plateau rms 0.013 um, "
         "knee rms 0.24 um; N_D_bulk 3.4e13 below the documented 0.5-1e14; epi/n+ position "
         "set by the fit, not by SIMS).",
+    )
+    tabulated_on = st.sidebar.checkbox(
+        "tabulated measured-C-V profile (19 knots, opt-in)",
+        value=False,
+        key="cfg_tabulated_on",
+        help="Applies etna.measured_cv_tabulated_config(): the epi doping is the 19-knot "
+        "log-linear table from the model-independent inversion of the digitised Photons "
+        "Fig. 4b C-V (knee rms 0.014 um, plateau rms 0.007 um; the parametric default "
+        "leaves 0.24 um in the knee), on the default geometry (p+ 0.3 um, n+ 1 um), N_t "
+        "refitted to 18 pA at -60 V. Overrides the doping fields and the graded transition "
+        "(the table carries the n-/n+ rise). It is an inversion of ONE C-V curve, not a SIMS "
+        "profile: the first 0.5 um and the 8.5-9.25 um stretch are not resolved by C-V.",
     )
     nplus_thickness_um = DeviceConfig.nplus_thickness_um
     N_D_nplus = DeviceConfig.N_D_nplus
@@ -314,6 +331,21 @@ def render_device_sidebar() -> None:
             "Previous calibrated model active: 3-point n+ calibration, abrupt epi/n+ step "
             "(no graded transition), N_t 2.805336e12. Its C-V knee (-8..-10 V) disagrees "
             "with the digitised measurement (-1..-4 V)."
+        )
+        if tabulated_on:
+            st.sidebar.warning(
+                "Both presets checked: the previous calibrated model wins; untick it to "
+                "apply the tabulated profile."
+            )
+    elif tabulated_on:
+        from etna import MEASURED_CV_TABULATED_PRESET
+
+        values.update(MEASURED_CV_TABULATED_PRESET)
+        st.sidebar.info(
+            "Tabulated measured-C-V profile active (opt-in): 19-knot log-linear N_D(y) from "
+            "the inversion of the digitised Fig. 4b C-V; doping fields and the graded "
+            "transition are overridden (N_D junction / bulk shown are the table's junction "
+            "value and minimum). Not a SIMS profile."
         )
 
     try:

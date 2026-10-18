@@ -45,8 +45,11 @@ from etna.core.device import (
     default_buffer_for_profile,
     acceptor_total_scale,
     add_local_mobility_models,
+    donor_table_spec,
     graded_base_expr,
     mobility_doping,
+    set_tabulated_doping_profile,
+    table_min_doping,
 )
 
 logger = logging.getLogger(__name__)
@@ -206,12 +209,19 @@ def create_sic_2d_device(
     nplus_generation=False,
     buffer_thickness_cm=_BUFFER_THICKNESS_DEFAULT_CM,
     buffer_end_doping=_BUFFER_END_DOPING_DEFAULT,
+    donor_table=None,
 ):
     """Create a 2D p+/n- 4H-SiC diode device in devsim.
 
     Structure uses symmetry: x = 0 (center/symmetry plane) to half_width_cm.
     Depth: y = 0 (anode, top) to total_depth (cathode, bottom).
     Air buffer regions are added at top and bottom for contact detection.
+
+    ``donor_table`` (opt-in): tabulated epi donor profile in depth y, as
+    ``etna.core.device.create_sic_device`` (replaces the exponential epi and the graded
+    transition; the n+ step follows). The resolved ``N_D_junction`` / ``N_D_bulk`` of
+    the returned dict are then the table's junction value and minimum (informative; the
+    sweep's V_bi uses the former).
 
     Parameters
     ----------
@@ -266,8 +276,13 @@ def create_sic_2d_device(
     epi_end = substrate_thickness_cm + epi_thickness_cm
     _check_nplus(nplus_thickness_cm, N_D_nplus)
     nplus = None if nplus_thickness_cm is None else (epi_end, N_D_nplus)
+    table = donor_table_spec(epi_thickness_cm, donor_table)
+    if table is not None and doping_profile != "graded":
+        raise ValueError(
+            f"donor_table requires doping_profile='graded' (got {doping_profile!r})"
+        )
     buffer_thickness_cm, buffer_end_doping = default_buffer_for_profile(
-        doping_profile, buffer_thickness_cm, buffer_end_doping
+        doping_profile, buffer_thickness_cm, buffer_end_doping, donor_table
     )
     buffer = buffer_spec(
         epi_end, epi_thickness_cm, buffer_thickness_cm, buffer_end_doping
@@ -424,7 +439,7 @@ def create_sic_2d_device(
     # Reference scalar mobilities at the EPI doping (mobility_doping), as the 1D builder;
     # the transport uses the local per-node mobility (add_local_mobility_models below;
     # engine2d builds the same edges from the evaluated doping rows).
-    N_D_mobility = mobility_doping(N_D, doping_profile, N_D_bulk)
+    N_D_mobility = mobility_doping(N_D, doping_profile, N_D_bulk, table)
     mu_n = mobility_caughey_thomas_T(N_D_mobility, T, "electron", params)
     mu_p = mobility_caughey_thomas_T(N_D_mobility, T, "hole", params)
     devsim.set_parameter(
@@ -474,7 +489,23 @@ def create_sic_2d_device(
     _N_D_bulk = N_D_bulk if N_D_bulk is not None else _N_D_BULK_DEFAULT
     _L_transition = L_transition if L_transition is not None else _L_TRANSITION_DEFAULT
 
-    if doping_profile == "graded":
+    if table is not None:
+        # informative resolved values: the table's junction value and minimum
+        _N_D_junction, _N_D_bulk = 10.0 ** table[1][0], table_min_doping(table)
+        set_tabulated_doping_profile(
+            device_name,
+            region_name,
+            junction_pos,
+            N_A_ionized,
+            table,
+            nplus=nplus,
+            coord="y",
+        )
+        logger.info(
+            f"Tabulated 2D doping: {len(table[0])} knots, N_D {_N_D_junction:.2e} at "
+            f"the junction, min {_N_D_bulk:.2e}"
+        )
+    elif doping_profile == "graded":
         set_graded_doping_2d(
             device_name,
             region_name,
@@ -544,6 +575,11 @@ def create_sic_2d_device(
         "nplus_generation": bool(nplus_generation),
         "buffer_thickness_cm": buffer_thickness_cm if buffer is not None else None,
         "buffer_end_doping": buffer_end_doping if buffer is not None else None,
+        "donor_table": (
+            None
+            if table is None
+            else tuple((float(d), float(n)) for d, n in donor_table)
+        ),
     }
 
 

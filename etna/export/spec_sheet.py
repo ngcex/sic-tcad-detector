@@ -28,6 +28,8 @@ from etna.export.labels import (
     MEASURED_W_30V_UM,
     NPLUS_CALIBRATION_NOTE,
     CV_SYSTEMATIC_NPLUS_NOTE,
+    CV_SYSTEMATIC_TABULATED_NOTE,
+    TABULATED_CALIBRATION_NOTE,
     VALIDATION_LABEL,
     VFD_DEFINITION,
     analytic_vfd,
@@ -35,10 +37,13 @@ from etna.export.labels import (
     epi_donor_profile,
     has_buffer,
     has_nplus,
+    has_table,
     is_measured_cv_device,
+    is_measured_cv_tabulated_device,
     is_nplus_calibrated_device,
     is_reference_device,
     reach_through_definition,
+    table_sensitive_end_um,
 )
 
 # The run_all sections a spec sheet reads (the cheap ones; see etna.run_all).
@@ -119,12 +124,19 @@ def build_spec(config, report=None) -> dict:
     ref = is_reference_device(config)
     measured_cv = is_measured_cv_device(config)  # == ref since the 2026-10-18 flip
     prev_default = is_nplus_calibrated_device(config)
+    table = has_table(config)
+    tab_preset = is_measured_cv_tabulated_device(config)
     layers = stack_layers(config)
     t_e = config.epi_thickness_um
     depths = [d for d in _DOPING_DEPTHS_UM if d < t_e]
     if has_buffer(config):  # sample the transition too (start, middle)
         t0 = t_e - config.buffer_thickness_um
         depths = sorted(set(depths) | {round(t0, 6), round((t0 + t_e) / 2, 6)})
+    if table:  # the knots themselves, plus the end of the low-doped epi
+        t0 = table_sensitive_end_um(config)
+        depths = sorted(
+            set(depths) | {round(t0, 6)} | {round(d, 6) for d, _ in config.donor_table}
+        )
     depths = [d for d in depths if d < t_e] + [t_e]
     profile = [
         dict(
@@ -133,7 +145,14 @@ def build_spec(config, report=None) -> dict:
         )
         for d in depths
     ]
-    if has_buffer(config):
+    if table:
+        model = (
+            "opt-in tabulated measured-C-V profile (19 knots: inversion of the digitised "
+            "Fig. 4b C-V, not a SIMS profile)"
+            if tab_preset
+            else f"tabulated epi profile ({len(config.donor_table)} knots, user table)"
+        ) + (" + n+ layer" if nplus else ", no n+ layer")
+    elif has_buffer(config):
         model = (
             "default stack: measured-C-V profile (graded n-/n+ transition, fit to the "
             "digitised Fig. 4b)"
@@ -155,6 +174,7 @@ def build_spec(config, report=None) -> dict:
         "model": model,
         "reference_device": ref,
         "measured_cv_preset": measured_cv,
+        "measured_cv_tabulated_preset": tab_preset,
         "nplus_calibrated_preset": prev_default,
         "dimension": "1D" if config.half_width_um is None else "2D",
         "config": asdict(config),
@@ -183,6 +203,28 @@ def build_spec(config, report=None) -> dict:
             "L_transition_um": config.L_transition_um,
             "buffer_thickness_um": config.buffer_thickness_um,
             "buffer_end_doping_cm3": config.buffer_end_doping,
+            # tabulated profile: the knots as given (depth_um, N_D) and where the low-doped
+            # epi ends by the decade rule (None without a table)
+            "donor_table": (
+                None
+                if not table
+                else [
+                    dict(depth_below_junction_um=float(d), N_D_cm3=float(n))
+                    for d, n in config.donor_table
+                ]
+            ),
+            "table_sensitive_epi_end_um": (
+                None if not table else float(table_sensitive_end_um(config))
+            ),
+            "table_note": (
+                TABULATED_CALIBRATION_NOTE
+                if tab_preset
+                else (
+                    "user-supplied table: provenance not known to etna"
+                    if table
+                    else None
+                )
+            ),
             "samples": profile,
         },
     }
@@ -238,6 +280,14 @@ def build_spec(config, report=None) -> dict:
             "(see cv.calibration)."
         )
         cvd["measured_W_minus30V_um"] = MEASURED_W_30V_UM
+    elif tab_preset:
+        cvd["systematic"] = (
+            CV_SYSTEMATIC_TABULATED_NOTE.format(w=w30, d=d30)
+            if w30 is not None
+            else "No out-of-fit C-V comparison: the whole digitised curve is the "
+            "inversion's input (see cv.calibration)."
+        )
+        cvd["measured_W_minus30V_um"] = MEASURED_W_30V_UM
     elif prev_default and w30 is not None:
         cvd["systematic"] = CV_SYSTEMATIC_NPLUS_NOTE.format(w=w30, d=d30)
         cvd["measured_W_minus30V_um"] = MEASURED_W_30V_UM
@@ -247,9 +297,13 @@ def build_spec(config, report=None) -> dict:
         CALIBRATION_NOTE
         if ref
         else (
-            NPLUS_CALIBRATION_NOTE
-            if prev_default
-            else "The C-V fit applies to the reference device (default stack) only."
+            TABULATED_CALIBRATION_NOTE
+            if tab_preset
+            else (
+                NPLUS_CALIBRATION_NOTE
+                if prev_default
+                else "The C-V fit applies to the reference device (default stack) only."
+            )
         )
     )
     spec["cv"] = cvd
@@ -271,7 +325,11 @@ def build_spec(config, report=None) -> dict:
     spec["cce"] = ccd
 
     dark = _ok_result(report, "dark")
-    from etna.core.device import DEFAULT_STACK, NPLUS_CALIBRATION
+    from etna.core.device import (
+        DEFAULT_STACK,
+        MEASURED_CV_TABULATED_STACK,
+        NPLUS_CALIBRATION,
+    )
 
     n_t = (
         float(dark.metadata.get("N_t", config.N_t)) if dark is not None else config.N_t
@@ -283,6 +341,11 @@ def build_spec(config, report=None) -> dict:
         prev_default
         and n_t == NPLUS_CALIBRATION["N_t"]
         and config.E_t == NPLUS_CALIBRATION["E_t"]
+    )
+    calibrated_tab = (
+        tab_preset
+        and n_t == MEASURED_CV_TABULATED_STACK["N_t"]
+        and config.E_t == MEASURED_CV_TABULATED_STACK["E_t"]
     )
     dd = {
         "available": dark is not None,
@@ -298,11 +361,20 @@ def build_spec(config, report=None) -> dict:
                 )
                 if calibrated_prev
                 else (
-                    f"N_t = {n_t:.4g}, E_t = {config.E_t:g} eV on this device: the dark-current "
-                    "calibration (default stack, N_t = "
-                    f"{DEFAULT_STACK['N_t']:.7g}, E_t = {DEFAULT_STACK['E_t']:g} eV, fitted to the "
-                    "measured < 18 pA bound at -60 V on 4 mm2) does not apply; uncalibrated "
-                    "estimate."
+                    (
+                        DARK_CALIBRATION_NOTE
+                        + f" (N_t = {n_t:.7g} refitted on the tabulated profile; the "
+                        "parametric default's 2.849024e12 gives 17.999 pA there: the proxy is "
+                        "profile-independent to 1e-4.)"
+                    )
+                    if calibrated_tab
+                    else (
+                        f"N_t = {n_t:.4g}, E_t = {config.E_t:g} eV on this device: the dark-current "
+                        "calibration (default stack, N_t = "
+                        f"{DEFAULT_STACK['N_t']:.7g}, E_t = {DEFAULT_STACK['E_t']:g} eV, fitted to the "
+                        "measured < 18 pA bound at -60 V on 4 mm2) does not apply; uncalibrated "
+                        "estimate."
+                    )
                 )
             )
         ),
@@ -352,11 +424,20 @@ def build_spec(config, report=None) -> dict:
             "validation; dark current is a calibration to the measured bound."
             if ref
             else (
-                "C-V eps*A/C at -30 V vs Photons Fig. 4b (see cv.systematic; 0 / -10 V are "
-                "calibration inputs of this previous default); dark current is a "
-                "calibration to the measured bound."
-                if prev_default
-                else "none for this config (they apply to the reference device only)."
+                (
+                    "the full digitised Photons Fig. 4b C-V is the INPUT of the tabulated "
+                    "profile's inversion (see cv.calibration: knee rms 0.014 um, plateau rms "
+                    "0.007 um), not a validation, and the table is not a SIMS profile; dark "
+                    "current is a calibration to the measured bound."
+                )
+                if tab_preset
+                else (
+                    "C-V eps*A/C at -30 V vs Photons Fig. 4b (see cv.systematic; 0 / -10 V are "
+                    "calibration inputs of this previous default); dark current is a "
+                    "calibration to the measured bound."
+                    if prev_default
+                    else "none for this config (they apply to the reference device only)."
+                )
             )
         ),
         "No fabrication layout: the GDSII export is a labelled REFERENCE-NOT-FAB schematic; "
@@ -435,6 +516,22 @@ def spec_to_markdown(spec: dict) -> str:
             f"N_D -> {ed['buffer_end_doping_cm3']:.3g} cm^-3 at the epi end (fitted form, "
             "not a measured profile)."
         )
+    if ed.get("donor_table"):
+        L.append("")
+        L.append(
+            f"Tabulated profile: {len(ed['donor_table'])} knots (log10 N_D linear between "
+            f"them); low-doped epi ends at {ed['table_sensitive_epi_end_um']:.2f} um below "
+            "the junction (one decade above the table minimum). "
+            + (ed.get("table_note") or "")
+        )
+        L.append("")
+        L.append("| knot | depth below junction (um) | N_D (cm^-3) | log10 N_D |")
+        L.append("|---|---|---|---|")
+        for k, s in enumerate(ed["donor_table"]):
+            L.append(
+                f"| {k} | {s['depth_below_junction_um']:g} | {s['N_D_cm3']:.4g} | "
+                f"{np.log10(s['N_D_cm3']):.3f} |"
+            )
     L.append("")
     L.append("| depth below junction (um) | N_D (cm^-3) |")
     L.append("|---|---|")

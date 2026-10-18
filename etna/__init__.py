@@ -6,11 +6,13 @@ from etna._version import __version__
 from etna.api.device import (
     LEGACY_PRESET,
     MEASURED_CV_PRESET,
+    MEASURED_CV_TABULATED_PRESET,
     MICRODOSIMETER_PRESET,
     NPLUS_CALIBRATED_PRESET,
     DeviceConfig,
     legacy_config,
     measured_cv_config,
+    measured_cv_tabulated_config,
     microdosimeter_config,
     nplus_calibrated_config,
 )
@@ -40,6 +42,8 @@ __all__ = [
     "microdosimeter_config",
     "MEASURED_CV_PRESET",
     "measured_cv_config",
+    "MEASURED_CV_TABULATED_PRESET",
+    "measured_cv_tabulated_config",
     "NPLUS_CALIBRATED_PRESET",
     "nplus_calibrated_config",
     "SimResult",
