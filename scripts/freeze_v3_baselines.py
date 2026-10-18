@@ -58,7 +58,8 @@ N_D_BULK = 8.5e13
 L_TRANSITION = 1e-4
 
 # Canonical 20 scientific-deliverable notebooks (research A3 / D4: the duplicates
-# 03_executed.ipynb and 05_parametric_studies.ipynb are NOT deliverables).
+# 03_executed.ipynb (removed 2026-10-18, a stale copy of 03) and
+# 05b_flash_parametric_studies.ipynb (ex 05_parametric_studies) are NOT deliverables).
 NOTEBOOK_LIST = [
     "01_phase1_validation.ipynb",
     "02_electrical_characterization.ipynb",

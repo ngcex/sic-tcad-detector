@@ -7,7 +7,7 @@ import nbformat
 # Resolve paths relative to this script's location
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_DIR = os.path.dirname(SCRIPT_DIR)
-NOTEBOOK_PATH = os.path.join(PROJECT_DIR, "notebooks", "05_parametric_studies.ipynb")
+NOTEBOOK_PATH = os.path.join(PROJECT_DIR, "notebooks", "05b_flash_parametric_studies.ipynb")
 
 nb = nbformat.v4.new_notebook()
 
