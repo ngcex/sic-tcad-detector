@@ -798,7 +798,7 @@ run is whatever `DeviceConfig()` / the core defaults are now, unless they pin a 
 | 13_parametric_optimization     | radiation-hardness sweep                       |                                                                        |
 | 14_validation                  | comparison with published irradiation data     |                                                                        |
 | 15_2d_electrostatics_cce       | 2D field and CCE of the microdosimeter         | generator `create_notebook_15.py`                                      |
-| 16_single_particle_cce         | single-particle 2D transient CCE, CCE(LET)     | generator `create_notebook_16.py`; loads `data/cce_let_table_*.json`; `ETNA_REBUILD_CCE_TABLES=1` rebuilds them (~70 min) into `$ETNA_FIGURE_DIR/data/` |
+| 16_single_particle_cce         | single-particle 2D transient CCE, CCE(LET)     | generator `create_notebook_16.py`; loads `data/cce_let_table_*.json`; `ETNA_REBUILD_CCE_TABLES=1` rebuilds them (~40 min) into `$ETNA_FIGURE_DIR/data/` |
 | 17_mc_coupling                 | MC energy deposition to pulse height           | generator executes it in place                                         |
 | 18_microdosimetric_spectra     | lineal energy spectra, y_F / y_D               | kappa placeholders; generator executes it                              |
 | 19_alternative_structures      | mesa, 3D electrode, ΔE-E, guard ring           | pins the previous-default doping on the legacy geometry (PERF-06)      |
@@ -813,7 +813,9 @@ Run times measured on 2026-10-18 (Apple M4, executed into a scratch copy, the ma
 with other jobs): 01 3 s, 02 17 s, 03 15 s, 04 5 s, 05 29 s, 05b 65 s (full sweep), 06 37 s,
 07 23 s, 08 21 s, 09 4 s, 10 11 s, 11 34 s, 12 27 s, 13 17 s, 14 18 s, 15 60 s, 16 71 s (tables
 loaded; one 2D ion-track transient remains), 17 4 s, 18 3 s, 19 193 s, 20 137 s. Rebuilding the
-notebook-16 tables (`ETNA_REBUILD_CCE_TABLES=1`) takes about 70 min and writes them to
+notebook-16 tables (`ETNA_REBUILD_CCE_TABLES=1`) takes about 40 min (100 um ~15 min, 300 um
+~26 min; one device per table, linear-response synthesis of the non-simulated LETs, was
+~70-90 min with a device and a transient per LET) and writes them to
 `$ETNA_FIGURE_DIR/data/`, never over `data/`. Notebook 17 rewrites `data/synthetic_mc_events.csv` (bit-identical, seeded) relative to the repo root (they `chdir('..')`):
 run them from a scratch copy unless you mean to regenerate those tracked files. The test suite and CI do not
 execute notebooks (only the no-outputs and generator checks run);

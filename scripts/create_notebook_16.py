@@ -73,7 +73,9 @@ md(
 **CCE(LET) tables: loaded, not rebuilt.** Sections 6-7 load the committed
 tables `data/cce_let_table_100um.json` and `data/cce_let_table_300um.json`, so
 the default run only simulates the Section 3-4 ion track and current pulse. Rebuilding the tables takes about
-70 minutes (20 + 10 transient 2D solves); to do it, set
+40 minutes (one 2D device per table; 11 of the 20 and 6 of the 10 LETs
+simulated, the others synthesised from the highest-LET transient by linear
+response, within 1.2e-7 of simulating every LET); to do it, set
 `ETNA_REBUILD_CCE_TABLES=1` in the environment (or `REBUILD_CCE_TABLES = True`
 below). Rebuilt tables are written to `$ETNA_FIGURE_DIR/data/` (default
 `notebooks/figures/data/`, untracked), never over the tracked `data/`; copy
@@ -86,7 +88,7 @@ code(
 import sys
 sys.path.insert(0, '..')
 import os
-# Rebuild the CCE(LET) tables (~70 min) instead of loading data/*.json
+# Rebuild the CCE(LET) tables (~40 min) instead of loading data/*.json
 REBUILD_CCE_TABLES = os.environ.get('ETNA_REBUILD_CCE_TABLES', '').strip() not in ('', '0')
 FIG_DIR = os.path.abspath(os.environ.get("ETNA_FIGURE_DIR", "figures"))  # before the chdir: notebooks/figures/ (untracked)
 REBUILT_DIR = os.path.join(FIG_DIR, 'data')  # rebuilt tables go here, never over data/
@@ -143,7 +145,7 @@ def cce_table(path, build_kwargs, geometry_info):
     if not REBUILD_CCE_TABLES:
         if not os.path.exists(path):
             raise FileNotFoundError(
-                f"{path} is missing: set ETNA_REBUILD_CCE_TABLES=1 to rebuild it (~70 min)")
+                f"{path} is missing: set ETNA_REBUILD_CCE_TABLES=1 to rebuild it (~40 min)")
         print(f"Loaded {path} (set ETNA_REBUILD_CCE_TABLES=1 to rebuild)")
         return table_from_json(path), path
     os.makedirs(REBUILT_DIR, exist_ok=True)
@@ -423,10 +425,15 @@ md(
 We build the CCE(LET) lookup table for the 100 um SV at 50 V bias. This sweeps
 20 LET values logarithmically from 0.5 to 500 keV/um.
 
-Each LET value creates a fresh device, injects an ion track, runs a transient
-simulation and extracts CCE. By default the committed table
+One device is built for the table; each simulated LET restores its dark state,
+injects an ion track, runs a transient simulation and extracts CCE
+(`build_cce_let_table(method=\"linear\")`: the lowest LETs, the middle one and
+500 keV/um are simulated, the others synthesised from the 500 keV/um transient,
+which is exact for a transient linear in the deposited charge; low injection
+here). The CCE varies by ~1e-5 over the table: the dark-current subtraction of
+the estimator, not physics. By default the committed table
 `data/cce_let_table_100um.json` (consumed by the Monte Carlo coupling, notebook
-17) is loaded; with `ETNA_REBUILD_CCE_TABLES=1` the sweep is re-run (~30 min)
+17) is loaded; with `ETNA_REBUILD_CCE_TABLES=1` the sweep is re-run (~15 min)
 and saved to `$ETNA_FIGURE_DIR/data/` (see Section 2).
 """
 )
@@ -487,7 +494,8 @@ md(
 
 We now build the CCE(LET) table for the 300 um SV (half_width = 150 um) at
 the same 50 V bias, using 10 LET points for reasonable runtime (the larger mesh
-requires ~3x longer per simulation). As in Section 6 the committed
+requires ~3x longer per simulation; ~26 min with 6 of the 10 LETs simulated).
+As in Section 6 the committed
 `data/cce_let_table_300um.json` is loaded unless `ETNA_REBUILD_CCE_TABLES=1`.
 
 **Expected result:** At center injection (x = 0), the wider SV should show

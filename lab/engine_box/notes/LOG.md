@@ -101,3 +101,45 @@ old code 0.5 V stops at -57.9 V, new code 0.5 V at -63.2 V, old and new code wit
 reach -100 V; 2 V vs old 0.5 V on the common points 1.9e-14; smooth plateau 4.489e-14 ->
 4.490e-14 A from -60 to -100 V. (The plain-DD legacy wall of run_cv / run_field is a
 different path.) tests/test_default_stack.py now pins the reach.
+
+## CCE(LET) table rebuild: build once + linear-response synthesis (2026-10-18)
+
+Profile, one point (hw 50, 17.8k nodes, LET 10, lab/engine_box/bench/let_table_profile.py):
+build 25.9 s (14 DC solves, 216 Newton its), transient 54.6 s (79 BDF1 steps x 3 Newton
+its, 0.69 s/step); UMFPACK numeric factorisation 40 s + devsim assembly 27 s of 80 s.
+hw 150: build ~85 s, transient ~210 s (machine loaded).
+
+* Build per LET was redundant: one device, dark state snapshot/restore
+  (let_table_build_once.py): bit-identical, -19 % (hw 50, 3 points).
+* Looser stop is NOT 1e-6-safe: rtol 1e-6 moves CCE by ~2e-6 (hw 50 and 150).
+* Newton tolerances are not the source of the ~1e-5 LET dependence of the table
+  (let_table_abs_tol.py: abs 1e10->1e7 bit-identical, rel 1e-8->1e-11 3e-9). It comes from
+  collected_charge's |I| - |I_dark| with I_dark (+2e-13 A/cm hw 50, +6e-13 hw 150) of the
+  opposite sign to the anode signal: offset ~ I_dark t_end / Q_gen ~ 1/LET. Sign-aware
+  (I_dark - I) dt: 0.9999715 / 0.9999703 / 0.9999703 at LET 0.5 / 15.8 / 500 (flat to 1.2e-6)
+  vs 0.9999624 / 0.9999699 / 0.9999703. Pre-existing estimator issue, NOT fixed (it would
+  move the table by up to 9e-6 / 1.7e-5 at 0.5 keV/um).
+* Two-point affine fill (Q_col = a Q_gen + b): misses 1.8e-7 (hw 50) / 7.4e-7 (hw 150) at
+  the middle LET, 8.2e-7 max over the hw 50 grid: too close to 1e-6, replaced by
+* linear-response synthesis (method="linear", default): I_L = I_dark + (I_ref - I_dark)
+  Q_gen(L)/Q_gen(ref) on the fixed time grid, with the estimator and stop rule of
+  simulate_single_particle; lowest LETs simulated bottom-up until one agrees to 2.5e-7, the
+  middle LET simulated as a 1e-6 check.
+
+Notebook-16 grids (let_table_linear.py), linear vs full (one transient per LET, = old code):
+
+| table          | simulated | max abs(lin - full) | t95 diff | wall full -> linear (concurrent runs) |
+| -------------- | --------- | ------------------- | -------- | ------------------------------------- |
+| 100 um, 20 LET | 11 / 20   | 1.07e-7             | 0        | 18.4 -> 15.2 min                      |
+| 300 um, 10 LET | 6 / 10    | 1.18e-7             | 0        | 45.9 -> 25.7 min                      |
+
+Fresh vs committed data/ tables (built 2026-10-17): up to 5.9e-6 / 6.2e-6 in CCE (lowest LET),
+~2e-6 at 500 keV/um, for full and linear alike; stored t95 0.208 ns vs fresh 0.1174 ns.
+The anchors are conservative: misses below the first synthesised LET are 2.5e-7-1e-6;
+a 5e-7 anchor tolerance would simulate fewer LETs (untested).
+
+engine2d transient (task 3), not implemented: engine2d has a banded-LU Gummel DC solver
+only; a BDF1 transient needs mass terms in the continuity kernels, a per-step Gummel/Newton
+with devsim's convergence semantics and a parity harness (>1 day). <=1e-9 parity vs devsim
+is not demonstrable: devsim's own per-LET CCE carries ~1e-7-1e-6 step-count/stop noise.
+Gain is capped anyway: the table now needs 6-12 transients.
