@@ -40,3 +40,23 @@ def test_forward_anode_current_matches_direct_form(dev, V):
     # well-conditioned regime: a sign-convention flip would show here
     out = iv_sweep(dev, [V], contact="anode")
     assert out["currents"][0] == pytest.approx(extract_contact_current(dev, "anode"), rel=1e-5, abs=0)
+
+
+def test_iv_sweep_starts_from_the_live_bias(dev, monkeypatch):
+    """audit-v7 A-13: after ramp_bias the sweep ramps from the live bias, not from 0 V."""
+    from etna.core.drift_diffusion import ramp_bias
+
+    ramp_bias(dev, -10.0, contact="anode")
+    applied = []
+    real_set = devsim.set_parameter
+
+    def spy(**kw):
+        if kw.get("device") == dev["device_name"] and kw.get("name") == "anode_bias":
+            applied.append(kw["value"])
+        return real_set(**kw)
+
+    monkeypatch.setattr(devsim, "set_parameter", spy)
+    out = iv_sweep(dev, [-9.5], contact="anode")
+    assert applied == [pytest.approx(-9.5)]  # one 0.5 V step from -10 V, no jump from 0
+    assert out["truncated"] is False
+    assert out["voltages"].tolist() == [-9.5]
