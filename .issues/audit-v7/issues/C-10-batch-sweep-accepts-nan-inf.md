@@ -4,7 +4,7 @@ source: raw-C F10
 title: Batch Sweep value parser accepts nan, inf and non-positive values, which are injected straight into DeviceConfig
 severity: low
 category: bug
-status: open
+status: fixed
 location:
   - app/workflows/batch_sweep.py:93-100
 labels: [app, input-validation]
@@ -54,3 +54,8 @@ AppTest: values "10, nan" -> st.error shown and no facade call. "10, -5" -> st.e
 ## Effort
 
 S
+
+## Status 2026-10-18 (final-c): fixed (0d55a48)
+
+- The parser rejects any value that is not finite and > 0 (every SWEEPABLE_FIELDS entry, incl. L_transition_um which DeviceConfig requires > 0) with st.error before the facade runs. (Before, nan reached DeviceConfig validation, but inf passed it for epi thickness / area / N_A.)
+- Evidence: `uv run pytest -q tests/test_app_batch_sweep_page.py` -> 9 passed (test_non_finite_or_non_positive_values_are_rejected: "10, nan", "10, inf", "10, -5", "0, 10"; test_valid_values_still_run).

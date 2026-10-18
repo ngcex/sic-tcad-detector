@@ -4,7 +4,7 @@ source: raw-C F16
 title: Streamlit app listens on all interfaces by default with no auth, 200 MB uploads and unbounded CPU-bound solves
 severity: low
 category: security
-status: open
+status: fixed
 location:
   - .streamlit/config.toml (only a [theme] section; no [server] section)
   - README.md:82 (`uv run streamlit run app/main.py`)
@@ -65,3 +65,8 @@ Config only. Manually start the app and check that `lsof -nP -iTCP:8501 -sTCP:LI
 ## Effort
 
 S
+
+## Status 2026-10-18 (final-c): fixed (c6c2e51)
+
+- .streamlit/config.toml gains `[server] address = "localhost"` (theme kept). maxUploadSize is set explicitly to Streamlit default 200 MB on purpose: a per-step MC CSV is ~70 B/step (data/synthetic_mc_events.csv 776 kB / 11k steps), so 20 MB would block real Geant4 exports, and with the loopback bind uploads come only from the local user. headless is not set in the file (passed on the CLI for health checks; locally the browser should open). For shared use: `--server.address 0.0.0.0` behind an authenticating proxy (comment in the file).
+- Evidence: `uv run streamlit run app/main.py --server.headless true --server.port 8597` -> `curl -s localhost:8597/_stcore/health` = ok; `lsof -nP -iTCP:8597 -sTCP:LISTEN` -> `TCP 127.0.0.1:8597 (LISTEN)` (was `*:8599` at audit time); server killed, port free. tests/test_app_streamlit_config.py asserts server.address == "localhost".

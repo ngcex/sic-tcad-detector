@@ -4,7 +4,7 @@ source: raw-C F13
 title: Dead or test-only surface in the API layer (MeshData.regions/contacts, build_device device_name, run_flash_recombination/run_transient not exportable)
 severity: info
 category: dead-code
-status: open
+status: fixed
 location:
   - etna/api/results.py:32-33 and etna/api/simulation.py (run_field populates MeshData.regions / .contacts)
   - etna/api/device.py:46 (`build_device(..., device_name=None)`)
@@ -58,3 +58,10 @@ test_api_field accordingly.
 ## Effort
 
 S
+
+## Status 2026-10-18 (final-c): fixed (f88e0bb + 9122689)
+
+- (a) 9122689: MeshData.regions/.contacts are LIVE: app/components/geometry_viewer.py draws each contact as a dashed line at its depth (vertical in the 1D bar chart, horizontal on the reversed 2D depth axis) and outlines 2D regions; empty lists draw nothing. MeshData docstring rewritten (units, dict keys, devsim and engine2d producers). Live check: run_field 1D -> lines at 0 and 11.3 um; 2D (engine2d) -> rect + lines at 0 and 11.3 um.
+- (b) build_device(device_name=...) kept; 9122689 adds tests/test_api_device.py::test_build_device_forwards_explicit_device_name (1D and 2D, no devsim).
+- (c) f88e0bb: to_csv_bytes branches for "temperature" (T_K, CCE, solver from solver_per_T; voltage_V/method header), "flash" (dose_rate_Gy_s, CCE; V_bias/E_MeV + scope WARNING) and "transient" (dose_rate_Gy_s, CCE_clipped_0_1, CCE_raw from transient_cce_raw; current_contact header).
+- Evidence: `uv run pytest -q tests/test_app_geometry_viewer.py tests/test_app_csv_export.py tests/test_api_device.py -k "not slow"` pass (3 viewer tests, 3 round-trip tests, 1 device_name test).

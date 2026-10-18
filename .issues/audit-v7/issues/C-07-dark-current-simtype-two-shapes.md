@@ -4,7 +4,7 @@ source: raw-C F7
 title: sim_type="dark_current" has two incompatible shapes; the facade's native bias-sweep result is mislabeled as T_K by to_csv_bytes / build_dark_current_figure, and truncation is not reported
 severity: low
 category: bug
-status: open
+status: fixed
 location:
   - etna/api/simulation.py:742-754 (run_dark_current: x = bias V)
   - app/components/results.py:89-132 (figure x-axis "Temperature (K)"), :286-296 (CSV first column "T_K")
@@ -81,3 +81,9 @@ indistinguishable from a complete one. The app path itself is labeled correctly 
 ## Effort
 
 S
+
+## Status 2026-10-18 (final-c): fixed (e10c83d + f88e0bb)
+
+- e10c83d: run_dark_current reports `truncated`, `requested_v_start/stop`, `reached_v_stop`.
+- f88e0bb: the Dark Current page aggregate is `sim_type="dark_current_vs_T"` (CSV `T_K,I_total_A`); run_dark_current keeps `"dark_current"` (x = bias) and to_csv_bytes exports it as `bias_V,I_total_A` (+ `past_reach_through` column for the legacy model, `# truncated:` and `# validity:` header lines); build_dark_current_figure titles the axis Temperature or Bias by sim_type.
+- Evidence: `uv run pytest -q tests/test_app_csv_export.py tests/test_app_dark_current_page.py` -> passed (test_run_dark_current_shape_is_labelled_bias_not_temperature, test_run_dark_current_truncation_and_legacy_validity_are_exported; page CSV still starts with T_K).

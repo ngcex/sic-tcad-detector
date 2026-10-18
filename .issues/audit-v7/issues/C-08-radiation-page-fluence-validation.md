@@ -4,7 +4,7 @@ source: raw-C F8
 title: Radiation Damage page accepts fluence_min <= 0 or min > max: zero crashes with an uncaught ValueError, negative silently yields NaN fluences
 severity: low
 category: bug
-status: open
+status: fixed
 location:
   - app/workflows/radiation_damage.py:62-74 (fluence inputs, no min_value)
   - app/workflows/radiation_damage.py:96-110 (geomspace outside any ValueError handler)
@@ -70,3 +70,8 @@ fluence_min=1e16, fluence_max=1e13 (st.error shown and the facade is not called)
 ## Effort
 
 S
+
+## Status 2026-10-18 (final-c): fixed (00ce048, test e08916e)
+
+- 00ce048: Run checks `0 < fluence_min <= fluence_max` (and V_bias <= 0) before geomspace; errors go through show_error. e08916e pins it.
+- Evidence: `uv run pytest -q tests/test_app_radiation_damage_page.py` -> 8 passed (test_invalid_fluence_range_is_rejected_before_the_facade: min 0, min < 0, min > max -> st.error, facade never called).
