@@ -46,6 +46,7 @@ from etna.core.solver_tol import (
     TRANSIENT_RELAXED_REL_ERROR,
     TRANSIENT_REL_ERROR,
 )
+from etna.core.devsim_reset import delete_device_and_mesh
 
 logger = logging.getLogger(__name__)
 
@@ -537,7 +538,7 @@ def build_cce_let_table(
         finally:
             if device_info is not None:
                 try:
-                    devsim.delete_device(device=device_info["device_name"])
+                    delete_device_and_mesh(device_info["device_name"])
                 except Exception:
                     pass
 

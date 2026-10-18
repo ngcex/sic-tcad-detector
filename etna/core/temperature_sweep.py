@@ -22,6 +22,7 @@ from etna.core.sic_material import (
     mobility_caughey_thomas_T,
 )
 from etna.core.device import graded_stack_kwargs, mobility_doping
+from etna.core.devsim_reset import delete_device_and_mesh
 
 
 logger = logging.getLogger(__name__)
@@ -62,7 +63,6 @@ def sweep_iv_vs_temperature(
         DataFrame with columns: T, I_reverse, n_i, mu_n, mu_p, E_g.
         Indexed by integer row number.
     """
-    import devsim
 
     from etna.core.drift_diffusion import create_dd_device, extract_steady_state_current, ramp_bias
     from etna.core.dark_current import create_dark_current_device, dark_current_sweep
@@ -132,7 +132,7 @@ def sweep_iv_vs_temperature(
             logger.warning(f"sweep_iv: failed at T={T:.1f}K: {e}")
         finally:
             try:
-                devsim.delete_device(device=dev_name)
+                delete_device_and_mesh(dev_name)
             except Exception:
                 pass
 
@@ -166,7 +166,6 @@ def sweep_cv_vs_temperature(
         - 'W': 2D array of depletion widths (cm), shape (len(T), len(V))
         - 'C': 2D array of capacitances (F/cm^2), shape (len(T), len(V))
     """
-    import devsim
 
     from etna.core.cv_analysis import cv_sweep as _cv_sweep
     from etna.core.drift_diffusion import create_dd_device
@@ -206,7 +205,7 @@ def sweep_cv_vs_temperature(
             C_all[i, :] = np.nan
         finally:
             try:
-                devsim.delete_device(device=dev_name)
+                delete_device_and_mesh(dev_name)
             except Exception:
                 pass
 
@@ -243,7 +242,6 @@ def sweep_cce_vs_temperature(
     df : pd.DataFrame
         Long-format DataFrame with columns: T, V, CCE.
     """
-    import devsim
 
     from etna.core.charge_collection import hecht_cce
     from etna.core.cv_analysis import cv_sweep as _cv_sweep
@@ -285,7 +283,7 @@ def sweep_cce_vs_temperature(
                 logger.warning(f"sweep_cce(hecht): failed at T={T:.1f}K: {e}")
             finally:
                 try:
-                    devsim.delete_device(device=dev_name)
+                    delete_device_and_mesh(dev_name)
                 except Exception:
                     pass
 

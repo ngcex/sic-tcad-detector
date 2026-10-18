@@ -33,7 +33,7 @@ from etna.core.device import (
     table_sensitive_end_cm,
     table_sensitive_end_doping,
 )
-from etna.core.devsim_reset import reset_devsim_fully
+from etna.core.devsim_reset import reset_devsim_fully, delete_device_and_mesh
 from etna.core.drift_diffusion import ramp_bias
 from etna.core.flash_recombination import cce_vs_dose_rate
 from etna.core.mc_coupling import load_mc_events_csv
@@ -753,7 +753,7 @@ def _run_cv_devsim(config: DeviceConfig, bias_array) -> SimResult:
     finally:
         # Ensure no device leaks after run_cv returns, regardless of outcome.
         try:
-            devsim.delete_device(device=device_info["device_name"])
+            delete_device_and_mesh(device_info["device_name"])
         except Exception:
             logger.warning(
                 "run_cv: delete_device(%r) failed, falling back to full reset",
@@ -1100,7 +1100,7 @@ def run_field(config: DeviceConfig, bias_V: float = -50.0) -> SimResult:
     finally:
         # Ensure no device leaks after run_field returns, regardless of outcome.
         try:
-            devsim.delete_device(device=device_info["device_name"])
+            delete_device_and_mesh(device_info["device_name"])
         except Exception:
             logger.warning(
                 "run_field: delete_device(%r) failed, falling back to full reset",
@@ -1848,7 +1848,7 @@ def run_dark_current(
         # Ensure no device leaks after run_dark_current returns, regardless
         # of outcome (bucket-b finally block copied from run_cv).
         try:
-            devsim.delete_device(device=device_info["device_name"])
+            delete_device_and_mesh(device_info["device_name"])
         except Exception:
             logger.warning(
                 "run_dark_current: delete_device(%r) failed, falling back to "

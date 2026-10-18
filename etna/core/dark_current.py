@@ -57,6 +57,7 @@ from etna.core.drift_diffusion import (
     extract_steady_state_current,
 )
 from etna.core.device import DEFAULT_STACK as _STACK, graded_stack_kwargs
+from etna.core.devsim_reset import delete_device_and_mesh
 
 
 logger = logging.getLogger(__name__)
@@ -805,7 +806,7 @@ def sensitivity_sweep(
                 )
         finally:
             try:
-                devsim.delete_device(device=device_name)
+                delete_device_and_mesh(device_name)
             except Exception:
                 pass
 
@@ -933,7 +934,7 @@ def dark_current_vs_fluence(
         pristine_N_D_profile = ref_donors[epi_mask_ref]
     finally:
         try:
-            devsim.delete_device(device=ref_name)
+            delete_device_and_mesh(ref_name)
         except Exception:
             pass
 
@@ -1007,7 +1008,7 @@ def dark_current_vs_fluence(
             reasons[i] = f"solver failure: {type(e).__name__}: {e}"
         finally:
             try:
-                devsim.delete_device(device=dev_name)
+                delete_device_and_mesh(dev_name)
             except Exception:
                 pass
 
@@ -1142,7 +1143,7 @@ def dark_current_post_anneal(
         pristine_N_D_profile = ref_donors[epi_mask_ref]
     finally:
         try:
-            devsim.delete_device(device=ref_name)
+            delete_device_and_mesh(ref_name)
         except Exception:
             pass
 
@@ -1235,7 +1236,7 @@ def dark_current_post_anneal(
         return _invalid(f"solver failure: {type(e).__name__}: {e}")
     finally:
         try:
-            devsim.delete_device(device=dev_name)
+            delete_device_and_mesh(dev_name)
         except Exception:
             pass
 

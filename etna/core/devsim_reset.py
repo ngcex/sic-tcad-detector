@@ -131,3 +131,21 @@ def reset_devsim_fully(preserve_solver=True):
                 devsim.set_parameter(name="solver_callback", value=saved_callback)
             except Exception:
                 pass
+
+
+def delete_device_and_mesh(device_name):
+    """Delete a devsim device and the mesh it was built from.
+
+    ``devsim.delete_device`` leaves the mesh alive (a new device can still be created
+    from it), so per-call devices leaked one mesh each in long fluence / dose-rate
+    loops (audit-v7 A-09). Every ETNA builder (create_sic_device, create_sic_device_2d,
+    alternative_structures, the batched and engine2d probes) creates one device per
+    mesh named ``f"{device_name}_mesh"``; this deletes both. The device deletion
+    raises ``devsim.error`` exactly like ``devsim.delete_device`` (callers keep their
+    own handling); a missing mesh (device built some other way) is not an error.
+    """
+    devsim.delete_device(device=device_name)
+    try:
+        devsim.delete_mesh(mesh=f"{device_name}_mesh")
+    except devsim.error:
+        logger.debug("delete_device_and_mesh: no mesh %r_mesh", device_name)

@@ -42,6 +42,7 @@ from etna.core.poisson import (
 from etna.core.radiation_damage import compute_damaged_params, compute_phi_crit
 from etna.core.sic_material import srh_lifetime
 from etna.core.device import DEFAULT_STACK as _STACK
+from etna.core.devsim_reset import delete_device_and_mesh
 
 logger = logging.getLogger(__name__)
 
@@ -531,7 +532,7 @@ def cv_at_fluence(
         pristine_N_D_profile = ref_donors[epi_mask]
     finally:
         try:
-            devsim.delete_device(device=ref_name)
+            delete_device_and_mesh(ref_name)
         except Exception:
             pass
 
@@ -630,7 +631,7 @@ def cv_at_fluence(
         raise
     finally:
         try:
-            devsim.delete_device(device=dev_name)
+            delete_device_and_mesh(dev_name)
         except Exception:
             pass
 

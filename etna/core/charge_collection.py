@@ -45,6 +45,7 @@ logger = logging.getLogger(__name__)
 # graded-doping defaults of the fluence sweeps = cce_vs_bias = the default stack
 from etna.core.device import DEFAULT_STACK as _STACK  # noqa: E402
 from etna.core.device import graded_stack_kwargs, mobility_doping  # noqa: E402
+from etna.core.devsim_reset import delete_device_and_mesh
 
 
 def full_compensation_reason(damaged):
@@ -625,7 +626,7 @@ def cce_vs_bias(
 
     finally:
         try:
-            devsim.delete_device(device=device)
+            delete_device_and_mesh(device)
         except Exception:
             pass
 
@@ -775,7 +776,7 @@ def _fluence_reference(dev_kw):
         x, donors, acceptors = get("x"), get("Donors"), get("Acceptors")
     finally:
         try:
-            devsim.delete_device(device=ref_name)
+            delete_device_and_mesh(ref_name)
         except Exception:
             pass
     epi_mask = x >= info["junction_pos"]
@@ -921,7 +922,7 @@ def _cce_fluence_devsim(dev_kw, damaged, V_bias, alpha_range_cm, generation_rate
         return compute_cce_from_dd(device_info, gen_values, contact="cathode")
     finally:
         try:
-            devsim.delete_device(device=dev_name)
+            delete_device_and_mesh(dev_name)
         except Exception:
             pass
 
@@ -1157,7 +1158,7 @@ def cce_vs_bias_at_fluence(
         pristine_N_D_profile = ref_donors[epi_mask_ref]
     finally:
         try:
-            devsim.delete_device(device=ref_name)
+            delete_device_and_mesh(ref_name)
         except Exception:
             pass
 
@@ -1263,7 +1264,7 @@ def cce_vs_bias_at_fluence(
 
     finally:
         try:
-            devsim.delete_device(device=dev_name)
+            delete_device_and_mesh(dev_name)
         except Exception:
             pass
 
@@ -1378,7 +1379,7 @@ def cce_post_anneal(
         pristine_N_D_profile = ref_donors[epi_mask_ref]
     finally:
         try:
-            devsim.delete_device(device=ref_name)
+            delete_device_and_mesh(ref_name)
         except Exception:
             pass
 
@@ -1498,7 +1499,7 @@ def cce_post_anneal(
         return _invalid(f"solver failure: {type(e).__name__}: {e}")
     finally:
         try:
-            devsim.delete_device(device=dev_name)
+            delete_device_and_mesh(dev_name)
         except Exception:
             pass
 
@@ -1714,7 +1715,7 @@ def cce_vs_epi_thickness(
 
         finally:
             try:
-                devsim.delete_device(device=device)
+                delete_device_and_mesh(device)
             except Exception:
                 pass
 

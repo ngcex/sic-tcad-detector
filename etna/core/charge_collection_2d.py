@@ -46,6 +46,7 @@ from etna.core.drift_diffusion import (
 )
 from etna.core.charge_collection import add_generation_to_dd
 from etna.core.generation_profiles import alpha_depth_shape, confine_generation_to_epi
+from etna.core.devsim_reset import delete_device_and_mesh
 
 logger = logging.getLogger(__name__)
 
@@ -710,7 +711,7 @@ def compare_cce_2d_vs_1d(half_width_um=50.0, V_bias=50.0, gen_rate=1e18):
         # (with residual DD state from lateral scan) causes convergence failure
         # when the 1D device tries its initial equilibrium solve.
         half_width_cm = device_info_2d["half_width_cm"]
-        devsim.delete_device(device=device_info_2d["device_name"])
+        delete_device_and_mesh(device_info_2d["device_name"])
         device_info_2d = None  # Prevent double-delete in finally
 
         # --- 1D device ---
@@ -765,12 +766,12 @@ def compare_cce_2d_vs_1d(half_width_um=50.0, V_bias=50.0, gen_rate=1e18):
         # Clean up devices
         if device_info_2d is not None:
             try:
-                devsim.delete_device(device=device_info_2d["device_name"])
+                delete_device_and_mesh(device_info_2d["device_name"])
             except Exception:
                 pass
         if device_info_1d is not None:
             try:
-                devsim.delete_device(device=device_info_1d["device_name"])
+                delete_device_and_mesh(device_info_1d["device_name"])
             except Exception:
                 pass
 
@@ -817,7 +818,7 @@ def cce_vs_bias_lateral(half_width_um=50.0, biases=None, n_points=5, gen_rate=1e
         finally:
             if device_info is not None:
                 try:
-                    devsim.delete_device(device=device_info["device_name"])
+                    delete_device_and_mesh(device_info["device_name"])
                 except Exception:
                     pass
 
