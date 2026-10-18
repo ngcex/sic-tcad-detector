@@ -60,9 +60,15 @@ Q_ELECTRON = 1.602e-19  # C, elementary charge
 # (The old 5 % headroom covered the post-injection trapezoid, audit C4.)
 _CCE_EXCESS_TOL = 1e-3
 
-# build_cce_let_table(method="affine"): largest accepted miss, in CCE_raw, of the
-# simulated middle LET against the end-point line (fresh hw 50 run: 1.8e-7).
-_AFFINE_CHECK_TOL = 5e-7
+# build_cce_let_table(method="linear"): a LET is synthesised from the let_max transient
+# once a simulated LET below it agrees with its synthesis to _LINEAR_ANCHOR_TOL
+# (CCE_raw); the simulated middle LET must agree to _LINEAR_CHECK_TOL (table tolerance).
+_LINEAR_ANCHOR_TOL = 2.5e-7
+_LINEAR_CHECK_TOL = 1e-6
+# rtol_converged of the let_max reference run: continues past the default stop so the
+# synthesised low-LET series (which stop later) are covered; its own row applies the
+# default stop to the same series (identical prefix, so that row is unchanged).
+_LINEAR_REF_RTOL = 1e-10
 
 
 def ion_track_generation_2d(
@@ -443,8 +449,7 @@ def build_cce_let_table(
     x_ion_cm=0.0,
     contact=None,
     device_kwargs=None,
-    method="affine",
-    affine_check_tol=_AFFINE_CHECK_TOL,
+    method="linear",
 ):
     """Build CCE(LET) lookup table from transient simulations.
 
@@ -471,46 +476,45 @@ def build_cce_let_table(
         Forwarded to simulate_single_particle (None = anode with n+, else cathode).
     device_kwargs : dict or None
         Extra keyword arguments for create_2d_dd_device (geometry / doping stack).
-    method : {"affine", "full"}
-        "full": one transient per LET. "affine" (default, n_let_points > 3): three
-        transients (let_min, let_max and the middle LET of the grid); the other rows
-        are Q_collected = a * Q_generated + b through the let_min / let_max points,
-        and the simulated middle point checks that line (see Notes). Falls back to
-        "full" (with a warning) if the check fails or a transient fails.
-    affine_check_tol : float
-        Largest |CCE_raw(fit) - CCE_raw(simulated)| accepted at the middle LET.
+    method : {"linear", "full"}
+        "full": one transient per LET. "linear" (default, n_let_points > 3): the
+        let_max transient is synthesised for the other LETs (see Notes); the lowest
+        LETs, where the synthesis is least accurate, are simulated bottom-up until one
+        agrees with its synthesis to 2.5e-7, and the middle LET is simulated as a
+        check (1e-6). Falls back to simulating the remaining LETs (with a warning) if
+        the check fails or a transient fails.
 
     Returns
     -------
     table : pandas.DataFrame
         Columns: LET_keV_um, Q_generated_fC, Q_collected_fC, CCE (clipped to
         [0, 1]), CCE_raw (unclipped Q_collected / Q_generated), t_collection_ns,
-        converged, simulated (False for the rows filled by the affine fit).
+        converged, simulated (False for the rows synthesised by method="linear").
 
     Notes
     -----
-    Why the affine fill is enough. The table's LETs are all low injection (peak
+    Why method="linear" is enough. The table's LETs are all low injection (peak
     excess density 2.6e9-2.6e12 cm^-3 for 0.5-500 keV/um against N_D_bulk 3.4e13, no
-    plasma effects in the model), so the transient is linear in the deposited charge
-    and the physical CCE does not depend on the LET; the simulated tables vary by
-    only ~1e-5 over three decades. That residual variation goes as 1/LET, i.e. a
-    fixed charge offset b, which the line a * Q_generated + b reproduces. Its origin
-    is the dark-current subtraction of collected_charge, sum (|I| - |I_dark|) dt: at
-    the anode of the default stack I_dark (+2.0e-13 A/cm at hw 50, 50 V) has the
-    opposite sign to the signal current, so each step is off by ~|I_dark| dt, an
-    offset of order I_dark * t_end independent of the LET (the sign-aware sum
-    (I_dark - I) dt gives 0.9999715 / 0.9999703 / 0.9999703 at LET 0.5 / 15.8 / 500
-    against 0.9999624 / 0.9999699 / 0.9999703; the Newton tolerances are not the
-    cause: TRANSIENT_ABS_ERROR 1e10 -> 1e7 is bit-identical, TRANSIENT_REL_ERROR
-    1e-8 -> 1e-11 moves CCE by 3e-9; lab/engine_box/bench/let_table_abs_tol.py). The
-    end-point line misses the simulated middle LET by 1.8e-7 (fresh hw 50 run;
-    t_end varies by ~10 % between LETs) and every row of the stored 100 / 300 um
-    tables by <= 1.5e-7 / 5.5e-7 (lab/engine_box/bench/let_table_affine.py: the
-    full 20 / 10-point grids, affine vs full). Cost: 3 transients instead of
-    n_let_points (20 -> 3 for the 100 um table, 10 -> 3 for the 300 um one).
+    plasma effects in the model), so the transient is linear in the deposited charge:
+    on the fixed time grid of simulate_single_particle (dt depends on t only) the
+    contact current at LET L is I_dark + (I_ref(t) - I_dark) * Q_gen(L) / Q_gen(ref).
+    The synthesis applies simulate_single_particle's own estimator and convergence
+    stop to that series, so it reproduces the per-LET runs, including their residual
+    ~1e-5 LET dependence. That dependence is numerical, from collected_charge's
+    sum (|I| - |I_dark|) dt: at the anode of the default stack I_dark (+2.0e-13 A/cm
+    at hw 50, 50 V) has the opposite sign to the signal current, an offset of order
+    I_dark * t_end / Q_gen ~ 1/LET (the sign-aware sum (I_dark - I) dt gives
+    0.9999715 / 0.9999703 / 0.9999703 at LET 0.5 / 15.8 / 500 against 0.9999624 /
+    0.9999699 / 0.9999703). The Newton tolerances are not the cause
+    (TRANSIENT_ABS_ERROR 1e10 -> 1e7 bit-identical, TRANSIENT_REL_ERROR 1e-8 -> 1e-11
+    moves CCE by 3e-9; lab/engine_box/bench/let_table_abs_tol.py). Synthesis vs
+    simulation (fresh runs, hw 50 / 150): 7.9e-8 / 7.4e-8 at LET 15.8, ~1e-6 at LET
+    0.5 (there the solver's tail stalls at I_dark, which a linear model does not
+    reproduce: hence the bottom-up simulated anchors). Parity on the full notebook-16
+    grids: lab/engine_box/bench/let_table_linear.py.
     """
-    if method not in ("affine", "full"):
-        raise ValueError(f"method must be 'affine' or 'full', got {method!r}")
+    if method not in ("linear", "full"):
+        raise ValueError(f"method must be 'linear' or 'full', got {method!r}")
     LET_values = np.logspace(np.log10(let_min), np.log10(let_max), n_let_points)
 
     # One device for the whole table: the build (mesh, Poisson, equilibrium, DD setup,
@@ -526,7 +530,7 @@ def build_cce_let_table(
     try:
         dark_state = _snapshot_dark_state(device_info)
 
-        def point(i):
+        def point(i, **sim_kw):
             return _cce_let_point(
                 device_info,
                 dark_state,
@@ -535,14 +539,13 @@ def build_cce_let_table(
                 contact,
                 i,
                 n_let_points,
+                **sim_kw,
             )
 
         rows, done = None, {}
-        if method == "affine" and n_let_points > 3:
-            rows, done = _affine_table(
-                device_info, LET_values, x_ion_cm, point, affine_check_tol
-            )
-        if rows is None:  # "full", or the affine check failed: simulate the rest
+        if method == "linear" and n_let_points > 3:
+            rows, done = _linear_table(device_info, LET_values, x_ion_cm, point)
+        if rows is None:  # "full", or the linear check failed: simulate the rest
             rows = [done[i] if i in done else point(i) for i in range(n_let_points)]
     finally:
         try:
@@ -553,54 +556,102 @@ def build_cce_let_table(
     return pd.DataFrame(rows)
 
 
-def _affine_table(device_info, LET_values, x_ion_cm, point, check_tol):
-    """(rows, simulated): table rows from transients at let_min, let_max and the middle
-    LET, the others from Q_collected = a * Q_generated + b through the end points
-    (build_cce_let_table Notes). rows is None if a transient fails or the middle point
-    misses the line by more than ``check_tol`` in CCE_raw (the caller then simulates
-    the other LETs); ``simulated`` maps grid index -> simulated row."""
+def synthesize_linear_response(
+    times, currents, I_dark, scale, rtol_converged=1e-7, n_converged=3
+):
+    """simulate_single_particle's (Q_collected, times, currents) for a generation
+    ``scale`` times that of a run (``times``, ``currents``, ``I_dark``), assuming the
+    transient is linear in the generation: I = I_dark + scale * (I_run - I_dark) on the
+    same time grid, with the same estimator and convergence stop. None if the series
+    ends before the stop (the run being scaled is too short to cover it).
+    """
+    times = np.asarray(times, dtype=float)
+    I = I_dark + scale * (np.asarray(currents, dtype=float) - I_dark)
+    dt = np.diff(times, prepend=0.0)
+    Q_run = (abs(I[0]) - abs(I_dark)) * dt[0]
+    n_small = 0
+    for k in range(1, len(times)):
+        dQ = (abs(I[k]) - abs(I_dark)) * dt[k]
+        Q_run += dQ
+        if Q_run != 0.0 and abs(dQ) < rtol_converged * abs(Q_run):
+            n_small += 1
+            if n_small >= n_converged:
+                t, Ik = times[: k + 1], I[: k + 1]
+                return collected_charge(t, Ik, I_dark), t, Ik
+        else:
+            n_small = 0
+    return None
+
+
+def _linear_table(device_info, LET_values, x_ion_cm, point):
+    """(rows, simulated) for build_cce_let_table(method="linear"); rows is None when the
+    let_max transient fails or the middle-LET check misses (the caller then simulates
+    the rest). ``simulated`` maps grid index -> simulated row."""
     n = len(LET_values)
-    i_lo, i_mid, i_hi = 0, n // 2, n - 1
-    sim = {i: point(i) for i in (i_lo, i_hi, i_mid)}
-    if any(not np.isfinite(r["CCE_raw"]) for r in sim.values()):
-        logger.warning("affine CCE(LET) table: a transient failed, simulating the other LETs")
-        return None, sim
-    q_gen = {i: r["Q_generated_fC"] for i, r in sim.items()}
-    q_col = {i: r["Q_collected_fC"] for i, r in sim.items()}
-    slope = (q_col[i_hi] - q_col[i_lo]) / (q_gen[i_hi] - q_gen[i_lo])
+    i_hi, i_mid = n - 1, n // 2
+    row_hi, ref = point(i_hi, rtol_converged=_LINEAR_REF_RTOL, return_series=True)
+    if ref is None or not np.isfinite(row_hi["CCE_raw"]):
+        logger.warning("linear CCE(LET) table: let_max transient failed")
+        return None, {}
+    q_gen_hi = row_hi["Q_generated_fC"] * 1e-15
 
-    def fit(qg):
-        return q_col[i_lo] + slope * (qg - q_gen[i_lo])
+    def synth(i, Q_gen=None):
+        if Q_gen is None:
+            _, Q_gen = ion_track_generation_2d(
+                device_info, LET_values[i], x_ion_cm=x_ion_cm
+            )
+        out = synthesize_linear_response(
+            ref["times"], ref["currents"], ref["I_dark"], Q_gen / q_gen_hi
+        )
+        if out is None:
+            return None
+        Q_col, t, I = out
+        t95 = analyze_current_pulse(t, I, ref["I_dark"])["t_collection"]
+        row = _table_row(LET_values[i], Q_gen, Q_col, True, t95)
+        return {**row, "simulated": False}
 
-    miss = abs(fit(q_gen[i_mid]) / q_gen[i_mid] - sim[i_mid]["CCE_raw"])
-    if miss > check_tol:
+    # the let_max row: the default stop applied to its own (longer) series
+    hi = synth(i_hi, q_gen_hi)
+    if hi is None:
+        logger.warning("linear CCE(LET) table: let_max run did not converge")
+        return None, {}
+    sim = {i_hi: {**hi, "simulated": True}}
+
+    def miss(i):
+        s_row = synth(i, sim[i]["Q_generated_fC"] * 1e-15)
+        if s_row is None or not np.isfinite(sim[i]["CCE_raw"]):
+            return np.inf
+        return abs(s_row["CCE_raw"] - sim[i]["CCE_raw"])
+
+    # bottom-up anchors: simulate until a LET agrees with its synthesis
+    i_first_synth = i_hi
+    for i in range(i_hi):
+        sim[i] = point(i)
+        if miss(i) <= _LINEAR_ANCHOR_TOL:
+            i_first_synth = i + 1
+            break
+    if i_mid not in sim:
+        sim[i_mid] = point(i_mid)
+    d_mid = miss(i_mid)
+    if not d_mid <= _LINEAR_CHECK_TOL:
         logger.warning(
-            f"affine CCE(LET) table: middle LET {LET_values[i_mid]:.3g} keV/um misses "
-            f"the end-point line by {miss:.2e} in CCE (> {check_tol:g}): simulating "
-            "the other LETs"
+            f"linear CCE(LET) table: middle LET {LET_values[i_mid]:.3g} keV/um misses "
+            f"its synthesis by {d_mid:.2e} in CCE (> {_LINEAR_CHECK_TOL:g}): "
+            "simulating the other LETs"
         )
         return None, sim
-    logger.info(
-        f"affine CCE(LET) table: middle-LET check |dCCE| = {miss:.2e} "
-        f"(tol {check_tol:g}); {n - 3} rows filled from the line"
-    )
-    # t95 and convergence of a filled row: those of the simulated LET nearest in log
-    sim_idx = np.array(sorted(sim))
     rows = []
-    for i, LET in enumerate(LET_values):
-        if i in sim:
-            rows.append(sim[i])
-            continue
-        _, Q_gen = ion_track_generation_2d(device_info, LET, x_ion_cm=x_ion_cm)
-        near = sim[int(sim_idx[np.argmin(np.abs(np.log(LET_values[sim_idx] / LET)))])]
-        row = _table_row(
-            LET,
-            Q_gen,
-            fit(Q_gen * 1e15) * 1e-15,
-            near["converged"],
-            near["t_collection_ns"] * 1e-9,
-        )
-        rows.append({**row, "simulated": False})
+    for i in range(n):
+        row = sim.get(i)
+        if row is None:
+            row = synth(i) if i >= i_first_synth else None
+        if row is None:
+            row = sim[i] = point(i)
+        rows.append(row)
+    logger.info(
+        f"linear CCE(LET) table: {len(sim)} of {n} LETs simulated, middle-LET check "
+        f"|dCCE| = {d_mid:.2e}"
+    )
     return rows, sim
 
 
@@ -625,12 +676,26 @@ def _restore_dark_state(device_info, dark_state):
         devsim.set_node_values(device=device, region=region, name=name, values=values)
 
 
-def _cce_let_point(device_info, dark_state, LET, x_ion_cm, contact, i, n_let_points):
-    """One CCE(LET) table row on the shared device, from the restored dark state."""
+def _cce_let_point(
+    device_info,
+    dark_state,
+    LET,
+    x_ion_cm,
+    contact,
+    i,
+    n_let_points,
+    return_series=False,
+    **sim_kw,
+):
+    """One CCE(LET) table row on the shared device, from the restored dark state
+    (with ``return_series``: (row, simulate_single_particle result or None))."""
+    sim_result = None
     try:
         _restore_dark_state(device_info, dark_state)
         generation, Q_gen = ion_track_generation_2d(device_info, LET, x_ion_cm=x_ion_cm)
-        sim_result = simulate_single_particle(device_info, generation, contact=contact)
+        sim_result = simulate_single_particle(
+            device_info, generation, contact=contact, **sim_kw
+        )
         pulse_info = analyze_current_pulse(
             sim_result["times"], sim_result["currents"], sim_result["I_dark"]
         )
@@ -658,7 +723,7 @@ def _cce_let_point(device_info, dark_state, LET, x_ion_cm, contact, i, n_let_poi
     # Log progress every 5 LET values
     if (i + 1) % 5 == 0 or i == 0:
         logger.info(f"CCE(LET) progress: {i+1}/{n_let_points} (LET={LET:.2f} keV/um)")
-    return row
+    return (row, sim_result) if return_series else row
 
 
 def _table_row(LET, Q_gen, Q_col, converged, t_collection_s):

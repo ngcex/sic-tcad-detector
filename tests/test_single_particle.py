@@ -406,62 +406,55 @@ class TestCCEVsBias:
         ), f"CCE(50V)={cce_results[50.0]:.6f} < CCE(10V)={cce_results[10.0]:.6f}"
 
 
-class TestAffineTable:
-    """build_cce_let_table(method="affine") fill logic with a fake transient (no devsim)."""
+class TestLinearSynthesis:
+    """synthesize_linear_response reproduces simulate_single_particle's estimator and
+    stop on a scaled series (no devsim)."""
 
-    LETS = np.logspace(np.log10(0.5), np.log10(500.0), 7)
+    def test_scale_one_reproduces_the_stopped_run(self, monkeypatch):
+        from etna.core.single_particle import synthesize_linear_response
 
-    def _run(self, monkeypatch, q_col_of_qgen, check_tol=5e-7):
-        import etna.core.single_particle as sp
+        run = TestBackwardEulerEstimator._run_decay
+        stopped = run(monkeypatch, 1e-9)
+        long = run(monkeypatch, 1e-9, rtol_converged=1e-12)
+        assert len(long["times"]) > len(stopped["times"])
+        Q, t, I = synthesize_linear_response(long["times"], long["currents"], 0.0, 1.0)
+        assert len(t) == len(stopped["times"])
+        assert Q == stopped["Q_collected"]
 
-        k = 2.0e-15  # Q_gen (C/cm) per keV/um
-        monkeypatch.setattr(
-            sp, "ion_track_generation_2d", lambda info, L, x_ion_cm=0.0: (None, k * L)
+    def test_linear_scaling_and_short_series(self, monkeypatch):
+        from etna.core.single_particle import synthesize_linear_response
+
+        run = TestBackwardEulerEstimator._run_decay
+        long = run(monkeypatch, 1e-9, rtol_converged=1e-12)
+        Q1, t1, _ = synthesize_linear_response(
+            long["times"], long["currents"], 0.0, 1.0
         )
-        calls = []
-
-        def point(i):
-            calls.append(i)
-            L = self.LETS[i]
-            row = sp._table_row(L, k * L, q_col_of_qgen(k * L), True, 1e-10 * (1 + i))
-            return {**row, "simulated": True}
-
-        rows, sim = sp._affine_table({}, self.LETS, 0.0, point, check_tol)
-        return rows, sim, calls
-
-    def test_affine_fill_exact_for_affine_response(self, monkeypatch):
-        a, b = 0.99997, -3e-21  # b in C/cm
-        rows, sim, calls = self._run(monkeypatch, lambda q: a * q + b)
-        assert sorted(calls) == [0, 3, 6]  # let_min, middle, let_max only
-        assert rows is not None and len(rows) == len(self.LETS)
-        for i, r in enumerate(rows):
-            q = 2.0e-15 * self.LETS[i]
-            assert r["CCE_raw"] == pytest.approx((a * q + b) / q, rel=0, abs=1e-12)
-            assert r["simulated"] == (i in (0, 3, 6))
-        # filled rows take t95 / converged of the simulated LET nearest in log
-        assert rows[1]["t_collection_ns"] == pytest.approx(rows[0]["t_collection_ns"])
-        assert rows[5]["t_collection_ns"] == pytest.approx(rows[6]["t_collection_ns"])
-
-    def test_nonaffine_response_falls_back(self, monkeypatch):
-        # CCE rising by 1e-5 per decade of LET: the middle point misses the line
-        rows, sim, calls = self._run(
-            monkeypatch, lambda q: q * (0.9999 + 1e-5 * np.log10(q / 2.0e-15))
+        Q3, t3, _ = synthesize_linear_response(
+            long["times"], long["currents"], 0.0, 3.0
         )
-        assert rows is None and sorted(sim) == [0, 3, 6]
+        assert len(t3) == len(t1) and Q3 == pytest.approx(3.0 * Q1, rel=1e-12)
+        # a series too short for the stop gives None
+        assert (
+            synthesize_linear_response(
+                long["times"][:5], long["currents"][:5], 0.0, 1.0
+            )
+            is None
+        )
 
     def test_unknown_method_rejected(self):
         from etna.core.single_particle import build_cce_let_table
 
         with pytest.raises(ValueError):
-            build_cce_let_table(method="linear", half_width_um=2.0, n_let_points=4)
+            build_cce_let_table(method="affine", half_width_um=2.0, n_let_points=4)
 
 
 @pytest.mark.slow
 class TestBuildCCELetTableSmallMesh:
     """build_cce_let_table on a small mesh (hw 2 um, 5 mesh columns): the shared-device
-    table equals a fresh device per LET, and method="affine" equals method="full"."""
+    table equals a fresh device per LET, and method="linear" equals method="full"
+    within the table tolerance (1e-6)."""
 
-    def test_build_once_and_affine_parity(self):
+    def test_build_once_and_linear_parity(self):
         from etna.core.charge_collection_2d import create_2d_dd_device
         from etna.core.devsim_reset import delete_device_and_mesh
         from etna.core.single_particle import (
@@ -471,18 +464,19 @@ class TestBuildCCELetTableSmallMesh:
         )
 
         kw = dict(
-            half_width_um=2.0, V_bias=50.0, n_let_points=4, let_min=0.5, let_max=500.0
+            half_width_um=2.0, V_bias=50.0, n_let_points=5, let_min=0.5, let_max=500.0
         )
         full = build_cce_let_table(method="full", **kw)
-        affine = build_cce_let_table(method="affine", **kw)
+        lin = build_cce_let_table(method="linear", **kw)
         assert full["converged"].all() and full["simulated"].all()
-        # n=4: let_min, the middle (index 2) and let_max simulated, index 1 filled
-        assert affine["simulated"].tolist() == [True, False, True, True]
-        for i in (0, 2, 3):
-            assert affine["CCE_raw"][i] == full["CCE_raw"][i]
-        assert abs(affine["CCE_raw"][1] - full["CCE_raw"][1]) < 1e-6
+        assert lin["simulated"].iloc[-1] and not lin["simulated"].all()
+        d = (lin["CCE_raw"] - full["CCE_raw"]).abs()
+        assert d.max() < 1e-6, d.tolist()
+        # simulated rows are the full-table rows (let_max: same series prefix)
+        assert d[lin["simulated"]].max() < 1e-12
+        assert (lin["t_collection_ns"] - full["t_collection_ns"]).abs().max() < 1e-12
 
-        # build-once parity: a fresh device at that LET gives the full-table row
+        # build-once parity: a fresh device gives the full-table row
         info = create_2d_dd_device(half_width_um=2.0, V_bias=50.0)
         try:
             gen, q_gen = ion_track_generation_2d(info, full["LET_keV_um"][1])
