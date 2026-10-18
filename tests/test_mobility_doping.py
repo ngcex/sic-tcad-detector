@@ -122,3 +122,29 @@ def test_engine_scalar_mobility_still_accepted_and_shape_checked():
     assert cb.mu_n.shape == (x.size - 1, 1) and np.all(cb.mu_n == 900.0)
     with pytest.raises(ValueError, match="edge mobility shape"):
         ContinuityBatch(pb, np.ones((x.size, 1)), 120.0, 1e-9, 6e-7)
+
+
+def test_local_mobility_2d_devsim_and_engine2d():
+    """2D builder and engine2d use the same local mobility (per row; vertical edges
+    averaged). The 2D CCE parity tests (engine2d vs devsim, 1e-10) cover the transport."""
+    from etna.core.device import acceptor_total_scale, edge_mobility, local_mobility
+    from etna.core.engine2d.device import Device2D
+    from etna.core.engine2d.grid import grid_from_devsim
+
+    cfg = DeviceConfig(half_width_um=20.0)
+    info = build_device(cfg)
+    d, r = info["device_name"], info["region_name"]
+    g = lambda n: np.array(devsim.get_node_model_values(device=d, region=r, name=n))
+    try:
+        don, acc, mu = g("Donors"), g("Acceptors"), g("mu_n_node")
+    finally:
+        devsim.delete_device(device=d)
+    scale = acceptor_total_scale(cfg.N_A, info["N_A_ionized"])
+    np.testing.assert_allclose(mu, local_mobility(don, acc, scale, cfg.T, "electron"), rtol=1e-13)
+    kw = device_kwargs(cfg)
+    kw.pop("half_width_um", None)
+    grid, ginfo = grid_from_devsim(half_width_um=20.0, **kw)
+    dev = Device2D(grid, ginfo)
+    row = local_mobility(grid.donors, grid.acceptors, scale, cfg.T, "electron")
+    np.testing.assert_allclose(dev.kn_h, row * dev.Vt, rtol=1e-14)
+    np.testing.assert_allclose(dev.kn_v, edge_mobility(row) * dev.Vt, rtol=1e-14)
