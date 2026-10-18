@@ -218,9 +218,9 @@ class TestBackwardEulerEstimator:
         times = np.array([1e-12, 3e-12, 7e-12])
         currents = np.array([-2.0, -1.0, -0.5])  # sign ignored, |I| integrated
         expected = 2.0 * 1e-12 + 1.0 * 2e-12 + 0.5 * 4e-12
-        assert collected_charge(times, currents, 0.0) == pytest.approx(expected)
+        assert collected_charge(times, currents, 0.0) == pytest.approx(expected, rel=1e-12)
         # dark current subtracted per unit time
-        assert collected_charge(times, currents - 0.1, -0.1) == pytest.approx(expected)
+        assert collected_charge(times, currents - 0.1, -0.1) == pytest.approx(expected, rel=1e-12)
         assert collected_charge([], [], 0.0) == 0.0
 
     @staticmethod
@@ -250,9 +250,9 @@ class TestBackwardEulerEstimator:
         tau = 1e-9
         r = self._run_decay(monkeypatch, tau)
         assert r["converged"] and r["times"][-1] < 200e-9
-        assert r["times"][0] == pytest.approx(1e-12)  # the injection step
+        assert r["times"][0] == pytest.approx(1e-12, rel=1e-9)  # the injection step
         assert r["Q_collected"] == pytest.approx(
-            collected_charge(r["times"], r["currents"], 0.0)
+            collected_charge(r["times"], r["currents"], 0.0), rel=1e-12
         )
         # the stop does not truncate: same as running to t_collect without a stop
         full = self._run_decay(monkeypatch, tau, rtol_converged=0.0)
@@ -262,7 +262,7 @@ class TestBackwardEulerEstimator:
         assert r["Q_collected"] == pytest.approx(tau, rel=0.1)
         # analyze_current_pulse uses the same estimator
         pulse = analyze_current_pulse(r["times"], r["currents"], 0.0)
-        assert pulse["Q_collected"] == pytest.approx(r["Q_collected"])
+        assert pulse["Q_collected"] == pytest.approx(r["Q_collected"], rel=1e-12)
 
 
 class TestLETConversion:

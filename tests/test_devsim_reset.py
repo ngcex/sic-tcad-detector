@@ -61,9 +61,13 @@ def test_idempotent_on_empty_state():
     pytest.importorskip("devsim")
     from etna.core.devsim_reset import reset_devsim_fully
 
+    import devsim
+
     # Should not raise even with no devices / no cylindrical state.
     reset_devsim_fully()
+    assert list(devsim.get_device_list()) == []
     reset_devsim_fully(preserve_solver=False)
+    assert list(devsim.get_device_list()) == []
 
 
 class TestResetClearsState:

@@ -189,7 +189,7 @@ def test_gds_top_cell_and_disclaimer(readback, device):
         for lb in top.labels
     )
     assert any(gds.VALIDATION_LABEL in lb.text for lb in top.labels)
-    assert lib.unit == pytest.approx(1e-6)
+    assert lib.unit == pytest.approx(1e-6, rel=1e-12)
 
 
 @pytest.mark.parametrize("device", gds.DEVICES)

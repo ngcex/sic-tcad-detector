@@ -405,7 +405,7 @@ def test_transient_cce_commensurate_or_not(t_duration):
         solver = TransientSolver(info)
         solver.initialize()
         res = solver.simulate_pulse(G, t_rise=1e-6, t_duration=t_duration, t_fall=1e-6)
-        assert res["times"][0] == pytest.approx(1e-7)  # step END stamp
+        assert res["times"][0] == pytest.approx(1e-7, rel=1e-9)  # step END stamp
         assert res["generation_integral"] == pytest.approx(1e-6 + t_duration, rel=1e-9)
         cce = solver.compute_transient_cce(res, G, x)
     finally:

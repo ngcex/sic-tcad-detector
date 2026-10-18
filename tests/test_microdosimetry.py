@@ -327,7 +327,7 @@ class TestPlots:
             y_D=spectrum_broad["y_D"],
             label="Test",
         )
-        assert ax is not None
+        assert isinstance(ax, plt.Axes) and ax.has_data()
         plt.close("all")
 
     def test_plot_yf_spectrum_creates_figure(self, spectrum_broad):
@@ -338,7 +338,7 @@ class TestPlots:
             y_F=spectrum_broad["y_F"],
             label="Test",
         )
-        assert ax is not None
+        assert isinstance(ax, plt.Axes) and ax.has_data()
         plt.close("all")
 
     def test_plot_yd_on_existing_axes(self, spectrum_broad):

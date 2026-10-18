@@ -51,12 +51,15 @@ def test_cce_vs_fluence_legacy_geometry_matches_devsim():
     dev = cce_vs_fluence(
         [0.0, 1e12, 1e13], V_bias=-40.0, device_kwargs=kw, solver="devsim"
     )
-    _same_cce(eng, dev)
+    _same_cce(eng, dev)  # asserts NaN pattern, validity and |dCCE| < 1e-9
+    assert eng["solver"] == ["batched"] * 3 and dev["solver"] == ["devsim"] * 3
+    assert all(eng["valid"])
 
 
 def test_legacy_geometry_beyond_cross_check_stays_on_devsim():
     kw = dict(nplus_thickness_cm=None, substrate_thickness_cm=1e-4, buffer_thickness_cm=None, buffer_end_doping=None)
-    assert cc._fluence_engine_reason(kw, -60.0) is not None
+    why = cc._fluence_engine_reason(kw, -60.0)
+    assert isinstance(why, str) and why
     assert cc._fluence_engine_reason(kw, -40.0) is None
     assert cc._fluence_engine_reason({}, -100.0) is None  # default stack has n+
     with pytest.raises(ValueError, match="legacy geometry"):

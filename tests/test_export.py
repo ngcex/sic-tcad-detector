@@ -134,7 +134,7 @@ def test_spec_default_reference_device():
     )
     # 4 mm2 default area since 2026-10-18: 1.8e-11 A (was 4.5e-14 A on 1e-4 cm2, x400)
     assert spec["dark_current"]["I_at_minus60V_A"] == pytest.approx(1.8e-11, rel=1e-12)
-    assert spec["dark_current"]["J_at_minus60V_A_per_cm2"] == pytest.approx(4.5e-10)
+    assert spec["dark_current"]["J_at_minus60V_A_per_cm2"] == pytest.approx(4.5e-10, rel=1e-12)
     assert "calibration" in spec["dark_current"]["note"]
     # the spikes at both abrupt steps (8e5 at 0.3 um, 9e5 at 10.3 um) are excluded from the peak
     assert spec["field"]["peak_E_V_per_cm"] == pytest.approx(1.14e5)

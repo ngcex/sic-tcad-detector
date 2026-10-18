@@ -255,7 +255,8 @@ class TestCCEVsBias:
     """Integration tests for CCE vs bias sweep."""
 
     @pytest.fixture(scope="class")
-    def cce_sweep_result(self):
+    @classmethod
+    def cce_sweep_result(cls):
         """Run CCE sweep once for all tests in this class."""
         V = np.array([0.0, -5.0, -10.0, -20.0, -40.0, -60.0])
         result = cce_vs_bias(V, epi_thickness_cm=10e-4)
@@ -345,7 +346,7 @@ def test_compare_hecht_uses_only_the_reached_biases(monkeypatch):
     np.testing.assert_array_equal(r["voltages"], [-10.0, -20.0])
     assert len(r["cce_dd"]) == len(r["cce_hecht"]) == len(r["cce_hecht_partial"]) == 2
     expected = np.max(np.abs(r["cce_dd"] - cc.hecht_cce(r["voltages"], d=10e-4)))
-    assert r["max_deviation"] == pytest.approx(expected)
+    assert r["max_deviation"] == pytest.approx(expected, rel=1e-12)
 
 
 # ===================================================================

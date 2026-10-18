@@ -53,7 +53,7 @@ class TestDevice2DCreation:
         dev = create_sic_2d_device(device_name=_unique_name())
         params = dev["params"]
         assert params.eps_r == pytest.approx(9.7)
-        assert params.n_i_300 == pytest.approx(5e-9)
+        assert params.n_i_300 == pytest.approx(5e-9, rel=1e-12)
         assert params.E_g == pytest.approx(3.26)
 
 
@@ -399,9 +399,6 @@ class TestExtractDepletionWidth2DCenter:
     The 1D extract_depletion_width_numerical reads x as depth; 2D modules use
     y as depth. These tests lock the new dimension-aware extractor.
     """
-
-    def test_importable(self):
-        from etna.core.poisson import extract_depletion_width_2d_center  # noqa: F401
 
     def test_raises_on_1d_device(self):
         from etna.core.poisson import extract_depletion_width_2d_center

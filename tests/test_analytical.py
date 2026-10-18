@@ -338,9 +338,17 @@ class TestIntegrationPipeline:
         biases = [0, -5, -10, -20, -30, -60]
         print("\n  Bias (V) | W (um) | W clamped (um)")
         print("  ---------|--------|---------------")
+        Ws = []
         for V in biases:
             W = depletion_width(self.Vbi, V, self.N_D, self.p.eps_r)
             W_clamp = depletion_width(
                 self.Vbi, V, self.N_D, self.p.eps_r, self.epi_thickness
             )
             print(f"  {V:8.1f} | {W*1e4:6.2f} | {W_clamp*1e4:6.2f}")
+            # the clamp is exactly min(W, epi); W grows with reverse bias
+            assert W_clamp == min(W, self.epi_thickness)
+            Ws.append(W)
+        assert np.all(np.diff(Ws) > 0)
+        assert 0.0 < self.f_A < 1.0 and self.NA_ion == pytest.approx(
+            self.f_A * self.N_A, rel=1e-12
+        )

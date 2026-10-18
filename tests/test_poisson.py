@@ -26,8 +26,9 @@ class TestDeviceCreation:
     def test_device_creates_successfully(self):
         from etna.core.device import create_sic_device
 
-        dev = create_sic_device(device_name=_unique_name())
-        assert dev["device_name"] is not None
+        name = _unique_name()
+        dev = create_sic_device(device_name=name)
+        assert dev["device_name"] == name
         assert dev["num_nodes"] > 100  # non-trivial mesh
 
     def test_device_has_correct_parameters(self):
@@ -46,7 +47,7 @@ class TestDeviceCreation:
         dev = create_sic_device(device_name=_unique_name())
         params = dev["params"]
         assert params.eps_r == pytest.approx(9.7)
-        assert params.n_i_300 == pytest.approx(5e-9)
+        assert params.n_i_300 == pytest.approx(5e-9, rel=1e-12)
         assert params.E_g == pytest.approx(3.26)
 
 
@@ -60,7 +61,15 @@ class TestPoissonSolver:
 
         dev = create_sic_device(device_name=_unique_name())
         setup_poisson(dev)
-        solve_equilibrium(dev)  # Should not raise
+        solve_equilibrium(dev)
+        psi = np.array(
+            devsim.get_node_model_values(
+                device=dev["device_name"], region=dev["region_name"], name="Potential"
+            )
+        )
+        assert np.all(np.isfinite(psi))
+        # 4H-SiC p+/n built-in voltage ~2.9-3.0 V across the device at 0 V
+        assert 2.5 < psi.max() - psi.min() < 3.5
 
     def test_electric_field_reasonable_at_equilibrium(self):
         """E-field at equilibrium is in physically reasonable range."""

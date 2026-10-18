@@ -25,10 +25,10 @@ class TestComputeAgreementMetrics:
         exp = [1.0, 2.0, 3.0]
         m = compute_agreement_metrics(sim, exp)
         assert m["r_squared"] == pytest.approx(1.0)
-        assert m["max_deviation"] == pytest.approx(0.0)
-        assert m["rmse"] == pytest.approx(0.0)
-        assert m["mean_relative_error"] == pytest.approx(0.0)
-        assert m["max_relative_deviation"] == pytest.approx(0.0)
+        assert m["max_deviation"] == pytest.approx(0.0, abs=0)
+        assert m["rmse"] == pytest.approx(0.0, abs=0)
+        assert m["mean_relative_error"] == pytest.approx(0.0, abs=0)
+        assert m["max_relative_deviation"] == pytest.approx(0.0, abs=0)
 
     def test_known_deviation(self):
         """Known deviation: sim=[1,2,4], exp=[1,2,3] -> max_dev=1, RMSE=1/sqrt(3)."""
@@ -63,7 +63,7 @@ class TestComputeAgreementMetrics:
         """Single-point comparison works (ss_tot=0 edge case)."""
         m = compute_agreement_metrics([5.0], [5.0])
         assert m["r_squared"] == pytest.approx(1.0)
-        assert m["rmse"] == pytest.approx(0.0)
+        assert m["rmse"] == pytest.approx(0.0, abs=0)
 
     def test_length_mismatch_raises(self):
         """Mismatched array lengths raise ValueError."""
@@ -122,7 +122,7 @@ class TestValidateIV:
         result = validate_iv(iv_data, area=1.0)
 
         # Dark current at -60V is abs(currents at -60V) = 1e-12
-        assert result["dark_current_60V"] == pytest.approx(1e-12)
+        assert result["dark_current_60V"] == pytest.approx(1e-12, rel=1e-12)
         # 1e-12 < 18e-12 * 100 = 1.8e-9 -> pass
         assert result["dark_current_pass"] == True  # noqa: E712 (numpy bool)
         # ideal_srh_floor: I_dark < target * 1e-10 => 1e-12 < 18e-12 * 1e-10 = 1.8e-21 => False
