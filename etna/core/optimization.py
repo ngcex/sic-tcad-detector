@@ -25,6 +25,7 @@ References:
 import contextlib
 import itertools
 import logging
+import multiprocessing.context as _mpc
 import os
 import warnings
 
@@ -324,15 +325,58 @@ def _worker_init():
 
 
 @contextlib.contextmanager
+def _main_module_hidden():
+    """Show the spawn machinery a ``__main__`` without ``__file__`` / ``__spec__``.
+
+    A spawned child re-executes the parent's ``__main__`` file (as ``__mp_main__``)
+    unless the main module has neither. Under streamlit (the app, and AppTest in the
+    tests) ``__main__`` is the page script, installed by the script runner and never
+    restored: the child re-ran it and died (BrokenProcessPool; the AppTest temp
+    script raised NameError). The sweep workers only run importable etna functions.
+    The swap lasts one process launch (a few ms) and the parent's module is put back.
+    """
+    import sys
+    import types
+
+    saved = sys.modules.get("__main__")
+    sys.modules["__main__"] = types.ModuleType("__main__")
+    try:
+        yield
+    finally:
+        sys.modules["__main__"] = saved
+
+
+class _NoMainSpawnProcess(_mpc.SpawnProcess):
+    """SpawnProcess launched without the parent's ``__main__`` (module level: the
+    process object is pickled to the child)."""
+
+    @staticmethod
+    def _Popen(process_obj):
+        with _main_module_hidden():
+            return _mpc.SpawnProcess._Popen(process_obj)
+
+
+class _NoMainSpawnContext(_mpc.SpawnContext):
+    """The "spawn" context, its workers launched without the parent's ``__main__``."""
+
+    Process = _NoMainSpawnProcess
+
+
+def _no_main_spawn_context():
+    return _NoMainSpawnContext()
+
+
+@contextlib.contextmanager
 def _spawn_pool(max_workers):
     """ProcessPoolExecutor (spawn) whose workers run single-threaded native pools.
 
     The caps are put in ``os.environ`` while the workers are started (a spawned child
     inherits the parent's environment) and restored afterwards; the parent's own pools
     are already sized, so it is not affected. The caller holds the devsim lock
-    (``serialized``), so no other etna call starts processes meanwhile.
+    (``serialized``), so no other etna call starts processes meanwhile. The workers do
+    not import the parent's ``__main__`` (``_main_module_hidden``): submitted functions
+    must live in importable modules.
     """
-    import multiprocessing
     from concurrent.futures import ProcessPoolExecutor
 
     saved = {key: os.environ.get(key) for key in _WORKER_THREAD_ENV}
@@ -340,7 +384,7 @@ def _spawn_pool(max_workers):
     try:
         with ProcessPoolExecutor(
             max_workers=max_workers,
-            mp_context=multiprocessing.get_context("spawn"),
+            mp_context=_no_main_spawn_context(),
             initializer=_worker_init,
         ) as pool:
             yield pool
