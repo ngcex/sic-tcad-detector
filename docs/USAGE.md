@@ -614,8 +614,9 @@ viz all use it, so they report one number: 9.06e4 V/cm at -30 V and 1.21e5 V/cm 
 **Convergence walls and the outside-validity wall.** With the n+ layer (all current
 presets except legacy) devsim has no contact wall: on the default stack it was checked
 to converge to -150 V, and the engines are cross-checked against it to -100 V. The **legacy** model puts the ohmic cathode on the n- epi, so
-devsim stops converging around -64 V at 300 K. This is a contact artefact, not
-punch-through.
+devsim stops converging around -64 V at 300 K (where it stops depends on the
+linear-algebra build: a 2 V-step dark sweep reaches -100 V on macOS but -78.9 V on the ubuntu
+CI runner). This is a contact artefact, not punch-through.
 
 - `run_cv` / `run_cce` / `run_dark_current` on the devsim path return the reached points
   with `truncated=True`.
