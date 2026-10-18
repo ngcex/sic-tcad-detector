@@ -9,6 +9,12 @@ charge collection pipeline.  Provides:
 - Batch CCE(LET) lookup for fast ensemble processing (1000+ events/sec)
 - Pulse height distribution histogram
 
+Positions are loaded and unit-converted but NOT used: both paths reduce an event to
+LET = sum(edep) / sv_thickness and apply a position-independent CCE (the full path
+places every track at ``x_ion_cm``). Lateral / edge collection losses of the 2D work
+(charge_collection_2d.cce_lateral_scan) do not enter the spectrum (audit-v7 B-11,
+open as a model change).
+
 Two processing paths:
     - **Full path** (events_to_charge_profiles): calls ion_track_generation_2d
       for each event, producing mesh-resolved 2D charge generation profiles.
@@ -408,7 +414,9 @@ def process_mc_ensemble(events_df, cce_interp, sv_thickness_um=10.0):
         Standardized event DataFrame (step-level or event-level).
     cce_interp : callable
         CCE interpolation function from ``load_cce_let_table()``.
-        Signature: cce_interp(LET_keV_um) -> CCE.
+        Signature: cce_interp(LET_keV_um) -> CCE. If it carries ``let_min`` /
+        ``let_max`` (load_cce_let_table sets them), events outside that range are
+        counted in ``n_clamped`` and logged: their CCE is the table edge value.
     sv_thickness_um : float
         Sensitive volume thickness for LET computation (um).
 
@@ -421,6 +429,8 @@ def process_mc_ensemble(events_df, cce_interp, sv_thickness_um=10.0):
         - event_collected_keV : ndarray -- collected energy per event
         - n_events : int -- number of events processed
         - n_zero_energy : int -- number of events with zero/negative energy
+        - n_clamped : int -- events with LET outside the CCE table (edge CCE used);
+          0 when cce_interp carries no range
     """
     # Sum energy per event
     event_totals = events_df.groupby("event_id")["edep_keV"].sum()
@@ -452,6 +462,22 @@ def process_mc_ensemble(events_df, cce_interp, sv_thickness_um=10.0):
                 n_high,
             )
 
+    # CCE table range: the lookup clamps outside it (np.interp edge value)
+    n_clamped = 0
+    lo = getattr(cce_interp, "let_min", None)
+    hi = getattr(cce_interp, "let_max", None)
+    if lo is not None and hi is not None and len(LET) > 0:
+        n_clamped = int(np.sum((LET < lo) | (LET > hi)))
+        if n_clamped:
+            logger.warning(
+                "%d of %d events have LET outside the CCE table [%g, %g] keV/um: "
+                "their CCE is the table edge value (clamped)",
+                n_clamped,
+                len(LET),
+                lo,
+                hi,
+            )
+
     # Vectorized CCE lookup
     CCE = np.array([cce_interp(let) for let in LET])
 
@@ -465,6 +491,7 @@ def process_mc_ensemble(events_df, cce_interp, sv_thickness_um=10.0):
         "event_collected_keV": E_collected,
         "n_events": int(len(energies_pos)),
         "n_zero_energy": n_zero,
+        "n_clamped": n_clamped,
     }
 
 

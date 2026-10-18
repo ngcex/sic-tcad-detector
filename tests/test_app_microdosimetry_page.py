@@ -88,7 +88,9 @@ def test_upload_run_caches_spectrum(monkeypatch):
 
     assert at.exception == [], f"page crashed on boot: {at.exception}"
 
-    data = Path("data/synthetic_mc_events.csv").read_bytes()
+    data = (
+        Path(__file__).resolve().parents[1] / "data" / "synthetic_mc_events.csv"
+    ).read_bytes()
     at.file_uploader[0].upload("events.csv", data, "text/csv")
     at.run()
 

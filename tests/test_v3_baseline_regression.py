@@ -22,12 +22,13 @@ import pytest
 
 devsim = pytest.importorskip("devsim")
 
-BASELINE_PATH = pathlib.Path("tests/baselines/v3_frozen.json")
+_REPO = pathlib.Path(__file__).resolve().parents[1]
+BASELINE_PATH = _REPO / "tests" / "baselines" / "v3_frozen.json"
 
 
 def _load_baseline():
-    if not BASELINE_PATH.exists():
-        pytest.skip(f"Baseline file not found at {BASELINE_PATH}")
+    # committed fixture: a missing file is a failure, not a silent skip (audit D-14)
+    assert BASELINE_PATH.exists(), f"committed baseline missing: {BASELINE_PATH}"
     return json.loads(BASELINE_PATH.read_text())
 
 
@@ -166,4 +167,4 @@ def test_v3_notebook_list_unchanged():
     baseline = _load_baseline()
     assert len(baseline["notebook_list"]) == 20
     for nb in baseline["notebook_list"]:
-        assert pathlib.Path(f"notebooks/{nb}").exists(), f"notebook missing: {nb}"
+        assert (_REPO / "notebooks" / nb).exists(), f"notebook missing: {nb}"

@@ -620,6 +620,11 @@ def load_cce_let_table(filepath):
         """Interpolate CCE at given LET using log-linear interpolation."""
         return float(np.interp(np.log10(let_value), np.log10(LET_valid), CCE_valid))
 
+    # np.interp clamps outside the table: expose the range so callers can flag it
+    # (process_mc_ensemble warns on clamped events; audit-v7 B-11)
+    cce_interp.let_min = float(LET_valid.min())
+    cce_interp.let_max = float(LET_valid.max())
+
     logger.info(
         f"Loaded CCE(LET) table from {filepath}: "
         f"{len(LET_valid)} valid points, "

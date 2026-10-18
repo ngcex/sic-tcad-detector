@@ -215,6 +215,7 @@ class TestProcessMCEnsemble:
             "event_collected_keV",
             "n_events",
             "n_zero_energy",
+            "n_clamped",
         }
         assert len(result["event_energies_keV"]) == 50
         assert result["n_events"] == 50
@@ -233,6 +234,28 @@ class TestProcessMCEnsemble:
         result = process_mc_ensemble(df, mock_cce_interp)
         assert result["n_zero_energy"] == 1  # event 1 has edep=0
         assert result["n_events"] == 2  # events 0 and 2
+
+    def test_out_of_table_let_is_counted_and_logged(self, caplog):
+        """audit-v7 B-11: events beyond the CCE table range are flagged as clamped."""
+
+        def interp(let):
+            return 0.9
+
+        interp.let_min, interp.let_max = 0.1, 1000.0
+        df = pd.DataFrame(
+            {
+                "event_id": [0, 1, 2],
+                "x_cm": [0.0] * 3,
+                "y_cm": [0.0] * 3,
+                "z_cm": [0.0] * 3,
+                # LET = edep / 10 um: 0.05 (below), 5 (inside), 2000 (above) keV/um
+                "edep_keV": [0.5, 50.0, 20000.0],
+            }
+        )
+        with caplog.at_level("WARNING", logger="etna.core.mc_coupling"):
+            result = process_mc_ensemble(df, interp, sv_thickness_um=10.0)
+        assert result["n_clamped"] == 2
+        assert "outside the CCE table" in caplog.text
 
     def test_constant_cce(self, sample_events_df, mock_cce_interp):
         """With CCE=0.95, collected = 0.95 * deposited for all events."""
@@ -421,9 +444,8 @@ class TestFullPipeline:
         """Full pipeline: synthetic events -> process_mc_ensemble -> PHD."""
         import time
 
-        cce_path = Path("data/cce_let_table_100um.json")
-        if not cce_path.exists():
-            pytest.skip("CCE table not found at data/cce_let_table_100um.json")
+        cce_path = Path(__file__).resolve().parents[1] / "data" / "cce_let_table_100um.json"
+        assert cce_path.exists(), f"committed CCE table missing: {cce_path}"
 
         from etna.core.single_particle import load_cce_let_table
 
