@@ -137,7 +137,9 @@ def set_devsim_quiet(enabled: bool = True) -> None:
             originals = {
                 name: obj
                 for name, obj in vars(devsim).items()
-                if not name.startswith("_") and callable(obj) and not isinstance(obj, type)
+                if not name.startswith("_")
+                and callable(obj)
+                and not isinstance(obj, type)
             }
             by_id = {id(obj): name for name, obj in originals.items()}
             wrappers = {name: _quiet_call(obj) for name, obj in originals.items()}

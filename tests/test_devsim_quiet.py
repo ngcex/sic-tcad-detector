@@ -64,7 +64,9 @@ def _direct_core_field():
 
     from etna.core.charge_collection_2d import create_2d_dd_device
 
-    info = create_2d_dd_device(half_width_um=20.0, V_bias=5.0, device_name=f"quiet_probe{next(_probe)}")
+    info = create_2d_dd_device(
+        half_width_um=20.0, V_bias=5.0, device_name=f"quiet_probe{next(_probe)}"
+    )
     try:
         return np.array(
             devsim.get_node_model_values(
