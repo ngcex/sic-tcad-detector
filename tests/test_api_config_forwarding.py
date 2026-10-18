@@ -114,7 +114,7 @@ def test_dark_current_forwards_full_config(monkeypatch):
     got = _capture(monkeypatch, "create_dark_current_device")
     monkeypatch.setattr(sim, "reset_devsim_fully", lambda: None)
     with pytest.raises(_Stop):
-        sim.run_dark_current(CFG)
+        sim.run_dark_current(CFG, solver="devsim")  # the devsim builder path
     for key, val in device_kwargs(CFG).items():
         assert got[key] == val
 

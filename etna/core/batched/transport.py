@@ -70,6 +70,7 @@ class TransportResult:
     J_cathode: np.ndarray  # (B,) A/cm^2, cathode Jn + Jp (Jn in the balanced form)
     gummel_iterations: int
     converged: np.ndarray  # (B,) bool
+    G: "np.ndarray | None" = None  # (B, N) generation of the last iteration (G + G_fn)
 
 
 class ContinuityBatch:
@@ -80,10 +81,22 @@ class ContinuityBatch:
     tests and callers that want one value per device). ``tau`` scalar or (B,).
     """
 
-    def __init__(self, pb, mu_n, mu_p, tau_n, tau_p):
+    def __init__(
+        self, pb, mu_n, mu_p, tau_n, tau_p, n1=None, p1=None, C_n=0.0, C_p=0.0
+    ):
+        """``n1`` / ``p1`` (scalar or (B,), default n_i: midgap SRH) are the SRH trap
+        densities of U = (n p - n_i^2) / (tau_p (n + n1) + tau_n (p + p1)): the dark-current
+        model passes the Z1/2 level (etna.core.dark_current.tat_constants). ``C_n`` / ``C_p``
+        (cm^6/s, default 0 = off) add bulk Auger U_A = (C_n n + C_p p)(n p - n_i^2), as
+        etna.core.flash_recombination.add_auger_recombination. With the defaults every
+        expression is the pre-2026-10-18 one (bit-identical CCE)."""
         self.pb = pb  # PoissonBatch -- supplies mesh, doping, n_i, V_t
         B, N = pb.B, pb.N
         bc = lambda a: np.broadcast_to(np.asarray(a, dtype=float), (B,)).copy()
+        self.n1 = pb.n_i.copy() if n1 is None else bc(n1)
+        self.p1 = pb.n_i.copy() if p1 is None else bc(p1)
+        self.C_n, self.C_p = bc(C_n), bc(C_p)
+        self.auger = bool(np.any(self.C_n != 0.0) or np.any(self.C_p != 0.0))
 
         def edges(a):
             a = np.asarray(a, dtype=float)
@@ -116,7 +129,7 @@ class ContinuityBatch:
             ]
         )
 
-    def _solve_carrier(self, psi_T, n_other, which, G_T, denom, bc):
+    def _solve_carrier(self, psi_T, n_other, which, G_T, denom, bc, aug=None):
         """One linear SG continuity solve for electrons ('n') or holes ('p'); (N, B) arrays."""
         pb = self.pb
         N, B = psi_T.shape
@@ -132,6 +145,12 @@ class ContinuityBatch:
         # SRH linearised in the solved carrier: U = (x * other - n_i^2)/denom
         srh_lin = qv * n_other[1:-1] / denom[1:-1]
         srh_const = qv * n_i2 / denom[1:-1]
+        if aug is not None:
+            # Auger (C_n n + C_p p)(n p - n_i^2) with its prefactor ``aug`` lagged
+            # (evaluated at the previous iterate): linear in the solved carrier, same
+            # fixed point as devsim's fully coupled Newton
+            srh_lin = srh_lin + qv * aug[1:-1] * n_other[1:-1]
+            srh_const = srh_const + qv * aug[1:-1] * n_i2
         if which == "n":
             # Jn_i - Jn_{i-1} - q v (U - G) = 0
             c[1:-1] = k[1:] * Bm[1:]
@@ -166,10 +185,18 @@ class ContinuityBatch:
         tol=1e-6,
         max_iter=50,
         poisson_tol=1e-8,
+        G_fn=None,
     ):
         """Gummel iteration from a converged Poisson state psi (B, N).
 
         G: optical generation (B, N) or (N,) cm^-3 s^-1 (None = dark).
+        G_fn: optional field-dependent generation, ``G_fn(psi_T) -> (N, B)`` cm^-3 s^-1,
+        re-evaluated from the present potential at the start of every Gummel iteration
+        and added to G (the dark-current model's f_depl generation,
+        etna.core.batched.dark). At convergence the generation is that of the converged
+        field: the frozen-field fixed point of etna.core.dark_current.
+        _resolve_self_consistent. The generation of the last iteration is returned in
+        ``TransportResult.G``.
         tol: relative change of the cathode current between successive Gummel
         iterations (and of psi [V_t], n, p, floored at 2*poisson_tol).
         """
@@ -197,15 +224,25 @@ class ContinuityBatch:
             else np.asarray(p0, float).T.copy()
         )
         tau_n, tau_p = self.tau_n[None, :], self.tau_p[None, :]
+        n1, p1 = self.n1[None, :], self.p1[None, :]
+        C_n, C_p = self.C_n[None, :], self.C_p[None, :]
+        aug = (lambda nn, pp: C_n * nn + C_p * pp) if self.auger else (lambda nn, pp: None)
+        G_opt = G_T
         converged = np.zeros(B, dtype=bool)
         J_prev = None
         it = 0
         for it in range(1, max_iter + 1):
-            denom = tau_p * (n_T + n_i) + tau_n * (p_T + n_i)
-            n_new = self._solve_carrier(psi_T, p_T, "n", G_T, denom, self.n_bc)
+            if G_fn is not None:
+                G_T = G_opt + G_fn(psi_T)
+            denom = tau_p * (n_T + n1) + tau_n * (p_T + p1)
+            n_new = self._solve_carrier(
+                psi_T, p_T, "n", G_T, denom, self.n_bc, aug(n_T, p_T)
+            )
             n_new = np.maximum(n_new, 0.0)
-            denom = tau_p * (n_new + n_i) + tau_n * (p_T + n_i)
-            p_new = self._solve_carrier(psi_T, n_new, "p", G_T, denom, self.p_bc)
+            denom = tau_p * (n_new + n1) + tau_n * (p_T + p1)
+            p_new = self._solve_carrier(
+                psi_T, n_new, "p", G_T, denom, self.p_bc, aug(n_new, p_T)
+            )
             p_new = np.maximum(p_new, 0.0)
             # cathode current of the continuity-consistent state (psi_T, n_new, p_new): it is a
             # tiny difference of two large SG terms, so it is NOT re-evaluated after the Poisson
@@ -216,8 +253,10 @@ class ContinuityBatch:
             # sum q v (U - G); both terms are well conditioned (electrons are minority at the
             # p+ anode), unlike Jn[-1] itself, which is a difference of huge SG terms when n
             # is large at the cathode (n+ layer). Holes are minority at the cathode: direct.
-            denom = tau_p * (n_new + n_i) + tau_n * (p_new + n_i)
+            denom = tau_p * (n_new + n1) + tau_n * (p_new + p1)
             U = (n_new * p_new - n_i**2) / denom
+            if self.auger:
+                U = U + (C_n * n_new + C_p * p_new) * (n_new * p_new - n_i**2)
             S = (Q * self.v[1:-1] * (U[1:-1] - G_T[1:-1])).sum(axis=0)
             J = Jn[0] + S + Jp[-1]
             dJ = (
@@ -260,4 +299,5 @@ class ContinuityBatch:
             J_cathode=J,
             gummel_iterations=it,
             converged=converged,
+            G=G_T.T.copy(),
         )

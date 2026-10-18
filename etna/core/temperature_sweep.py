@@ -32,9 +32,17 @@ def sweep_iv_vs_temperature(
     temperatures,
     V_reverse=-30,
     use_tat=True,
+    solver="auto",
     **device_kwargs,
 ):
     """Sweep temperature and extract reverse-bias leakage current at each T.
+
+    With ``use_tat`` (default) the temperatures inside the dark-current engine scope
+    (``etna.core.dark_current.dark_engine_reason``: 150-450 K, graded/uniform) are solved
+    in one batch on the numba engine (same TAT model and fixed point as the devsim path;
+    parity tests/test_dark_current_engine.py); the others, and any the engine does not
+    converge, build a devsim device as below. ``solver``: "auto", "engine" (raise outside
+    the scope) or "devsim" (reference). ``df.attrs["solver"]`` lists the path per row.
 
     For each T: creates a DD device, ramps to V_reverse, extracts I_reverse.
     Each device is cleaned up after use to avoid devsim memory issues.
@@ -71,9 +79,22 @@ def sweep_iv_vs_temperature(
 
     temperatures = np.asarray(temperatures, dtype=float)
     params = SiC4H_Parameters()
+    if solver not in ("auto", "engine", "devsim"):
+        raise ValueError(f"solver must be 'auto', 'engine' or 'devsim' (got {solver!r})")
+
+    engine_J = {}
+    if use_tat and solver != "devsim":
+        engine_J = _iv_engine(temperatures, V_reverse, solver, device_kwargs)
 
     records = []
+    solvers = []
     for T in temperatures:
+        if float(T) in engine_J:
+            kwargs = dict(T=T, **graded_stack_kwargs())
+            kwargs.update(device_kwargs)
+            records.append(_iv_record(T, engine_J[float(T)], kwargs, params))
+            solvers.append("batched")
+            continue
         dev_id = uuid.uuid4().hex[:8]
         dev_name = f"iv_sweep_T_{dev_id}"
 
@@ -109,25 +130,8 @@ def sweep_iv_vs_temperature(
                 ramp_bias(device_info, cathode_V, contact="cathode", V_step=0.5)
                 I_total = extract_steady_state_current(device_info, contact="cathode")
 
-            n_i_T, _, _, E_g_T = intrinsic_concentration(T, params)
-            # mobilities at the epi doping the device transport uses (mobility_doping:
-            # N_D uniform, N_D_bulk graded), not at a fixed 0.001 * N_ref
-            nd_mob = mobility_doping(
-                kwargs.get("N_D"), kwargs["doping_profile"], kwargs.get("N_D_bulk")
-            )
-            mu_n = mobility_caughey_thomas_T(nd_mob, T, "electron", params)
-            mu_p = mobility_caughey_thomas_T(nd_mob, T, "hole", params)
-
-            records.append(
-                {
-                    "T": T,
-                    "I_reverse": abs(I_total),
-                    "n_i": n_i_T,
-                    "mu_n": mu_n,
-                    "mu_p": mu_p,
-                    "E_g": E_g_T,
-                }
-            )
+            records.append(_iv_record(T, I_total, kwargs, params))
+            solvers.append("devsim")
             logger.info(f"sweep_iv: T={T:.1f}K, I_reverse={abs(I_total):.4e} A/cm^2")
 
         except Exception as e:
@@ -138,7 +142,61 @@ def sweep_iv_vs_temperature(
             except Exception:
                 pass
 
-    return pd.DataFrame(records)
+    df = pd.DataFrame(records)
+    df.attrs["solver"] = solvers
+    return df
+
+
+def _iv_record(T, I_total, kwargs, params):
+    """One sweep_iv_vs_temperature row (material columns as before)."""
+    n_i_T, _, _, E_g_T = intrinsic_concentration(T, params)
+    # mobilities at the epi doping the device transport uses (mobility_doping:
+    # N_D uniform, N_D_bulk graded), not at a fixed 0.001 * N_ref
+    nd_mob = mobility_doping(
+        kwargs.get("N_D"), kwargs["doping_profile"], kwargs.get("N_D_bulk")
+    )
+    return {
+        "T": T,
+        "I_reverse": abs(I_total),
+        "n_i": n_i_T,
+        "mu_n": mobility_caughey_thomas_T(nd_mob, T, "electron", params),
+        "mu_p": mobility_caughey_thomas_T(nd_mob, T, "hole", params),
+        "E_g": E_g_T,
+    }
+
+
+_DARK_MODEL_KEYS = ("N_t", "E_t", "S_n", "S_p")
+
+
+def _iv_engine(temperatures, V_reverse, solver, device_kwargs):
+    """{T: J_total} for the temperatures the dark-current engine serves (one batch;
+    unconverged temperatures are left out, the caller runs them on devsim)."""
+    from etna.core.dark_current import (
+        dark_current_engine,
+        dark_engine_reason,
+        dark_reference,
+    )
+
+    model = {k: device_kwargs[k] for k in _DARK_MODEL_KEYS if k in device_kwargs}
+    geo = {k: v for k, v in device_kwargs.items() if k not in _DARK_MODEL_KEYS}
+    kws, Ts = [], []
+    for T in temperatures:
+        kw = dict(T=float(T), **graded_stack_kwargs())
+        kw.update(geo)
+        reason = dark_engine_reason(kw, [V_reverse])
+        if reason is not None:
+            if solver == "engine":
+                raise ValueError(f"sweep_iv_vs_temperature: engine unavailable ({reason})")
+            logger.info("sweep_iv: T=%g K on devsim (%s)", T, reason)
+            continue
+        kws.append(kw)
+        Ts.append(float(T))
+    if not kws:
+        return {}
+    res = dark_current_engine(
+        [dark_reference(kw) for kw in kws], [V_reverse], area=1.0, **model
+    )
+    return {T: r["J_total"][-1] for T, r in zip(Ts, res) if r["converged"].all()}
 
 
 def sweep_cv_vs_temperature(
