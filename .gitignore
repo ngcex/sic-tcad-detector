@@ -17,3 +17,6 @@ papers/
 .venv/
 .playwright-mcp/
 scratchpad/
+
+# save_figure() output written next to the package by notebooks 02-05 (not package data)
+etna/figures/
