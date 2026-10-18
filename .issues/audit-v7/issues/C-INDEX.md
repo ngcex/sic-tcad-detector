@@ -76,7 +76,7 @@ Branch final-c (from final-verify 7fe3cfb). Evidence per item (details in each i
 - C-13: fixed. 9122689 (viewer draws contacts / 2D regions, MeshData docstring, build_device(device_name=) test) + f88e0bb (temperature / flash / transient CSV branches with round-trip tests).
 - C-14: fixed. 00ce048 (Phase 40, placeholder, run_cv) + f88e0bb (run_cce note, to_csv_bytes docstring). `grep -rn "Phase 40" app` -> none; 10 st.Page entries.
 - C-15: resolved (documented, a6ce6da). Single dev extra kept by design; footgun documented in pyproject, README and USAGE; CI uses --extra dev.
-- C-16: fixed. c6c2e51 (`[server] address = "localhost"`, maxUploadSize 200 kept with reasoning). Live: health ok, `lsof` -> `127.0.0.1:8597 (LISTEN)`; tests/test_app_streamlit_config.py.
+- C-16: fixed. c6c2e51 (`[server] address = "localhost"`, maxUploadSize 200 kept with reasoning). Live from the repo root: health ok, `lsof` -> `127.0.0.1:8597 (LISTEN)`; launched from /tmp it binds `*` (the config is read from the launch directory), so the explicit flag stays useful elsewhere; tests/test_app_streamlit_config.py.
 - C-17: fixed. ae5a5b1 (file-like accepted, page passes io.BytesIO, no tempfile). Same y_F/y_D/y as the path call.
 
 Counts after this sync (from the issue files): 14 fixed, 1 open (C-12, partial), 2 resolved (C-05, C-15). 25 new tests (affected files: 108 -> 133 collected).
