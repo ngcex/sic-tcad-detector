@@ -23,3 +23,15 @@ etna/figures/
 
 # lab/solver2d devsim reference dumps: regenerated on demand (lab/solver2d/README.md)
 lab/solver2d/notes/*.npz
+
+# Build / tool artefacts
+.ipynb_checkpoints/
+*.egg-info/
+dist/
+build/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.scratch/
+.claude/worktrees/
