@@ -442,9 +442,10 @@ def build_cce_let_table(
 ):
     """Build CCE(LET) lookup table from transient simulations.
 
-    Creates a fresh 2D device for each LET value, injects an ion track at
-    the center, runs a transient simulation, and extracts CCE.  Device is
-    deleted after each simulation to avoid global solver coupling.
+    Builds ONE 2D device at (half_width_um, V_bias), snapshots its dark state, and
+    for each LET restores that state, injects an ion track, runs a transient
+    simulation and extracts CCE. The device is deleted at the end (devsim solves are
+    global: no other device may coexist during the sweep).
 
     Parameters
     ----------
@@ -474,81 +475,110 @@ def build_cce_let_table(
     """
     LET_values = np.logspace(np.log10(let_min), np.log10(let_max), n_let_points)
 
-    results = []
-    for i, LET in enumerate(LET_values):
-        device_info = None
+    # One device for the whole table: the build (mesh, Poisson, equilibrium, DD setup,
+    # bias ramp; ~25 s at hw 50, a third of a point) does not depend on the LET. The
+    # dark DC state (Potential / Electrons / Holes at V_bias) is snapshotted once and
+    # restored before each LET; simulate_single_particle's transient_dc then resets
+    # the time-integration history, as a fresh device would (the transient_cce_vs_
+    # dose_rate pattern, WP-F). Results are identical to the former build-per-LET
+    # loop (lab/engine_box/bench/let_table_build_once.py).
+    device_info = create_2d_dd_device(
+        half_width_um=half_width_um, V_bias=V_bias, **(device_kwargs or {})
+    )
+    try:
+        dark_state = _snapshot_dark_state(device_info)
+        results = [
+            _cce_let_point(
+                device_info, dark_state, LET, x_ion_cm, contact, i, n_let_points
+            )
+            for i, LET in enumerate(LET_values)
+        ]
+    finally:
         try:
-            device_info = create_2d_dd_device(
-                half_width_um=half_width_um, V_bias=V_bias, **(device_kwargs or {})
-            )
-
-            generation, Q_gen = ion_track_generation_2d(
-                device_info, LET, x_ion_cm=x_ion_cm
-            )
-
-            sim_result = simulate_single_particle(
-                device_info, generation, contact=contact
-            )
-
-            Q_col = sim_result["Q_collected"]
-            cce_raw = Q_col / Q_gen if Q_gen > 0 else float("nan")
-            # Physical ceiling: CCE cannot exceed 1 in a linear DD detector. The
-            # backward-Euler estimator gives CCE_raw <= 1 on the validated cases
-            # (the old post-injection trapezoid gave 1.0066, audit C4); the clip
-            # stays as a guard, with a warning if the excess is beyond numerics.
-            if not np.isnan(cce_raw) and cce_raw > 1.0 + _CCE_EXCESS_TOL:
-                logger.warning(
-                    f"LET={LET:.1f}: CCE_raw={cce_raw:.6f} exceeds the physical "
-                    f"ceiling by >{_CCE_EXCESS_TOL:g}; likely a bug "
-                    f"(Q_col={Q_col:.3e}, Q_gen={Q_gen:.3e})."
-                )
-            cce = float(np.clip(cce_raw, 0.0, 1.0))
-
-            pulse_info = analyze_current_pulse(
-                sim_result["times"], sim_result["currents"], sim_result["I_dark"]
-            )
-            t_coll_ns = pulse_info["t_collection"] * 1e9
-
-            results.append(
-                {
-                    "LET_keV_um": LET,
-                    "Q_generated_fC": Q_gen * 1e15,
-                    "Q_collected_fC": Q_col * 1e15,
-                    "CCE": cce,
-                    "CCE_raw": float(cce_raw),
-                    "converged": bool(sim_result["converged"]),
-                    "t_collection_ns": t_coll_ns,
-                }
-            )
-
-        except Exception as exc:
-            logger.warning(f"Simulation failed for LET={LET:.2f} keV/um: {exc}")
-            results.append(
-                {
-                    "LET_keV_um": LET,
-                    "Q_generated_fC": float("nan"),
-                    "Q_collected_fC": float("nan"),
-                    "CCE": float("nan"),
-                    "CCE_raw": float("nan"),
-                    "converged": False,
-                    "t_collection_ns": float("nan"),
-                }
-            )
-
-        finally:
-            if device_info is not None:
-                try:
-                    delete_device_and_mesh(device_info["device_name"])
-                except Exception:
-                    pass
-
-        # Log progress every 5 LET values
-        if (i + 1) % 5 == 0 or i == 0:
-            logger.info(
-                f"CCE(LET) progress: {i+1}/{n_let_points} " f"(LET={LET:.2f} keV/um)"
-            )
+            delete_device_and_mesh(device_info["device_name"])
+        except Exception:
+            pass
 
     return pd.DataFrame(results)
+
+
+# DC solution variables of the 2D DD device: the complete state create_2d_dd_device
+# leaves after the bias ramp (everything else is derived from them at each solve).
+_DARK_STATE_SOLUTIONS = ("Potential", "Electrons", "Holes")
+
+
+def _snapshot_dark_state(device_info):
+    device, region = device_info["device_name"], device_info["region_name"]
+    return {
+        name: list(
+            devsim.get_node_model_values(device=device, region=region, name=name)
+        )
+        for name in _DARK_STATE_SOLUTIONS
+    }
+
+
+def _restore_dark_state(device_info, dark_state):
+    device, region = device_info["device_name"], device_info["region_name"]
+    for name, values in dark_state.items():
+        devsim.set_node_values(device=device, region=region, name=name, values=values)
+
+
+def _cce_let_point(device_info, dark_state, LET, x_ion_cm, contact, i, n_let_points):
+    """One CCE(LET) table row on the shared device, from the restored dark state."""
+    try:
+        _restore_dark_state(device_info, dark_state)
+        generation, Q_gen = ion_track_generation_2d(device_info, LET, x_ion_cm=x_ion_cm)
+        sim_result = simulate_single_particle(device_info, generation, contact=contact)
+        pulse_info = analyze_current_pulse(
+            sim_result["times"], sim_result["currents"], sim_result["I_dark"]
+        )
+        row = _table_row(
+            LET,
+            Q_gen,
+            sim_result["Q_collected"],
+            sim_result["converged"],
+            pulse_info["t_collection"],
+        )
+    except Exception as exc:
+        logger.warning(f"Simulation failed for LET={LET:.2f} keV/um: {exc}")
+        row = {
+            "LET_keV_um": LET,
+            "Q_generated_fC": float("nan"),
+            "Q_collected_fC": float("nan"),
+            "CCE": float("nan"),
+            "CCE_raw": float("nan"),
+            "converged": False,
+            "t_collection_ns": float("nan"),
+        }
+
+    # Log progress every 5 LET values
+    if (i + 1) % 5 == 0 or i == 0:
+        logger.info(f"CCE(LET) progress: {i+1}/{n_let_points} (LET={LET:.2f} keV/um)")
+    return row
+
+
+def _table_row(LET, Q_gen, Q_col, converged, t_collection_s):
+    """CCE(LET) table row (charges in C/cm, t_collection in s)."""
+    cce_raw = Q_col / Q_gen if Q_gen > 0 else float("nan")
+    # Physical ceiling: CCE cannot exceed 1 in a linear DD detector. The
+    # backward-Euler estimator gives CCE_raw <= 1 on the validated cases
+    # (the old post-injection trapezoid gave 1.0066, audit C4); the clip
+    # stays as a guard, with a warning if the excess is beyond numerics.
+    if not np.isnan(cce_raw) and cce_raw > 1.0 + _CCE_EXCESS_TOL:
+        logger.warning(
+            f"LET={LET:.1f}: CCE_raw={cce_raw:.6f} exceeds the physical "
+            f"ceiling by >{_CCE_EXCESS_TOL:g}; likely a bug "
+            f"(Q_col={Q_col:.3e}, Q_gen={Q_gen:.3e})."
+        )
+    return {
+        "LET_keV_um": LET,
+        "Q_generated_fC": Q_gen * 1e15,
+        "Q_collected_fC": Q_col * 1e15,
+        "CCE": float(np.clip(cce_raw, 0.0, 1.0)),
+        "CCE_raw": float(cce_raw),
+        "converged": bool(converged),
+        "t_collection_ns": t_collection_s * 1e9,
+    }
 
 
 def save_cce_let_table(table_df, filepath, geometry_info=None):
