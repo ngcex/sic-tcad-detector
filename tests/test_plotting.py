@@ -1,6 +1,8 @@
 """Tests for plotting utilities.
 
-Smoke tests for all 5 public functions in src/plotting.py.
+Smoke tests for plot_electric_field, plot_depletion_width_vs_bias, plot_doping_profile and
+save_figure in etna/core/plotting.py; the other helpers there (I-V / C-V / CCE / parametric
+plots, used by the notebooks) have no dedicated test in this file.
 Uses synthetic data only -- no devsim dependency needed.
 """
 
