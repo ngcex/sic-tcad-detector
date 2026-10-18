@@ -82,6 +82,8 @@ CASES = [
 def main():
     worst = dict(psi=0.0, cce=0.0)
     for label, hw, vb, epi, nd, extra in CASES:
+        # no-buffer cases explicit (builder default = the stack's transition since 2026-10-18)
+        extra = {"buffer_thickness_cm": None, "buffer_end_doping": None, **extra}
         why = engine2d_unsupported_reason(hw, vb, epi, nd, 3, **extra)
         assert why is None, (label, why)
         t = time.time()

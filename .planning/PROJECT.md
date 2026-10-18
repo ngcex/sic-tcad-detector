@@ -170,7 +170,7 @@ Explore how charge collection efficiency (CCE) in the SiC detector behaves under
 - Alternative structures: planar, mesa, 3D electrode, stacked delta-E/E, guard ring
 - Parametric optimization with noise floor estimation and multi-criteria scoring
 - Tech debt known: N_D uniforme fallisce a reverse bias in 2D; kappa da scaling analitico (non tabulato); ROOT mock-only
-- Phi_crit ~4.86e13 cm⁻² for Petringa device (full doping compensation threshold)
+- Phi_crit ~4.86e13 cm⁻² for Petringa device (full doping compensation threshold; 62 MeV p, historical doping). On the 2026-10-18 default (N_D_bulk 3.38e13): 1.93e13 cm⁻² (previous default 4.72e13)
 
 ### Device Parameters (from group papers)
 
@@ -186,6 +186,7 @@ Explore how charge collection efficiency (CCE) in the SiC detector behaves under
 | Dielectric constant (ε_r) | 9.7                                                      | Photons paper p.6                     |
 | e-h pair energy           | 8.4 eV                                                   | Microdosimetry p.5                    |
 | Full depletion voltage    | ~10 V                                                    | Photons paper p.6 (C-V data)          |
+| Model default (2026-10-18) | measured-C-V fit (DEFAULT_STACK): NJ 8.19e15, L 0.46 μm, NB 3.38e13 (below the 0.5–1e14 above), graded n⁻/n⁺ transition over the last 1.14 μm to 4.5e16; V_fd 2.74 V, reach-through 3.10 V, gate 1.2 V_fd 3.28 V (paper's −10 V = 3× gate); epi/n⁺ position from the fit, not SIMS | lab/cv_gap; DESIGN-1 §2 |
 | Operating bias            | -30 V (dosimetry), -50 V (microdosimetry)                | Papers                                |
 | Dark current              | < 18 pA up to -60V                                       | Photons paper p.6                     |
 
@@ -231,7 +232,7 @@ The FLASH paper (Petringa 2025, Physica Medica 138) characterizes the dosimetric
 | Use devsim for device physics      | Open-source, Python-native, proven for semiconductor simulation                    | ✓ Good — handled all physics including transient high-injection                                                                     |
 | devsim-only (no fipy)              | devsim transient solver handled high-injection without needing separate PDE solver | ✓ Good — simplified architecture, one solver for everything                                                                         |
 | Python + Jupyter                   | Interactive analysis, publication-quality plots, group accessibility               | ✓ Good — 8 validated notebooks ready for group use                                                                                  |
-| Graded epi doping                  | Uniform N_D fails to match C-V under reverse bias; graded profile needed           | ✓ Good — C-V R²=0.998 after calibration                                                                                             |
+| Graded epi doping                  | Uniform N_D fails to match C-V under reverse bias; graded profile needed           | ✓ Good — C-V R²=0.998 after calibration (fit recovery on 3 points; since 2026-10-18 the default is fitted on the full digitised curve with a graded n⁻/n⁺ transition, plateau rms 0.013 μm, knee rms 0.24 μm)                                                                                             |
 | Clamped exponential Boltzmann      | SiC n_i~5e-9 causes overflow in standard exponential                               | ✓ Good — stable solver without accuracy loss                                                                                        |
 | Flat CCE as null result            | Auger recombination negligible at FLASH dose rates (delta_n << threshold)          | ✓ Good — valid scientific finding                                                                                                   |
 | Calibrated n_i(T) anchor           | Physical n_i formula gives 3.93e-9 vs validated 5e-9; use ratio-scaling            | ✓ Good — exact 5e-9 at 300K, correct T-dependence                                                                                   |

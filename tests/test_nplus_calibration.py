@@ -1,4 +1,6 @@
-"""Pins the n+ calibration record (etna.core.device.NPLUS_CALIBRATION = DEFAULT_STACK, the default model).
+"""Pins the n+ calibration record (etna.core.device.NPLUS_CALIBRATION): the default model
+2026-10-17 .. 2026-10-18, now the named preset etna.nplus_calibrated_config() (the default
+is the measured-C-V profile, DEFAULT_STACK). Abrupt epi/n+ step: no graded transition.
 
 C-V (since 2026-10-17): the targets are W = eps*A/C of a measured C, so the model
 observable is eps/C of the small-signal C = dQ/dV (reverse_sweep's C), not the depletion
@@ -93,6 +95,10 @@ def test_nt_reproduces_the_18pA_bound():
             "N_D_junction",
             "N_D_bulk",
             "L_transition",
+            # None: the record has no graded transition (the builders' default since
+            # 2026-10-18 would add the measured-C-V one)
+            "buffer_thickness_cm",
+            "buffer_end_doping",
         )
     }
     info = create_dark_current_device(

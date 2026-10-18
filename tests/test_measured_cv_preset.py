@@ -1,11 +1,13 @@
-"""The opt-in measured-C-V profile preset (graded n-/n+ transition, "buffer").
+"""The measured-C-V profile (graded n-/n+ transition, "buffer"): the DEFAULT since
+2026-10-18 (it was an opt-in preset; measured_cv_config() is now an alias of DeviceConfig()).
 
-Record: etna.core.device.MEASURED_CV_STACK (lab/cv_gap fit on the full digitised Photons
-Fig. 4b curve). Checks: the default model is bit-identical without a buffer; devsim and the
+Record: etna.core.device.DEFAULT_STACK = MEASURED_CV_STACK (lab/cv_gap fit on the full
+digitised Photons Fig. 4b curve). Checks: the previous default (nplus_calibrated_config,
+no buffer) is bit-identical to its closed formula; devsim and the
 batched engine agree with the buffer (lab/buffer_profile/bench/buffer_parity1d.py: dW
 1.9e-15, dpsi 1.4e-14 V, dCCE 1.2e-10 over 11 cases to -100 V; 2D: buffer_parity2d.py dpsi
 7.1e-14 V, dCCE 1.4e-14); the preset reproduces the digitised plateau (rms 0.013 um) and
-the three labels; exports and the app label it as a fit, not the default.
+the three labels; exports and the app label it as a fit (fit input, not a validation).
 """
 
 import dataclasses
@@ -17,7 +19,12 @@ import pytest
 
 import etna
 from etna.api import simulation as sim
-from etna.api.device import DeviceConfig, device_kwargs, measured_cv_config
+from etna.api.device import (
+    DeviceConfig,
+    device_kwargs,
+    measured_cv_config,
+    nplus_calibrated_config,
+)
 from etna.core.batched import (
     alpha_generation,
     cce_sweep,
@@ -28,7 +35,12 @@ from etna.core.batched import (
 from etna.core.batched.material import EPS, graded_doping
 from etna.core.charge_collection import cce_vs_bias
 from etna.core.cv_analysis import cv_sweep
-from etna.core.device import DEFAULT_STACK, MEASURED_CV_STACK, donor_profile
+from etna.core.device import (
+    DEFAULT_STACK,
+    MEASURED_CV_STACK,
+    NPLUS_CALIBRATION,
+    donor_profile,
+)
 from etna.core.drift_diffusion import create_dd_device
 
 M = MEASURED_CV_STACK
@@ -42,29 +54,31 @@ def _preset_kwargs(**over):
     return kw
 
 
-# ----------------------------------------------------------------- the default is untouched
-def test_default_model_has_no_buffer_and_is_bit_identical():
-    c = DeviceConfig()
+# ------------------------------------------------- the default flip; previous default intact
+def test_default_is_the_preset_and_previous_default_has_no_buffer():
+    assert MEASURED_CV_STACK is DEFAULT_STACK
+    assert DeviceConfig() == measured_cv_config()
+    c = nplus_calibrated_config()
     assert c.buffer_thickness_um is None and c.buffer_end_doping is None
     kw = device_kwargs(c)
-    assert "buffer_thickness_cm" not in kw and "buffer_end_doping" not in kw
-    assert MEASURED_CV_STACK is not DEFAULT_STACK
-    assert DEFAULT_STACK["N_D_bulk"] == 8.252732e13  # not flipped
+    # explicit Nones: the builders default to the stack's transition since the flip
+    assert kw["buffer_thickness_cm"] is None and kw["buffer_end_doping"] is None
+    P = NPLUS_CALIBRATION
     # the engine's doping without a buffer is the old closed formula, bit for bit
     x = node_positions(EPI, SUB, NP)
     d, _ = graded_doping(
         x,
         SUB,
         1e19,
-        DEFAULT_STACK["N_D_junction"],
-        DEFAULT_STACK["N_D_bulk"],
-        DEFAULT_STACK["L_transition"],
+        P["N_D_junction"],
+        P["N_D_bulk"],
+        P["L_transition"],
         nplus=(SUB + EPI, 1e19),
     )
     old = (
-        DEFAULT_STACK["N_D_bulk"]
-        + (DEFAULT_STACK["N_D_junction"] - DEFAULT_STACK["N_D_bulk"])
-        * np.exp(-np.maximum(x - SUB, 0.0) / DEFAULT_STACK["L_transition"])
+        P["N_D_bulk"]
+        + (P["N_D_junction"] - P["N_D_bulk"])
+        * np.exp(-np.maximum(x - SUB, 0.0) / P["L_transition"])
     ) * (x >= SUB) + 1e19 * (x - (SUB + EPI) >= 0)
     assert np.array_equal(d[0], old)
 
@@ -86,9 +100,15 @@ def test_preset_record_and_validation():
     assert measured_cv_config(T=310.0).T == 310.0
     assert etna.MEASURED_CV_PRESET["buffer_end_doping"] == M["buffer_end_doping"]
     with pytest.raises(ValueError, match="together"):
-        DeviceConfig(buffer_thickness_um=1.0)
+        DeviceConfig(buffer_thickness_um=1.0, buffer_end_doping=None)
     with pytest.raises(ValueError, match="together"):
-        DeviceConfig(buffer_end_doping=1e16)
+        DeviceConfig(buffer_thickness_um=None, buffer_end_doping=1e16)
+    # the default transition (1.14 um) does not fit a 1 um epi: the message says how out
+    with pytest.raises(ValueError, match="abrupt epi end"):
+        DeviceConfig(epi_thickness_um=1.0)
+    assert DeviceConfig(
+        epi_thickness_um=1.0, buffer_thickness_um=None, buffer_end_doping=None
+    ).buffer_thickness_um is None
     with pytest.raises(ValueError, match="below"):
         DeviceConfig(buffer_thickness_um=10.0, buffer_end_doping=1e16)
     with pytest.raises(ValueError):
@@ -268,7 +288,7 @@ def test_analytic_vfd_profile_integral_matches_closed_form_without_buffer():
         full_depletion_voltage_profile,
     )
 
-    c = DeviceConfig()
+    c = nplus_calibrated_config()
     y = np.linspace(0.0, c.epi_thickness_um * 1e-4, 20001)
     nd = donor_profile(y, 0.0, c.N_D_junction, c.N_D_bulk, c.L_transition_um * 1e-4)
     closed = full_depletion_voltage_graded(
@@ -279,7 +299,7 @@ def test_analytic_vfd_profile_integral_matches_closed_form_without_buffer():
         0.0,
     )
     assert full_depletion_voltage_profile(y, nd, 0.0) == pytest.approx(closed, rel=1e-6)
-    assert analytic_vfd(c) == pytest.approx(9.93, abs=0.02)  # unchanged default number
+    assert analytic_vfd(c) == pytest.approx(9.93, abs=0.02)  # the previous default
     # with the transition V_fd is the depletion of the low-doped epi up to the transition
     # start (8.86 um): 2.74 V, next to the engine's 3.1 V reach-through; integrating through
     # the transition to 10 um would give ~130 V (the C-V creep, not full depletion)
@@ -299,9 +319,14 @@ def test_spec_sheet_and_cross_section_label_the_preset():
 
     cfg = measured_cv_config(area_cm2=0.04)
     spec = build_spec(cfg, None)
-    assert spec["measured_cv_preset"] and not spec["reference_device"]
-    assert "measured C-V profile preset" in spec["model"]
+    assert spec["measured_cv_preset"] and spec["reference_device"]
+    assert "measured-C-V profile" in spec["model"] and "default stack" in spec["model"]
     assert spec["cv"]["calibration"] == MEASURED_CV_NOTE
+    cal = spec["cv"]["calibration"]
+    # the statements the default's export must carry
+    for s in ("digitised Photons Fig. 4b", "plateau rms 0.013 um", "knee rms 0.24 um",
+              "below the documented 0.5-1e14", "not by SIMS"):
+        assert s in cal, s
     assert "fit input" in spec["statements"][1].lower()
     names = [L["name"] for L in stack_layers(cfg)]
     assert names == ["p+ anode", "n- epi", "n-/n+ transition", "n+ substrate"]
@@ -312,9 +337,10 @@ def test_spec_sheet_and_cross_section_label_the_preset():
         M["buffer_end_doping"], rel=1e-3
     )
     assert float(epi_donor_profile(cfg, 5.0)) == pytest.approx(M["N_D_bulk"], rel=1e-2)
-    # the default spec sheet is unchanged in kind
-    d = build_spec(DeviceConfig(), None)
-    assert d["model"] == "default stack (n+ layer)" and d["reference_device"]
+    # the previous default is labelled as such, with its 3-point calibration note
+    d = build_spec(nplus_calibrated_config(), None)
+    assert d["model"].startswith("previous default") and not d["reference_device"]
+    assert d["nplus_calibrated_preset"] and "0 V and -10 V" in d["cv"]["calibration"]
     assert d["epi_doping"]["buffer_thickness_um"] is None
 
 
@@ -334,9 +360,12 @@ def test_sidebar_values_with_the_preset_assemble_the_preset_config():
         "T": 300.0,
         "area_cm2": 0.04,
     }
-    assert assemble_config(values).buffer_thickness_um is None
+    # without the transition keys the sidebar assembles the default transition
+    assert assemble_config(values).buffer_thickness_um == 1.136634
     values.update(etna.MEASURED_CV_PRESET)
     assert assemble_config(values) == measured_cv_config(area_cm2=0.04)
+    values.update(etna.NPLUS_CALIBRATED_PRESET)
+    assert assemble_config(values) == nplus_calibrated_config(area_cm2=0.04)
 
 
 def test_run_all_sweep_passes_the_buffer_to_the_engine():

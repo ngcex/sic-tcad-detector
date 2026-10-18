@@ -60,6 +60,9 @@ _SUBSTRATE_DEFAULT_CM = DEFAULT_STACK[
 _NPLUS_DEFAULT_CM = DEFAULT_STACK[
     "nplus_thickness_cm"
 ]  # cm, n+ under the epi (was None)
+# graded n-/n+ transition of the default stack (was none before the 2026-10-18 flip)
+_BUFFER_THICKNESS_DEFAULT_CM = DEFAULT_STACK["buffer_thickness_cm"]
+_BUFFER_END_DOPING_DEFAULT = DEFAULT_STACK["buffer_end_doping"]
 
 # Physical constants (CGS)
 EPS_0 = 8.854e-14  # F/cm, vacuum permittivity
@@ -198,8 +201,8 @@ def create_sic_2d_device(
     nplus_thickness_cm=_NPLUS_DEFAULT_CM,
     N_D_nplus=DEFAULT_STACK["N_D_nplus"],
     nplus_generation=False,
-    buffer_thickness_cm=None,
-    buffer_end_doping=None,
+    buffer_thickness_cm=_BUFFER_THICKNESS_DEFAULT_CM,
+    buffer_end_doping=_BUFFER_END_DOPING_DEFAULT,
 ):
     """Create a 2D p+/n- 4H-SiC diode device in devsim.
 
@@ -241,8 +244,9 @@ def create_sic_2d_device(
         ``etna.core.device.create_sic_device``. Default DEFAULT_STACK (1 um, 1e19);
         nplus_thickness_cm=None = historical (legacy) model, cathode on the n- epi.
     buffer_thickness_cm, buffer_end_doping :
-        Optional graded n-/n+ transition over the last ``buffer_thickness_cm`` of the
-        epi, as ``etna.core.device.create_sic_device`` (both None = none, the default).
+        Graded n-/n+ transition over the last ``buffer_thickness_cm`` of the epi, as
+        ``etna.core.device.create_sic_device``: default DEFAULT_STACK (1.136634 um to
+        4.516421e16); both None (explicit) = abrupt epi/n+ (previous default, legacy).
 
     Returns
     -------
@@ -571,6 +575,10 @@ def calibrate_graded_doping_2d(
        operating envelope to the full clinical reverse-bias range without
        distorting the validated low-bias fit.
 
+    Trial devices use the LEGACY geometry (no n+, no graded transition; p+
+    ``substrate_thickness_cm``, default 1 um), explicitly: the builders' defaults are the
+    measured-C-V stack (DEFAULT_STACK), which is not a 3-target calibration.
+
     The calibration target is the 2D solver reproducing its own validated 1D
     twin's C-V at the device center (RESEARCH.md Assumption A2 / success
     criterion #2), NOT an external 2D dataset.
@@ -700,6 +708,11 @@ def calibrate_graded_doping_2d(
                 substrate_thickness_cm=substrate_thickness_cm,
                 N_A=N_A,
                 T=T,
+                # the historical 3-target edge calibration: legacy geometry (cathode on
+                # the epi, abrupt end), explicit since the builders default to the stack
+                nplus_thickness_cm=None,
+                buffer_thickness_cm=None,
+                buffer_end_doping=None,
             )
             device = device_info["device_name"]
             bias_name = simple_physics.GetContactBiasName("cathode")

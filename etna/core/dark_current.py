@@ -835,11 +835,11 @@ def dark_current_vs_fluence(
     epi_thickness_cm : float
         Epitaxial layer thickness (cm).  Default 10 um.
     N_D_junction : float
-        Junction-side donor concentration (cm^-3).  Default: DEFAULT_STACK (2.958237e15).
+        Junction-side donor concentration (cm^-3).  Default: DEFAULT_STACK (8.185880e15).
     N_D_bulk : float
-        Bulk-side donor concentration (cm^-3).  Default: DEFAULT_STACK (8.252732e13).
+        Bulk-side donor concentration (cm^-3).  Default: DEFAULT_STACK (3.382506e13).
     L_transition : float
-        Doping transition length (cm).  Default: DEFAULT_STACK (0.987 um).
+        Doping transition length (cm).  Default: DEFAULT_STACK (0.4638630 um).
     energy_MeV : float
         Proton energy (MeV).  Default 62.0.
     lifetime_model : str
@@ -856,9 +856,9 @@ def dark_current_vs_fluence(
     device_kwargs : dict or None
         Extra create_sic_device keywords (geometry: substrate_thickness_cm,
         nplus_thickness_cm, N_D_nplus, ...; or doping), overriding the defaults.
-        None = the default stack (DEFAULT_STACK); nplus_thickness_cm=None and
-        substrate_thickness_cm=1e-4 (or etna.api.device.device_kwargs(legacy_config()))
-        give the legacy geometry.
+        None = the default stack (DEFAULT_STACK); nplus_thickness_cm=None,
+        buffer_thickness_cm=buffer_end_doping=None and substrate_thickness_cm=1e-4 (or
+        etna.api.device.device_kwargs(legacy_config())) give the legacy geometry.
 
     Returns
     -------
@@ -1099,9 +1099,9 @@ def dark_current_post_anneal(
     device_kwargs : dict or None
         Extra create_sic_device keywords (geometry: substrate_thickness_cm,
         nplus_thickness_cm, N_D_nplus, ...; or doping), overriding the defaults.
-        None = the default stack (DEFAULT_STACK); nplus_thickness_cm=None and
-        substrate_thickness_cm=1e-4 (or etna.api.device.device_kwargs(legacy_config()))
-        give the legacy geometry.
+        None = the default stack (DEFAULT_STACK); nplus_thickness_cm=None,
+        buffer_thickness_cm=buffer_end_doping=None and substrate_thickness_cm=1e-4 (or
+        etna.api.device.device_kwargs(legacy_config())) give the legacy geometry.
 
     Returns
     -------

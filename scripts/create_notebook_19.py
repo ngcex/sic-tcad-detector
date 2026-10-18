@@ -140,8 +140,18 @@ V_STEP_MAX = 2.5          # adaptive ramp start step; measured cheaper than 5 V 
 # stack (p+ 1 um on the n- epi, cathode directly on the epi, no n+ layer). The planar
 # baseline is therefore pinned to the same stack so that the comparison is
 # structure-vs-structure, not stack-vs-stack (create_2d_dd_device defaults to the n+
-# stack since 2026-10-17).
-LEGACY_STACK = dict(substrate_thickness_cm=1e-4, nplus_thickness_cm=None)
+# stack since 2026-10-17). Since 2026-10-18 the builders also default to the graded n-/n+
+# transition and the measured-C-V doping: the planar baseline pins the abrupt epi end and
+# the alternative structures' doping (the previous default's, NPLUS_CALIBRATION).
+LEGACY_STACK = dict(
+    substrate_thickness_cm=1e-4,
+    nplus_thickness_cm=None,
+    buffer_thickness_cm=None,
+    buffer_end_doping=None,
+    N_D_junction=2.958237e15,
+    N_D_bulk=8.252732e13,
+    L_transition=0.987e-4,
+)
 
 
 def ramp_cathode(info, V, contact="cathode"):
@@ -223,18 +233,18 @@ boundary-value problem as the mesa pillar of Section 1.2. What happens to charge
 generated beyond a real planar anode edge (epi continuing under the oxide) is the
 "overhang" reference of the guard-ring section (1.4).
 
-**Normalisation note (`zero_on_contacts=True`).** `compute_cce_2d` divides the
+**Normalisation note (contact nodes).** Until 2026-10-18 `compute_cce_2d` divided the
 collected current by the box-rule integral of the generation over ALL mesh nodes, but
 on the contact nodes the contact equation replaces the continuity equation (Dirichlet
 carrier densities): pairs assigned there are counted and never injected. With the
 default normalisation that leaves a purely mesh-dependent CCE deficit equal to the
 cathode nodes' share of the generation -- measured at 50 V: 1.3e-3 on this planar
 device (50 nm cells at the cathode), 4.6e-3 on the coarser mesh of the alternative
-builders -- which would masquerade as a structure difference. Every scan in this
-notebook therefore zeroes the generation on the contact nodes, so I_generated is what
-the model injects and the five meshes are comparable; the remaining 1 - CCE
-(~1e-4-2e-4) is the SRH loss of the model. The library default is unchanged (the
-frozen v3 baselines use it).
+builders -- which would masquerade as a structure difference. The library now
+normalises by the injected (non-contact) generation and `alpha_stripe_generation` /
+`cce_lateral_scan` zero the contact nodes by default (`zero_on_contacts=True`), so
+I_generated is what the model injects and the five meshes are comparable; the remaining
+1 - CCE (~1e-4-2e-4) is the SRH loss of the model.
 """
 )
 
@@ -250,7 +260,7 @@ print(f"  Nodes: {planar_info['num_nodes']}, structure: planar, "
       f"aggressive {planar_info.get('ramp_aggressive_retries', 0)}")
 
 print("Running CCE lateral scan...")
-cce_planar = cce_lateral_scan(planar_info, n_points=N_SCAN, contact="cathode", zero_on_contacts=True)
+cce_planar = cce_lateral_scan(planar_info, n_points=N_SCAN, contact="cathode")
 cce_results['Planar'] = cce_planar
 
 print(f"  Center CCE:         {cce_planar['cce_values'][0]:.6f}")
@@ -314,11 +324,11 @@ try:
     ramp_cathode(mesa_info, V_BIAS)
 
     print("Running CCE lateral scan on the mesa pillar...")
-    cce_mesa = cce_lateral_scan(mesa_info, n_points=N_SCAN, contact="cathode", zero_on_contacts=True)
+    cce_mesa = cce_lateral_scan(mesa_info, n_points=N_SCAN, contact="cathode")
     cce_results['Mesa'] = cce_mesa
 
     # Same stripe at the centre, read at both contacts: current conservation check
-    both = cce_with_generation(mesa_info, alpha_stripe_generation(mesa_info, 0.0, zero_on_contacts=True),
+    both = cce_with_generation(mesa_info, alpha_stripe_generation(mesa_info, 0.0),
                                contacts=("cathode", "anode"))
     print(f"  Center CCE:         {cce_mesa['cce_values'][0]:.6f} "
           f"(cathode {both['cathode']:.9f} == anode {both['anode']:.9f})")
@@ -398,7 +408,7 @@ try:
     cce_radial, cce_radial_anode = [], []
     for r_pos in radial_positions_cm:
         both = cce_with_generation(
-            elec3d_info, alpha_stripe_generation(elec3d_info, r_pos, zero_on_contacts=True), contacts=("cathode", "anode"))
+            elec3d_info, alpha_stripe_generation(elec3d_info, r_pos), contacts=("cathode", "anode"))
         cce_radial.append(both['cathode'])
         cce_radial_anode.append(both['anode'])
         print(f"  r = {r_pos*1e4:5.1f} um: CCE cathode {both['cathode']:.6f}, anode {both['anode']:.6f}")
@@ -499,7 +509,7 @@ def edge_event_sharing(info, label):
     rows = []
     for x_um in EDGE_POSITIONS_UM:
         frac, resid = contact_current_sharing(
-            info, alpha_stripe_generation(info, x_um * 1e-4, zero_on_contacts=True), node_sets=ns)
+            info, alpha_stripe_generation(info, x_um * 1e-4), node_sets=ns)
         row = {'x_um': x_um, 'anode': -frac['anode'], 'cathode': frac['cathode'],
                'guard': -frac.get('guard_ring_anode', 0.0), 'residual': resid}
         row['lost'] = 1.0 - row['cathode']
@@ -531,7 +541,7 @@ try:
     STRIPE_SIGMA_CM = 2e-4
     x_last = gr_info['sv_half_width_cm'] - 3 * STRIPE_SIGMA_CM   # stripe still entirely over the anode
     cce_gr = cce_lateral_scan(gr_info, n_points=N_SCAN, contact="anode", node_set=ns['anode'],
-                               x_max_cm=x_last, zero_on_contacts=True)
+                               x_max_cm=x_last)
     cce_results['Guard Ring'] = cce_gr
     print(f"  Center CCE (anode): {cce_gr['cce_values'][0]:.6f}")
     print(f"  CCE at x = {x_last*1e4:.0f} um (3 sigma inside the anode edge): {cce_gr['cce_values'][-1]:.6f}")
@@ -646,9 +656,9 @@ try:
     ramp_cathode(layers['delta_e'], V_BIAS_DELTA_E, contact='de_cathode')
     ramp_cathode(layers['e_stop'], V_BIAS, contact='e_cathode')
 
-    scan_de = cce_lateral_scan(layers['delta_e'], n_points=5, contact='de_cathode', zero_on_contacts=True)
-    scan_e = cce_lateral_scan(layers['e_stop'], n_points=5, contact='e_cathode', zero_on_contacts=True)
-    both_de = cce_with_generation(layers['delta_e'], alpha_stripe_generation(layers['delta_e'], 0.0, zero_on_contacts=True),
+    scan_de = cce_lateral_scan(layers['delta_e'], n_points=5, contact='de_cathode')
+    scan_e = cce_lateral_scan(layers['e_stop'], n_points=5, contact='e_cathode')
+    both_de = cce_with_generation(layers['delta_e'], alpha_stripe_generation(layers['delta_e'], 0.0),
                                   contacts=layers['delta_e']['contacts'])
     cce_results['Delta-E/E'] = {'delta_e': scan_de, 'e_stop': scan_e}
 

@@ -136,6 +136,9 @@ def batch_for(kw):
 def main():
     worst = dict(W=0.0, psi=0.0, cce=0.0, donors=0.0)
     for label, kw in CASES:
+        # no-buffer cases explicit: the builders default to the stack's transition since
+        # the 2026-10-18 default flip
+        kw = {"buffer_thickness_cm": None, "buffer_end_doping": None, **kw}
         name = f"bpar_{uuid.uuid4().hex[:6]}"
         info = create_dd_device(device_name=name, **kw)
         ref = cv_sweep(info, CV_BIAS)

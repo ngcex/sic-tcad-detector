@@ -17,7 +17,14 @@ from etna.core.device import create_sic_device
 from etna.core.drift_diffusion import create_dd_device, ramp_bias
 
 # p+ 1 um explicit: the spike geometry (builders default to the stack 0.3 um since 2026-10-17)
-NPLUS = dict(nplus_thickness_cm=1e-4, N_D_nplus=1e19, substrate_thickness_cm=1e-4)
+# abrupt n+ step (the builders default to the graded n-/n+ transition since 2026-10-18)
+NPLUS = dict(
+    nplus_thickness_cm=1e-4,
+    N_D_nplus=1e19,
+    substrate_thickness_cm=1e-4,
+    buffer_thickness_cm=None,
+    buffer_end_doping=None,
+)
 # Doping the spike numbers were taken with: the core graded fallbacks before the n+ flip
 # (cce_vs_bias 2.90e15 / 8.50e13 / 1 um; device2d 2.931417e15 / 8.823059e13 / 0.9872267 um).
 # The fallbacks are now DEFAULT_STACK; pinned here so the tests keep checking the n+
@@ -42,7 +49,8 @@ def test_nplus_mesh_and_doping():
         assert info["total_length"] == pytest.approx(12e-4)
         assert x[-1] == pytest.approx(12e-4)
         assert np.all(donors[x > 11e-4 + 1e-12] > 1e19)
-        assert np.all(donors[(x > 1e-4) & (x < 11e-4 - 1e-12)] < 3e15)
+        # epi: the graded fallback (DEFAULT_STACK N_D_junction 8.19e15 since 2026-10-18)
+        assert np.all(donors[(x > 1e-4) & (x < 11e-4 - 1e-12)] < 1e16)
     finally:
         devsim.delete_device(device=info["device_name"])
 
@@ -113,7 +121,9 @@ def test_device_kwargs_carry_nplus_explicitly():
 @pytest.mark.slow
 # 0.9995626 / 0.9619415 before the hole mobility at the epi doping since 2026-10-17 (was N_A, audit-v7 A-03);
 # 0.9997212 / 0.9621150 before both mobilities at N_D_bulk (was DEFAULT_N_D 1.07e15), 2026-10-17
-@pytest.mark.parametrize("gen_in_nplus, expected", [(False, 0.9997262), (True, 0.9621205)])
+# 0.9621205 (True) before 2026-10-18: I_gen counted the never-injected cathode-row
+# generation (share 4.64e-4 with nplus_generation); now the injected generation only.
+@pytest.mark.parametrize("gen_in_nplus, expected", [(False, 0.9997262), (True, 0.9625666)])
 def test_2d_cce_with_nplus(gen_in_nplus, expected):
     """2D devsim (hw 25, -20 V, n+ 1 um): balanced raw CCE <= 1, equal to the 1D value
     (0.999562, epi-only G), laterally flat; the direct contact current gives 1.0136 here."""
@@ -122,6 +132,7 @@ def test_2d_cce_with_nplus(gen_in_nplus, expected):
         Q,
         cce_lateral_scan,
         create_2d_dd_device,
+        injected_generation,
         integrate_nodes_box_2d,
     )
     from etna.core.drift_diffusion import extract_steady_state_current
@@ -141,7 +152,10 @@ def test_2d_cce_with_nplus(gen_in_nplus, expected):
         G = confine_generation_to_epi(info, y, G)
         add_generation_to_dd(info, G)
         devsim.solve(type="dc", absolute_error=1e10, relative_error=DC_REL_ERROR, maximum_iterations=40)
-        raw = abs(extract_steady_state_current(info, "cathode")) / (Q * integrate_nodes_box_2d(info, G))
+        # normalised by the injected generation (contact nodes are Dirichlet)
+        raw = abs(extract_steady_state_current(info, "cathode")) / (
+            Q * integrate_nodes_box_2d(info, injected_generation(info, G))
+        )
         add_generation_to_dd(info, np.zeros_like(G))
         devsim.solve(type="dc", absolute_error=1e10, relative_error=DC_REL_ERROR, maximum_iterations=40)
         scan = cce_lateral_scan(info, n_points=3)

@@ -152,14 +152,15 @@ class TestCvAtFluence:
     def test_cv_flattens_at_moderate_fluence(self):
         """C-V at moderate fluence is flatter than pristine.
 
-        At 5e13 protons/cm^2, carrier removal reduces doping variation
-        in the epi layer, leading to more uniform depletion and flatter C-V.
+        At 1.2e13 protons/cm^2 (62 % of the default's 1.93e13 compensation fluence since
+        the 2026-10-18 default flip; was 2e13 of 4.7e13), carrier removal reduces doping
+        variation in the epi layer, leading to more uniform depletion and flatter C-V.
         """
         from etna.core.cv_analysis import cv_at_fluence
 
         V_pts = [0, -5, -10, -20, -30]
         pristine = cv_at_fluence(fluence=0.0, V_range=V_pts)
-        damaged = cv_at_fluence(fluence=2e13, V_range=V_pts)
+        damaged = cv_at_fluence(fluence=1.2e13, V_range=V_pts)
 
         assert pristine is not None
         assert damaged is not None

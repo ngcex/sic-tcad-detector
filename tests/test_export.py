@@ -88,9 +88,11 @@ def test_label_is_verbatim():
 
 
 def test_analytic_vfd_pinned_default_stack():
-    # same V_bi inputs as the 2D sweep gate (etna.core.optimization): 9.93 V (8.21 V
-    # before the 2026-10-17 small-signal C recalibration: N_D_bulk 6.34e13 -> 8.25e13)
-    assert analytic_vfd(DeviceConfig()) == pytest.approx(9.93, abs=0.005)
+    # same V_bi inputs as the 2D sweep gate (etna.core.optimization): 2.74 V on the
+    # measured-C-V default (to the transition start) since 2026-10-18; 9.93 V on the
+    # previous default (8.21 V before the 2026-10-17 small-signal C recalibration)
+    assert analytic_vfd(DeviceConfig()) == pytest.approx(2.736, abs=0.005)
+    assert analytic_vfd(etna.nplus_calibrated_config()) == pytest.approx(9.93, abs=0.005)
 
 
 def test_spec_default_reference_device():
@@ -102,19 +104,26 @@ def test_spec_default_reference_device():
         fd["reach_through_V"] == 10.3
         and "Debye length" in fd["reach_through_definition"]
     )
-    assert fd["analytic_V_fd_V"] == pytest.approx(9.93, abs=0.005)
-    assert [L["name"] for L in spec["layers"]] == ["p+ anode", "n- epi", "n+ substrate"]
-    assert [L["thickness_um"] for L in spec["layers"]] == [0.3, 10.0, 1.0]
-    assert "not a fabrication thickness" in spec["layers"][2]["note"]
+    assert fd["analytic_V_fd_V"] == pytest.approx(2.736, abs=0.005)
+    assert "transition" in fd["reach_through_definition"]
+    assert [L["name"] for L in spec["layers"]] == [
+        "p+ anode",
+        "n- epi",
+        "n-/n+ transition",
+        "n+ substrate",
+    ]
+    assert [L["thickness_um"] for L in spec["layers"]] == [0.3, 8.863366, 1.136634, 1.0]
+    assert "not a fabrication thickness" in spec["layers"][3]["note"]
     s = spec["epi_doping"]["samples"]
     assert s[0]["N_D_cm3"] == pytest.approx(cfg.N_D_junction)
     assert s[-1]["depth_below_junction_um"] == 10.0
+    # the default is fitted on the whole digitised curve (2026-10-18): no out-of-fit point
     assert (
-        "+2.6 %" in spec["cv"]["systematic"]
-        and "not refitted" in spec["cv"]["systematic"]
-        and "none is picked" in spec["cv"]["systematic"]
+        "No out-of-fit C-V comparison" in spec["cv"]["systematic"]
+        and "in-fit residual" in spec["cv"]["systematic"]
     )
-    assert "calibration inputs" in spec["cv"]["calibration"]
+    assert "calibration input" in spec["cv"]["calibration"]
+    assert "not by SIMS" in spec["cv"]["calibration"]
     assert spec["cv"]["W_um"]["-30 V"] == pytest.approx(9.9788, abs=1e-4)
     assert "dQ/dV" in spec["cv"]["W_definition"]
     assert (
@@ -209,9 +218,9 @@ def test_cross_section_svg_to_scale_and_labelled():
             r'<rect x="110.0" y="[^"]+" width="300.0" height="([^"]+)"', svg
         )
     ]
-    assert len(hs) == 3
+    assert len(hs) == 4  # p+ / n- epi / graded n-/n+ transition / n+ (default since 2026-10-18)
     np.testing.assert_allclose(
-        np.array(hs) / sum(hs), np.array([0.3, 10, 1]) / 11.3, rtol=1e-3
+        np.array(hs) / sum(hs), np.array([0.3, 8.863366, 1.136634, 1]) / 11.3, rtol=1e-3
     )
 
 

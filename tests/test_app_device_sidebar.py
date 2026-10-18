@@ -115,20 +115,32 @@ def test_sidebar_default_is_the_nplus_stack():
     assert "Inside the 1D engine/devsim cross-check domain" in texts
     at.sidebar.checkbox(key="cfg_legacy_on").check()
     at.run()
-    from etna import legacy_config, measured_cv_config
+    from etna import legacy_config, measured_cv_config, nplus_calibrated_config
 
     assert at.session_state["device_config"] == dataclasses.replace(
         legacy_config(), area_cm2=0.04
     )
-    # the measured-C-V profile checkbox is opt-in too, and labelled as a fit
+    # the default IS the measured-C-V profile (2026-10-18); the previous calibrated model
+    # (abrupt n+, no transition) is the opt-in checkbox now
     at.sidebar.checkbox(key="cfg_legacy_on").uncheck()
-    assert not at.sidebar.checkbox(key="cfg_measured_cv_on").value
-    at.sidebar.checkbox(key="cfg_measured_cv_on").check()
     at.run()
     assert at.session_state["device_config"] == dataclasses.replace(
         measured_cv_config(), area_cm2=0.04
     )
+    assert not at.sidebar.checkbox(key="cfg_nplus_cal_on").value
+    at.sidebar.checkbox(key="cfg_nplus_cal_on").check()
+    at.run()
+    assert at.session_state["device_config"] == dataclasses.replace(
+        nplus_calibrated_config(), area_cm2=0.04
+    )
     infos = " ".join(c.value for c in at.sidebar.info)
-    assert "fitted on the digitised" in infos and "not the default" in infos
+    assert "Previous calibrated model" in infos and "no graded transition" in infos
     texts = " ".join(c.value for c in at.sidebar.caption)
     assert "Inside the 1D engine/devsim cross-check domain" in texts
+    # the transition checkbox off = abrupt epi end with the default doping
+    at.sidebar.checkbox(key="cfg_nplus_cal_on").uncheck()
+    at.sidebar.checkbox(key="cfg_buffer_on").uncheck()
+    at.run()
+    assert at.session_state["device_config"] == dataclasses.replace(
+        DeviceConfig(), area_cm2=0.04, buffer_thickness_um=None, buffer_end_doping=None
+    )

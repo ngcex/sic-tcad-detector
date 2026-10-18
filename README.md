@@ -16,14 +16,15 @@ Petringa group's 4H-SiC detector work at INFN-LNS Catania.
 ## What it does
 
 - **Electrostatics & C–V** — built-in potential, depletion width, electric
-  field, capacitance–voltage extraction. R² = 0.998 is fit-recovery (same
-  points used to calibrate the doping profile); the only literature check
+  field, capacitance–voltage extraction. The default doping profile is a FIT to the
+  digitised measured C-V of this device (Photons Fig. 4b: plateau rms 0.013 µm, knee
+  rms 0.24 µm), so C-V agreement is fit quality, not validation; the only literature check
   (Bruzzi & Verroi 2023, a Schottky diode on a different, 30 µm epi wafer at 2.46e15) is a
   solver-scale check, not a validation of this device: the +3.1 % at −40 V is the Schottky-vs-pn
   built-in-voltage difference (<1 % with V_bi matched). The measured C-V of this device
-  (Photons Fig. 4b, digitised in `lab/cv_gap/`) puts the knee at −1…−4 V where the model has it
-  at −8…−10 V — see `.issues/perf/PERF-05-default-stack-followups.md` and
-  `.planning/VALIDATION_LITERATURE.md`.
+  (Photons Fig. 4b, digitised in `lab/cv_gap/`) puts the knee at −1…−4 V; the previous
+  abrupt-n⁺ default had it at −8…−10 V, hence the 2026-10-18 default flip — see
+  `.issues/perf/PERF-05-default-stack-followups.md` and `.planning/VALIDATION_LITERATURE.md`.
 - **Charge collection (CCE)** — drift-diffusion transport, Hecht analysis,
   CCE vs bias, single-particle and transient response.
 - **Dark current** — total leakage vs temperature from an effective
@@ -179,32 +180,42 @@ built-in-voltage difference; <1 % with V_bi matched), not a validation of this d
   R² ≥ 0.99 over 0…−50 V).
 - ⚠️ **Calibration, not prediction:** dark current is a calibration input: one
   trap density N_t fitted to the experimental bound < 18 pA up to −60 V (4 mm²;
-  N_t = 2.805336e12 on the default stack, E_t = 0.67 eV); quote it as a budget
+  N_t = 2.849024e12 on the default stack, E_t = 0.67 eV); quote it as a budget
   estimate only.
 - ⚠️ **FLASH dose-rate:** the high-injection _plasma-recombination_ physics is
   **not implemented** — FLASH dose-rate outputs are exploratory sensitivity
   bounds, not a validated mechanistic prediction.
-- ✅ **Device stack (default since the n⁺ flip):** p⁺ anode 0.3 µm / 10 µm graded
-  n⁻ epi / n⁺ substrate (1 µm modelled, 10¹⁹ cm⁻³, cathode on its far end), doping
-  solved exactly on the 0 / −10 V C-V points (`etna.core.device.DEFAULT_STACK`): those
-  two points are **calibration inputs**, not reproduced validation points. `run_cv`
+- ✅ **Device stack (default since 2026-10-18: the measured-C-V profile):** p⁺ anode
+  0.3 µm / 10 µm graded n⁻ epi (N_D_junction 8.19e15, L 0.46 µm, N_D_bulk 3.38e13) with
+  a graded n⁻/n⁺ transition over its last 1.14 µm (log-linear to 4.5e16 at 10 µm) /
+  n⁺ substrate (1 µm modelled, 10¹⁹ cm⁻³, cathode on its far end)
+  (`etna.core.device.DEFAULT_STACK`; `etna.measured_cv_config()` is an alias). The
+  profile is a **fit to the digitised Photons Fig. 4b** (plateau rms 0.013 µm over
+  −5…−59 V, knee rms 0.24 µm): the whole curve is a calibration input. **N_D_bulk
+  3.4e13 is below the documented 0.5–1e14** statements, and the epi/n⁺ position is set
+  by the fit, not by SIMS. `run_cv`
   returns the small-signal C = dQ/dV (the observable of a measured C-V; W = ε·A/C in
   `metadata["W_from_C"]`); the n/N_D = 0.5 depletion edge is metadata
   (`depletion_widths`). There is no deep-bias convergence wall (devsim converges to
-  ≥ −150 V; the engine is cross-checked to −100 V). Reach-through is **12.3 V** by a
-  _definition_: the depletion edge within one Debye length of the n⁻/n⁺ step
-  (`metadata["reach_through_V"]`; paper: ~10 V; 17 V under the legacy mesh rule).
-- ⚠️ **Known C-V residual:** ε·A/C at −30 V is 9.98 µm vs the measured 9.73 µm
-  (+2.6 %; Photons Fig. 4b labels 1.68 / 9.52 / 9.73 µm), the one out-of-fit C-V point.
-  A ~0.5 µm graded n⁻/n⁺ buffer, an epi ~2.5 % thinner than nominal and edge/fringe
-  capacitance falling with bias each close the gap; three points cannot separate them,
-  so none is picked and nothing is refitted (lab/microdosimeter/notes/LOG.md §4, §6).
+  ≥ −150 V; the engine is cross-checked to −100 V). Full depletion, by _definition_
+  (`etna.export.labels.VFD_DEFINITION`): analytic V_fd **2.74 V** (to the transition
+  start), reach-through **3.10 V** (edge within one Debye length of the transition
+  start, `metadata["reach_through_V"]`), sweep gate 1.2 × V_fd = **3.28 V**. The paper's
+  −10 V is 3× that gate (3.6× V_fd); DESIGN-1 keeps ≥ −10 V as the practical operating
+  bias (margin for the fit's doping uncertainty: V_fd 3.9–7.6 V if the bulk is at the
+  documented 0.5–1e14).
+- ⚠️ **Previous default:** `etna.nplus_calibrated_config()` (UI: "previous calibrated
+  model") reproduces the 2026-10-17 numbers bit for bit: abrupt epi/n⁺ step, doping
+  solved on the 0 / −10 V C-V points (2.958237e15 / 8.252732e13 / L 0.987 µm held),
+  N_t 2.805336e12; V_fd 9.93 V, reach-through 12.3 V, ε·A/C(−30 V) 9.98 vs 9.73 µm
+  (+2.6 %), C-V knee at −8…−10 V (excluded by the full digitised curve).
 - ⚠️ **Legacy model:** `etna.legacy_config()` (UI: "historical model") reproduces the
   pre-flip numbers: cathode directly on the n⁻ epi, p⁺ 1 µm, 2.93e15 / 8.82e13 /
   0.987 µm, N_t 2.8e12, E_t 0.65. Only there does devsim stop converging at deep bias
   (≈ −64 V) — an artefact of the missing n⁺ substrate, **not** a physical limit.
-  Direct core calls (`etna.core.*` builders and sweeps) default to the same stack; pass
-  `nplus_thickness_cm=None, substrate_thickness_cm=1e-4` (or
+  Direct core calls (`etna.core.*` builders and sweeps) default to the same stack
+  (including the graded transition); pass `nplus_thickness_cm=None,
+  buffer_thickness_cm=None, buffer_end_doping=None, substrate_thickness_cm=1e-4` (or
   `device_kwargs(legacy_config())`) for the legacy geometry.
 - 🔧 **Data-blocked (machinery ready, real data needed):**
   - Tissue-equivalence κ(E): the Bragg-additivity machinery is in place

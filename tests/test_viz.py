@@ -54,7 +54,12 @@ def test_animation_data_uses_solvers(monkeypatch):
     assert d["frames"][2]["peak_E_V_per_cm"] == pytest.approx(1e5 + 2000)
     assert all(f["peak_excludes_interface"] for f in d["frames"])
     assert d["E_axis_max"] == pytest.approx(1.15 * (1e5 + 2000))
-    assert [L["name"] for L in d["layers"]] == ["p+ anode", "n- epi", "n+ substrate"]
+    assert [L["name"] for L in d["layers"]] == [
+        "p+ anode",
+        "n- epi",
+        "n-/n+ transition",  # default stack since 2026-10-18
+        "n+ substrate",
+    ]
 
 
 def test_animation_data_rejects_2d_and_forward_bias():

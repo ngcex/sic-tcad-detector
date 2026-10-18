@@ -21,7 +21,7 @@ from etna.core.devsim_lock import serialized
 from etna.core.device2d import create_sic_2d_device
 from etna.core.drift_diffusion import create_dd_device, setup_sic_drift_diffusion
 from etna.core.poisson import setup_poisson, solve_equilibrium
-from etna.core.device import DEFAULT_STACK, LEGACY_STACK, MEASURED_CV_STACK
+from etna.core.device import DEFAULT_STACK, LEGACY_STACK, NPLUS_CALIBRATION
 
 
 def _um(cm):
@@ -60,13 +60,14 @@ class DeviceConfig:
     # E_t (eV below Ec). Used by run_dark_current only; not device-builder keywords.
     N_t: float = DEFAULT_STACK["N_t"]
     E_t: float = DEFAULT_STACK["E_t"]
-    # Optional GRADED n-/n+ transition ("buffer") over the last buffer_thickness_um of
-    # the epi: donors rise log-linearly from the local epi value to buffer_end_doping
-    # (cm^-3) at the epi end, the n+ step follows. Both None (default) = today's abrupt
-    # epi/n+ model, bit-identical. The pair fitted on the full digitised measured C-V is
-    # measured_cv_config() (etna.core.device.MEASURED_CV_STACK); NOT the default.
-    buffer_thickness_um: Optional[float] = None
-    buffer_end_doping: Optional[float] = None
+    # GRADED n-/n+ transition ("buffer") over the last buffer_thickness_um of the epi:
+    # donors rise log-linearly from the local epi value to buffer_end_doping (cm^-3) at
+    # the epi end, the n+ step follows. Default: the measured-C-V fit (DEFAULT_STACK,
+    # 1.136634 um to 4.516421e16; since 2026-10-18). Both None = the abrupt epi/n+ form
+    # (nplus_calibrated_config(), legacy_config()). An epi not thicker than the
+    # transition needs buffer_thickness_um=None (or a thinner transition).
+    buffer_thickness_um: Optional[float] = _um(DEFAULT_STACK["buffer_thickness_cm"])
+    buffer_end_doping: Optional[float] = DEFAULT_STACK["buffer_end_doping"]
 
     def __post_init__(self) -> None:
         """Reject physically meaningless values early, with a clear message.
@@ -111,7 +112,9 @@ class DeviceConfig:
             ):
                 problems.append(
                     f"buffer_thickness_um={self.buffer_thickness_um!r} must be below "
-                    f"epi_thickness_um={self.epi_thickness_um!r}"
+                    f"epi_thickness_um={self.epi_thickness_um!r} (the default graded "
+                    "n-/n+ transition; pass buffer_thickness_um=None, "
+                    "buffer_end_doping=None for an abrupt epi end)"
                 )
         if not (self.N_A >= 1e17):
             problems.append(f"N_A must be >= 1e17 cm^-3 (p+ anode; got {self.N_A!r})")
@@ -158,13 +161,15 @@ def device_kwargs(config: DeviceConfig) -> dict:
         )
     else:
         kw.update(nplus_thickness_cm=None)
-    # The buffer keys appear only when set (the builders default to none), so the
-    # kwargs of a config without a buffer are unchanged.
+    # The buffer keys are always present too: the core builders default to the stack's
+    # graded n-/n+ transition, so an abrupt epi end must be passed as explicit Nones.
     if config.buffer_thickness_um is not None:
         kw.update(
             buffer_thickness_cm=config.buffer_thickness_um * 1e-4,
             buffer_end_doping=config.buffer_end_doping,
         )
+    else:
+        kw.update(buffer_thickness_cm=None, buffer_end_doping=None)
     return kw
 
 
@@ -191,33 +196,56 @@ def legacy_config(**overrides) -> DeviceConfig:
     return DeviceConfig(**{**LEGACY_PRESET, **overrides})
 
 
-# MEASURED C-V PROFILE preset (opt-in, NOT the default): the doping form fitted on the full
-# digitised Photons Fig. 4b eps*A/C curve (lab/cv_gap/notes/LOG.md; record and provenance in
-# etna.core.device.MEASURED_CV_STACK): junction layer 8.2e15 / L 0.46 um, bulk 3.4e13, and
+# MEASURED C-V PROFILE preset = the DEFAULT since 2026-10-18 (kept as a named preset so
+# code written against the opt-in preset keeps working): the doping form fitted on the full
+# digitised Photons Fig. 4b eps*A/C curve (lab/cv_gap/notes/LOG.md; record, provenance and
+# limits in etna.core.device.DEFAULT_STACK): junction layer 8.2e15 / L 0.46 um, bulk 3.4e13,
 # a graded n-/n+ transition over the last 1.14 um of the epi rising to 4.5e16 at the epi
-# end, 1e19 n+ beyond. Same geometry as the default stack (p+ 0.3 um, 10 um epi, 1 um n+).
-# Reproduces the measured plateau to 0.013 um rms (-5..-59 V) and the knee at -1..-4 V
-# that the default's abrupt form puts at -8..-10 V; N_t refitted to the 18 pA bound.
+# end, 1e19 n+ beyond; N_t refitted to the 18 pA bound. measured_cv_config() == DeviceConfig().
 MEASURED_CV_PRESET = {
-    "substrate_thickness_um": _um(MEASURED_CV_STACK["substrate_thickness_cm"]),
-    "nplus_thickness_um": _um(MEASURED_CV_STACK["nplus_thickness_cm"]),
-    "N_D_nplus": MEASURED_CV_STACK["N_D_nplus"],
+    "substrate_thickness_um": _um(DEFAULT_STACK["substrate_thickness_cm"]),
+    "nplus_thickness_um": _um(DEFAULT_STACK["nplus_thickness_cm"]),
+    "N_D_nplus": DEFAULT_STACK["N_D_nplus"],
     "doping_profile": "graded",
-    "N_D_junction": MEASURED_CV_STACK["N_D_junction"],
-    "N_D_bulk": MEASURED_CV_STACK["N_D_bulk"],
-    "L_transition_um": _um(MEASURED_CV_STACK["L_transition"]),
-    "buffer_thickness_um": _um(MEASURED_CV_STACK["buffer_thickness_cm"]),
-    "buffer_end_doping": MEASURED_CV_STACK["buffer_end_doping"],
-    "N_t": MEASURED_CV_STACK["N_t"],
-    "E_t": MEASURED_CV_STACK["E_t"],
+    "N_D_junction": DEFAULT_STACK["N_D_junction"],
+    "N_D_bulk": DEFAULT_STACK["N_D_bulk"],
+    "L_transition_um": _um(DEFAULT_STACK["L_transition"]),
+    "buffer_thickness_um": _um(DEFAULT_STACK["buffer_thickness_cm"]),
+    "buffer_end_doping": DEFAULT_STACK["buffer_end_doping"],
+    "N_t": DEFAULT_STACK["N_t"],
+    "E_t": DEFAULT_STACK["E_t"],
 }
 
 
 def measured_cv_config(**overrides) -> DeviceConfig:
-    """DeviceConfig of the measured-C-V profile preset (graded n-/n+ transition), plus
-    ``overrides``. Opt-in: ``DeviceConfig()`` stays the 3-point-calibrated default stack.
-    """
+    """DeviceConfig of the measured-C-V profile, plus ``overrides``. Alias of the default
+    since 2026-10-18: ``measured_cv_config() == DeviceConfig()``."""
     return DeviceConfig(**{**MEASURED_CV_PRESET, **overrides})
+
+
+# PREVIOUS DEFAULT preset (2026-10-17 .. 2026-10-18; etna.core.device.NPLUS_CALIBRATION): the
+# n+ stack with the exponential epi calibrated on three C-V points (0 / -10 V exact, L held
+# 0.987 um) and an ABRUPT 1e19 n+ step at the epi end (no graded transition), N_t 2.805336e12.
+# Reproduces the numbers of that period bit for bit (tests/test_nplus_calibration.py).
+NPLUS_CALIBRATED_PRESET = {
+    "substrate_thickness_um": _um(NPLUS_CALIBRATION["substrate_thickness_cm"]),
+    "nplus_thickness_um": _um(NPLUS_CALIBRATION["nplus_thickness_cm"]),
+    "N_D_nplus": NPLUS_CALIBRATION["N_D_nplus"],
+    "doping_profile": "graded",
+    "N_D_junction": NPLUS_CALIBRATION["N_D_junction"],
+    "N_D_bulk": NPLUS_CALIBRATION["N_D_bulk"],
+    "L_transition_um": _um(NPLUS_CALIBRATION["L_transition"]),
+    "buffer_thickness_um": None,  # abrupt epi/n+ step
+    "buffer_end_doping": None,
+    "N_t": NPLUS_CALIBRATION["N_t"],
+    "E_t": NPLUS_CALIBRATION["E_t"],
+}
+
+
+def nplus_calibrated_config(**overrides) -> DeviceConfig:
+    """DeviceConfig of the PREVIOUS default (3-point n+ calibration, abrupt epi/n+, no
+    graded transition), plus ``overrides``."""
+    return DeviceConfig(**{**NPLUS_CALIBRATED_PRESET, **overrides})
 
 
 def has_buffer(config) -> bool:
@@ -227,7 +255,7 @@ def has_buffer(config) -> bool:
 
 # MICRODOSIMETER preset (Petringa et al. 2025, Physica Medica 140, 105675, pp.2-3): 5x5 mm2
 # die (0.25 mm3 = 25 mm2 x 10 um), 10 um n- epi on n+, p+ epi 0.3-1 um. SEPARATE from the
-# C-V-calibrated 4 mm2 dosimeter (DEFAULT_STACK is untouched). Epi doping: uniform N_D =
+# C-V-fitted 4 mm2 dosimeter (DEFAULT_STACK); abrupt epi/n+ (no graded transition). Epi doping: uniform N_D =
 # 1e14, the paper's own 1/C^2 estimate ("on the order of 1e14 cm^-3, consistent with
 # nominal values") and the same group's spec for this epi (0.5-1e14, "full depletion at
 # about 10 V, -30 V = over-depleted": Petringa 2025 JINST 20 C08019; SiC_Photons). In this

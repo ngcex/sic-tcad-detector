@@ -11,7 +11,11 @@ must also collect the same charge (the legacy cathode has no n+ round-off proble
 
 Before the backward-Euler estimator (post-injection trapezoid, 1 %-of-peak stop) the
 same device gave cathode 0.9776 vs steady state 0.9609 and anode 0.9060: neither check
-held. Now both contacts give 0.96152 (hw 25, LET 10).
+held. Then both contacts gave 0.96152 (hw 25, LET 10). Since 2026-10-18 Q_generated is the
+box-rule integral of the injected generation (contact nodes zeroed; was the triangle rule
+over every node, which counted the never-injected cathode-row share): at LET 1, 10 V the
+single-particle CCE goes 0.961613 -> 0.962940 against the steady-state 0.962560 (gap
+-9.5e-4 -> +3.8e-4; lab/default_flip/bench/sp_contacts.py).
 """
 
 import numpy as np
@@ -21,6 +25,8 @@ import pytest
 LEGACY_2D = dict(
     substrate_thickness_cm=1e-4,
     nplus_thickness_cm=None,
+    buffer_thickness_cm=None,  # builder default since 2026-10-18: the graded transition
+    buffer_end_doping=None,
     N_D_junction=2.931417e15,
     N_D_bulk=8.823059e13,
     L_transition=9.872267e-5,

@@ -309,8 +309,8 @@ def microdosimetric_sweep(
     substrate_thickness_cm=DEFAULT_STACK["substrate_thickness_cm"],
     N_D_junction=None,
     L_transition=None,
-    buffer_thickness_cm=None,
-    buffer_end_doping=None,
+    buffer_thickness_cm=DEFAULT_STACK["buffer_thickness_cm"],
+    buffer_end_doping=DEFAULT_STACK["buffer_end_doping"],
 ):
     """Sweep SV geometry and doping parameters with a validity gate and operating-point ranking.
 
@@ -363,9 +363,10 @@ def microdosimetric_sweep(
         every config (None = create_sic_2d_device default = DEFAULT_STACK doping),
         forwarded with the n+ keywords.
     buffer_thickness_cm, buffer_end_doping :
-        Optional graded n-/n+ transition of every config (create_sic_2d_device
-        keywords; both None = none). The V_fd gate then integrates the actual profile
-        (``analytic_vfd_from_info``). "auto" serves it inside ENGINE2D_BUFFER_BOX.
+        Graded n-/n+ transition of every config (create_sic_2d_device keywords; default
+        DEFAULT_STACK, both None = abrupt epi end). The V_fd gate then integrates the
+        actual profile to the transition start (``analytic_vfd_from_info``). "auto"
+        serves it inside ENGINE2D_BUFFER_BOX.
 
     Returns
     -------
@@ -411,11 +412,13 @@ def microdosimetric_sweep(
         ("substrate_thickness_cm", substrate_thickness_cm),
         ("N_D_junction", N_D_junction),
         ("L_transition", L_transition),
-        ("buffer_thickness_cm", buffer_thickness_cm),
-        ("buffer_end_doping", buffer_end_doping),
     ):
         if value is not None:
             dkw[key] = value
+    # the transition keys are always passed: None must reach the builder as an explicit
+    # "abrupt epi end" (its default is the stack's graded transition)
+    dkw["buffer_thickness_cm"] = buffer_thickness_cm
+    dkw["buffer_end_doping"] = buffer_end_doping
     tasks = [
         (i, total, hw, epi, nd, vb, n_lateral_points, solver) + ((dkw,) if dkw else ())
         for i, (hw, epi, nd, vb) in enumerate(grid)

@@ -235,12 +235,13 @@ def test_cv_and_cce_report_reach_through_and_domain():
     cv = sim.run_cv(DeviceConfig(), v_stop=-50.0, n_points=51)
     assert cv.metadata["solver"] == "batched"
     assert cv.metadata["validated_domain"] is True
-    # Default stack: full depletion at 10.3 V (Debye-length rule, a definition; the legacy
-    # mesh rule gave 17 V); no deep-bias wall with the n+ layer.
-    assert 10.0 <= cv.metadata["reach_through_V"] <= 20.0
+    # Default stack (measured-C-V profile since 2026-10-18): full depletion of the low-doped
+    # epi at 3.1 V (edge within one L_D of the transition start, a definition; 12.3 V on the
+    # previous abrupt-n+ default, 17 V under the legacy mesh rule); no deep-bias wall.
+    assert 2.0 <= cv.metadata["reach_through_V"] <= 5.0
     cce = sim.run_cce(DeviceConfig(), n_points=7)
     assert cce.metadata["reach_through_known"] is True
-    assert 10.0 <= cce.metadata["reach_through_V"] <= 20.0
+    assert 2.0 <= cce.metadata["reach_through_V"] <= 5.0
 
     text = to_csv_bytes(cv).decode()
     assert "# solver: batched" in text
@@ -324,9 +325,10 @@ def test_reach_through_found_with_nplus(epi):
 def test_run_radiation_damage_forwards_valid_and_reason():
     cfg = DeviceConfig()
     phi_c = sim.compensation_fluence(cfg, 62)
-    # N_D_bulk / (eta 5 * kappa(62 MeV)): 8.252732e13 -> 4.72e13 (legacy 8.82e13 -> 5.04e13;
+    # N_D_bulk / (eta 5 * kappa(62 MeV)): 3.382506e13 -> 1.93e13 on the measured-C-V default
+    # (2026-10-18; previous default 8.252732e13 -> 4.72e13, legacy 8.82e13 -> 5.04e13;
     # 6.335936e13 -> 3.62e13 before the 2026-10-17 small-signal C recalibration)
-    assert 4.5e13 < phi_c < 4.9e13
+    assert 1.9e13 < phi_c < 1.96e13
     res = sim.run_radiation_damage(
         cfg, fluences=np.array([0.5 * phi_c, 2.0 * phi_c]), V_bias=-20.0,
         proton_energy_MeV=62,

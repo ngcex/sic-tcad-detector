@@ -232,11 +232,29 @@ def create_2d_dd_device(
     return device_info
 
 
+def injected_generation(device_info, generation_values):
+    """``generation_values`` with the contact nodes zeroed: the generation the solver
+    actually injects. On a contact node the contact equation replaces the continuity
+    equation (Dirichlet carrier densities), so a source term assigned there never enters
+    the device."""
+    device = device_info["device_name"]
+    region = device_info["region_name"]
+    g = np.array(generation_values, dtype=float, copy=True)
+    for c in contacts_on_region(device, region):
+        g[sorted(_contact_node_indices(device, region, c))] = 0.0
+    return g
+
+
 def compute_cce_2d(device_info, generation_values, contact="cathode", node_set=None):
     """Compute 2D charge collection efficiency from DD simulation.
 
-    CCE = |I_collected| / I_generated, where I_generated is computed via
-    area integration of the generation rate over the 2D mesh.
+    CCE = |I_collected| / I_generated, where I_generated is the box-rule integral
+    of the generation rate over the NON-CONTACT nodes (``injected_generation``): the
+    generation the solver injects. Since 2026-10-18; before, the integral ran over all
+    nodes and counted the never-injected contact-node generation, a mesh-dependent CCE
+    deficit (1.26e-3 on the legacy planar diode, 50 nm mesh, at the cathode; 0 for an
+    alpha stripe on the n+ stack, whose contact nodes carry no generation; 6.1e-4 for a
+    uniform generation through the n+).
 
     The symmetry factor of 2 (half-device) cancels in the ratio since
     both I_collected and I_generated are for the half-device.
@@ -263,8 +281,10 @@ def compute_cce_2d(device_info, generation_values, contact="cathode", node_set=N
     cce : float
         Charge collection efficiency, clipped to [0, 1].
     """
-    # I_generated = Q * integral(G dA)  [A/cm for 2D]
-    I_generated = Q * integrate_nodes_box_2d(device_info, generation_values)
+    # I_generated = Q * integral(G dA) over the injected (non-contact) nodes [A/cm for 2D]
+    I_generated = Q * integrate_nodes_box_2d(
+        device_info, injected_generation(device_info, generation_values)
+    )
 
     # I_collected at contact [A/cm for 2D]
     I_collected = abs(
@@ -284,7 +304,7 @@ def alpha_stripe_generation(
     gen_rate=1e18,
     stripe_sigma_cm=2e-4,
     depth_from=None,
-    zero_on_contacts=False,
+    zero_on_contacts=True,
 ):
     """Alpha-like generation stripe entering the epi at lateral position ``x_pos_cm``.
 
@@ -296,16 +316,16 @@ def alpha_stripe_generation(
     overrides the entry depth (default: the junction, ``substrate_thickness_cm``). For
     an axisymmetric device x is the radius and the stripe is a cylindrical shell.
 
-    ``zero_on_contacts=True`` zeroes G on the contact nodes. The contact equation
-    replaces the continuity equation there (Dirichlet carrier densities), so pairs
-    assigned to those nodes are never injected into the device, while the box-rule
-    ``I_generated`` of :func:`compute_cce_2d` counts them: the CCE then carries a
-    purely mesh-dependent deficit equal to the contact nodes' share of the generation
-    (measured at 50 V on the legacy planar diode: 1.3e-3 with the 50 nm device2d mesh
-    at the cathode, 4.6e-3 with the coarser alternative-structure mesh; the physical
-    loss left after removing it is ~1e-4-2e-4). The default keeps the historical
-    normalisation (frozen v3 baselines); the structure comparison of notebook 19 uses
-    True so that the meshes of its five builders are comparable.
+    ``zero_on_contacts=True`` (default since 2026-10-18) zeroes G on the contact nodes.
+    The contact equation replaces the continuity equation there (Dirichlet carrier
+    densities), so pairs assigned to those nodes are never injected into the device;
+    the returned array is then the generation actually injected. :func:`compute_cce_2d`
+    normalises by the injected generation either way (since 2026-10-18), so the flag
+    no longer moves a CCE; before, ``False`` counted the contact nodes in
+    ``I_generated`` and the CCE carried a mesh-dependent deficit equal to their share
+    (legacy planar diode at 50 V: 1.26e-3 with the 50 nm device2d mesh at the cathode,
+    4.6e-3 with the coarser alternative-structure mesh; 0 on the n+ stack, where the
+    stripe is confined to the epi). ``False`` keeps the raw stripe on every node.
 
     AUDIT Mj-5 (v5): the scan previously used a monotonically DECAYING exponential
     exp(-y/alpha), backwards for an alpha (energy loss per unit path RISES toward the
@@ -387,7 +407,10 @@ def contact_current_sharing(device_info, generation, node_sets=None):
     device = device_info["device_name"]
     region = device_info["region_name"]
     contacts = contacts_on_region(device, region)
-    I_gen = Q * integrate_nodes_box_2d(device_info, generation)
+    # injected generation only (contact nodes are Dirichlet), as compute_cce_2d
+    I_gen = Q * integrate_nodes_box_2d(
+        device_info, injected_generation(device_info, generation)
+    )
     currents = _solved_with_generation(
         device_info,
         generation,
@@ -427,7 +450,7 @@ def cce_lateral_scan(
     contact="cathode",
     node_set=None,
     x_max_cm=None,
-    zero_on_contacts=False,
+    zero_on_contacts=True,
 ):
     """Compute CCE at multiple lateral positions from center to edge.
 
@@ -454,9 +477,9 @@ def cce_lateral_scan(
     x_max_cm : float, optional
         Last lateral position (default ``device_info["half_width_cm"]``).
     zero_on_contacts : bool
-        Passed to :func:`alpha_stripe_generation` (default False: historical
-        normalisation, which includes the never-injected contact-node generation in
-        ``I_generated``).
+        Passed to :func:`alpha_stripe_generation` (default True since 2026-10-18). The
+        CCE does not depend on it: :func:`compute_cce_2d` normalises by the injected
+        (non-contact) generation.
 
     Returns
     -------

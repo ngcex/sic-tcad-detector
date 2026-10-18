@@ -17,7 +17,17 @@ from etna.core.optimization import _sweep_one, microdosimetric_sweep
 
 # The no-n+ (legacy) geometry, explicit: the builders default to the n+ stack since
 # 2026-10-17, and the contact-on-epi wall tested below exists only without n+.
-LEGACY_GEOM = dict(substrate_thickness_cm=1e-4, nplus_thickness_cm=None)
+# no n+, no graded transition (builders default to both); the wall numbers below were
+# measured with the previous default's junction doping (2026-10-18 flip: the builders'
+# fallback is now the measured-C-V NJ 8.19e15 / L 0.46 um), so it is pinned here.
+LEGACY_GEOM = dict(
+    substrate_thickness_cm=1e-4,
+    nplus_thickness_cm=None,
+    buffer_thickness_cm=None,
+    buffer_end_doping=None,
+    N_D_junction=2.958237e15,
+    L_transition=0.987e-4,
+)
 
 
 class TestEligibility:
@@ -183,10 +193,12 @@ class TestDepletionMargin:
         assert V_FD_MARGIN == 1.2
 
     def test_just_above_vfd_is_not_enough(self):
-        # 20 um epi, N_D_bulk 8.5e13: V_fd ~ 33.9 V; 40 V < 1.2 V_fd ~ 40.7 V
-        row = _sweep_one((0, 1, 25.0, 20e-4, 8.5e13, 40.0, 3, "auto"))
+        # 20 um epi, N_D_bulk 8.5e13 on the default stack (measured-C-V junction layer and
+        # transition since 2026-10-18): V_fd ~ 28.4 V; 32 V < 1.2 V_fd ~ 34.1 V
+        # (previous default: V_fd 33.9 V, tested at 40 V)
+        row = _sweep_one((0, 1, 25.0, 20e-4, 8.5e13, 32.0, 3, "auto"))
         assert row["solver"] == "engine2d" and row["failure_reason"] == ""
-        assert row["V_fd"] < 40.0 < 1.2 * row["V_fd"]
+        assert row["V_fd"] < 32.0 < 1.2 * row["V_fd"]
         assert not row["is_fully_depleted"] and not row["is_valid"]
 
     def test_above_margin_is_valid(self):

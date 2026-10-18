@@ -448,11 +448,11 @@ def cv_at_fluence(
     epi_thickness_cm : float
         Epitaxial layer thickness (cm). Default 10 um.
     N_D_junction : float
-        Junction-side donor concentration (cm^-3). Default: DEFAULT_STACK (2.958237e15).
+        Junction-side donor concentration (cm^-3). Default: DEFAULT_STACK (8.185880e15).
     N_D_bulk : float
-        Bulk-side donor concentration (cm^-3). Default: DEFAULT_STACK (8.252732e13).
+        Bulk-side donor concentration (cm^-3). Default: DEFAULT_STACK (3.382506e13).
     L_transition : float
-        Doping transition length (cm). Default: DEFAULT_STACK (0.987 um).
+        Doping transition length (cm). Default: DEFAULT_STACK (0.4638630 um).
     energy_MeV : float
         Proton energy (MeV). Default 62.0.
     lifetime_model : str

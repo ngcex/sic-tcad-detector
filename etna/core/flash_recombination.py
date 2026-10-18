@@ -296,11 +296,11 @@ def cce_vs_dose_rate(
     n_continuation_steps : int
         Steps for generation-rate continuation ramp. Default: 5.
     N_D_junction : float
-        Donor concentration at junction (cm^-3). Default: DEFAULT_STACK (2.958237e15).
+        Donor concentration at junction (cm^-3). Default: DEFAULT_STACK (8.185880e15).
     N_D_bulk : float
-        Donor concentration in bulk epi (cm^-3). Default: DEFAULT_STACK (8.252732e13).
+        Donor concentration in bulk epi (cm^-3). Default: DEFAULT_STACK (3.382506e13).
     L_transition : float
-        Transition length for graded doping profile (cm). Default: DEFAULT_STACK (0.987 um).
+        Transition length for graded doping profile (cm). Default: DEFAULT_STACK (0.4638630 um).
     device_kwargs : dict or None
         Additional keyword arguments for create_dd_device (e.g. N_A, T,
         substrate_thickness_cm, doping_profile, N_D); override the defaults.
@@ -491,7 +491,8 @@ def parametric_cce_sweep(
 
     device_kwargs : dict or None
         Forwarded to cce_vs_dose_rate (geometry overrides, e.g. the legacy
-        nplus_thickness_cm=None / substrate_thickness_cm=1e-4).
+        nplus_thickness_cm=None / buffer_thickness_cm=buffer_end_doping=None /
+        substrate_thickness_cm=1e-4).
 
     Returns
     -------

@@ -45,11 +45,19 @@ from etna.core.device2d import (
     K_B_EV,
     K_B_J,
     DEFAULT_N_D,
-    _N_D_JUNCTION_DEFAULT,
-    _N_D_BULK_DEFAULT,
-    _L_TRANSITION_DEFAULT,
 )
-from etna.core.device import mobility_doping
+from etna.core.device import NPLUS_CALIBRATION, mobility_doping
+
+# Graded-doping fallbacks of the alternative structures: the PREVIOUS default's epi doping
+# (NPLUS_CALIBRATION, 2.958237e15 / 8.252732e13 / 0.987 um), not DEFAULT_STACK. These
+# builders keep the legacy geometry (p+ 1 um, cathode on the epi, no n+, no graded n-/n+
+# transition; PERF-05), and notebook 19's structure comparison was computed on this
+# doping; the measured-C-V default (N_D_bulk 3.4e13, L 0.46 um, 2026-10-18) without its
+# transition and n+ would be a third mixed model (and the guard-ring diode does not
+# converge past 3 V with it). Explicit arguments win.
+_N_D_JUNCTION_DEFAULT = NPLUS_CALIBRATION["N_D_junction"]
+_N_D_BULK_DEFAULT = NPLUS_CALIBRATION["N_D_bulk"]
+_L_TRANSITION_DEFAULT = NPLUS_CALIBRATION["L_transition"]
 
 logger = logging.getLogger(__name__)
 
@@ -435,7 +443,9 @@ def create_mesa_device(
     Returns device_info with ``structure_type="mesa"``.
     """
     # epi doping of both mobilities (graded: N_D_bulk), same rule as create_sic_device
-    N_D_mob = mobility_doping(None, doping_profile, N_D_bulk)
+    N_D_mob = mobility_doping(
+        None, doping_profile, _N_D_BULK_DEFAULT if N_D_bulk is None else N_D_bulk
+    )
     pillar_hw_cm = pillar_half_width_um * 1e-4
     trench_w_cm = trench_width_um * 1e-4
     trench_d_cm = trench_depth_um * 1e-4
@@ -760,7 +770,9 @@ def create_3d_electrode_device(
     deleting the device.
     """
     # epi doping of both mobilities (graded: N_D_bulk), same rule as create_sic_device
-    N_D_mob = mobility_doping(None, doping_profile, N_D_bulk)
+    N_D_mob = mobility_doping(
+        None, doping_profile, _N_D_BULK_DEFAULT if N_D_bulk is None else N_D_bulk
+    )
     outer_r_cm = outer_radius_um * 1e-4
     col_r_cm = column_radius_um * 1e-4
     top_gap_cm = top_gap_um * 1e-4
@@ -1020,7 +1032,9 @@ def create_delta_e_e_device(
     depth), ``epi_thickness_cm``, ``total_length`` (layer bottom), ``half_width_cm``.
     """
     # epi doping of both mobilities (graded: N_D_bulk), same rule as create_sic_device
-    N_D_mob = mobility_doping(None, doping_profile, N_D_bulk)
+    N_D_mob = mobility_doping(
+        None, doping_profile, _N_D_BULK_DEFAULT if N_D_bulk is None else N_D_bulk
+    )
     half_width_cm = half_width_um * 1e-4
     de_thick_cm = delta_e_thickness_um * 1e-4
     e_thick_cm = e_stop_thickness_um * 1e-4
@@ -1293,7 +1307,9 @@ def create_guard_ring_device(
     ``half_width_cm`` is the SV half-width (the default extent of cce_lateral_scan).
     """
     # epi doping of both mobilities (graded: N_D_bulk), same rule as create_sic_device
-    N_D_mob = mobility_doping(None, doping_profile, N_D_bulk)
+    N_D_mob = mobility_doping(
+        None, doping_profile, _N_D_BULK_DEFAULT if N_D_bulk is None else N_D_bulk
+    )
     sv_hw_cm = sv_half_width_um * 1e-4
     gr_w_cm = guard_ring_width_um * 1e-4
     gr_gap_cm = guard_ring_gap_um * 1e-4

@@ -35,70 +35,46 @@ DEFAULT_N_D = 1.07e15  # cm^-3
 # ionized. 1e18 and 1e19 give the same W/CCE/dark current to <1e-3 (lab spike).
 DEFAULT_N_D_NPLUS = 1e19  # cm^-3
 
-# DEFAULT DEVICE STACK (single source of truth): p+ anode 0.3 um / 10 um graded n- epi /
-# n+ substrate (1 um modelled, cathode on its far end), confirmed by the device owner.
-# Read by DeviceConfig, create_sic_device / create_sic_2d_device (graded-doping fallbacks),
-# cce_vs_bias and the 2D engine gate; SiC4H_Parameters holds N_t / E_t (read back here).
-# Every core default reads it: the builders' geometry (p+ 0.3 um, n+ 1 um) and graded
-# doping, and the sweep helpers (transient, flash, temperature, C-V, dark current, CCE).
-# Explicit arguments win; nplus_thickness_cm=None (explicit) builds the no-n+ legacy
-# geometry. Before 2026-10-17 the builders kept p+ 1 um / no n+ and the helpers hardcoded
-# 2.90e15 / 8.50e13 / 1.0e-4 (a third doping set), so direct core calls mixed models.
-# Calibration (lab/solver2d/bench/nplus_calibrate.py; pinned by
-# tests/test_nplus_calibration.py; notes in lab/solver2d/notes/LOG.md):
-# C-V: the three W targets (1.7 / 9.5 / 9.73 um at 0 / -10 / -30 V, A = 4 mm2; Photons
-# Fig. 4b labels 1.68 / 9.52 / 9.73 um) are W = eps*A/C of a MEASURED C, so the model
-# observable is eps*A/C of the small-signal C = dQ/dV that run_cv returns (NOT the
-# n/N_D = 0.5 depletion edge; before 2026-10-17 the calibration matched that edge and
-# missed its own -10 V point by +2.8 % in eps*A/C: lab/microdosimeter/notes/LOG.md
-# sections 4 and 6). The three targets have NO exact solution for (N_D_junction,
-# N_D_bulk, L) in this 1D model (3-parameter least squares: residual ~3 %). Hence:
-# L_transition held at 0.987 um and (N_D_junction, N_D_bulk) solved EXACTLY on eps*A/C
-# at 0 V and -10 V (2 equations, 2 unknowns; residuals < 1e-14 engine, < 3e-8 devsim).
-# These two points are therefore CALIBRATION INPUTS, not reproduced validation points.
-# The -30 V point is out of fit: +2.56 % (9.979 vs 9.73 um). Three points cannot tell
-# apart a ~0.5 um graded n-/n+ buffer, an epi ~2.5 % thinner than nominal (9.75 um, inside
-# typical tolerance) and lateral edge/fringe capacitance falling with bias (LOG.md
-# section 4: each alone closes the gap); the C-V knee (-5..-15 V) or a SIMS profile could.
-# Not picked, not refitted. Previous record (edge calibration): 2.974271e15 / 6.335936e13.
-# N_t: rescaled (leakage linear in N_t) so that I(300 K, -60 V, 4 mm2) = 18 pA, the bound
-# "< 18 pA up to -60 V" used as equality; N_t is the fitted magnitude of the
-# f_depl = min(E/3.5e4, 1) effective-generation PROXY, not a trap density.
-# E_t = 0.67 eV: Z1/2 level of radiation_damage (Burin et al. Table I).
+# DEFAULT DEVICE STACK (single source of truth): p+ anode 0.3 um / 10 um graded n- epi with
+# a graded n-/n+ transition over its last 1.14 um / n+ substrate (1 um modelled, cathode on
+# its far end). Read by DeviceConfig, create_sic_device / create_sic_2d_device (geometry,
+# graded-doping and transition fallbacks), every sweep helper (transient, flash,
+# temperature, C-V, dark current, CCE), the batched engine dispatch and the 2D engine gate;
+# SiC4H_Parameters holds N_t / E_t (read back here). Explicit arguments win;
+# nplus_thickness_cm=None (explicit) builds the no-n+ legacy geometry and
+# buffer_thickness_cm=buffer_end_doping=None (explicit) the abrupt epi/n+ form.
+#
+# Since 2026-10-18 the default is the MEASURED-C-V profile (it was the opt-in preset
+# MEASURED_CV_STACK, which is now an alias of this record). Provenance and limits:
+# - The doping is a FIT to the digitised Photons Fig. 4b curve (eps*A/C at every 250 mV
+#   from 0 to -60 V, A = 4 mm2; lab/cv_gap/notes/LOG.md, fit "buffer + end doping",
+#   chi2 198 / 224 dof): plateau rms 0.013 um over -5..-59 V, knee (-3.25..-0.25 V) rms
+#   0.24 um (the exponential epi cannot make the 1.3e13 dip at 4-6 um; a tabulated profile
+#   would). Model eps*A/C 1.655 / 9.519 / 9.750 um at 0 / -10 / -30 V (labels 1.68 / 9.52
+#   / 9.73), W(-2 V) 6.94 (data 7.18), W(-5 V) 9.25 (9.27).
+# - Form: thinner, more heavily doped junction layer, a low bulk and a GRADED n-/n+
+#   transition ("buffer") starting buffer_thickness_cm before the nominal epi end, rising
+#   log-linearly from the local epi value to buffer_end_doping at the epi end (1e19 n+
+#   beyond): the 1e19 substrate is NOT reached at 10 um.
+# - N_D_bulk 3.4e13 is BELOW every documented doping statement for this epi (0.5-1e14,
+#   Petringa 2025 / Photons "order 1e14"; the 1/C^2 slope over -6..-2 V gives 1.2e14, over
+#   -3..-0.5 V 3.9e13: PERF-05). The epi/n+ position (10 um + transition) is set by the fit,
+#   NOT by SIMS: C-V does not tell where 1e19 is reached (SIMS/SRP or C-V to -100..-200 V
+#   would; lab/cv_gap/notes/LOG.md section 5).
+# - Full-depletion definitions with a transition (VFD_DEFINITION in etna.export.labels):
+#   analytic V_fd 2.74 V (moment integral to the transition start), reach-through 3.10 V
+#   (edge within one L_D of the transition start), 1.2 V_fd gate 3.28 V.
+# - N_t: I(300 K, -60 V, 4 mm2) = 18 pA on this profile (the "< 18 pA up to -60 V" bound
+#   used as equality; lab/buffer_profile/bench/nt_refit.py); N_t is the fitted magnitude of
+#   the f_depl = min(E/3.5e4, 1) effective-generation PROXY, not a trap density.
+#   E_t = 0.67 eV: Z1/2 level of radiation_damage (Burin et al. Table I).
+# Values: the lab fit (lab/cv_gap/notes/fits.json "fit_buffer_Nnp") rounded to 7 digits;
+# the 2-digit numbers (8.2e15 / 0.46 / 3.4e13 / 1.14 / 4.5e16) move eps*A/C(0 V) by
+# +0.04 um (the knee is that sensitive), so they are not used.
+# The previous default (3-point n+ calibration, abrupt epi/n+) is NPLUS_CALIBRATION below,
+# built by etna.nplus_calibrated_config(); the pre-n+ model is LEGACY_STACK.
 DEFAULT_STACK = {
     "substrate_thickness_cm": 0.3e-4,  # p+ anode layer (Petringa 2025 Fig. 1)
-    "nplus_thickness_cm": 1e-4,
-    "N_D_nplus": DEFAULT_N_D_NPLUS,
-    "N_D_junction": 2.958237e15,
-    "N_D_bulk": 8.252732e13,
-    "L_transition": 0.987e-4,  # held, not fitted
-    "N_t": SiC4H_Parameters.N_t,  # 2.805336e12
-    "E_t": SiC4H_Parameters.E_t,  # 0.67
-}
-# Historical name of the same record (it was the opt-in calibration before the flip).
-NPLUS_CALIBRATION = DEFAULT_STACK
-
-# MEASURED C-V PROFILE (opt-in preset, NOT the default): the doping form fitted on the
-# full digitised Photons Fig. 4b curve (eps*A/C at every 250 mV from 0 to -60 V, A = 4 mm2;
-# lab/cv_gap/notes/LOG.md, fit "buffer + end doping", chi2 198 / 224 dof, plateau rms
-# 0.013 um over -5..-59 V, knee rms 0.23 um). The production form above (exponential epi,
-# abrupt 1e19 n+ at the epi end, calibrated on 3 points) puts the C-V knee at -8..-10 V
-# where the measurement has it at -1..-4 V (W(-2 V) 2.99 vs 7.18 um measured, W(-5 V)
-# 5.93 vs 9.27 um). What fits: a thinner, more heavily doped junction layer, a lower bulk
-# and a GRADED n-/n+ transition ("buffer") that starts buffer_thickness_cm before the
-# nominal epi end and rises log-linearly from the local epi value to buffer_end_doping at
-# the epi end (1e19 n+ beyond): the 1e19 substrate is NOT reached at 10 um. Model
-# eps*A/C 1.655 / 9.519 / 9.750 um at 0 / -10 / -30 V (labels 1.68 / 9.52 / 9.73).
-# N_D_bulk 3.4e13 is below every documented doping statement for this epi (0.5-1e14),
-# and the epi/n+ position is no longer fixed by the data: the owner decides whether this
-# becomes the default (PERF-05). N_t: refitted on this profile to I(300 K, -60 V, 4 mm2) =
-# 18 pA like the default (tests/test_measured_cv_preset.py). Built by
-# etna.api.device.measured_cv_config(); the app sidebar has an opt-in checkbox.
-# Values: the lab fit (lab/cv_gap/notes/fits.json "fit_buffer_Nnp") rounded to 7 digits,
-# as DEFAULT_STACK; the 2-digit numbers quoted above (8.2e15 / 0.46 / 3.4e13 / 1.14 /
-# 4.5e16) move eps*A/C(0 V) by +0.04 um (the knee is that sensitive), so they are not used.
-MEASURED_CV_STACK = {
-    "substrate_thickness_cm": 0.3e-4,
     "nplus_thickness_cm": 1e-4,
     "N_D_nplus": DEFAULT_N_D_NPLUS,
     "N_D_junction": 8.185880e15,
@@ -106,11 +82,33 @@ MEASURED_CV_STACK = {
     "L_transition": 0.4638630e-4,
     "buffer_thickness_cm": 1.136634e-4,  # graded n-/n+ transition before the epi end
     "buffer_end_doping": 4.516421e16,  # N_D at the epi end (log-linear rise from the epi value)
-    # N_t: I(300 K, -60 V, 4 mm2) = 18 pA on this profile (lab/buffer_profile/bench/
-    # nt_refit.py; default 2.805336e12 gives 17.724 pA here: the proxy is nearly
-    # profile-independent). E_t: the default's Z1/2 level.
-    "N_t": 2.849024e12,
-    "E_t": SiC4H_Parameters.E_t,
+    "N_t": SiC4H_Parameters.N_t,  # 2.849024e12
+    "E_t": SiC4H_Parameters.E_t,  # 0.67
+}
+# Historical name of the same record (the opt-in preset before the 2026-10-18 flip).
+MEASURED_CV_STACK = DEFAULT_STACK
+
+# PREVIOUS DEFAULT (2026-10-17 .. 2026-10-18): the n+ stack calibrated on three C-V points,
+# exponential epi with an ABRUPT 1e19 n+ step at the epi end (no transition). Kept so its
+# numbers stay reproducible: etna.nplus_calibrated_config(); pinned by
+# tests/test_nplus_calibration.py. Calibration (lab/solver2d/bench/nplus_calibrate.py;
+# notes in lab/solver2d/notes/LOG.md): W = eps*A/C of the small-signal C at 0 / -10 V
+# (1.7 / 9.5 um, A = 4 mm2) solved EXACTLY for (N_D_junction, N_D_bulk) with L_transition
+# HELD at 0.987 um; -30 V out of fit (+2.56 %: 9.979 vs 9.73 um). Against the full digitised
+# curve this form is excluded (chi2 2.6e5 / 227: knee at -8..-10 V where the measurement
+# has it at -1..-4 V; W(-2 V) 2.99 vs 7.18 um): lab/cv_gap/notes/LOG.md. N_t fitted to the
+# 18 pA bound on this profile. Previous record (edge calibration): 2.974271e15 / 6.335936e13.
+NPLUS_CALIBRATION = {
+    "substrate_thickness_cm": 0.3e-4,
+    "nplus_thickness_cm": 1e-4,
+    "N_D_nplus": DEFAULT_N_D_NPLUS,
+    "N_D_junction": 2.958237e15,
+    "N_D_bulk": 8.252732e13,
+    "L_transition": 0.987e-4,  # held, not fitted
+    "buffer_thickness_cm": None,  # abrupt epi/n+ step
+    "buffer_end_doping": None,
+    "N_t": 2.805336e12,
+    "E_t": 0.67,
 }
 
 
@@ -129,7 +127,7 @@ def mobility_doping(N_D, doping_profile, N_D_bulk):
     return float(DEFAULT_N_D if N_D is None else N_D)
 
 
-# LEGACY model (the default before the n+ flip), kept so old numbers stay reproducible:
+# LEGACY model (the default before the n+ flip, 2026-10-17), kept so old numbers stay reproducible:
 # cathode contact directly on the n- epi (no n+; non-convergence wall at deep reverse bias,
 # a contact artefact), p+ 1 um, the old DeviceConfig doping, N_t 2.8e12, E_t 0.65.
 # etna.api.device.legacy_config() builds the DeviceConfig; pinned by tests/test_default_stack.py.
@@ -140,6 +138,8 @@ LEGACY_STACK = {
     "N_D_junction": 2.93e15,
     "N_D_bulk": 8.82e13,
     "L_transition": 0.987e-4,
+    "buffer_thickness_cm": None,  # abrupt epi end (cathode on the epi)
+    "buffer_end_doping": None,
     "N_t": 2.8e12,
     "E_t": 0.65,
 }
@@ -225,8 +225,8 @@ def create_sic_device(
     nplus_thickness_cm=DEFAULT_STACK["nplus_thickness_cm"],
     N_D_nplus=DEFAULT_STACK["N_D_nplus"],
     nplus_generation=False,
-    buffer_thickness_cm=None,
-    buffer_end_doping=None,
+    buffer_thickness_cm=DEFAULT_STACK["buffer_thickness_cm"],
+    buffer_end_doping=DEFAULT_STACK["buffer_end_doping"],
 ):
     """Create a 1D p+/n- 4H-SiC diode device in devsim.
 
@@ -276,13 +276,14 @@ def create_sic_device(
         dropped, as without an n+ layer); True = the profile continues into the n+.
         Whether the alpha deposit in the n+ counts is an open physics question.
     buffer_thickness_cm, buffer_end_doping : float or None
-        Optional GRADED n-/n+ transition ("buffer") over the last ``buffer_thickness_cm``
-        of the epi: the donors rise log-linearly from the local epi value to
+        GRADED n-/n+ transition ("buffer") over the last ``buffer_thickness_cm`` of the
+        epi: the donors rise log-linearly from the local epi value to
         ``buffer_end_doping`` at the epi end (``max`` with the epi value, so a buffer never
-        lowers the doping); the n+ step (if any) follows at the epi end. Both None
-        (default) = today's abrupt epi/n+ model, bit-identical. Both must be given
-        together, with 0 < buffer_thickness_cm < epi_thickness_cm. The form fitted on the
-        measured C-V is ``MEASURED_CV_STACK`` (etna.api.device.measured_cv_config()).
+        lowers the doping); the n+ step (if any) follows at the epi end. Default
+        DEFAULT_STACK (1.136634 um to 4.516421e16, the measured-C-V fit). Both None
+        (explicit) = the abrupt epi/n+ form of the previous default and the legacy model.
+        Both must be given together, with 0 < buffer_thickness_cm < epi_thickness_cm (an
+        epi thinner than the default transition needs an explicit None or a thinner one).
 
     Returns
     -------
@@ -804,7 +805,10 @@ def calibrate_graded_doping(
     widths at multiple bias voltages.
 
     Uses the full drift-diffusion solver for proper carrier transport under
-    bias. The target voltages use reverse-bias convention (negative V means
+    bias. Historical (v3) tool: trial devices use the LEGACY geometry (cathode on the
+    n- epi, no n+, no graded transition; p+ ``substrate_thickness_cm``, default 1 um) and
+    the n/N_D = 0.5 depletion edge, not the small-signal C. The default stack is a fit to
+    the full digitised C-V instead (DEFAULT_STACK; lab/cv_gap). The target voltages use reverse-bias convention (negative V means
     reverse bias on the diode); internally these are applied as positive
     cathode bias in devsim.
 
@@ -885,6 +889,11 @@ def calibrate_graded_doping(
                 N_D_junction=N_D_j,
                 N_D_bulk=N_D_b,
                 L_transition=L_t,
+                # the historical 3-target edge calibration: legacy geometry (cathode on
+                # the epi, abrupt end), explicit since the builders default to the stack
+                nplus_thickness_cm=None,
+                buffer_thickness_cm=None,
+                buffer_end_doping=None,
             )
 
             device = device_info["device_name"]

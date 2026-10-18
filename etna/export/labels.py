@@ -15,9 +15,21 @@ VALIDATION_LABEL = (
 # What "except where stated" refers to (the only measurement comparisons).
 MEASURED_W_30V_UM = 9.73  # Photons Fig. 4b, W = eps*A/C at -30 V (A = 4 mm2)
 CALIBRATION_NOTE = (
-    "Doping (N_D_junction, N_D_bulk) was solved exactly on the measured C-V points at 0 V "
-    "and -10 V (W = eps*A/C = 1.7 / 9.5 um, with C the small-signal dQ/dV): these two points "
-    "are calibration inputs, not reproduced or validated points."
+    "Default stack doping (N_D_junction, N_D_bulk, L_transition and the graded n-/n+ "
+    "transition) is a FIT to the digitised Photons Fig. 4b C-V curve (eps*A/C every 250 mV, "
+    "0 to -60 V, A = 4 mm2, C the small-signal dQ/dV; chi2 198 / 224 dof): plateau rms "
+    "0.013 um over -5..-59 V, knee rms 0.24 um (-3.25..-0.25 V). The whole curve is a "
+    "calibration input, not a validation. N_D_bulk 3.4e13 cm^-3 is below the documented "
+    "0.5-1e14 cm^-3 statements for this epi; the epi/n+ position (10 um epi, transition over "
+    "its last 1.14 um, 1e19 beyond) is set by the fit, not by SIMS (C-V does not show where "
+    "1e19 is reached). Residuals at the labelled points 0 / -10 / -30 V: +0.025 / +0.001 / "
+    "-0.020 um (model 1.655 / 9.519 / 9.750 vs 1.68 / 9.52 / 9.73 um)."
+)
+NPLUS_CALIBRATION_NOTE = (
+    "Previous default (nplus_calibrated_config): doping (N_D_junction, N_D_bulk) solved "
+    "exactly on the measured C-V points at 0 V and -10 V (W = eps*A/C = 1.7 / 9.5 um, C the "
+    "small-signal dQ/dV; L_transition held at 0.987 um): these two points are calibration "
+    "inputs, not reproduced or validated points."
 )
 DARK_CALIBRATION_NOTE = (
     "Dark current is a calibration / budget estimate, not a prediction: N_t is fitted so "
@@ -25,14 +37,21 @@ DARK_CALIBRATION_NOTE = (
     "as equality (N_t is the magnitude of an effective-generation proxy, not a trap density)."
 )
 CV_SYSTEMATIC_NOTE = (
+    "No out-of-fit C-V comparison: the whole digitised curve is a fit input (see "
+    "cv.calibration). W = eps*A/C at -30 V simulated {w:.3f} um vs measured 9.73 um "
+    "({d:+.2f} %, an in-fit residual). The knee (-3.25..-0.25 V) is reproduced only to "
+    "0.24 um rms: the exponential epi form cannot follow the measured dip to ~1.3e13 at 4-6 um."
+)
+CV_SYSTEMATIC_NPLUS_NOTE = (
     "Known C-V residual: W = eps*A/C at -30 V simulated {w:.2f} um vs measured 9.73 um "
-    "({d:+.1f} %), the one out-of-fit measurement comparison. Three C-V points cannot tell "
-    "apart its candidate causes (a ~0.5 um graded n-/n+ buffer, an epi ~2.5 % thinner than "
-    "nominal, lateral edge/fringe capacitance falling with bias): none is picked; not refitted."
+    "({d:+.1f} %), out of fit. The full digitised Fig. 4b curve excludes this abrupt "
+    "epi/n+ form: it puts the C-V knee at -8..-10 V where the measurement has it at "
+    "-1..-4 V (W(-2 V) 2.99 vs 7.18 um); the default stack's graded n-/n+ transition fits it "
+    "(lab/cv_gap/notes/LOG.md)."
 )
 CV_SYSTEMATIC_OTHER = (
-    "Known C-V residual (+2.6 % in eps*A/C at -30 V, cause not identified, not refitted) is "
-    "stated for the reference device (default stack, 300 K); not re-evaluated for this config."
+    "C-V comparisons with the measurement (digitised Photons Fig. 4b) are stated for the "
+    "reference device (default stack, 300 K) only; not re-evaluated for this config."
 )
 ALPHA_NOTE = (
     "Epi-only alpha generation matches the measurement geometry (alphas tilted 65 deg, "
@@ -48,14 +67,8 @@ BUFFER_NOTE = (
     "the nominal epi end); a FITTED form from the digitised measured C-V, not a measured "
     "profile (SIMS / SRP would settle it)"
 )
-MEASURED_CV_NOTE = (
-    "Measured C-V profile preset: the epi doping (N_D_junction, N_D_bulk, L_transition) and "
-    "the graded n-/n+ transition were fitted on the full digitised Photons Fig. 4b curve "
-    "(eps*A/C every 250 mV, 0 to -60 V, A = 4 mm2; chi2 198 / 224 dof, plateau rms 0.013 um "
-    "over -5..-59 V, knee rms 0.23 um): the whole curve is a FIT INPUT, not a validation. "
-    "Residuals at the labelled points 0 / -10 / -30 V: +0.025 / +0.001 / -0.020 um "
-    "(model 1.655 / 9.519 / 9.750 vs 1.68 / 9.52 / 9.73 um). Not the default stack."
-)
+# The measured-C-V profile is the default since 2026-10-18: same statement.
+MEASURED_CV_NOTE = CALIBRATION_NOTE
 
 
 def has_nplus(config) -> bool:
@@ -66,27 +79,35 @@ def has_buffer(config) -> bool:
     return getattr(config, "buffer_thickness_um", None) is not None
 
 
-def is_measured_cv_device(config) -> bool:
-    """The measured-C-V preset (geometry, doping, buffer, 300 K); area / N_t / E_t free."""
-    from etna.api.device import measured_cv_config
-
+def _same_device(config, other) -> bool:
     skip = {"area_cm2", "N_t", "E_t"}
     a = {k: v for k, v in asdict(config).items() if k not in skip}
-    b = {k: v for k, v in asdict(measured_cv_config()).items() if k not in skip}
+    b = {k: v for k, v in asdict(other).items() if k not in skip}
     return a == b
 
 
 def is_reference_device(config) -> bool:
-    """The calibrated default device (geometry, doping, 300 K); area / N_t / E_t free.
+    """The default device (geometry, doping, transition, 300 K); area / N_t / E_t free.
 
-    Only for this device do the stated measurement comparisons apply.
+    Only for this device do the stated measurement comparisons apply. Since 2026-10-18
+    the default is the measured-C-V profile (DEFAULT_STACK).
     """
     from etna.api.device import DeviceConfig
 
-    skip = {"area_cm2", "N_t", "E_t"}
-    a = {k: v for k, v in asdict(config).items() if k not in skip}
-    b = {k: v for k, v in asdict(DeviceConfig()).items() if k not in skip}
-    return a == b
+    return _same_device(config, DeviceConfig())
+
+
+def is_measured_cv_device(config) -> bool:
+    """The measured-C-V profile (== the reference device since the 2026-10-18 flip)."""
+    return is_reference_device(config)
+
+
+def is_nplus_calibrated_device(config) -> bool:
+    """The previous default (nplus_calibrated_config: 3-point n+ calibration, abrupt
+    epi/n+); area / N_t / E_t free."""
+    from etna.api.device import nplus_calibrated_config
+
+    return _same_device(config, nplus_calibrated_config())
 
 
 def reach_through_definition(config) -> str:
@@ -96,14 +117,15 @@ def reach_through_definition(config) -> str:
             "extrinsic Debye length L_D of the START of the graded n-/n+ transition "
             f"(epi end - {config.buffer_thickness_um:g} um; L_D at the epi doping there): "
             "full depletion of the low-doped epi; the edge then creeps into the "
-            "transition for tens of volts. A definition, not a measurement"
+            "transition for tens of volts. A definition, not a measurement (3.10 V on "
+            "the default stack)"
         )
     if has_nplus(config):
         return (
             "smallest |V| at which the depletion edge (n/N_D = 0.5) lies within one "
             "extrinsic Debye length L_D = sqrt(eps V_t / (q N_D(epi end))) of the "
-            "n-/n+ step. A definition, not a measurement (12.30 V on the default stack; "
-            "paper: ~10 V)"
+            "n-/n+ step. A definition, not a measurement (12.30 V on the previous default, "
+            "nplus_calibrated_config)"
         )
     return (
         "smallest |V| at which the depletion edge lies in the last mesh interval before "
@@ -118,7 +140,8 @@ VFD_DEFINITION = (
     "N_D_junction). With a graded n-/n+ transition t is the depth of the TRANSITION START "
     "(the low-doped epi; depleting the transition itself is the -10..-60 V creep, not full "
     "depletion). The looser of the two definitions; used by the 2D sweep's full-depletion "
-    "gate (|V| >= 1.2 V_fd)"
+    "gate (|V| >= 1.2 V_fd). Default stack: 2.74 V (gate 3.28 V); previous default "
+    "(abrupt epi/n+): 9.93 V"
 )
 
 

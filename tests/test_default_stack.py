@@ -1,4 +1,5 @@
-"""The default model is the p+ / graded n- epi / n+ stack (etna.core.device.DEFAULT_STACK).
+"""The default model is the p+ / graded n- epi (graded n-/n+ transition) / n+ stack
+(etna.core.device.DEFAULT_STACK; since 2026-10-18 the measured-C-V fit).
 
 * one source of truth: DeviceConfig, the core graded-doping fallbacks, cce_vs_bias,
   device2d and the 2D engine gate all read DEFAULT_STACK; N_t / E_t live in
@@ -18,7 +19,13 @@ import etna
 import etna.api.simulation as sim
 import etna.core.device as core_device
 import etna.core.device2d as core_device2d
-from etna.api.device import DeviceConfig, device_kwargs, legacy_config
+from etna.api.device import (
+    DeviceConfig,
+    device_kwargs,
+    legacy_config,
+    measured_cv_config,
+    nplus_calibrated_config,
+)
 from etna.core.device import DEFAULT_STACK, LEGACY_STACK, NPLUS_CALIBRATION
 from etna.core.engine2d import (
     engine2d_dark_unsupported_reason,
@@ -29,19 +36,39 @@ from etna.core.sic_material import SiC4H_Parameters
 
 def test_one_source_of_truth():
     c = DeviceConfig()
-    assert NPLUS_CALIBRATION is DEFAULT_STACK
+    # 2026-10-18 flip: the default is the measured-C-V fit (was NPLUS_CALIBRATION:
+    # 2.958237e15 / 8.252732e13 / 0.987 um, abrupt n+, N_t 2.805336e12)
+    assert core_device.MEASURED_CV_STACK is DEFAULT_STACK
+    assert NPLUS_CALIBRATION is not DEFAULT_STACK
+    assert c == measured_cv_config()
     assert c.substrate_thickness_um == 0.3 and c.nplus_thickness_um == 1.0
     assert c.N_D_nplus == DEFAULT_STACK["N_D_nplus"] == 1e19
-    # 2026-10-17 recalibration on eps*A/C of the small-signal C (was 2.974271e15 /
-    # 6.335936e13 / 2.805349e12, calibrated on the depletion edge)
-    assert c.N_D_junction == DEFAULT_STACK["N_D_junction"] == 2.958237e15
-    assert c.N_D_bulk == DEFAULT_STACK["N_D_bulk"] == 8.252732e13
-    assert c.L_transition_um == 0.987
-    assert c.N_t == SiC4H_Parameters().N_t == DEFAULT_STACK["N_t"] == 2.805336e12
+    assert c.N_D_junction == DEFAULT_STACK["N_D_junction"] == 8.185880e15
+    assert c.N_D_bulk == DEFAULT_STACK["N_D_bulk"] == 3.382506e13
+    assert c.L_transition_um == 0.463863
+    assert c.buffer_thickness_um == 1.136634
+    assert c.buffer_end_doping == DEFAULT_STACK["buffer_end_doping"] == 4.516421e16
+    assert c.N_t == SiC4H_Parameters().N_t == DEFAULT_STACK["N_t"] == 2.849024e12
     assert c.E_t == SiC4H_Parameters().E_t == DEFAULT_STACK["E_t"] == 0.67
     assert core_device2d._N_D_JUNCTION_DEFAULT == DEFAULT_STACK["N_D_junction"]
     assert core_device2d._N_D_BULK_DEFAULT == DEFAULT_STACK["N_D_bulk"]
     assert core_device2d._L_TRANSITION_DEFAULT == DEFAULT_STACK["L_transition"]
+    assert core_device2d._BUFFER_THICKNESS_DEFAULT_CM == DEFAULT_STACK["buffer_thickness_cm"]
+    assert core_device2d._BUFFER_END_DOPING_DEFAULT == DEFAULT_STACK["buffer_end_doping"]
+    import inspect
+
+    for fn in (core_device.create_sic_device, core_device2d.create_sic_2d_device):
+        p = inspect.signature(fn).parameters
+        assert p["buffer_thickness_cm"].default == DEFAULT_STACK["buffer_thickness_cm"]
+        assert p["buffer_end_doping"].default == DEFAULT_STACK["buffer_end_doping"]
+    # the previous default stays reproducible as a named preset
+    p = nplus_calibrated_config()
+    assert (p.N_D_junction, p.N_D_bulk, p.L_transition_um) == (2.958237e15, 8.252732e13, 0.987)
+    assert p.buffer_thickness_um is None and p.buffer_end_doping is None
+    assert (p.N_t, p.E_t) == (2.805336e12, 0.67)
+    # device_kwargs always carries the transition keys (None = abrupt epi end)
+    kp = device_kwargs(p)
+    assert kp["buffer_thickness_cm"] is None and kp["buffer_end_doping"] is None
     # N_t / E_t are not builder keywords (the engine gates reject unknown keys)
     assert "N_t" not in device_kwargs(c) and "E_t" not in device_kwargs(c)
 
@@ -110,13 +137,33 @@ def test_legacy_preset_reproduces_the_pre_flip_numbers():
     assert d.metadata["N_t"] == 2.8e12 and d.metadata["E_t"] == 0.65
 
 
-def test_default_numbers_are_the_calibration_record():
-    """Calibration record (2026-10-17, on the small-signal C; lab/solver2d/notes/LOG.md):
-    eps*A/C 1.700 / 9.500 (inputs) / 9.979 um (out of fit, +2.56 %), depletion edge
-    1.689 / 9.267 / 9.896 um, CCE 0.998899 / 0.999707 / 0.999820, dark 6.077 / 14.720 /
-    18.000 pA (4 mm2). Previous record (edge calibration): edge 1.700 / 9.500 / 9.899,
-    CCE 0.999021 / 0.999706 / 0.999819, dark 6.132 / 14.873 / 18.000, reach-through 10.3 V."""
+def test_default_numbers_are_the_measured_cv_record():
+    """Default since 2026-10-18 (measured-C-V fit, lab/cv_gap + lab/buffer_profile):
+    eps*A/C 1.655 / 9.519 / 9.750 um at 0 / -10 / -30 V (digitised labels 1.68 / 9.52 /
+    9.73; the whole curve is a fit input), depletion edge 1.649 / 9.480 / 9.736 um,
+    reach-through 3.1 V (edge within one L_D of the transition start), CCE 0.999472 /
+    0.999810 / 0.999883 at -10 / -30 / -50 V, dark 6.296 / 15.763 / 18.000 pA (4 mm2;
+    N_t refitted to the 18 pA bound)."""
     c = DeviceConfig()
+    cv = sim.run_cv(c, 0.0, -30.0, 31)
+    WC = np.asarray(cv.metadata["W_from_C"]) * 1e4
+    np.testing.assert_allclose(WC[[0, 10, 30]], [1.654732, 9.518526, 9.75029], atol=1e-6)
+    W = np.asarray(cv.metadata["depletion_widths"]) * 1e4
+    np.testing.assert_allclose(W[[0, 10, 30]], [1.649339, 9.480291, 9.736051], atol=1e-6)
+    assert cv.metadata["reach_through_V"] == pytest.approx(3.1)
+    cce = sim.run_cce(c, -10.0, -50.0, 3)
+    np.testing.assert_allclose(cce.y, [0.999472, 0.99981, 0.999883], atol=1e-6)
+    d = sim.run_dark_current(dataclasses.replace(c, area_cm2=0.04), 0.0, -60.0, 7)
+    np.testing.assert_allclose(d.y[[1, 3, 6]] * 1e12, [6.296, 15.763, 18.000], atol=1e-3)
+
+
+def test_previous_default_numbers_are_the_calibration_record():
+    """Previous default (nplus_calibrated_config; 2026-10-17 record, on the small-signal
+    C; lab/solver2d/notes/LOG.md): eps*A/C 1.700 / 9.500 (inputs) / 9.979 um (out of fit,
+    +2.56 %), depletion edge 1.689 / 9.267 / 9.896 um, dark 6.077 / 14.720 / 18.000 pA
+    (4 mm2). Previous record (edge calibration): edge 1.700 / 9.500 / 9.899,
+    CCE 0.999021 / 0.999706 / 0.999819, dark 6.132 / 14.873 / 18.000, reach-through 10.3 V."""
+    c = nplus_calibrated_config()
     cv = sim.run_cv(c, 0.0, -30.0, 31)
     WC = np.asarray(cv.metadata["W_from_C"]) * 1e4
     np.testing.assert_allclose(WC[[0, 10, 30]], [1.7, 9.5, 9.978827], rtol=0, atol=1e-6)

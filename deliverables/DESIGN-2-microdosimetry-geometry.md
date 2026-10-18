@@ -31,21 +31,24 @@ that forms the collecting contact — Schottky (FBK) or junction-barrier-Schottk
 
 | Parameter                           | Recommended value                                 | Basis / note                                                            |
 | ----------------------------------- | ------------------------------------------------- | ----------------------------------------------------------------------- |
-| SV depth (epi thickness)            | **10 µm** (baseline)                              | calibrated config (profile fitted to measured W)                        |
+| SV depth (epi thickness)            | **10 µm** (baseline)                              | default stack (profile fitted to the digitised measured C-V)            |
 | SV half-width                       | **50 µm** (→ 100 µm SV)                           | baseline choice only; NOT discriminated by the model (no edge physics)  |
-| Graded epi donor profile N_D(y)     | N_D_junction 2.97e15, N_D_bulk 6.34e13, L 0.99 µm | n⁺-stack calibration (DEFAULT_STACK)                                    |
+| Graded epi donor profile N_D(y)     | N_D_junction 8.19e15, N_D_bulk 3.38e13, L 0.46 µm; graded n⁻/n⁺ transition over the last 1.14 µm to 4.5e16 | C-V fit (DEFAULT_STACK; N_D_bulk below the documented 0.5–1e14; transition not from SIMS) |
 | Device stack                        | p⁺ 0.3 µm / n⁻ epi / n⁺ substrate                 | owner-confirmed; cathode on the n⁺                                      |
-| Operating reverse bias              | **−15 to −20 V**                                  | ≥ 1.2 × V_fd (≈ 9.9 V), above reach-through (10.3 V)                    |
-| Full-depletion voltage V_fd (10 µm) | **≈ 8.2 V**                                       | analytic graded profile (assumes p-n electrostatics)                    |
+| Operating reverse bias              | **≥ −10 V** (practical; gate ≥ 3.3 V)             | 1.2 × V_fd = 3.28 V; reach-through 3.10 V; −10 V keeps margin for the fit's doping uncertainty (DESIGN-1 §2) |
+| Full-depletion voltage V_fd (10 µm) | **≈ 2.7 V**                                       | analytic graded profile to the transition start (assumes p-n electrostatics) |
 | Validity gate                       | \|V_bias\| ≥ 1.2 × V_fd and CCE ≥ 0.95             | Mj-3 validity gate; 20 % margin = ±20 % doping tolerance (DESIGN-1)     |
 
 **Alternative SV depths (model V_fd, p-n electrostatics):**
 
 | Epi thickness | V_fd        | Recommended operating bias | Note                                         |
 | ------------- | ----------- | -------------------------- | -------------------------------------------- |
-| 5 µm          | ~3.6 V      | ≥ −10 V                    | lowest-bias option; epi holds ~42 % of the alpha's pairs |
-| **10 µm**     | **~8.2 V**  | **−15 to −20 V**           | **baseline (calibrated profile)**            |
-| 20 µm         | ~26 V       | ≥ −31 V (1.2 × V_fd)       | converges (no wall with the n⁺ substrate)    |
+| 5 µm          | ~0.7 V      | ≥ −10 V                    | lowest-bias option; epi holds ~42 % of the alpha's pairs |
+| **10 µm**     | **~2.7 V**  | **≥ −10 V** (gate 3.3 V)   | **baseline (C-V-fitted profile)**            |
+| 20 µm         | ~11.5 V     | ≥ −14 V (1.2 × V_fd)       | converges (no wall with the n⁺ substrate)    |
+
+(5 and 20 µm carry the 10 µm device's fitted profile and 1.14 µm transition: an
+extrapolation. With the previous abrupt-n⁺ default the three V_fd were 4.0 / 9.9 / 33 V.)
 
 > **No solver wall on the default stack.** The cathode sits on the n⁺ substrate and
 > devsim converges to ≥ −100 V in 2D. The ~−50 V limit of earlier versions belonged to

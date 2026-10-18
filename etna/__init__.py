@@ -7,10 +7,12 @@ from etna.api.device import (
     LEGACY_PRESET,
     MEASURED_CV_PRESET,
     MICRODOSIMETER_PRESET,
+    NPLUS_CALIBRATED_PRESET,
     DeviceConfig,
     legacy_config,
     measured_cv_config,
     microdosimeter_config,
+    nplus_calibrated_config,
 )
 from etna.api.results import MeshData, SimResult
 from etna.api.simulation import (
@@ -38,6 +40,8 @@ __all__ = [
     "microdosimeter_config",
     "MEASURED_CV_PRESET",
     "measured_cv_config",
+    "NPLUS_CALIBRATED_PRESET",
+    "nplus_calibrated_config",
     "SimResult",
     "MeshData",
     "run_cv",
