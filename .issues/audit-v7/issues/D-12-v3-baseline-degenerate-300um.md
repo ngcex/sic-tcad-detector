@@ -3,7 +3,7 @@ id: D-12
 title: v3 baseline guard is degenerate (300 um CCE == 100 um CCE) and self-baselined from a dirty tree
 severity: low
 category: improvement
-status: open
+status: closed 2026-10-18 (wp-c2 6517841: docstring says what the 2D entries pin, test renamed, the 300 um variant is exhaustive-only so it costs no default-run time; decision: git_commit_sha stays 'WORKING_TREE' - the values are hand re-pinned and each re-pin is recorded with its date and cause in metadata.rebaselined_*, so one freeze SHA would be misleading)
 location: tests/baselines/v3_frozen.json:2-3,12,20; tests/test_v3_baseline_regression.py:68-105; scripts/freeze_v3_baselines.py:176-182
 labels: [tests, regression-baseline, test-cost]
 source: raw-D F12

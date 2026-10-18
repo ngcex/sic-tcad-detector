@@ -52,3 +52,10 @@ Status column synced from the issue files and the git log; evidence per change:
 - C-04: fixed. 5d20634 (file status already fixed)
 
 Counts after the sync: 2 fixed, 15 open (the Totals line above is the audit-time count).
+
+## Status sync 2026-10-18 (wp-c2)
+
+- C-05: resolved. a6ce6da (WP-D lock upgrade); pip-audit of the all-extras export re-run on wp-c2: no known vulnerabilities.
+- C-13: still open (MeshData.regions/contacts, build_device device_name, to_csv_bytes branches for temperature/flash/transient are not addressed by wp-c2).
+
+Counts after this sync (from the issue files): 2 fixed, 14 open, 1 resolved.

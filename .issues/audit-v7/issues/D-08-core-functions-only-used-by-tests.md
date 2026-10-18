@@ -3,7 +3,7 @@ id: D-08
 title: Nine etna.core public functions are referenced only by their own tests
 severity: low
 category: dead-code
-status: open
+status: fixed 2026-10-18 (wp-c2 910e2a6 + 834e1ae: 3 of the 9 removed - compute_cce_from_current, compute_microdosimetric_means, plot_electric_field_multi; the other 6 kept with a one-line reason in their docstrings)
 location: etna/core/charge_collection.py:145 compute_cce_from_current; :1225 cce_anneal_vs_temperature; etna/core/cv_analysis.py:66 depletion_width_from_capacitance; etna/core/dark_current.py:920 dark_current_post_anneal; etna/core/mc_coupling.py:166 list_root_trees; :314 events_to_charge_profiles; etna/core/microdosimetry.py:226 compute_microdosimetric_means; etna/core/plotting.py:76 plot_electric_field_multi; etna/core/sic_material.py:308 effective_dos
 labels: [dead-code, api-surface]
 source: raw-D F8

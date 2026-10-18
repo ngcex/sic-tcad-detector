@@ -13,14 +13,14 @@ Each claim was re-checked against the code. Devsim runs were done for B-01, B-02
 | [B-06](B-06-dark-current-calibration-text-inconsistent.md)   | medium   | fixed  | Dark-current calibration claims (18 pA / 8 pA / 1e12) inconsistent; code gives ~141 pA; area defaults differ         | S (docs) / M (recalibrate) |
 | [B-07](B-07-api-proton-energy-default-out-of-niel-table.md)  | medium   | open   | API default proton_energy_MeV=5.6 is outside the NIEL table and silently clamps to kappa(30)                         | S                          |
 | [B-08](B-08-hurkx-gamma-inert-mislabelled-tat.md)            | low      | open   | Hurkx Gamma identically 1 at reachable fields; docs/labels overstate TAT; discontinuous Gamma<1 branch               | S                          |
-| [B-09](B-09-plot-efield-multi-single-voltage-zerodiv.md)     | low      | open   | plot_electric_field_multi ZeroDivisionError for a single voltage                                                     | S                          |
+| [B-09](B-09-plot-efield-multi-single-voltage-zerodiv.md)     | low      | fixed  | plot_electric_field_multi ZeroDivisionError for a single voltage                                                     | S                          |
 | [B-10](B-10-proton-generation-profile-energy-independent.md) | low      | open   | proton_generation_profile is energy-independent; 30/70/150 MeV curves identical                                      | S                          |
 | [B-11](B-11-mc-hit-positions-unused.md)                      | low      | open   | MC hit positions never used; per-event CCE ignores lateral position                                                  | M                          |
-| [B-12](B-12-dead-code-physics-slice.md)                      | low      | open   | Dead code / test-only symbols in the physics slice (multi-item)                                                      | M                          |
+| [B-12](B-12-dead-code-physics-slice.md)                      | low      | fixed  | Dead code / test-only symbols in the physics slice (multi-item)                                                      | M                          |
 | [B-13](B-13-temperature-coefficient-wrong-units.md)          | low      | open   | extract_temperature_coefficient labels "%/K" and "pA/K" for fraction and A/cm^2 inputs                               | S                          |
-| [B-14](B-14-compare-2d-vs-1d-center-key-wrong.md)            | low      | open   | compare_cce_2d_vs_1d "cce_2d_center" is the full-area CCE                                                            | S                          |
+| [B-14](B-14-compare-2d-vs-1d-center-key-wrong.md)            | low      | fixed  | compare_cce_2d_vs_1d "cce_2d_center" is the full-area CCE                                                            | S                          |
 | [B-15](B-15-notebook20-outputs-2-of-36-configs.md)           | medium   | open   | Notebook 20 committed outputs rest on 2/36 sweep configs (stale May-2026 run)                                        | M                          |
-| [B-16](B-16-single-particle-first-step-indexerror.md)        | low      | partial| simulate_single_particle masks a first-step failure with IndexError                                                  | S                          |
+| [B-16](B-16-single-particle-first-step-indexerror.md)        | low      | closed | simulate_single_particle masks a first-step failure with IndexError                                                  | S                          |
 
 **Totals:** 16 issues: 3 high, 5 medium, 8 low. 16 open, 0 rejected, 0 needs-info.
 
@@ -45,3 +45,12 @@ Status column synced from the issue files and the git log; evidence per change:
 - B-16: partial. 3c546a0: the injection step is recorded (times starts at dt_inject) so the IndexError is gone and a non-converged run warns 'Q_collected is truncated'; open: a failed first post-injection step still yields a finite truncated CCE instead of NaN/raise
 
 Counts after the sync: 5 fixed, 10 open, 1 partial (the Totals line above is the audit-time count).
+
+## Status sync 2026-10-18 (wp-c2)
+
+- B-09: fixed. 910e2a6: plot_electric_field_multi removed (no caller).
+- B-12: fixed. ce2e236, 910e2a6, a78cbdf, 834e1ae, dd84a64 (item list in the issue file status).
+- B-14: fixed. c22c602: cce_2d_center is the centre-column CCE.
+- B-16: closed. Verified by WP-A (issue file): a failed injection raises the devsim error; the 'partial' note above predates it.
+
+Counts after this sync (from the issue files): 1 closed, 8 fixed, 7 open.
