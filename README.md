@@ -107,8 +107,8 @@ uv run python -c "from etna import DeviceConfig, run_cv; print(run_cv(DeviceConf
 # or launch the interactive UI
 uv run streamlit run app/main.py --server.address localhost
 
-# run the fast default test suite in parallel
-uv run pytest -n auto --dist loadfile -q
+# run the default test suite in parallel (the scheduler comes from pytest.ini)
+uv run pytest -n auto -q
 
 # open a notebook (start from notebooks/ so saved figures land in notebooks/figures/)
 cd notebooks && uv run jupyter lab 01_phase1_validation.ipynb
@@ -118,15 +118,17 @@ cd notebooks && uv run jupyter lab 01_phase1_validation.ipynb
 > pytest from `.venv`. `uv run pytest` may then fall through to a system pytest
 > (audit C-15).
 >
-> **Tests:** there are 1037 tests in 89 modules. `pytest.ini` deselects the 7 `exhaustive`
-> tests (run them with `-m exhaustive`), so the default run is 1030 tests. With `-n auto`
-> it takes about 4 minutes on a 10-core machine. `--dist loadfile` keeps each module's
-> devsim devices in one worker process, because devsim state is process-global. Use
-> `-n0` when debugging with pdb.
+> **Tests:** there are 1041 tests in 89 modules. `pytest.ini` deselects the 7 `exhaustive`
+> tests (run them with `-m exhaustive`), so the default run is 1034 tests, and it is the
+> real gate. On a 10-core machine `-n auto` takes about 4 minutes (248 s, down from
+> 502 s with `--dist loadfile` on the same shared machine). `pytest.ini` supplies
+> `--dist loadgroup`; `tests/_xdist_schedule.py` balances the work and
+> `tests/conftest.py` deletes devsim devices that tests leak. Use `-n0` when
+> debugging with pdb. See [docs/USAGE.md §14](docs/USAGE.md#14-tests).
 >
-> **CI:** `.github/workflows/ci.yml` runs on every push and pull request. It checks the
-> lock, notebook hygiene and the generators, then runs the fast suite. The exhaustive
-> tests run nightly.
+> **CI:** `.github/workflows/ci.yml` runs on pushes to `main`, on pull requests and on
+> manual dispatch. It checks the lock, ruff, notebook hygiene and the generators, then
+> runs the default suite with `-n 4`. The exhaustive tests and `pip-audit` run nightly.
 
 ### Python API
 
