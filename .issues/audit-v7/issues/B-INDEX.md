@@ -82,7 +82,7 @@ Counts after this sync (`grep -h '^status:' B-[0-9]*.md`): 2 closed, 10 fixed, 1
 
 ### Physics items left open
 
-**B-07 (API proton energy default 5.6 MeV outside the NIEL table).** `run_radiation_damage`, `default_fluence_grid` and `compensation_fluence` default to 5.6 MeV. `get_hardness_factor` interpolates a 30 to 150 MeV table with `np.interp`, which returns the edge value outside the table. The default API run therefore uses kappa(30 MeV) = 0.5 while labelling the result 5.6 MeV. Proton NIEL in SiC rises steeply below about 30 MeV, so the default understates damage per proton.
+**B-07 (API proton energy default 5.6 MeV outside the NIEL table).** `run_radiation_damage` and `default_fluence_grid` default to 5.6 MeV (`compensation_fluence` takes the energy explicitly and is called with that default). `get_hardness_factor` interpolates a 30 to 150 MeV table with `np.interp`, which returns the edge value outside the table. The default API run therefore uses kappa(30 MeV) = 0.5 while labelling the result 5.6 MeV. Proton NIEL in SiC rises steeply below about 30 MeV, so the default understates damage per proton.
 
 It is not fixed here because both possible fixes change physics results or behaviour:
 

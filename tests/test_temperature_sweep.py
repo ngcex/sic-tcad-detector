@@ -63,7 +63,8 @@ class TestSweepCCE:
 
         assert isinstance(df, pd.DataFrame)
         assert len(df) == 3  # 3 temperatures x 1 voltage
-        assert set(df.columns) == {"T", "V", "CCE"}
+        assert set(df.columns) == {"T", "V", "CCE", "truncated"}  # B-05
+        assert not df["truncated"].any()
 
         for _, row in df.iterrows():
             assert (

@@ -74,7 +74,7 @@ Counts after this sync (`grep -h '^status:' D-[0-9]*.md`): 2 closed, 13 fixed, 1
 
 ### Physics item noted (from D-15)
 
-**Finite-SV mean chord length.** The spectrum tooling uses the slab approximation l_bar = 2t, which is valid only when the lateral size is much larger than the thickness. For DESIGN-2's 100 x 100 x 10 um SV, the Cauchy value 4V/S is 16.7 um, about 17 % below 20 um, so y would scale up by about 1.2x.
+**Finite-SV mean chord length.** The spectrum tooling uses the slab approximation l_bar = 2t, which is valid only when the lateral size is much larger than the thickness. For a square 100 um SV (100 x 100 x 10 um; DESIGN-2 fixes the width, not the depth), the Cauchy value 4V/S is 16.7 um, about 17 % below 20 um, so y would scale up by about 1.2x.
 
 Passing a depth to `mean_chord_length` changes every lineal-energy result, so it is not done here.
 
