@@ -240,7 +240,12 @@ def sweep_cce_vs_temperature(
     Returns
     -------
     df : pd.DataFrame
-        Long-format DataFrame with columns: T, V, CCE.
+        Long-format DataFrame with columns: T, V, CCE, truncated. Only the biases
+        the solver reached are listed: when the C-V (hecht) or CCE (dd) sweep at a
+        temperature stops at a convergence wall, the remaining voltages have no row
+        and that temperature's rows carry truncated=True (audit-v7 B-05; each CCE is
+        paired with the voltage the sweep returned, never by position in
+        ``voltages``).
     """
 
     from etna.core.charge_collection import hecht_cce
@@ -271,12 +276,13 @@ def sweep_cce_vs_temperature(
             try:
                 device_info = create_dd_device(**kwargs)
                 cv_result = _cv_sweep(device_info, voltages)
-                W_arr = cv_result["depletion_widths"]
+                truncated = bool(cv_result.get("truncated", False))
 
-                for j, V in enumerate(voltages):
-                    W = W_arr[j]
+                for V, W in zip(cv_result["voltages"], cv_result["depletion_widths"]):
                     cce_val = float(hecht_cce(V, d=W, T=T))
-                    records.append({"T": T, "V": V, "CCE": cce_val})
+                    records.append(
+                        {"T": T, "V": float(V), "CCE": cce_val, "truncated": truncated}
+                    )
 
                 logger.info(f"sweep_cce(hecht): T={T:.1f}K done")
             except Exception as e:
@@ -299,16 +305,19 @@ def sweep_cce_vs_temperature(
                 )
                 dd_kwargs.update(device_kwargs)
                 result = cce_vs_bias(voltages, device_kwargs=dd_kwargs)
+                truncated = bool(result.get("truncated", False))
 
-                for j, V in enumerate(voltages):
-                    records.append({"T": T, "V": V, "CCE": result["cce_values"][j]})
+                for V, c in zip(result["voltages"], result["cce_values"]):
+                    records.append(
+                        {"T": T, "V": float(V), "CCE": float(c), "truncated": truncated}
+                    )
                 logger.info(f"sweep_cce(dd): T={T:.1f}K done")
             except Exception as e:
                 logger.warning(f"sweep_cce(dd): failed at T={T:.1f}K: {e}")
     else:
         raise ValueError(f"method must be 'hecht' or 'dd', got '{method}'")
 
-    return pd.DataFrame(records)
+    return pd.DataFrame(records, columns=["T", "V", "CCE", "truncated"])
 
 
 def extract_temperature_coefficient(temperatures, values, quantity_name="CCE"):
