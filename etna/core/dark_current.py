@@ -38,6 +38,7 @@ References:
 
 from etna.core.solver_tol import DC_REL_ERROR
 import logging
+import uuid
 
 import devsim
 import numpy as np
@@ -750,7 +751,9 @@ def sensitivity_sweep(
 
     records = []
     for i, val in enumerate(param_values):
-        device_name = f"sweep_{param_name}_{i}"
+        # unique: devsim keeps the mesh after delete_device, so a fixed name made a
+        # second sensitivity_sweep call in the same process fail ("mesh already exists")
+        device_name = f"sweep_{param_name}_{i}_{uuid.uuid4().hex[:8]}"
         kwargs = dict(base_kwargs)
         kwargs["T"] = T
 
@@ -885,7 +888,6 @@ def dark_current_vs_fluence(
         L_transition=L_transition,
     )
     dev_kw.update(device_kwargs or {})
-    import uuid
 
 
     from etna.core.device import apply_damaged_params, create_sic_device
@@ -1095,7 +1097,6 @@ def dark_current_post_anneal(
         L_transition=_STACK["L_transition"],
     )
     dev_kw.update(device_kwargs or {})
-    import uuid
 
 
     from etna.core.device import apply_damaged_params, create_sic_device
