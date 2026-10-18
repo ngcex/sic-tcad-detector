@@ -11,6 +11,11 @@ solver, with calibrated 4H-SiC material physics, an installable Python API
 (`etna`), a Streamlit UI, and a set of analysis notebooks — developed for the
 Petringa group's 4H-SiC detector work at INFN-LNS Catania.
 
+**Start here: [`docs/USAGE.md`](docs/USAGE.md)**, the single usage guide (scope and a
+"what to trust" table, installation, presets and units, every `run_*` facade with a
+runnable example, solver provenance, validity limits, the app, notebooks, tests,
+troubleshooting). This README is the overview.
+
 ---
 
 ## What it does
@@ -39,7 +44,7 @@ Petringa group's 4H-SiC detector work at INFN-LNS Catania.
   3D-electrode, ΔE-E telescope (guard-ring hand-scored only; edge physics not
   modelled); operating-point and batch sweeps.
 
-22 Jupyter notebooks under `notebooks/` reproduce the underlying figures and
+21 Jupyter notebooks under `notebooks/` reproduce the underlying figures and
 results; the Streamlit UI (`app/`) exposes the same workflows interactively
 without needing to read or write any Python.
 
@@ -48,63 +53,78 @@ without needing to read or write any Python.
 ## Streamlit UI
 
 ```bash
-streamlit run app/main.py
+uv run streamlit run app/main.py --server.address localhost
 ```
 
-An 8-page interactive app built on the `etna` public API — configure a device
-once in the sidebar (persists across pages) and explore:
+Without `--server.address localhost`, Streamlit listens on all network interfaces with no
+authentication (audit C-16).
 
-| Page                        | Workflow                                                          |
-| --------------------------- | ----------------------------------------------------------------- |
-| **C-V Analysis**            | C–V curve, Mott-Schottky, depletion width, full-depletion marker  |
-| **Charge Collection (CCE)** | CCE vs reverse bias, configurable min/max bias sweep range        |
-| **Field Map**               | 1D/2D field & doping at a chosen reverse bias, heatmap viewer     |
-| **Radiation Damage**        | CCE vs proton fluence, energy/bias sweep, κ(E) disclosure banner  |
-| **Dark Current**            | Total leakage vs temperature (calibrated budget estimate)         |
-| **Microdosimetry**          | MC-events CSV upload → y·d(y) spectrum, y_F / y_D readouts        |
-| **Batch Sweep**             | Parametric sweep over any device field, overlaid curves, bulk CSV |
+A 10-page interactive app built on the `etna` public API. Configure a device once in the
+sidebar: geometry, doping, temperature, area, and preset checkboxes for the historical,
+previous-calibrated and tabulated models. The configuration persists across pages:
+
+| Page                        | Workflow                                                                                                 |
+| --------------------------- | -------------------------------------------------------------------------------------------------------- |
+| **Home**                    | Orientation and current device summary                                                                   |
+| **Run All**                 | Every simulation for the sidebar device (`etna.run_all`), JSON/CSV                                       |
+| **C-V Analysis**            | C–V curve, Mott-Schottky, depletion width, full-depletion marker                                         |
+| **Charge Collection (CCE)** | CCE vs reverse bias, configurable min/max bias sweep range                                               |
+| **Field Map**               | 1D/2D field & doping at a chosen reverse bias, heatmap viewer                                            |
+| **Radiation Damage**        | CCE vs proton fluence, energy/bias sweep, κ(E) disclosure banner                                         |
+| **Dark Current**            | Total leakage vs temperature (calibrated budget estimate)                                                |
+| **Microdosimetry**          | MC-events CSV upload → y·d(y) spectrum, y_F / y_D readouts                                               |
+| **Batch Sweep**             | Parametric sweep over a curated device field, overlaid curves, bulk CSV                                  |
+| **Export**                  | Spec sheet (JSON/CSV/MD/PDF), cross-section, mesh CSV/VTK, animations, schematic GDS (REFERENCE-NOT-FAB) |
 
 Every result page shows which solver produced it (batched engine, 2D engine
 or devsim) and whether the device lies inside the engine/devsim cross-check domain; the CSV
 download carries the same provenance (solver, cross-check domain, device config,
-software version) in its `#` header.
+software version) in its `#` header. Page-by-page inputs and outputs are in
+[`docs/USAGE.md` section 9](docs/USAGE.md#9-the-streamlit-app).
 
 ---
 
 ## Quick start
 
-Requires Python 3.13+ and the `devsim` solver. Dependency management uses
-[`uv`](https://docs.astral.sh/uv/).
+Requires Python 3.13+ and [`uv`](https://docs.astral.sh/uv/). The `devsim` solver comes
+as a wheel; on Linux it needs OpenBLAS/LAPACK (e.g.
+`apt-get install libopenblas-dev liblapack-dev`).
 
 ```bash
 # clone
 git clone https://github.com/ngcex/sic-tcad-detector.git
 cd sic-tcad-detector
 
-# install the package (devsim, numpy, scipy, numba, matplotlib, plotly, streamlit, pandas + dev extras)
+# install the package and the dev extra (pytest, pytest-xdist, jupyter, nbstripout, ruff);
+# add --extra viz for the Export page's animations (manim) and GDSII (gdstk)
 uv sync --extra dev
 
 # use the library directly
-uv run python -c "from etna import DeviceConfig, run_cv; print(run_cv(DeviceConfig()))"
+uv run python -c "from etna import DeviceConfig, run_cv; print(run_cv(DeviceConfig()).metadata['solver'])"
 
 # or launch the interactive UI
-uv run streamlit run app/main.py
+uv run streamlit run app/main.py --server.address localhost
 
-# run the fast tests
-uv run pytest tests/test_api_*.py tests/test_app_*.py -q
+# run the fast default test suite in parallel
+uv run pytest -n auto --dist loadfile -q
 
-# open a notebook
-uv run jupyter lab notebooks/01_phase1_validation.ipynb
+# open a notebook (start from notebooks/ so saved figures land in notebooks/figures/)
+cd notebooks && uv run jupyter lab 01_phase1_validation.ipynb
 ```
 
-> **Parallel tests:** `uv run pytest -n auto --dist loadfile -q` runs the full suite
-> (~700 tests) in about 4 minutes; use `-n0` when debugging with pdb.
+> **Always sync with `--extra dev`.** A plain `uv sync` installs no extras and removes
+> pytest from `.venv`. `uv run pytest` may then fall through to a system pytest
+> (audit C-15).
 >
-> **devsim note:** the full drift-diffusion test suite is slow, and stacking
-> many DD device builds in one interpreter process can exhaust devsim's
-> resources. Run DD-heavy modules one file at a time (e.g.
-> `uv run pytest tests/test_api_cce.py -m slow -q`) rather than the whole
-> suite in a single `pytest -q` invocation.
+> **Tests:** there are 999 tests in 86 modules. `pytest.ini` deselects the 6 `exhaustive`
+> tests (run them with `-m exhaustive`), so the default run is 993 tests. With `-n auto`
+> it takes about 5-6 minutes on a 10-core machine. `--dist loadfile` keeps each module's
+> devsim devices in one worker process, because devsim state is process-global. Use
+> `-n0` when debugging with pdb.
+>
+> **CI:** `.github/workflows/ci.yml` runs on every push and pull request. It checks the
+> lock, notebook hygiene and the generators, then runs the fast suite. The exhaustive
+> tests run nightly.
 
 ### Python API
 
@@ -114,9 +134,12 @@ from etna import DeviceConfig, run_cv, run_cce, run_field, run_radiation_damage
 cfg = DeviceConfig(epi_thickness_um=10.0, N_A=1e19)  # default area: the 4 mm2 dosimeter
 result = run_cv(cfg)          # SimResult: bias (x), capacitance in F for area_cm2 (y), metadata
 result = run_cce(cfg, v_start=-1.0, v_stop=-40.0)
-result = run_field(cfg)       # includes result.mesh (MeshData) for 2D devices
+result = run_field(cfg)       # result.mesh (MeshData); 1D: x = depth (um), y = |E| (V/cm)
 result.metadata["solver"]     # "batched" | "engine2d" | "devsim"
 ```
+
+Each facade, its return values and metadata keys, with an example that runs, is in
+[`docs/USAGE.md` section 6](docs/USAGE.md#6-the-run_-facades).
 
 **Solvers.** `run_cv` / `run_cce` (and their `run_*_batch` twins used by
 `ParametricSweep`) run on a batched numba 1D engine (`etna.core.batched`) when
@@ -133,7 +156,9 @@ See `etna/__init__.py` for the full public API surface (`DeviceConfig`,
 `SimResult`, `MeshData`, `run_cv`, `run_field`, `run_cce`,
 `run_radiation_damage`, `run_dark_current`, `run_temperature_sweep`,
 `run_flash_recombination`, `run_transient`, `run_microdosimetry`,
-`ParametricSweep`).
+`run_cv_batch`, `run_cce_batch`, `run_cce_tilted_alpha`, `run_all`, `ParametricSweep`,
+and the presets `measured_cv_config`, `measured_cv_tabulated_config`,
+`nplus_calibrated_config`, `legacy_config`, `microdosimeter_config`).
 
 ---
 
@@ -143,8 +168,12 @@ See `etna/__init__.py` for the full public API surface (`DeviceConfig`,
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `etna/`         | Installable Python package: `etna/api/` (public facades — `DeviceConfig`, `run_cv`, `run_cce`, …) and `etna/core/` (internal solver modules — material params, Poisson, drift-diffusion, CCE, dark current, radiation damage, microdosimetry, 2D devices, …) |
 | `app/`          | Streamlit UI: `app/main.py` (navigation shell), `app/workflows/` (one page per simulation type), `app/components/` (sidebar, plotting, CSV export)                                                                                                           |
-| `notebooks/`    | 22 analysis notebooks (validation, characterisation, FLASH, radiation damage, microdosimetry, feasibility)                                                                                                                                                   |
-| `tests/`        | 57 pytest modules (~700 tests) — `test_api_*.py` (library facades), `test_app_*.py` (Streamlit AppTest, incl. un-mocked per-page smoke tests), plus the core-physics modules                                                                                 |
+| `notebooks/`    | 21 analysis notebooks (validation, characterisation, FLASH, radiation damage, microdosimetry, feasibility); committed without outputs                                                                                                                        |
+| `tests/`        | 86 pytest modules (999 tests; 993 in the default run): `test_api_*.py` (library facades), `test_app_*.py` (Streamlit AppTest, incl. un-mocked per-page smoke tests), engine/devsim parity, presets, plus the core-physics modules                            |
+| `docs/`         | `docs/USAGE.md`, the usage guide                                                                                                                                                                                                                             |
+| `lab/`          | Research spikes, each with `notes/LOG.md` (commands and numbers behind calibrated defaults; see `lab/README.md`)                                                                                                                                             |
+| `scripts/`      | Notebook generators, the generator drift check, validation scripts (`scripts/README.md`)                                                                                                                                                                     |
+| `.issues/`      | Audit findings, performance issues and the tech-debt inventory                                                                                                                                                                                               |
 | `data/`         | Material/stopping-power tables (`data/srim/` holds **placeholders** for κ — see below)                                                                                                                                                                       |
 | `deliverables/` | Foundry-facing detector design specs (PDF + Markdown)                                                                                                                                                                                                        |
 | `figures/`      | Generated publication figures                                                                                                                                                                                                                                |
@@ -161,7 +190,9 @@ to be handed to a foundry (ST / FBK) as a feasibility study — not mask layouts
 - **DESIGN-2** — microdosimeter sensitive-volume geometry (junction type left to fab)
 
 Each states explicitly what is a validated model target vs. what the foundry must
-supply.
+supply. The Markdown files are the source; the PDFs were regenerated from them on
+2026-10-18, after the default-stack flip. `deliverables/DIMENSIONS-provenance.md`
+classifies every layout dimension as DOCUMENTED, MEASURED-FROM-FIGURE or PLACEHOLDER.
 
 ---
 
@@ -175,9 +206,14 @@ simulated C–V against an open-access 4H-SiC Schottky device on a different waf
 (Bruzzi & Verroi 2023): a solver-scale check only (+3.1 % at −40 V is the Schottky-vs-pn
 built-in-voltage difference; <1 % with V_bi matched), not a validation of this device. In the interest of honesty, the current limitations are:
 
-- ✅ **Solid / publishable:** electrostatics, C–V, CCE-vs-bias, the calibrated
-  graded-doping 2D model (converges to −50 V; 2D C–V matches the 1D twin,
-  R² ≥ 0.99 over 0…−50 V).
+- ✅ **Verified numerics (code-to-code, not against measurement):** the batched 1D and
+  2D numba engines reproduce devsim inside their parameter boxes (1D dC/C ≲ 3e-8,
+  dCCE ≲ 1e-10 to −100 V; 2D potential ~1e-13 V), and the 2D graded model's C–V
+  matches its 1D twin (R² ≥ 0.99 over 0…−50 V). Electrostatics, C–V and CCE-vs-bias are
+  therefore solved consistently, but their agreement with this device rests on the
+  C–V calibration below: the C–V is a fit, and no measured CCE of the dosimeter has been
+  reproduced. See the "what to trust" table in
+  [`docs/USAGE.md`](docs/USAGE.md#2-what-to-trust).
 - ⚠️ **Calibration, not prediction:** dark current is a calibration input: one
   trap density N_t fitted to the experimental bound < 18 pA up to −60 V (4 mm²;
   N_t = 2.849024e12 on the default stack, E_t = 0.67 eV); quote it as a budget
@@ -215,7 +251,7 @@ built-in-voltage difference; <1 % with V_bi matched), not a validation of this d
   (≈ −64 V) — an artefact of the missing n⁺ substrate, **not** a physical limit.
   Direct core calls (`etna.core.*` builders and sweeps) default to the same stack
   (including the graded transition); pass `nplus_thickness_cm=None,
-  buffer_thickness_cm=None, buffer_end_doping=None, substrate_thickness_cm=1e-4` (or
+buffer_thickness_cm=None, buffer_end_doping=None, substrate_thickness_cm=1e-4` (or
   `device_kwargs(legacy_config())`) for the legacy geometry.
 - 🔧 **Data-blocked (machinery ready, real data needed):**
   - Tissue-equivalence κ(E): the Bragg-additivity machinery is in place
@@ -224,10 +260,11 @@ built-in-voltage difference; <1 % with V_bi matched), not a validation of this d
     Surfaced as a persistent warning banner on the Radiation Damage page.
   - NIEL hardness factors for SiC are placeholders pending SR-NIEL data.
 
-Residual gaps between the notebook workflows and the Streamlit UI (7 of 21
-workflows have no dedicated page yet, e.g. FLASH transient, multi-defect
-comparison, validation-vs-literature) are tracked as v6.0 tech debt in the
-milestone audit above — not silent omissions.
+Residual gaps between the notebook workflows and the Streamlit UI are tracked as v6.0
+tech debt in the milestone audit above, not left as silent omissions. That audit found
+7 of 21 workflows with no page; the Run All page has since added the FLASH steady-state
+section (notebook 04). Notebooks 08 (FLASH transient), 12 (multi-defect comparison),
+14 (validation vs literature), 16, 19 and 20 remain notebook-only.
 
 ---
 
@@ -244,12 +281,23 @@ INFN-LNS Catania.
 
 ## Development note: notebook outputs
 
-Notebook outputs are stripped on commit (`.gitattributes` + `nbstripout`). After cloning run
-`uv run nbstripout --install --attributes .gitattributes` once so your local git applies the filter.
-Re-run a notebook (`jupyter nbconvert --execute`) to regenerate its outputs locally.
+Notebook outputs are stripped on commit (`.gitattributes` + `nbstripout`). After cloning, run
+`uv run nbstripout --install --attributes .gitattributes` once so that your local git applies
+the filter. CI rejects tracked notebooks with outputs (`nbstripout --verify`) and generators
+that drift from their notebooks (`scripts/check_notebook_generators.py`). To regenerate
+outputs locally, re-run a notebook from `notebooks/` (`jupyter nbconvert --execute`). Run
+from the repo root, `save_figure` would write over the tracked `figures/`; set
+`ETNA_FIGURE_DIR` to redirect it.
 
 ## Development environment
 
-`uv sync --extra dev --extra viz` installs the test tools (pytest-xdist: `pytest -n auto --dist loadfile`) and the optional
-animation dependency (manim, needs `pkg-config`, `cairo`, `pango`; on macOS `brew install pkgconf cairo pango`). A plain
-`uv sync --extra dev` removes manim again; the Export page then simply hides the animation section.
+The `dev` extra is the one development dependency set: pytest, pytest-xdist, jupyter,
+nbstripout and ruff. `uv sync --extra dev --extra viz` installs it plus the optional
+animation and layout dependencies. manim needs `pkg-config`, `cairo` and `pango`; on
+macOS, `brew install pkgconf cairo pango`. gdstk is needed for the GDSII download.
+
+A later `uv sync --extra dev` removes the `viz` packages again; the Export page then hides
+the animation section and the GDSII button. The package version is defined once, in
+`etna/_version.py`. The development workflow (parity tests when changing an engine,
+before/after numbers for any calibrated constant) is described in
+[`docs/USAGE.md` section 15](docs/USAGE.md#15-development-workflow).
