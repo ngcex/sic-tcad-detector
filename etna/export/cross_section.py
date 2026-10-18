@@ -305,7 +305,9 @@ def cross_section_png(config, dpi: int = 150) -> bytes:
     from matplotlib.backends.backend_agg import FigureCanvasAgg
     from matplotlib.figure import Figure
 
-    fig = Figure(figsize=(9, 6))
+    # manual axes placement: opt out of the constrained layout that etna.core.plotting
+    # turns on in rcParams (it warned 'no gridspecs with layoutgrids' on every export)
+    fig = Figure(figsize=(9, 6), layout="none")
     FigureCanvasAgg(fig)
     _draw_cross_section(fig, config)
     buf = io.BytesIO()

@@ -612,7 +612,8 @@ def plot_yd_spectrum(
     ax.set_xlabel("y (keV/$\\mu$m)")
     ax.set_ylabel("y $\\cdot$ d(y)")
     ax.set_title("Dose-weighted lineal energy spectrum")
-    ax.legend(fontsize=8)
+    if ax.get_legend_handles_labels()[0]:  # nothing labelled -> no empty legend
+        ax.legend(fontsize=8)
 
     return ax
 
@@ -664,6 +665,7 @@ def plot_yf_spectrum(bin_centers, f_y, y_F=None, ax=None, label=None, color=None
     ax.set_xlabel("y (keV/$\\mu$m)")
     ax.set_ylabel("y $\\cdot$ f(y)")
     ax.set_title("Frequency-weighted lineal energy spectrum")
-    ax.legend(fontsize=8)
+    if ax.get_legend_handles_labels()[0]:  # nothing labelled -> no empty legend
+        ax.legend(fontsize=8)
 
     return ax
