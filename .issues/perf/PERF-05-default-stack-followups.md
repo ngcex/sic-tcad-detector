@@ -153,3 +153,9 @@ over all nodes). Legacy hw 25, 10 V, LET 1: 0.961613 -> 0.962940 vs steady-state
 (gap -9.5e-4 -> +3.8e-4); default hw 25, 50 V (anode): 0.999970 -> 0.999966 (box vs
 triangle only; the track touches no contact with the n+ layer), so nb16's default-stack
 CCE(LET) table moves by ~4e-6 (lab/default_flip/bench/sp_contacts.py).
+Suite time old -> new: base 68af67e 912 passed in 266 s -> this branch 913 passed in 290 s
+(same machine, -n auto --dist loadfile; base re-measured in a scratch copy with its own venv).
+Uniform-profile configs (sidebar uniform mode, DESIGN-1's zero-bias variant) now inherit the
+1.14 um graded transition unless it is switched off (buffer_thickness_um=None).
+Open: tabulated 19-knot profile (lab/cv_gap/notes/knots.json, knee rms 0.24 -> ~0.03 um) not
+implemented (task 3 skipped: plumbing through DeviceConfig, labels, Debye rule, engines).
