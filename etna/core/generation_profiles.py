@@ -371,6 +371,10 @@ def proton_generation_profile(x_cm, E_MeV, dose_rate_Gy_s=1.0):
     within the detector is approximately flat (entrance dose region,
     well before the Bragg peak).
 
+    Energy-independent by construction: at equal dose rate the profile is the same
+    for every E_MeV, which is only validated against the supported range (audit-v7
+    B-10). Curves "at 30/70/150 MeV" at equal dose rate are therefore identical.
+
     Parameters
     ----------
     x_cm : array_like

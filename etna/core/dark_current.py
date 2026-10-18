@@ -331,6 +331,12 @@ def _compute_gamma_factors(device, region):
         Kt >= 4: Gamma = 1 (low field, no enhancement)
 
     For simplicity, Gamma_n = Gamma_p (same trap, symmetric tunneling).
+
+    Known defect (audit-v7 B-08, open, physics owner): the Kt < 4 branch is
+    discontinuous at Kt = 4 (Gamma drops from 1 to 0.226) and is below 1 for about
+    1.1 < Kt < 4, i.e. it would SUPPRESS generation. It is unreachable here: Kt < 4
+    needs |E| > ~4.5 MV/cm, above the 4H-SiC breakdown field, so Gamma = 1 at every
+    reachable bias.
     """
     Kt = np.array(
         devsim.get_node_model_values(device=device, region=region, name="Kt_TAT")
