@@ -56,8 +56,10 @@ without needing to read or write any Python.
 uv run streamlit run app/main.py --server.address localhost
 ```
 
-Without `--server.address localhost`, Streamlit listens on all network interfaces with no
-authentication (audit C-16).
+The committed `.streamlit/config.toml` binds the app to localhost when it is launched from
+the repo root (Streamlit reads the config of the launch directory); `--server.address
+localhost` makes that explicit from any directory. The app has no authentication: for shared
+use pass `--server.address 0.0.0.0` behind an authenticating reverse proxy (audit C-16).
 
 A 10-page interactive app built on the `etna` public API. Configure a device once in the
 sidebar: geometry, doping, temperature, area, and preset checkboxes for the historical,
@@ -116,9 +118,9 @@ cd notebooks && uv run jupyter lab 01_phase1_validation.ipynb
 > pytest from `.venv`. `uv run pytest` may then fall through to a system pytest
 > (audit C-15).
 >
-> **Tests:** there are 994 tests in 86 modules. `pytest.ini` deselects the 7 `exhaustive`
-> tests (run them with `-m exhaustive`), so the default run is 987 tests. With `-n auto`
-> it takes about 4-5 minutes on a 10-core machine. `--dist loadfile` keeps each module's
+> **Tests:** there are 1037 tests in 89 modules. `pytest.ini` deselects the 7 `exhaustive`
+> tests (run them with `-m exhaustive`), so the default run is 1030 tests. With `-n auto`
+> it takes about 4 minutes on a 10-core machine. `--dist loadfile` keeps each module's
 > devsim devices in one worker process, because devsim state is process-global. Use
 > `-n0` when debugging with pdb.
 >
@@ -169,7 +171,7 @@ and the presets `measured_cv_config`, `measured_cv_tabulated_config`,
 | `etna/`         | Installable Python package: `etna/api/` (public facades — `DeviceConfig`, `run_cv`, `run_cce`, …) and `etna/core/` (internal solver modules — material params, Poisson, drift-diffusion, CCE, dark current, radiation damage, microdosimetry, 2D devices, …) |
 | `app/`          | Streamlit UI: `app/main.py` (navigation shell), `app/workflows/` (one page per simulation type), `app/components/` (sidebar, plotting, CSV export)                                                                                                           |
 | `notebooks/`    | 21 analysis notebooks (validation, characterisation, FLASH, radiation damage, microdosimetry, feasibility); committed without outputs                                                                                                                        |
-| `tests/`        | 86 pytest modules (994 tests; 987 in the default run): `test_api_*.py` (library facades), `test_app_*.py` (Streamlit AppTest, incl. un-mocked per-page smoke tests), engine/devsim parity, presets, plus the core-physics modules                            |
+| `tests/`        | 89 pytest modules (1037 tests; 1030 in the default run): `test_api_*.py` (library facades), `test_app_*.py` (Streamlit AppTest, incl. un-mocked per-page smoke tests), engine/devsim parity, presets, plus the core-physics modules                          |
 | `docs/`         | `docs/USAGE.md`, the usage guide                                                                                                                                                                                                                             |
 | `lab/`          | Research spikes, each with `notes/LOG.md` (commands and numbers behind calibrated defaults; see `lab/README.md`)                                                                                                                                             |
 | `scripts/`      | Notebook generators, the generator drift check, validation scripts (`scripts/README.md`)                                                                                                                                                                     |
@@ -286,8 +288,9 @@ Notebook outputs are stripped on commit (`.gitattributes` + `nbstripout`). After
 the filter. CI rejects tracked notebooks with outputs (`nbstripout --verify`) and generators
 that drift from their notebooks (`scripts/check_notebook_generators.py`). To regenerate
 outputs locally, re-run a notebook from `notebooks/` (`jupyter nbconvert --execute`). Run
-from the repo root, `save_figure` would write over the tracked `figures/`; set
-`ETNA_FIGURE_DIR` to redirect it.
+from the repo root, the notebook figures would write over the tracked `figures/`; set
+`ETNA_FIGURE_DIR` to redirect them. Notebooks 16 and 17 also (re)write
+`data/cce_let_table_*.json` and `data/synthetic_mc_events.csv` relative to the repo root.
 
 ## Development environment
 

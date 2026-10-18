@@ -133,8 +133,12 @@ def test_compensated_points_listed_and_defaults_below_compensation(monkeypatch):
             sim_type="damage",
             x=np.array([1e13, 3e13, 1e14]),
             y=np.array([0.99, 0.98, np.nan]),
-            metadata={"V_bias": -20.0, "energy_MeV": 62, "valid": valid,
-                      "reason": reason},
+            metadata={
+                "V_bias": -20.0,
+                "energy_MeV": 62,
+                "valid": valid,
+                "reason": reason,
+            },
         )
 
     monkeypatch.setattr(etna, "run_radiation_damage", _fake)
@@ -192,3 +196,24 @@ def test_2d_config_shows_1d_only_warning(monkeypatch):
     assert any(
         "1D-only" in (w or "") for w in warning_texts
     ), f"1D-only warning not found: {warning_texts}"
+
+
+def test_invalid_fluence_range_is_rejected_before_the_facade(monkeypatch):
+    """audit C-08: min 0, negative min or min > max -> st.error, facade not called."""
+    calls = []
+    monkeypatch.setattr(
+        etna, "run_radiation_damage", lambda cfg, **k: calls.append(k) or None
+    )
+    for fmin, fmax in ((0.0, 1e14), (-1e13, 1e14), (1e15, 1e13)):
+        at = AppTest.from_function(_run_radiation_damage_page)
+        at.session_state["device_config"] = DeviceConfig()
+        at.run()
+        by_label = {n.label: n for n in at.number_input}
+        by_label["Min fluence (p/cm²)"].set_value(fmin)
+        by_label["Max fluence (p/cm²)"].set_value(fmax)
+        at.button[0].click()
+        at.run()
+        assert at.exception == [], (fmin, fmax, at.exception)
+        assert any("min ≤ max" in (e.value or "") for e in at.error), (fmin, fmax)
+        assert "damage_result" not in at.session_state
+    assert calls == []

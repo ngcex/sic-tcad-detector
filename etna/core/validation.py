@@ -94,6 +94,20 @@ def compute_agreement_metrics(sim_values, exp_values):
     }
 
 
+# A validation target counts as reached only if a simulated bias lies this close to
+# it (V); otherwise the metric is NaN and the target is listed in "missing_targets"
+# (audit-v7 A-12: the nearest point used to be taken at any distance).
+TARGET_V_TOL = 0.25
+
+
+def _pick(V, target, tol=TARGET_V_TOL):
+    """Index of the simulated bias nearest ``target``, or None if farther than tol."""
+    if len(V) == 0:
+        return None
+    i = int(np.argmin(np.abs(V - target)))
+    return i if abs(V[i] - target) <= tol else None
+
+
 def validate_iv(iv_data, area=1.0):
     """Validate simulated I-V data against experimental targets.
 
@@ -116,19 +130,29 @@ def validate_iv(iv_data, area=1.0):
         - "rectification_pass": bool
         - "series_resistance": estimated from dV/dI at high forward bias (Ohm)
         - "series_resistance_target": experimental target (Ohm)
+        - "missing_targets": biases (-60, +2, -2 V) with no simulated point within
+          TARGET_V_TOL; the metrics built on them are NaN and their pass flags False
+          (e.g. an iv_sweep truncated before -60 V)
     """
-    V = np.asarray(iv_data["voltages"])
+    V = np.asarray(iv_data["voltages"], dtype=float)
     I = np.asarray(iv_data["currents"]) * area  # Convert to absolute current (A)
 
     result = {}
+    missing = []
 
     # Dark current at -60V
-    idx_60 = np.argmin(np.abs(V - (-60.0)))
-    I_dark = abs(I[idx_60])
+    idx_60 = _pick(V, -60.0)
+    if idx_60 is None:
+        missing.append(-60.0)
+        I_dark = float("nan")
+    else:
+        I_dark = abs(I[idx_60])
     result["dark_current_60V"] = I_dark
     result["dark_current_target"] = EXPERIMENTAL_IV["dark_current_60V"]
     # Pass if within 2 orders of magnitude (simulation vs measurement tolerance)
-    result["dark_current_pass"] = I_dark < EXPERIMENTAL_IV["dark_current_60V"] * 100
+    result["dark_current_pass"] = bool(
+        I_dark < EXPERIMENTAL_IV["dark_current_60V"] * 100
+    )
 
     # Ideal-SRH floor detection
     # For 4H-SiC with n_i ~ 5e-9 cm^-3, the ideal SRH generation current is
@@ -138,22 +162,28 @@ def validate_iv(iv_data, area=1.0):
     # 10 orders of magnitude below the experimental target, it indicates the
     # simulation is at the ideal-SRH floor, not a physically meaningful result.
     target = EXPERIMENTAL_IV["dark_current_60V"]
-    result["ideal_srh_floor"] = I_dark > 0 and I_dark < target * 1e-10
-    result["dark_current_physically_meaningful"] = not result["ideal_srh_floor"]
+    result["ideal_srh_floor"] = bool(I_dark > 0 and I_dark < target * 1e-10)
+    result["dark_current_physically_meaningful"] = bool(
+        np.isfinite(I_dark) and not result["ideal_srh_floor"]
+    )
 
     # Rectification ratio at +/- 2V
-    idx_p2 = np.argmin(np.abs(V - 2.0))
-    idx_m2 = np.argmin(np.abs(V - (-2.0)))
-    I_forward = abs(I[idx_p2])
-    I_reverse = abs(I[idx_m2])
-    if I_reverse > 0:
-        rectification = I_forward / I_reverse
+    idx_p2 = _pick(V, 2.0)
+    idx_m2 = _pick(V, -2.0)
+    if idx_p2 is None:
+        missing.append(2.0)
+    if idx_m2 is None:
+        missing.append(-2.0)
+    if idx_p2 is None or idx_m2 is None:
+        rectification = float("nan")
     else:
-        rectification = float("inf")
+        I_forward = abs(I[idx_p2])
+        I_reverse = abs(I[idx_m2])
+        rectification = I_forward / I_reverse if I_reverse > 0 else float("inf")
     result["rectification_ratio"] = rectification
     result["rectification_target"] = EXPERIMENTAL_IV["rectification_ratio_2V"]
     # Pass if within 2 orders of magnitude
-    result["rectification_pass"] = (
+    result["rectification_pass"] = bool(
         rectification > EXPERIMENTAL_IV["rectification_ratio_2V"] / 100
     )
 
@@ -173,6 +203,7 @@ def validate_iv(iv_data, area=1.0):
 
     result["series_resistance"] = R_s
     result["series_resistance_target"] = EXPERIMENTAL_IV["series_resistance"]
+    result["missing_targets"] = missing
 
     return result
 
@@ -197,17 +228,38 @@ def validate_cv(cv_data):
         - "exp_voltages": experimental voltages (V)
         - "metrics": output of compute_agreement_metrics()
         - "per_point_error": relative error at each experimental voltage
+        - "extrapolated": True if an experimental voltage lies outside the simulated
+          bias range (or cv_data["truncated"] is True). Such points are NaN in
+          "sim_W" / "per_point_error" and excluded from "metrics" (np.interp would
+          silently return the edge value; audit-v7 A-12)
+        - "n_extrapolated": number of experimental voltages outside the range
+
+    Raises
+    ------
+    ValueError
+        If no experimental voltage lies inside the simulated range.
     """
-    V_sim = np.asarray(cv_data["voltages"])
+    V_sim = np.asarray(cv_data["voltages"], dtype=float)
     W_sim = np.asarray(cv_data.get("W_from_C", cv_data["depletion_widths"]))
 
     V_exp = np.array(EXPERIMENTAL_CV["voltages"])
     W_exp = np.array(EXPERIMENTAL_CV["depletion_widths_cm"])
 
-    # Interpolate simulated W at experimental voltages
-    W_sim_at_exp = np.interp(V_exp, np.sort(V_sim), W_sim[np.argsort(V_sim)])
+    if len(V_sim) == 0:
+        raise ValueError("validate_cv: empty C-V data (no simulated voltage)")
+    out = (V_exp < V_sim.min() - 1e-9) | (V_exp > V_sim.max() + 1e-9)
+    if out.all():
+        raise ValueError(
+            f"validate_cv: no experimental voltage {V_exp.tolist()} inside the "
+            f"simulated range [{V_sim.min():g}, {V_sim.max():g}] V"
+        )
 
-    metrics = compute_agreement_metrics(W_sim_at_exp, W_exp)
+    # Interpolate simulated W at the experimental voltages inside the range only
+    order = np.argsort(V_sim)
+    W_sim_at_exp = np.where(out, np.nan, np.interp(V_exp, V_sim[order], W_sim[order]))
+
+    inside = ~out
+    metrics = compute_agreement_metrics(W_sim_at_exp[inside], W_exp[inside])
 
     per_point_error = np.abs(W_sim_at_exp - W_exp) / W_exp
 
@@ -217,4 +269,6 @@ def validate_cv(cv_data):
         "exp_voltages": V_exp,
         "metrics": metrics,
         "per_point_error": per_point_error.tolist(),
+        "extrapolated": bool(out.any() or cv_data.get("truncated", False)),
+        "n_extrapolated": int(out.sum()),
     }

@@ -3,7 +3,7 @@ id: A-02
 title: Incomplete-ionization model is unphysical below ~1e18 cm^-3 (ionized fraction increases with doping; 0.02 % at 1e15 instead of ~66 %)
 severity: medium
 category: bug
-status: open
+status: open 2026-10-18 (final-verify: physics, not changed here; owner Giada Petringa / INFN-LNS physics group; see A-INDEX 'Physics items left open')
 location: etna/core/incomplete_ionization.py:1-10 (module docstring), 26-36 (_gibbs_ionization), 112-172 (ionized_acceptor_fraction); callers etna/core/device.py:226, etna/core/device2d.py:404; etna/api/device.py (DeviceConfig.N_A unvalidated); app/components/device_sidebar.py (N_A number_input); tests/test_incomplete_ionization.py
 labels: [audit-v7, slice-A, physics, material-model]
 source: raw-A-core-solvers.md F2

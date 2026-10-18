@@ -56,6 +56,7 @@ from etna.core.charge_collection import add_generation_to_dd, compute_cce_from_d
 from etna.core.generation_profiles import confine_generation_to_epi, proton_generation_profile
 from etna.core.device import DEFAULT_STACK as _STACK
 from etna.core.solver_tol import DC_ABS_ERROR, FLASH_REL_ERROR
+from etna.core.devsim_reset import delete_device_and_mesh
 
 logger = logging.getLogger(__name__)
 
@@ -390,7 +391,7 @@ def cce_vs_dose_rate(
 
     finally:
         try:
-            devsim.delete_device(device=device)
+            delete_device_and_mesh(device)
         except Exception:
             pass
 
@@ -429,7 +430,7 @@ def cce_vs_dose_rate(
 
     finally:
         try:
-            devsim.delete_device(device=device2)
+            delete_device_and_mesh(device2)
         except Exception:
             pass
 

@@ -39,14 +39,15 @@ class TestTemperatureCoefficient:
 
         assert result["r_squared"] > 0.9
         assert result["slope"] < 0  # negative trend
-        assert result["unit"] == "%/K"
+        assert result["unit"] == "1/K"  # fraction per kelvin, not %/K (B-13)
 
     def test_current_unit(self):
-        """Current quantities should get pA/K unit."""
+        """Current quantities are 1D current densities: A/cm^2/K (B-13)."""
         T = np.array([300, 310])
         values = np.array([1e-12, 2e-12])
         result = extract_temperature_coefficient(T, values, "I_reverse")
-        assert result["unit"] == "pA/K"
+        assert result["unit"] == "A/cm^2/K"
+        assert result["slope"] == pytest.approx(1e-13)  # no rescaling to pA
 
 
 class TestSweepCCE:
@@ -62,7 +63,8 @@ class TestSweepCCE:
 
         assert isinstance(df, pd.DataFrame)
         assert len(df) == 3  # 3 temperatures x 1 voltage
-        assert set(df.columns) == {"T", "V", "CCE"}
+        assert set(df.columns) == {"T", "V", "CCE", "truncated"}  # B-05
+        assert not df["truncated"].any()
 
         for _, row in df.iterrows():
             assert (

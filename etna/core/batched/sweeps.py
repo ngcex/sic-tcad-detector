@@ -235,7 +235,6 @@ def cce_sweep(
     G,
     T=300.0,
     N_A=DEFAULT_N_A,
-    N_D=None,
     tol=1e-8,
     gummel_tol=1e-6,
     max_step_V=MAX_STEP_V,
@@ -248,8 +247,8 @@ def cce_sweep(
     total from ``N_A`` per device), arithmetic edge average (material.edge_mobilities
     = etna.core.device.add_local_mobility_models); lifetimes from ``srh_lifetime(T)``.
     Before 2026-10-18 both mobilities were one scalar per device at the epi doping
-    ``N_D`` (and before 2026-10-17 holes at ``N_A``, .issues/audit-v7 A-03). ``N_D`` is
-    accepted for backward compatibility and no longer used (the doping is in ``pb``).
+    ``N_D`` (and before 2026-10-17 holes at ``N_A``, .issues/audit-v7 A-03); the ignored
+    ``N_D`` keyword was removed on 2026-10-18 (the doping is in ``pb``).
     The dark Poisson state is walked from 0 V in steps <= ``max_step_V`` (as
     run_cce_tilted_alpha): a cold jump to e.g. -50 V does not converge on low-doped
     devices; the Gummel solve runs only at the requested biases.

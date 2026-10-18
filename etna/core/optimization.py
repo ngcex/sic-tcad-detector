@@ -29,7 +29,6 @@ import multiprocessing.context as _mpc
 import os
 import warnings
 
-import devsim
 import numpy as np
 import pandas as pd
 
@@ -37,7 +36,7 @@ from etna.core.analytical import built_in_potential, full_depletion_voltage_grad
 from etna.core.charge_collection_2d import create_2d_dd_device, cce_lateral_scan
 from etna.core.dark_current import _resolve_self_consistent, setup_tat_model
 from etna.core.devsim_lock import serialized
-from etna.core.devsim_reset import reset_devsim_fully
+from etna.core.devsim_reset import reset_devsim_fully, delete_device_and_mesh
 from etna.core.drift_diffusion import extract_steady_state_current
 from etna.core.microdosimetry import mean_chord_length
 from etna.core.sic_material import SiC4H_Parameters
@@ -297,7 +296,7 @@ def _sweep_one(task):
     finally:
         if device_info is not None:
             try:
-                devsim.delete_device(device=device_info["device_name"])
+                delete_device_and_mesh(device_info["device_name"])
             except Exception:
                 pass
     return record
@@ -798,6 +797,6 @@ def get_dark_current_2d(half_width_um=50.0, V_bias=50.0, **device_kwargs):
     finally:
         if device_info is not None:
             try:
-                devsim.delete_device(device=device_info["device_name"])
+                delete_device_and_mesh(device_info["device_name"])
             except Exception:
                 pass

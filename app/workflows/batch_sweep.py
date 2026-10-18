@@ -34,6 +34,8 @@ last Run click). No module-level side effects -- all work happens in render().
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 import streamlit as st
 
@@ -90,6 +92,21 @@ SIM_FACADES = {
     TEMPERATURE_LABEL: "run_temperature_sweep",
 }
 
+# Facade x parameter pairs that cannot change the result (audit C-02): CCE is a
+# dimensionless ratio of collected to generated charge, so the device area drops
+# out; sweeping it would overlay identical curves. (T x run_temperature_sweep is
+# handled above: T is that facade's x-axis.)
+CCE_FACADES = {"run_cce", "run_temperature_sweep"}
+AREA_INDEPENDENT_PARAMS = {"area_cm2"}
+AREA_NO_OP_TEXT = (
+    "CCE is a dimensionless ratio and does not depend on the device area, so "
+    "every area value would give the same curve. Choose another sweep parameter "
+    "(the area does change the C-V result)."
+)
+NON_POSITIVE_TEXT = (
+    "Values must be finite, positive numbers (no nan, inf, 0 or negatives)."
+)
+
 
 def _reset_default_values() -> None:
     """on_change of the parameter selectbox: load that parameter's defaults."""
@@ -102,9 +119,7 @@ def render() -> None:
     cfg = require_config()
 
     if cfg.half_width_um is not None:
-        st.warning(
-            "This workflow is 1D-only. Set Dimensionality to 1D in the sidebar."
-        )
+        st.warning("This workflow is 1D-only. Set Dimensionality to 1D in the sidebar.")
         st.stop()
 
     param = st.selectbox(
@@ -134,6 +149,9 @@ def render() -> None:
                 "parameter."
             )
             run_disabled = True
+    if param in AREA_INDEPENDENT_PARAMS and SIM_FACADES[sim_label] in CCE_FACADES:
+        st.warning(AREA_NO_OP_TEXT)
+        run_disabled = True
 
     if st.button("Run simulation", disabled=run_disabled):
         try:
@@ -143,6 +161,10 @@ def render() -> None:
             st.stop()
         if len(values) < 1:
             st.warning("Enter at least one value.")
+            st.stop()
+        if not all(math.isfinite(v) and v > 0 for v in values):
+            # every SWEEPABLE_FIELDS entry is a strictly positive physical quantity
+            st.error(NON_POSITIVE_TEXT)
             st.stop()
 
         sim_fn = getattr(etna, SIM_FACADES[sim_label])
@@ -218,8 +240,7 @@ def render() -> None:
         solvers = sorted({r.metadata.get("solver", "") for r in results} - {""})
         if solvers:
             st.caption(
-                "Solver(s) used: "
-                + ", ".join(SOLVER_LABELS.get(x, x) for x in solvers)
+                "Solver(s) used: " + ", ".join(SOLVER_LABELS.get(x, x) for x in solvers)
             )
         label = PARAM_LABELS.get(param, param)
         cc = [r.metadata.get("cross_checked_to_V") for r in results]

@@ -408,6 +408,10 @@ def get_hardness_factor(energy_MeV: float, niel_table: dict | None = None) -> fl
     """Get NIEL hardness factor for a given proton energy.
 
     Uses linear interpolation between table entries for intermediate energies.
+    Outside the table (30-150 MeV for the default) np.interp returns the edge value:
+    the result is kappa(30 MeV) below 30 MeV and kappa(150 MeV) above. That is NOT an
+    extrapolation (proton NIEL in SiC rises steeply below ~30 MeV); a warning is
+    logged once per energy (audit-v7 B-07, open: the API default 5.6 MeV lies there).
 
     Parameters
     ----------
@@ -426,7 +430,25 @@ def get_hardness_factor(energy_MeV: float, niel_table: dict | None = None) -> fl
         niel_table = NIEL_HARDNESS_PROTON_SIC
     energies = sorted(niel_table.keys())
     factors = [niel_table[e] for e in energies]
+    if not (energies[0] <= energy_MeV <= energies[-1]):
+        key = (float(energy_MeV), energies[0], energies[-1])
+        if key not in _WARNED_OUT_OF_TABLE:
+            _WARNED_OUT_OF_TABLE.add(key)
+            edge = energies[0] if energy_MeV < energies[0] else energies[-1]
+            logger.warning(
+                "get_hardness_factor: %g MeV is outside the NIEL table [%g, %g] MeV; "
+                "using kappa(%g MeV) = %g (edge value, not an extrapolation)",
+                energy_MeV,
+                energies[0],
+                energies[-1],
+                edge,
+                niel_table[edge],
+            )
     return float(np.interp(energy_MeV, energies, factors))
+
+
+# (energy, table min, table max) already warned about by get_hardness_factor
+_WARNED_OUT_OF_TABLE: set = set()
 
 
 def scale_to_proton_energy(

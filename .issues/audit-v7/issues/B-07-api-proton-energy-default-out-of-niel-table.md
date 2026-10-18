@@ -3,7 +3,7 @@ id: B-07
 title: run_radiation_damage default proton_energy_MeV=5.6 is outside the NIEL table (30-150 MeV) and silently clamps to kappa(30)
 severity: medium
 category: bug
-status: open
+status: open 2026-10-18 (final-verify: physics default, not changed; 087adb0 only logs the edge-kappa use once and documents it in run_radiation_damage; owner Giada Petringa / INFN-LNS, see B-INDEX 'Physics items left open')
 location: etna/api/simulation.py:451,478 (default, docstring); etna/core/radiation_damage.py:61-66 (table), 407-429 (get_hardness_factor), ~663 (kappa = get_hardness_factor(energy_MeV)); etna/core/generation_profiles.py:235-243 (raises outside range)
 labels: [radiation-damage, api, niel, extrapolation, raw-F7]
 ---

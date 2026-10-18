@@ -866,3 +866,18 @@ class TestMakeSingleDefectParams:
         single = make_single_defect_params()
         assert single.eta_EH67 > 0
         assert single.eta_EH4 > 0
+
+
+def test_hardness_factor_out_of_table_warns_once(caplog):
+    """audit-v7 B-07: outside the NIEL table the edge kappa is used and logged once."""
+    import etna.core.radiation_damage as rd
+
+    rd._WARNED_OUT_OF_TABLE.discard((5.6, 30, 150))
+    with caplog.at_level("WARNING", logger="etna.core.radiation_damage"):
+        assert rd.get_hardness_factor(5.6) == rd.NIEL_HARDNESS_PROTON_SIC[30]
+        assert rd.get_hardness_factor(5.6) == rd.NIEL_HARDNESS_PROTON_SIC[30]
+    assert caplog.text.count("outside the NIEL table") == 1
+    caplog.clear()
+    with caplog.at_level("WARNING", logger="etna.core.radiation_damage"):
+        rd.get_hardness_factor(62.0)
+    assert "outside the NIEL table" not in caplog.text

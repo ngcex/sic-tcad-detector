@@ -3,3 +3,16 @@ primaryColor = "#1F6FEB"
 backgroundColor = "#FFFFFF"
 secondaryBackgroundColor = "#F0F2F6"
 textColor = "#1A1A1A"
+
+[server]
+# Listen on the loopback interface only (audit C-16): the app has no
+# authentication and its solves are CPU-bound, so it must not be reachable from
+# the network by default. For shared use pass `--server.address 0.0.0.0` on the
+# command line and put an authenticating reverse proxy in front of it.
+address = "localhost"
+# Upload cap in MB (Streamlit's default, kept on purpose): the Microdosimetry
+# page's per-step MC CSV is ~70 bytes per step (data/synthetic_mc_events.csv:
+# 776 kB for 11k steps), so a real Geant4 export of a few million steps needs
+# well over 20 MB; with the loopback-only bind above, uploads come only from
+# the local user.
+maxUploadSize = 200

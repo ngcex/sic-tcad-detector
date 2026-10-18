@@ -318,9 +318,9 @@ def _solver_of(res: SimResult) -> str:
 
 
 def _delete_device(name: str) -> None:
-    import devsim
+    from etna.core.devsim_reset import delete_device_and_mesh
 
-    devsim.delete_device(device=name)
+    delete_device_and_mesh(name)
 
 
 def _devices_alive() -> "list[str]":

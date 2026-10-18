@@ -88,7 +88,9 @@ def test_upload_run_caches_spectrum(monkeypatch):
 
     assert at.exception == [], f"page crashed on boot: {at.exception}"
 
-    data = Path("data/synthetic_mc_events.csv").read_bytes()
+    data = (
+        Path(__file__).resolve().parents[1] / "data" / "synthetic_mc_events.csv"
+    ).read_bytes()
     at.file_uploader[0].upload("events.csv", data, "text/csv")
     at.run()
 
@@ -120,4 +122,69 @@ def test_malformed_csv_shows_error_not_crash(monkeypatch):
         at.exception == []
     ), f"page crashed instead of showing st.error: {at.exception}"
     assert len(at.error) >= 1
+    assert "microdosimetry_result" not in at.session_state
+
+
+_FIXTURE = Path(__file__).parent.parent / "data" / "synthetic_mc_events.csv"
+
+
+def _uploaded_page():
+    at = AppTest.from_function(_run_microdosimetry_page)
+    at.session_state["device_config"] = DeviceConfig()
+    at.run()
+    at.file_uploader[0].upload("events.csv", _FIXTURE.read_bytes(), "text/csv")
+    at.run()
+    return at
+
+
+def test_real_pipeline_reads_the_upload_in_memory(monkeypatch):
+    """audit C-17: the REAL run_microdosimetry gets an in-memory stream (no temp file)."""
+    seen = []
+    real = etna.run_microdosimetry
+
+    def spy(cfg, mc_csv_path, **kw):
+        seen.append(type(mc_csv_path).__name__)
+        return real(cfg, mc_csv_path=mc_csv_path, **kw)
+
+    monkeypatch.setattr(etna, "run_microdosimetry", spy)
+    at = _uploaded_page()
+    at.button[0].click()
+    at.run()
+    assert at.exception == []
+    assert seen == ["BytesIO"]
+    expected = real(DeviceConfig(), mc_csv_path=str(_FIXTURE))
+    assert at.session_state["microdosimetry_result"].metadata["y_F"] == (
+        expected.metadata["y_F"]
+    )
+
+
+def test_changed_sensitive_volume_flags_the_cached_spectrum(monkeypatch):
+    """audit C-11: the spectrum depends on page inputs, not the sidebar."""
+    monkeypatch.setattr(etna, "run_microdosimetry", _fake_run_microdosimetry)
+    at = _uploaded_page()
+    at.button[0].click()
+    at.run()
+    assert not any("different page inputs" in (w.value or "") for w in at.warning)
+    at.number_input(key="micro_sv_t").set_value(20.0)
+    at.run()
+    stale = [w.value for w in at.warning if "different page inputs" in (w.value or "")]
+    assert stale and "sensitive-volume thickness" in stale[0]
+
+
+def test_failed_rerun_clears_the_previous_spectrum(monkeypatch):
+    """audit C-11 (b): a failed run does not leave the old spectrum on screen."""
+    monkeypatch.setattr(etna, "run_microdosimetry", _fake_run_microdosimetry)
+    at = _uploaded_page()
+    at.button[0].click()
+    at.run()
+    assert "microdosimetry_result" in at.session_state
+
+    def _bad(cfg, mc_csv_path, **kw):
+        raise ValueError("the MC events CSV contains no events")
+
+    monkeypatch.setattr(etna, "run_microdosimetry", _bad)
+    at.button[0].click()
+    at.run()
+    assert at.exception == []
+    assert any("no events" in (e.value or "") for e in at.error)
     assert "microdosimetry_result" not in at.session_state

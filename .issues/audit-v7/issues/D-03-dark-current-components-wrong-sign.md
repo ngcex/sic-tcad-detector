@@ -3,7 +3,7 @@ id: D-03
 title: Dark-current decomposition components have the opposite sign to I_total; I_SRH + I_TAT + I_SRV ≈ -I_total
 severity: medium
 category: bug
-status: open
+status: fixed 2026-10-18 (final-abd 02a0222: J_SRH/J_TAT/J_SRV = -q*integral(U), generation is a positive reverse current; the app CSV already exports only I_total. Evidence: pytest tests/test_dark_current.py -> 29 passed, signed I_SRH+I_TAT+I_SRV == I_total within 0.5 % (-60 V) / 1.5 % (-10 V), I_TAT > 0)
 location: etna/core/dark_current.py:353-428 (extract_dark_current_components, lines ~374-390); app/workflows/dark_current.py:118-137; etna/core/dark_current.py:1234 (plot uses np.abs)
 labels: [dark-current, sign-convention, app, csv-export]
 source: raw-D F3 (overlaps core-physics slice)

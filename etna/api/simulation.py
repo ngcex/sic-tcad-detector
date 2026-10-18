@@ -9,6 +9,8 @@ path (`cv_sweep` / `cce_vs_bias`); the other facades are thin adapters over
 from __future__ import annotations
 
 import logging
+import os
+from typing import IO
 
 import numpy as np
 
@@ -33,7 +35,7 @@ from etna.core.device import (
     table_sensitive_end_cm,
     table_sensitive_end_doping,
 )
-from etna.core.devsim_reset import reset_devsim_fully
+from etna.core.devsim_reset import reset_devsim_fully, delete_device_and_mesh
 from etna.core.drift_diffusion import ramp_bias
 from etna.core.flash_recombination import cce_vs_dose_rate
 from etna.core.mc_coupling import load_mc_events_csv
@@ -753,7 +755,7 @@ def _run_cv_devsim(config: DeviceConfig, bias_array) -> SimResult:
     finally:
         # Ensure no device leaks after run_cv returns, regardless of outcome.
         try:
-            devsim.delete_device(device=device_info["device_name"])
+            delete_device_and_mesh(device_info["device_name"])
         except Exception:
             logger.warning(
                 "run_cv: delete_device(%r) failed, falling back to full reset",
@@ -1100,7 +1102,7 @@ def run_field(config: DeviceConfig, bias_V: float = -50.0) -> SimResult:
     finally:
         # Ensure no device leaks after run_field returns, regardless of outcome.
         try:
-            devsim.delete_device(device=device_info["device_name"])
+            delete_device_and_mesh(device_info["device_name"])
         except Exception:
             logger.warning(
                 "run_field: delete_device(%r) failed, falling back to full reset",
@@ -1178,8 +1180,8 @@ def run_cce(
         irradiation), which is a stiffer solve that empirically stops
         converging around -50 to -60V — hence the extra margin vs run_cv/
         run_field's -50.0 default. See the "truncated" / "requested_v_stop"
-        metadata note above for what happens if a caller requests a deeper
-        v_stop than converges.
+        entries under Returns below for what happens if a caller requests a
+        deeper v_stop than converges.
     n_points : int
         Number of bias points in the sweep. Default 30.
 
@@ -1393,7 +1395,10 @@ def run_radiation_damage(
         Reverse bias (V, conventional-negative sign). Default -40.0.
     proton_energy_MeV : float
         Incident proton energy (MeV) used for the NIEL damage model.
-        Default 5.6.
+        Default 5.6. CAUTION: the NIEL hardness table covers 30-150 MeV only, so
+        5.6 MeV uses kappa(30 MeV) (edge value, logged); the result is that of a
+        30 MeV hardness factor labelled 5.6 MeV (audit-v7 B-07, open: physics
+        owner). Pass 30-150 MeV for an in-table energy.
 
     Returns
     -------
@@ -1848,7 +1853,7 @@ def run_dark_current(
         # Ensure no device leaks after run_dark_current returns, regardless
         # of outcome (bucket-b finally block copied from run_cv).
         try:
-            devsim.delete_device(device=device_info["device_name"])
+            delete_device_and_mesh(device_info["device_name"])
         except Exception:
             logger.warning(
                 "run_dark_current: delete_device(%r) failed, falling back to "
@@ -1921,7 +1926,9 @@ def _legacy_dark_validity(config: DeviceConfig, voltages) -> dict:
         )
     else:
         past = None
-        note = "reach-through unknown (engine unavailable); " + LEGACY_DARK_VALIDITY_NOTE
+        note = (
+            "reach-through unknown (engine unavailable); " + LEGACY_DARK_VALIDITY_NOTE
+        )
     return {"reach_through_V": rt, "past_reach_through": past, "validity_note": note}
 
 
@@ -2014,7 +2021,7 @@ def run_transient(
 
 def run_microdosimetry(
     config: DeviceConfig,
-    mc_csv_path: str,
+    mc_csv_path: "str | os.PathLike | IO",
     sv_thickness_um: float = 10.0,
     sv_width_um: float = 150.0,
 ) -> SimResult:
@@ -2032,10 +2039,11 @@ def run_microdosimetry(
     The per-step -> per-event aggregation (sum of edep grouped by event_id)
     has no existing core analog and is defined explicitly here.
 
-    Security note: `mc_csv_path` is a caller-supplied LOCAL filesystem path
-    parsed by pandas `read_csv` inside load_mc_events_csv — no eval, no
-    pickle, no code execution or binary deserialization (see the phase threat
-    model, T-37-02-V5). It is the only file-input surface in this phase.
+    Security note: `mc_csv_path` is a caller-supplied LOCAL filesystem path or
+    an in-memory file-like object (the app passes the upload as io.BytesIO, no
+    temp file), parsed by pandas `read_csv` inside load_mc_events_csv — no
+    eval, no pickle, no code execution or binary deserialization (see the
+    phase threat model, T-37-02-V5).
 
     Parameters
     ----------
@@ -2043,13 +2051,18 @@ def run_microdosimetry(
         Device configuration. Carried through on the SimResult for
         provenance; the microdosimetric spectrum itself depends only on the
         MC events and the sensitive-volume geometry below.
-    mc_csv_path : str
-        Path to the MC-events CSV (columns event_id, x, y, z, edep; edep in
-        keV, positions in cm — load_mc_events_csv's default column map).
+    mc_csv_path : str, os.PathLike or file-like
+        Path to (or open binary/text stream of) the MC-events CSV (columns
+        event_id, x, y, z, edep; edep in keV, positions in cm —
+        load_mc_events_csv's default column map).
     sv_thickness_um : float
-        Sensitive-volume thickness (um). Default 10.0.
+        Sensitive-volume thickness (um), finite and > 0. Default 10.0.
     sv_width_um : float
-        Sensitive-volume width (um). Default 150.0.
+        Sensitive-volume width (um), finite and > 0. Default 150.0. Currently has NO effect:
+        mean_chord_length uses the 3D Cauchy form 4V/S only when both width and
+        depth are given, so with width alone it returns the slab value
+        l_bar = 2 * sv_thickness_um (audit-v7 D-15; DESIGN-2's 100 um SV gives the
+        same l_bar). Whether to use a finite-SV l_bar is open (physics owner).
 
     Returns
     -------
@@ -2058,11 +2071,40 @@ def run_microdosimetry(
         y=y*d(y) (the dose-weighted representation per design spec 3.4),
         metadata contains "y_F", "y_D" (frequency-/dose-mean lineal energy),
         "f_y" (frequency distribution), and "l_bar_um" (mean chord length).
+
+    Raises
+    ------
+    ValueError
+        Non-positive / non-finite sensitive-volume dimensions; a CSV with no
+        events, non-finite or negative edep, or no event depositing energy
+        (instead of a silent all-zero or NaN spectrum). Malformed CSVs raise
+        ValueError / KeyError from the loader.
     """
+    # Reject meaningless inputs instead of returning a plausible-looking empty /
+    # NaN spectrum (audit C-09). Written as `not (x > 0)` so NaN is rejected too.
+    for name, value in (
+        ("sv_thickness_um", sv_thickness_um),
+        ("sv_width_um", sv_width_um),
+    ):
+        if not (np.isfinite(value) and value > 0):
+            raise ValueError(f"{name} must be finite and > 0 (got {value!r})")
+
     # Bucket-c: no TCAD solve at all. Load per-step events, aggregate to
     # per-event collected energy (this sum-by-event_id has no core analog).
     events = load_mc_events_csv(mc_csv_path)
+    if events.empty:
+        raise ValueError("the MC events CSV contains no events (header only?)")
+    edep = events["edep_keV"].to_numpy(dtype=float)
+    if not np.all(np.isfinite(edep)):
+        raise ValueError("the MC events CSV has non-finite energy deposits (edep)")
+    if np.any(edep < 0):
+        raise ValueError(
+            f"the MC events CSV has {int(np.sum(edep < 0))} negative energy "
+            "deposits (edep must be >= 0 keV)"
+        )
     collected_energies_keV = events.groupby("event_id")["edep_keV"].sum().to_numpy()
+    if not np.any(collected_energies_keV > 0):
+        raise ValueError("no event in the MC events CSV deposits any energy")
 
     l_bar = mean_chord_length(sv_thickness_um, sv_width_um=sv_width_um)
     spec = lineal_energy_spectrum(collected_energies_keV, l_bar)

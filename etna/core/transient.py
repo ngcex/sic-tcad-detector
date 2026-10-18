@@ -46,6 +46,7 @@ from etna.core.solver_tol import (
     RELAXED_ABS_ERROR,
     RELAXED_REL_ERROR,
 )
+from etna.core.devsim_reset import delete_device_and_mesh
 
 logger = logging.getLogger(__name__)
 
@@ -781,7 +782,7 @@ def transient_cce_vs_dose_rate(
             )
     finally:
         try:
-            devsim.delete_device(device=device)
+            delete_device_and_mesh(device)
         except Exception:
             pass
 

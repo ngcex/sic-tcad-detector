@@ -125,9 +125,9 @@ def compute_ni(T=300):
 
     Uses Varshni bandgap model and Boltzmann statistics for NC, NV.
 
-    Note: Not used in the v1.0 pipeline, which uses the fixed
-    n_i_300 = 5e-9 cm^-3 from SiC4H_Parameters. Temperature-dependent
-    n_i will be wired into the pipeline in v2 (ADV-02).
+    Used by intrinsic_concentration(T, params), which scales n_i(T) for every
+    device build (etna.core.device), and pinned at 300 K against the tabulated
+    N_C/N_V by tests/test_material.py.
 
     Parameters
     ----------

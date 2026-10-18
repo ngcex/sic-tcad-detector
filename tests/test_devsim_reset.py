@@ -145,3 +145,30 @@ def test_solve_still_works_after_reset_tests():
 
     info = create_dd_device(device_name="post_reset_canary")
     assert info["dd_initialized"]
+
+
+def test_delete_device_and_mesh_removes_the_mesh():
+    """audit-v7 A-09: devsim.delete_device leaves {name}_mesh alive; the helper does not."""
+    devsim = pytest.importorskip("devsim")
+    from etna.core.device import create_sic_device
+    from etna.core.devsim_reset import delete_device_and_mesh
+
+    info = create_sic_device(device_name="a09_helper")
+    assert "a09_helper_mesh" in devsim.get_mesh_list()
+    delete_device_and_mesh(info["device_name"])
+    assert "a09_helper" not in devsim.get_device_list()
+    assert "a09_helper_mesh" not in devsim.get_mesh_list()
+    with pytest.raises(devsim.error):
+        devsim.create_device(mesh="a09_helper_mesh", device="a09_reuse")
+
+
+def test_api_call_leaves_no_mesh_behind():
+    """A per-call API device is deleted with its mesh (run_dark_current, A-09)."""
+    devsim = pytest.importorskip("devsim")
+    from etna.api.device import DeviceConfig
+    from etna.api.simulation import run_dark_current
+
+    res = run_dark_current(DeviceConfig(), v_start=-10.0, v_stop=-20.0, n_points=2)
+    assert res.metadata["solver"] == "devsim"  # a devsim mesh was really built
+    assert list(devsim.get_mesh_list()) == []
+    assert list(devsim.get_device_list()) == []

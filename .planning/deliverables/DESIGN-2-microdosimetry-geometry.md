@@ -31,27 +31,32 @@ that forms the collecting contact — Schottky (FBK) or junction-barrier-Schottk
 
 | Parameter                           | Recommended value                                 | Basis / note                                                            |
 | ----------------------------------- | ------------------------------------------------- | ----------------------------------------------------------------------- |
-| SV depth (epi thickness)            | **10 µm** (baseline)                              | calibrated config (profile fitted to measured W)                        |
+| SV depth (epi thickness)            | **10 µm** (baseline)                              | default stack (profile fitted to the digitised measured C-V)            |
 | SV half-width                       | **50 µm** (→ 100 µm SV)                           | baseline choice only; NOT discriminated by the model (no edge physics)  |
-| Graded epi donor profile N_D(y)     | N_D_junction 2.93e15, N_D_bulk 8.82e13, L 0.99 µm | calibrated (Phase 26)                                                   |
-| Operating reverse bias              | **−15 to −20 V**                                  | ≥ 1.2 × V_fd (≈ 13 V); see note on the ~−50 V model limit below        |
-| Full-depletion voltage V_fd (10 µm) | **≈ 10.5 V**                                      | calibrated profile (assumes p-n electrostatics)                         |
+| Graded epi donor profile N_D(y)     | N_D_junction 8.19e15, N_D_bulk 3.38e13, L 0.46 µm; graded n⁻/n⁺ transition over the last 1.14 µm to 4.5e16 | C-V fit (DEFAULT_STACK; N_D_bulk below the documented 0.5–1e14; transition not from SIMS) |
+| Device stack                        | p⁺ 0.3 µm / n⁻ epi / n⁺ substrate                 | owner-confirmed; cathode on the n⁺                                      |
+| Operating reverse bias              | **≥ −10 V** (practical; gate ≥ 3.3 V)             | 1.2 × V_fd = 3.28 V; reach-through 3.10 V; −10 V keeps margin for the fit's doping uncertainty (DESIGN-1 §2) |
+| Full-depletion voltage V_fd (10 µm) | **≈ 2.7 V**                                       | analytic graded profile to the transition start (assumes p-n electrostatics) |
 | Validity gate                       | \|V_bias\| ≥ 1.2 × V_fd and CCE ≥ 0.95             | Mj-3 validity gate; 20 % margin = ±20 % doping tolerance (DESIGN-1)     |
 
 **Alternative SV depths (model V_fd, p-n electrostatics):**
 
 | Epi thickness | V_fd        | Recommended operating bias | Note                                         |
 | ------------- | ----------- | -------------------------- | -------------------------------------------- |
-| 5 µm          | ~4.1 V      | ≥ −10 V                    | lowest-bias option; epi holds ~42 % of the alpha's pairs |
-| **10 µm**     | **~10.5 V** | **−15 to −20 V**           | **baseline (calibrated profile)**            |
-| 20 µm         | ~35 V       | ≥ −42 V (1.2 × V_fd)       | converges; closer to the model's ~−50 V solver wall |
+| 5 µm          | ~0.7 V      | ≥ −10 V                    | lowest-bias option; epi holds ~42 % of the alpha's pairs |
+| **10 µm**     | **~2.7 V**  | **≥ −10 V** (gate 3.3 V)   | **baseline (C-V-fitted profile)**            |
+| 20 µm         | ~11.5 V     | ≥ −14 V (1.2 × V_fd)       | converges (no wall with the n⁺ substrate)    |
 
-> **The ~−50 V limit is a model/solver artefact, not a rated or physical limit.**
-> The modelled ohmic cathode sits directly on the n⁻ epi (no n⁺ substrate); past
-> reach-through (at V_fd) the field at that contact grows until devsim stops
-> converging (at a fixed contact-cell field ≈ 4.7 × 10⁴ V/cm). Configurations
-> beyond it are reported as NaN with `failure_reason` "outside model validity". It
-> is not punch-through (reach-through is at V_fd) and not breakdown.
+(5 and 20 µm carry the 10 µm device's fitted profile and 1.14 µm transition: an
+extrapolation. With the previous abrupt-n⁺ default the three V_fd were 4.0 / 9.9 / 33 V.)
+
+> **No solver wall on the default stack.** The cathode sits on the n⁺ substrate and
+> devsim converges to ≥ −100 V in 2D. The ~−50 V limit of earlier versions belonged to
+> the legacy model (ohmic cathode directly on the n⁻ epi, `etna.legacy_config()` /
+> `microdosimetric_sweep(nplus_thickness_cm=None)`): there the contact-cell field grows
+> past reach-through until devsim stops converging (≈ 4.7 × 10⁴ V/cm) and such rows are
+> NaN with `failure_reason` "outside model validity". Never punch-through, never
+> breakdown.
 
 > **Validity gate (audit Mj-3):** only configurations that are _fully depleted with
 > margin_ (|V_bias| ≥ 1.2 × V_fd, covering the ±20 % doping tolerance) **and** above
@@ -103,8 +108,8 @@ Specifically NOT provided and to be supplied/measured by the fab:
   Hurkx enhancement inactive below ~4.5 MV/cm; assumed n_i(T) temperature scaling)
   and does not apply to a Schottky/JBS junction. The fab must measure leakage for
   its junction type.
-- **No rated breakdown / max voltage.** The ~−50 V limit is a model/solver artefact
-  (cathode contact on the n⁻ epi, no n⁺ substrate), not breakdown and not a rating.
+- **No rated breakdown / max voltage.** No breakdown model. (The ~−50 V convergence
+  limit of the legacy model, cathode on the n⁻ epi, was a solver artefact, not a rating.)
 - **Tissue-equivalence (κ) and microdosimetric spectra are NOT in this spec.**
   The tissue-equivalence correction depends on stopping-power data we have flagged
   as not foundry-ready (Phase 27 work). This document is geometry only; it makes

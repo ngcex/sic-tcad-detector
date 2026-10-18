@@ -84,6 +84,8 @@ code(
 import sys
 sys.path.insert(0, '..')
 import os
+FIG_DIR = os.path.abspath(os.environ.get("ETNA_FIGURE_DIR", "figures"))  # before the chdir: notebooks/figures/ (untracked)
+os.makedirs(FIG_DIR, exist_ok=True)
 os.chdir('..')
 
 %matplotlib inline
@@ -818,8 +820,7 @@ else:
              ha='center', va='center', fontsize=14)
 
 plt.tight_layout()
-os.makedirs('figures', exist_ok=True)
-plt.savefig('figures/fig19_1_cce_lateral_profiles.png', bbox_inches='tight')
+plt.savefig(os.path.join(FIG_DIR, 'fig19_1_cce_lateral_profiles.png'), bbox_inches='tight')
 plt.show()
 print("Figure 1 saved: figures/fig19_1_cce_lateral_profiles.png")
 """
@@ -960,7 +961,7 @@ ax.legend(fontsize=10)
 ax.grid(True, alpha=0.3, which='both')
 
 plt.tight_layout()
-plt.savefig('figures/fig19_2_yd_spectra_overlay.png', bbox_inches='tight')
+plt.savefig(os.path.join(FIG_DIR, 'fig19_2_yd_spectra_overlay.png'), bbox_inches='tight')
 plt.show()
 print("Figure 2 saved: figures/fig19_2_yd_spectra_overlay.png")
 
@@ -1014,7 +1015,7 @@ ax.legend(fontsize=12)
 ax.grid(True, alpha=0.3, axis='y')
 
 plt.tight_layout()
-plt.savefig('figures/fig19_3_yF_yD_bar_chart.png', bbox_inches='tight')
+plt.savefig(os.path.join(FIG_DIR, 'fig19_3_yF_yD_bar_chart.png'), bbox_inches='tight')
 plt.show()
 print("Figure 3 saved: figures/fig19_3_yF_yD_bar_chart.png")
 """
@@ -1110,7 +1111,7 @@ ax.set_title('Structure comparison matrix (colour = rank within column; differen
 
 plt.colorbar(im, ax=ax, label='Relative rank within column (normalized)')
 plt.tight_layout()
-plt.savefig('figures/fig19_4_comparison_matrix.png', bbox_inches='tight')
+plt.savefig(os.path.join(FIG_DIR, 'fig19_4_comparison_matrix.png'), bbox_inches='tight')
 plt.show()
 print("Figure 4 saved: figures/fig19_4_comparison_matrix.png")
 """
@@ -1194,7 +1195,7 @@ ax.legend(fontsize=11)
 ax.grid(True, alpha=0.3, which='both')
 
 plt.tight_layout()
-plt.savefig('figures/fig19_5_tissue_equivalence.png', bbox_inches='tight')
+plt.savefig(os.path.join(FIG_DIR, 'fig19_5_tissue_equivalence.png'), bbox_inches='tight')
 plt.show()
 
 print(f"\\n[PLACEHOLDER] SiC:    y_D = {spec_planar['y_D']:.3f} keV/um")

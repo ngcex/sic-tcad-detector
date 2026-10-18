@@ -770,7 +770,13 @@ def iv_sweep(
 
     For convergence stability, voltages are applied incrementally from the
     current bias state using small internal steps (V_step_forward for V>0,
-    V_step_reverse for V<0).
+    V_step_reverse for V<0). The ramp starts from the contact's live bias
+    parameter, as ramp_bias does, so a device already biased (ramp_bias, an
+    earlier sweep) is not jumped back from 0 V in one step (audit-v7 A-13).
+
+    Sign: V is the bias of ``contact``. On the default "anode" (p+ side) a
+    positive V is forward bias and a negative V reverse bias; on "cathode" the
+    signs are the opposite (cv_sweep and ramp_bias work on the cathode).
 
     Parameters
     ----------
@@ -789,8 +795,10 @@ def iv_sweep(
     -------
     result : dict
         Dictionary with:
-        - "voltages": numpy array of applied voltages (V)
-        - "currents": numpy array of currents (A/cm^2)
+        - "voltages": numpy array of the voltages reached (V)
+        - "currents": numpy array of currents (A/cm^2), same length
+        - "truncated": True if a ramp step failed (strict and relaxed solve)
+          before the end of V_range; the converged prefix is returned
     """
     device = device_info["device_name"]
     V_range = np.asarray(V_range, dtype=float)
@@ -798,9 +806,12 @@ def iv_sweep(
     voltages_out = []
     currents_out = []
 
-    # Track current bias state
-    current_V = 0.0
+    # Track the bias state, starting from the live contact bias (A-13)
     bias_name = simple_physics.GetContactBiasName(contact)
+    try:
+        current_V = float(devsim.get_parameter(device=device, name=bias_name))
+    except devsim.error:
+        current_V = 0.0
 
     for V_target in V_range:
         # Determine step size based on direction
@@ -847,6 +858,7 @@ def iv_sweep(
                         return {
                             "voltages": np.array(voltages_out),
                             "currents": np.array(currents_out),
+                            "truncated": True,
                         }
 
         # Extract current at the target voltage
@@ -860,4 +872,5 @@ def iv_sweep(
     return {
         "voltages": np.array(voltages_out),
         "currents": np.array(currents_out),
+        "truncated": False,
     }

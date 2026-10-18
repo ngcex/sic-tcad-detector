@@ -4,7 +4,7 @@ source: raw-C F17
 title: Microdosimetry upload round-trips through a disk tempfile unnecessarily
 severity: info
 category: improvement
-status: open
+status: fixed
 location:
   - app/workflows/microdosimetry.py:65-83
   - etna/api/simulation.py:843-847 (signature `mc_csv_path: str`), :892
@@ -74,3 +74,8 @@ returns the same y_F as the file-path call. The existing microdosimetry AppTests
 ## Effort
 
 S
+
+## Status 2026-10-18 (final-c): fixed (ae5a5b1)
+
+- run_microdosimetry accepts `str | os.PathLike | IO` (load_mc_events_csv only calls pd.read_csv on it); the page passes `io.BytesIO(uploaded.getvalue())`; tempfile/os code and the finally cleanup removed.
+- Evidence: `uv run pytest -q tests/test_api_microdosimetry.py tests/test_app_microdosimetry_page.py` pass (test_in_memory_stream_gives_the_same_spectrum_as_the_path: identical y_F, y_D, y; test_real_pipeline_reads_the_upload_in_memory: the real facade receives a BytesIO); `grep -n tempfile app/workflows/microdosimetry.py` -> none.

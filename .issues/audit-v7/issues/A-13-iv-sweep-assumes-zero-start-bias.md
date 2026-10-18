@@ -3,7 +3,7 @@ id: A-13
 title: iv_sweep assumes the device starts at 0 V instead of reading the live contact bias
 severity: low
 category: improvement
-status: open
+status: fixed 2026-10-18 (final-abd d13ec97: iv_sweep starts from devsim.get_parameter(<contact>_bias), returns truncated, docstring states the anode sign. Evidence: pytest tests/test_iv_sweep_balanced.py::test_iv_sweep_starts_from_the_live_bias -> the only anode_bias set after ramp_bias(-10) is -9.5)
 location: etna/core/drift_diffusion.py:~360-361 (current_V = 0.0 in iv_sweep); contrast ~276-281 (ramp_bias reads devsim.get_parameter)
 labels: [audit-v7, slice-A, solver, convergence]
 source: raw-A-core-solvers.md F13

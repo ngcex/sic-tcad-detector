@@ -129,7 +129,6 @@ def main():
             G,
             T=kw.get("T", 300.0),
             N_A=kw.get("N_A", 1e19),
-            N_D=kw.get("N_D"),
         )
         nc = len(c["cce_values"])
         dc = np.max(np.abs(ce.cce[:nc, 0] - c["cce_values"]))

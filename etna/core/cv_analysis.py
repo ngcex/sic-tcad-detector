@@ -42,6 +42,7 @@ from etna.core.poisson import (
 from etna.core.radiation_damage import compute_damaged_params, compute_phi_crit
 from etna.core.sic_material import srh_lifetime
 from etna.core.device import DEFAULT_STACK as _STACK
+from etna.core.devsim_reset import delete_device_and_mesh
 
 logger = logging.getLogger(__name__)
 
@@ -217,7 +218,8 @@ def cv_sweep(device_info, V_range, eps_r=9.7, area=1.0):
     device_info : dict
         Device info dict (DD equations must be set up via create_dd_device).
     V_range : array_like
-        Array of reverse bias voltages (V, should be <= 0 for reverse bias).
+        Bias voltages in the conventional sign (V): negative = reverse bias. A
+        positive value is not rejected; it applies forward bias.
     eps_r : float
         Relative permittivity, used only for "W_from_C" (C itself comes from the
         device's own Permittivity). Default 9.7.
@@ -324,9 +326,13 @@ def cv_sweep(device_info, V_range, eps_r=9.7, area=1.0):
             # reaches the back contact and the DD solver's Newton iteration
             # stops converging. This is a physical sweep endpoint, not a
             # bug — stop here and return the converged portion.
+            # V_target is the first bias NOT reached (audit D-10 wording)
+            last = (
+                f"{solved_voltages[-1]:.2f}V" if solved_voltages else "no bias point"
+            )
             logger.warning(
-                f"cv_sweep: stopped sweep at V={V_target:.2f}V "
-                f"(requested down to {V_range.min():.2f}V)"
+                f"cv_sweep: could not reach V={V_target:.2f}V; sweep stopped after "
+                f"{last} (requested down to {V_range.min():.2f}V)"
             )
             truncated = True
             break
@@ -450,7 +456,8 @@ def cv_at_fluence(
     fluence : float
         Proton fluence (protons/cm^2).
     V_range : array_like
-        Array of reverse bias voltages (V, should be <= 0 for reverse bias).
+        Bias voltages in the conventional sign (V): negative = reverse bias. A
+        positive value is not rejected; it applies forward bias.
     area : float
         Junction area (cm^2). Default 1.0.
     epi_thickness_cm : float
@@ -531,7 +538,7 @@ def cv_at_fluence(
         pristine_N_D_profile = ref_donors[epi_mask]
     finally:
         try:
-            devsim.delete_device(device=ref_name)
+            delete_device_and_mesh(ref_name)
         except Exception:
             pass
 
@@ -630,7 +637,7 @@ def cv_at_fluence(
         raise
     finally:
         try:
-            devsim.delete_device(device=dev_name)
+            delete_device_and_mesh(dev_name)
         except Exception:
             pass
 

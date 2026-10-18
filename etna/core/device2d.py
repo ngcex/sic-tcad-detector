@@ -650,7 +650,8 @@ def calibrate_graded_doping_2d(
         Forwarded to ``create_2d_dd_device`` for every trial build.
     x0 : array_like or None
         Initial simplex guess ``[N_D_junction, N_D_bulk, L_transition]``.
-        Default ``[2.9e15, 8.5e13, 1e-4]`` (the v3.0 1D-calibrated values).
+        Default ``[2.9e15, 8.5e13, 1e-4]``: a starting guess for the optimizer
+        (rounded v3.0 1D values), not the calibrated stack (DEFAULT_STACK).
     maxiter : int
         Maximum Nelder-Mead iterations.
     V_target_for_convergence_only : float

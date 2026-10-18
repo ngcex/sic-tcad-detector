@@ -154,13 +154,13 @@ for row in report.rows():
 
 Every facade returns a `SimResult` (`etna/api/results.py`):
 
-| field      | meaning                                                                                                                 |
-| ---------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `config`   | the `DeviceConfig` used                                                                                                 |
-| `sim_type` | `"cv"`, `"cce"`, `"field"`, `"damage"`, `"dark_current"`, `"temperature"`, `"flash"`, `"transient"`, `"microdosimetry"` |
-| `x`, `y`   | primary axis and output (numpy arrays; see each facade in section 6)                                                    |
-| `metadata` | dict: solver provenance (section 7) plus facade-specific arrays and scalars                                             |
-| `mesh`     | `MeshData` (node coordinates in cm, node values, regions, contacts) for `run_field`; `None` otherwise                   |
+| field      | meaning                                                                                                                                                                                                          |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `config`   | the `DeviceConfig` used                                                                                                                                                                                          |
+| `sim_type` | `"cv"`, `"cce"`, `"field"`, `"damage"`, `"dark_current"` (x = bias), `"temperature"`, `"flash"`, `"transient"`, `"microdosimetry"`; the app's Dark Current page builds a `"dark_current_vs_T"` aggregate (x = T) |
+| `x`, `y`   | primary axis and output (numpy arrays; see each facade in section 6)                                                                                                                                             |
+| `metadata` | dict: solver provenance (section 7) plus facade-specific arrays and scalars                                                                                                                                      |
+| `mesh`     | `MeshData` (node coordinates in cm, node values, regions, contacts) for `run_field`; `None` otherwise                                                                                                            |
 
 `run_all` returns a `Report` (`etna/api/run_all.py`). It provides `report.ok`,
 `report.rows()` (one summary dict per section), `report.get("cv").result` (the
@@ -361,7 +361,7 @@ with a reason (the 3x point always; `compensation_fluence` is a lower bound on t
 threshold), showing where the model ends. Explicit grids are used as given. The
 NIEL kappa factors are placeholders, so read only the relative shape.
 Also, the facade's default `proton_energy_MeV=5.6` lies below the NIEL table, and kappa
-is silently clamped to its 30 MeV value. This is audit B-07, open at this version. The
+is clamped to its 30 MeV value (logged once per energy; an edge value, not an extrapolation). This is audit B-07, open at this version. The
 Radiation Damage page offers 30, 62, 70 and 150 MeV only.
 
 ```python
@@ -381,7 +381,8 @@ Returns the total reverse leakage. `x` is bias (V), `y` is the total current (A,
 `area_cm2`). Metadata:
 
 - `I_SRH`, `I_TAT`, `I_SRV` (a model partition, not a measured decomposition; I_SRV is
-  zero at the ohmic cathode)
+  zero at the ohmic cathode). They carry the sign of I_total (generation positive):
+  I_SRH + I_TAT + I_SRV ≈ I_total, with I_SRH a tiny negative net-recombination term
 - `N_t`, `E_t`, `area_cm2`
 - `truncated`, `reached_v_stop`
 - `reach_through_V`, `past_reach_through`, `validity_note` (filled for the legacy model
@@ -433,7 +434,11 @@ print(f.y.round(6), t.metadata["transient_cce_raw"].round(6))
 Pure data pipeline (no devsim). It reads Monte Carlo per-step depositions from a CSV
 (columns `event_id, x, y, z, edep`; edep in keV, positions in cm) and returns the lineal
 energy spectrum: `x` is y (keV/µm), `y` is y·d(y). Metadata holds `y_F`, `y_D`, `f_y` and
-`l_bar_um` (mean chord length). `config` is carried for provenance only.
+`l_bar_um` (mean chord length). `config` is carried for provenance only. `mc_csv_path` may be
+a path or a file-like object (e.g. `io.BytesIO`). It raises `ValueError` for non-positive or
+non-finite sensitive-volume dimensions, a CSV with no events, non-finite or negative `edep`,
+or no event depositing energy. `sv_width_um` currently has no effect: l̄ = 2·`sv_thickness_um`
+(slab approximation; a finite-SV 4V/S chord is an open physics choice, audit D-15).
 
 ```python
 from etna import DeviceConfig, run_microdosimetry
@@ -534,10 +539,11 @@ Which solver runs:
   5-30 µm, n+ and transition boxes). Otherwise devsim runs.
 - **devsim only**: 1D `run_field`, `run_dark_current`, `run_flash_recombination`,
   `run_transient`, and any engine fallback.
-- **Fluence sweeps**: the core `cce_vs_fluence` uses the batched engine where its box
-  allows (`tests/test_fluence_engine.py`). Note: at this version `run_radiation_damage`
-  labels its result `solver="devsim"` regardless (a known labelling gap in
-  `etna/api/simulation.py`). Do not read that label as evidence of which path ran.
+- **Fluence sweeps**: `run_radiation_damage` (through the core `cce_vs_fluence`) uses the
+  batched engine where its box allows (`tests/test_fluence_engine.py`) and devsim
+  otherwise. `metadata["solver"]` names the solver that ran the points and
+  `metadata["solver_per_point"]` records it per point (empty for the NaN points beyond
+  compensation).
 
 The **box** is a statement about where the two solvers agree. It is not a statement
 about physical validity: a device inside the box is solved the same way by both codes,
@@ -643,8 +649,10 @@ does fit, but it is lab-only (`lab/microdosimeter/notes/LOG.md` §9).
 uv run streamlit run app/main.py --server.address localhost
 ```
 
-Without `--server.address localhost` Streamlit listens on all network interfaces, with no
-authentication (audit C-16). Keep the flag on shared networks. One solve at a time:
+The committed `.streamlit/config.toml` binds the app to localhost when it is launched from
+the repo root (Streamlit reads the config of the launch directory); the flag makes that
+explicit from any directory. The app has no authentication: for shared use pass
+`--server.address 0.0.0.0` behind an authenticating reverse proxy (audit C-16). One solve at a time:
 devsim state is process-global, and the facades serialise access through a lock.
 
 **Sidebar** (`app/components/device_sidebar.py`). It is rendered on every page; the
@@ -681,6 +689,18 @@ header carries solver, domain, config and version.
 | Microdosimetry          | `run_microdosimetry`                                                            | MC events CSV upload, SV thickness (10 µm) and width                                                                                                               | y·d(y), y_F / y_D, CSV. Independent of the sidebar                                                                                                                                                                                                                                               |
 | Batch Sweep             | `ParametricSweep`                                                               | one of epi thickness, p+ thickness, N_A, N_D junction, N_D bulk, transition length, T, area; comma-separated values; facade (CCE vs bias, C-V, CCE vs temperature) | overlaid curves, bulk CSV, per-value failures listed                                                                                                                                                                                                                                             |
 | Export                  | engineering files (section 10)                                                  | spec sheet (reuses the Run All report when it matches); profile bias (default -30 V); animation button                                                             | spec sheet JSON/CSV/Markdown/PDF; cross-section SVG/PNG; mesh/profile CSV and VTK (ParaView/VisIt); two 480p manim MP4s (needs `viz`); schematic layout SVG and GDSII (needs `gdstk`) with the disclaimer "schematic, not a fabrication layout; missing dimensions must come from the mask data" |
+
+Page details not in the table:
+
+- The Field Map viewer draws the anode/cathode contacts (`MeshData.contacts`) as lines at
+  their depth and, in 2D, outlines the region (`MeshData.regions`).
+- The Dark Current CSV has columns `T_K, I_total_A`.
+- Batch Sweep values must be finite and positive; sweeping the area with a CCE facade is
+  disabled (CCE does not depend on area).
+- The shared CSV serializer (`app/components/results.py::to_csv_bytes`) covers every facade:
+  `run_temperature_sweep`, `run_flash_recombination` and `run_transient` included, and a native
+  `run_dark_current` result exports `bias_V, I_total_A` with the truncation record. The C-V
+  CSV column for 1/C² is `one_over_C2_per_F2`.
 
 As of the v5.0 milestone audit (`.planning/milestones/v5.0-MILESTONE-AUDIT.md`), 7 of the
 21 notebook workflows had no page. The Run All page has since added the FLASH
@@ -752,37 +772,44 @@ print(sec.status, sec.solver, sec.result.metadata["summary"])
 
 `notebooks/` holds 21 notebooks, committed **without outputs**. `.gitattributes` routes
 `*.ipynb` through nbstripout, and CI checks `nbstripout --verify notebooks/*.ipynb`. Run
-them from `notebooks/` (`uv run jupyter lab`), so that figures saved by
-`save_figure` land in `notebooks/figures/` (gitignored).
+them from `notebooks/` (`uv run jupyter lab`), so that their figures land in
+`notebooks/figures/` (gitignored). Every notebook figure, whether written by `save_figure`
+or by a direct `savefig`, goes to `$ETNA_FIGURE_DIR` or `./figures` of the directory the
+kernel started in; notebooks 15-20 resolve it before their `os.chdir('..')`.
 
 Notebooks written before 2026-10-18 may state numbers for older defaults; the model they
 run is whatever `DeviceConfig()` / the core defaults are now, unless they pin a preset.
 
-| notebook                       | topic                                          | notes                                                                     |
-| ------------------------------ | ---------------------------------------------- | ------------------------------------------------------------------------- |
-| 01_phase1_validation           | material parameters, analytical electrostatics |                                                                           |
-| 02_electrical_characterization | C-V, Mott-Schottky, doping profile, I-V        |                                                                           |
-| 03_charge_collection           | CCE vs bias, generation profiles, Hecht        | generator `scripts/create_notebook_03.py`                                 |
-| 04_flash_recombination         | FLASH Auger/SRH CCE vs dose rate               | sensitivity bound only                                                    |
-| 05_dark_current_vs_fluence     | dark current vs proton fluence                 | ~146 s (TAT on devsim; PERF-06)                                           |
-| 05b_flash_parametric_studies   | FLASH parametric sweeps                        |                                                                           |
-| 06_temperature_dependence      | material properties and CCE vs T               |                                                                           |
-| 07_dark_current                | TAT / SRH / surface terms                      |                                                                           |
-| 08_transient_flash             | FLASH pulse transients                         | generator `create_notebook_08.py`                                         |
-| 09_radiation_damage            | defect introduction, lifetimes, NIEL scaling   | kappa placeholders                                                        |
-| 10_cce_vs_fluence              | CCE degradation vs fluence                     | ~14 s (PERF-06)                                                           |
-| 11_dark_current_cv_evolution   | leakage and C-V vs fluence                     |                                                                           |
-| 12_multi_defect_comparison     | 3-defect vs single-defect models               | ~41 s (PERF-06)                                                           |
-| 13_parametric_optimization     | radiation-hardness sweep                       | the `epi_um` column-key bug of PERF-06 is fixed; run time not re-measured |
-| 14_validation                  | comparison with published irradiation data     |                                                                           |
-| 15_2d_electrostatics_cce       | 2D field and CCE of the microdosimeter         | generator `create_notebook_15.py`                                         |
-| 16_single_particle_cce         | single-particle 2D transient CCE, CCE(LET)     | generator `create_notebook_16.py`                                         |
-| 17_mc_coupling                 | MC energy deposition to pulse height           | generator executes it in place                                            |
-| 18_microdosimetric_spectra     | lineal energy spectra, y_F / y_D               | kappa placeholders; generator executes it                                 |
-| 19_alternative_structures      | mesa, 3D electrode, ΔE-E, guard ring           | ~200 s; pins the previous-default doping on the legacy geometry (PERF-06) |
-| 20_feasibility_report          | microdosimeter design study                    | outside-validity rows reported                                            |
+| notebook                       | topic                                          | notes                                                                  |
+| ------------------------------ | ---------------------------------------------- | ---------------------------------------------------------------------- |
+| 01_phase1_validation           | material parameters, analytical electrostatics |                                                                        |
+| 02_electrical_characterization | C-V, Mott-Schottky, doping profile, I-V        |                                                                        |
+| 03_charge_collection           | CCE vs bias, generation profiles, Hecht        | generator `scripts/create_notebook_03.py`                              |
+| 04_flash_recombination         | FLASH Auger/SRH CCE vs dose rate               | sensitivity bound only                                                 |
+| 05_dark_current_vs_fluence     | dark current vs proton fluence                 | TAT on devsim                                                          |
+| 05b_flash_parametric_studies   | FLASH parametric sweeps                        | runs its 60-condition sweep when the untracked cache is missing        |
+| 06_temperature_dependence      | material properties and CCE vs T               |                                                                        |
+| 07_dark_current                | TAT / SRH / surface terms                      |                                                                        |
+| 08_transient_flash             | FLASH pulse transients                         | generator `create_notebook_08.py`                                      |
+| 09_radiation_damage            | defect introduction, lifetimes, NIEL scaling   | kappa placeholders                                                     |
+| 10_cce_vs_fluence              | CCE degradation vs fluence                     |                                                                        |
+| 11_dark_current_cv_evolution   | leakage and C-V vs fluence                     |                                                                        |
+| 12_multi_defect_comparison     | 3-defect vs single-defect models               |                                                                        |
+| 13_parametric_optimization     | radiation-hardness sweep                       |                                                                        |
+| 14_validation                  | comparison with published irradiation data     |                                                                        |
+| 15_2d_electrostatics_cce       | 2D field and CCE of the microdosimeter         | generator `create_notebook_15.py`                                      |
+| 16_single_particle_cce         | single-particle 2D transient CCE, CCE(LET)     | generator `create_notebook_16.py`; rebuilds the CCE(LET) tables (~1 h) |
+| 17_mc_coupling                 | MC energy deposition to pulse height           | generator executes it in place                                         |
+| 18_microdosimetric_spectra     | lineal energy spectra, y_F / y_D               | kappa placeholders; generator executes it                              |
+| 19_alternative_structures      | mesa, 3D electrode, ΔE-E, guard ring           | pins the previous-default doping on the legacy geometry (PERF-06)      |
+| 20_feasibility_report          | microdosimeter design study                    | outside-validity rows reported                                         |
 
-Run times not listed were not measured for this guide. The test suite and CI do not
+Run times measured on 2026-10-18 (Apple M4, executed into a scratch copy, the machine shared
+with other jobs): 01 3 s, 02 17 s, 03 15 s, 04 5 s, 05 57 s, 05b 76 s (full sweep), 06 63 s,
+07 38 s, 08 21 s, 09 4 s, 10 11 s, 11 34 s, 12 27 s, 13 17 s, 14 18 s, 15 548 s, 16 4252 s (both CCE(LET) tables),
+17 4 s, 18 3 s, 19 209 s, 20 137 s. Notebook 16 writes `data/cce_let_table_*.json` and
+notebook 17 rewrites `data/synthetic_mc_events.csv` (bit-identical, seeded) relative to the repo root (they `chdir('..')`):
+run them from a scratch copy unless you mean to regenerate those tracked files. The test suite and CI do not
 execute notebooks (only the no-outputs and generator checks run);
 `scripts/regression_sweep_v3_notebooks.py` is a historical manual tool for the v3
 deliverables.
@@ -843,10 +870,12 @@ uv run pytest -n0 -x tests/test_api_cce.py        # serial, e.g. with --pdb
 uv run pytest -n auto --dist loadfile -q --durations=20  # slowest tests
 ```
 
-- 86 modules and 994 tests. `pytest.ini` deselects the `exhaustive` marker (7 redundant
-  deep variants, each implied by a kept test), so the default run collects 987.
+- 89 modules and 1037 tests. `pytest.ini` deselects the `exhaustive` marker (7 redundant
+  deep variants, each implied by a kept test), so the default run collects 1030.
   The `slow` marker labels the devsim integration tests but does not deselect them.
-- The default run took **4.3 minutes on 10 cores** (987 passed, no warnings). The
+- The default run took **4.1 minutes on 10 cores** (1030 passed; the only warnings are
+  SyntaxWarnings from the third-party pydub package, printed once when its bytecode is
+  first compiled). The
   slowest tests are devsim 2D builds: `test_device2d_convergence.py` at 300 µm,
   single-particle CCE vs bias, the 2D lateral scan and the 2D-vs-1D C-V (use
   `--durations=20` for the current list).

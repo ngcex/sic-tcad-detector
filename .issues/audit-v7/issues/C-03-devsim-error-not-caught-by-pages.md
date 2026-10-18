@@ -4,7 +4,7 @@ source: raw-C F3
 title: devsim.error is not a RuntimeError; pages only catch RuntimeError, so sidebar-permitted inputs crash with a raw traceback
 severity: medium
 category: bug
-status: open
+status: fixed
 location:
   - app/components/device_sidebar.py:80-85 (substrate min_value=0.0), 97-103, 109-114, 132-134 (N_A, N_D, N_D_junction, N_D_bulk, area: no min_value)
   - app/workflows/cv.py:43, cce.py:55, field_map.py:47, dark_current.py:144, batch_sweep.py:131, radiation_damage.py:105 (`except RuntimeError` only)
@@ -72,3 +72,8 @@ import devsim. Also see C-12 for `DeviceConfig.__post_init__` validation.
 ## Effort
 
 S
+
+## Status 2026-10-18 (final-c): fixed (00ce048)
+
+- Every devsim-calling page now catches `Exception` and routes it through `app.components.page_utils.show_error`, which treats the devsim `error` class (by name) as a solver failure (friendly st.error + details expander). DeviceConfig.__post_init__ rejects substrate_thickness_um <= 0 and the other non-positive inputs, and the sidebar shows the validation error instead of building.
+- Evidence: `grep -c "except RuntimeError" app/workflows/*.py` -> 0 in every file; `uv run pytest -q tests/test_app_robustness.py -k "devsim_error or stale or invalid_sidebar or rejects_out_of_range"` -> 15 passed (test_devsim_error_shows_friendly_error_with_details).
