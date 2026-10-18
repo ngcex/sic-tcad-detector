@@ -24,7 +24,10 @@ from etna.core.engine2d.grid import grid_from_devsim
 from etna.core.optimization import _sweep_one
 
 # p+ 1 um explicit (the builders default to the stack's 0.3 um since 2026-10-17)
-NPLUS = dict(nplus_thickness_cm=1e-4, N_D_nplus=1e19, substrate_thickness_cm=1e-4)
+# abrupt n+ step (the builders default to the graded transition since 2026-10-18)
+NPLUS = dict(
+    nplus_thickness_cm=1e-4, N_D_nplus=1e19, substrate_thickness_cm=1e-4, buffer_thickness_cm=None, buffer_end_doping=None
+)
 
 
 class TestNplusEligibility:

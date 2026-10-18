@@ -17,7 +17,14 @@ from etna.core.device import create_sic_device
 from etna.core.drift_diffusion import create_dd_device, ramp_bias
 
 # p+ 1 um explicit: the spike geometry (builders default to the stack 0.3 um since 2026-10-17)
-NPLUS = dict(nplus_thickness_cm=1e-4, N_D_nplus=1e19, substrate_thickness_cm=1e-4)
+# abrupt n+ step (the builders default to the graded n-/n+ transition since 2026-10-18)
+NPLUS = dict(
+    nplus_thickness_cm=1e-4,
+    N_D_nplus=1e19,
+    substrate_thickness_cm=1e-4,
+    buffer_thickness_cm=None,
+    buffer_end_doping=None,
+)
 # Doping the spike numbers were taken with: the core graded fallbacks before the n+ flip
 # (cce_vs_bias 2.90e15 / 8.50e13 / 1 um; device2d 2.931417e15 / 8.823059e13 / 0.9872267 um).
 # The fallbacks are now DEFAULT_STACK; pinned here so the tests keep checking the n+
@@ -42,7 +49,8 @@ def test_nplus_mesh_and_doping():
         assert info["total_length"] == pytest.approx(12e-4)
         assert x[-1] == pytest.approx(12e-4)
         assert np.all(donors[x > 11e-4 + 1e-12] > 1e19)
-        assert np.all(donors[(x > 1e-4) & (x < 11e-4 - 1e-12)] < 3e15)
+        # epi: the graded fallback (DEFAULT_STACK N_D_junction 8.19e15 since 2026-10-18)
+        assert np.all(donors[(x > 1e-4) & (x < 11e-4 - 1e-12)] < 1e16)
     finally:
         devsim.delete_device(device=info["device_name"])
 

@@ -30,7 +30,8 @@ GRADED = dict(
     doping_profile="graded", N_D_junction=2.9e15, N_D_bulk=8.5e13, L_transition=1e-4
 )
 # p+ thickness explicit: the builders default to the stack (0.3 um) since 2026-10-17
-NPLUS = dict(nplus_thickness_cm=NP, N_D_nplus=1e19, substrate_thickness_cm=SUB)
+# abrupt n+ step (the builders default to the graded transition since 2026-10-18)
+NPLUS = dict(nplus_thickness_cm=NP, N_D_nplus=1e19, substrate_thickness_cm=SUB, buffer_thickness_cm=None, buffer_end_doping=None)
 BIASES = np.array([0.0, -10.0, -40.0, -100.0])
 
 

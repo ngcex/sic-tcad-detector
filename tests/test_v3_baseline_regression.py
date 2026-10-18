@@ -88,7 +88,7 @@ def test_v3_cce_center_100um_preserved():
 
 
 @pytest.mark.slow
-@pytest.mark.exhaustive  # laterally uniform: same value as the 100 um test (0.95377414)
+@pytest.mark.exhaustive  # laterally uniform: same value as the 100 um test (0.95394391)
 def test_v3_cce_center_300um_preserved():
     """Calibrated 2D defaults must reproduce v3.0 CCE at the 300 um SV center."""
     from etna.core.devsim_reset import reset_devsim_fully
@@ -134,6 +134,9 @@ def test_v3_cv_1d_preserved():
             # v3 geometry, explicit: the builders default to the n+ stack since 2026-10-17
             substrate_thickness_cm=1e-4,
             nplus_thickness_cm=None,
+            # and no graded n-/n+ transition (builder default since 2026-10-18)
+            buffer_thickness_cm=None,
+            buffer_end_doping=None,
         )
         voltages = [0.0, -5.0, -10.0]
         result = cv_sweep(dev, V_range=voltages)

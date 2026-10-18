@@ -312,6 +312,12 @@ class TestMicrodosimetricSweepEndToEnd:
             n_lateral_points=3,
             nplus_thickness_cm=None,  # legacy: cathode on the n- epi (the wall)
             substrate_thickness_cm=1e-4,
+            # no graded transition, previous junction doping (the builders' fallbacks are
+            # the measured-C-V stack since 2026-10-18; the wall was measured on this one)
+            buffer_thickness_cm=None,
+            buffer_end_doping=None,
+            N_D_junction=2.958237e15,
+            L_transition=0.987e-4,
         )
         serial = microdosimetric_sweep(**kw, n_jobs=1)
         parallel = microdosimetric_sweep(**kw, n_jobs=4)

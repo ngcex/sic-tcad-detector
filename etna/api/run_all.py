@@ -78,13 +78,16 @@ def _run_sweep(config: DeviceConfig) -> SimResult:
         N_D_junction=config.N_D_junction,
         L_transition=config.L_transition_um * 1e-4,
     )
-    if (
-        config.buffer_thickness_um is not None
-    ):  # graded n-/n+ transition (opt-in preset)
-        nplus.update(
-            buffer_thickness_cm=config.buffer_thickness_um * 1e-4,
-            buffer_end_doping=config.buffer_end_doping,
-        )
+    # graded n-/n+ transition always explicit too: None (abrupt epi end, e.g. legacy or
+    # nplus_calibrated configs) must not fall back to the builders' default transition
+    nplus.update(
+        buffer_thickness_cm=(
+            None
+            if config.buffer_thickness_um is None
+            else config.buffer_thickness_um * 1e-4
+        ),
+        buffer_end_doping=config.buffer_end_doping,
+    )
     for hw in _SWEEP_HALF_WIDTHS:
         for vb in _SWEEP_BIASES:
             # the sweep builds graded, N_A 1e19, 300 K devices: the gate sees the config's

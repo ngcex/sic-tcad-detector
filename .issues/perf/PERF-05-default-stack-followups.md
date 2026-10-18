@@ -72,3 +72,53 @@ boxes widened to N_D_bulk 2e13 and the buffer keys, sidebar checkbox, export lab
 refit 2.849024e12. Plateau rms 0.013 um vs the digitised curve; the knee stays at 0.24 um rms
 (the exponential form; a tabulated profile would be needed). DEFAULT_STACK unchanged; impact
 table and open items in lab/buffer_profile/notes/LOG.md.
+
+## DEFAULT FLIPPED to the measured-C-V profile (feat/default-measured-cv, 2026-10-18)
+
+Owner-authorised (Fable review). `DeviceConfig()` / `DEFAULT_STACK` = the former
+`MEASURED_CV_STACK` (now an alias; `measured_cv_config()` == `DeviceConfig()`): p+ 0.3 um,
+NJ 8.185880e15, NB 3.382506e13, L 0.4638630 um, graded n-/n+ transition 1.136634 um to
+4.516421e16, n+ 1 um 1e19, N_t 2.849024e12 (`SiC4H_Parameters.N_t`), E_t 0.67. Previous
+default kept bit-identical as `etna.nplus_calibrated_config()` (`NPLUS_CALIBRATION`, now its
+own record); `legacy_config()` unchanged. Core builders' `buffer_*` defaults, the engine2d
+gate (missing key = default transition), `microdosimetric_sweep` and `run_all` read the
+stack; `device_kwargs` always emits the buffer keys (None = abrupt epi end).
+Reproducibility (lab/default_flip/bench/snapshot.py + compare.py, 4 mm2): new default ==
+old preset, nplus_calibrated == old default, legacy == legacy, all worst rel diff 0.0
+(donors, C-V, CCE, dark, peak E, compensation fluence, sweep gate); direct core calls
+(`create_sic_device(graded)`, `cce_vs_bias()`) == `DeviceConfig()` (donors bit-equal, CCE
+2.6e-11 devsim vs batched).
+
+| quantity (4 mm2, 300 K)                    | old default (nplus_calibrated)       | new default (measured C-V)          |
+| ------------------------------------------ | ------------------------------------ | ----------------------------------- |
+| V_fd analytic / 1.2 V_fd gate              | 9.93 V / 11.92 V                     | 2.74 V / 3.28 V                     |
+| reach-through (VFD_DEFINITION)             | 12.30 V                              | 3.10 V                              |
+| eps*A/C 0 / -2 / -5 / -10 / -30 / -60 V um | 1.700 2.992 5.931 9.500 9.979 9.996  | 1.655 6.939 9.252 9.519 9.750 9.872 |
+| CCE 0 / -1 / -2 / -3 / -5 / -10 V          | 0.8407 0.8931 0.9331 0.9612 0.9893 0.9993 | 0.8703 0.9743 0.9944 0.9978 0.9989 0.9995 |
+| CCE -50 V                                  | 0.999887                             | 0.999883                            |
+| dark current -10 / -30 / -60 V (pA)        | 6.08 / 14.72 / 18.00                 | 6.30 / 15.76 / 18.00                |
+| peak E excl. step spikes, -30 / -60 V      | 8.31e4 / 1.13e5 V/cm (x 0.40 um)     | 9.06e4 / 1.21e5 V/cm (x 0.40 um)    |
+| compensation fluence 5.6 / 62 MeV p        | 3.30e13 / 4.72e13 p/cm2              | 1.35e13 / 1.93e13 p/cm2             |
+| run_all sweep grid (hw 25/50 x 20/40/60 V) | 6/6 valid, engine2d                  | 6/6 valid, engine2d                 |
+| microdosimetric gate by bias, hw 25        | 5, 10 V shallow; valid from 15 V     | valid from 5 V (2 of 7 rows change) |
+| 2D engine, one point hw 50 / 40 V          | 0.21 s, CCE 0.999860                 | 0.22 s, CCE 0.999855                |
+| 2D default mesh hw 50 (devsim build)       | 17784 nodes, 0.05 s                  | 17784 nodes, 0.05 s                 |
+| run_all, all 8 sections                    | 11.0 s                               | 11.1 s                              |
+| run_cv 241 pts / sweep grid                | 0.12 s / 0.91 s (batched / engine2d) | 0.17 s / 0.91 s (batched / engine2d)|
+
+DESIGN-1 operating bias: gate >= 3.3 V; the paper's -10 V is 3x the gate (3.6x V_fd), -30 V
+9x (11x V_fd); recommendation kept at >= -10 V (margin for the fit's doping uncertainty:
+V_fd 3.9-7.6 V if the bulk is at the documented 0.5-1e14). Export labels state: fit to the
+digitised Fig. 4b, plateau rms 0.013 um, knee rms 0.24 um, N_D_bulk 3.4e13 below the
+documented 0.5-1e14, epi/n+ position set by the fit, not by SIMS.
+Decisions taken here: `calibrate_graded_doping(_2d)` now build the LEGACY geometry
+explicitly (item 1 above); `alternative_structures` graded fallbacks pinned to the
+previous default's doping (legacy geometry; the guard-ring diode does not converge past
+3 V with NB 3.4e13 / L 0.46 um and no transition); notebook 19 pins the same.
+Fast paths still serve the default: `validated_domain_reason(DeviceConfig())` None (run_cv /
+run_cce batched), engine2d gate None for the default 2D kwargs (run_all sweep, field).
+Parity re-run on the new default (lab/buffer_profile/bench, no-buffer cases now explicit):
+1D 11 cases to -100 V worst dW 1.9e-15, dpsi 1.4e-14 V, dCCE 1.2e-10, donors 7.3e-15;
+2D 9 cases worst dpsi 1.5e-13 V (20 um epi, 100 V; 7.1e-14 before), dCCE 1.5e-14,
+engine 0.1-0.3 s vs devsim 4.5-27.5 s per case. v3 cce_center re-pinned 0.95377414 ->
+0.95394391 (+0.018 %, record in tests/baselines/v3_frozen.json).

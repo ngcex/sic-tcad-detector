@@ -25,8 +25,9 @@ from etna.export.labels import (
     CV_SYSTEMATIC_NOTE,
     CV_SYSTEMATIC_OTHER,
     DARK_CALIBRATION_NOTE,
-    MEASURED_CV_NOTE,
     MEASURED_W_30V_UM,
+    NPLUS_CALIBRATION_NOTE,
+    CV_SYSTEMATIC_NPLUS_NOTE,
     VALIDATION_LABEL,
     VFD_DEFINITION,
     analytic_vfd,
@@ -35,6 +36,7 @@ from etna.export.labels import (
     has_buffer,
     has_nplus,
     is_measured_cv_device,
+    is_nplus_calibrated_device,
     is_reference_device,
     reach_through_definition,
 )
@@ -115,7 +117,8 @@ def build_spec(config, report=None) -> dict:
         raise ValueError("report was computed for a different DeviceConfig")
     nplus = has_nplus(config)
     ref = is_reference_device(config)
-    measured_cv = is_measured_cv_device(config)
+    measured_cv = is_measured_cv_device(config)  # == ref since the 2026-10-18 flip
+    prev_default = is_nplus_calibrated_device(config)
     layers = stack_layers(config)
     t_e = config.epi_thickness_um
     depths = [d for d in _DOPING_DEPTHS_UM if d < t_e]
@@ -132,16 +135,19 @@ def build_spec(config, report=None) -> dict:
     ]
     if has_buffer(config):
         model = (
-            "measured C-V profile preset (graded n-/n+ transition, digitised Fig. 4b fit)"
-            if measured_cv
+            "default stack: measured-C-V profile (graded n-/n+ transition, fit to the "
+            "digitised Fig. 4b)"
+            if ref
             else "stack with a graded n-/n+ transition (buffer)"
         ) + (" + n+ layer" if nplus else ", no n+ layer")
-    else:
+    elif nplus:
         model = (
-            "default stack (n+ layer)"
-            if nplus
-            else "legacy model (no n+, cathode on the n- epi)"
+            "previous default (3-point n+ calibration, abrupt epi/n+ step)"
+            if prev_default
+            else "n+ stack with an abrupt epi/n+ step"
         )
+    else:
+        model = "legacy model (no n+, cathode on the n- epi)"
 
     spec = {
         "label": VALIDATION_LABEL,
@@ -149,6 +155,7 @@ def build_spec(config, report=None) -> dict:
         "model": model,
         "reference_device": ref,
         "measured_cv_preset": measured_cv,
+        "nplus_calibrated_preset": prev_default,
         "dimension": "1D" if config.half_width_um is None else "2D",
         "config": asdict(config),
         "area_cm2": config.area_cm2,
@@ -222,16 +229,17 @@ def build_spec(config, report=None) -> dict:
             C_at_minus30V_F=_f(_interp_at(cv.x, cv.y, -30.0)),
         )
     w30 = cvd.get("W_um", {}).get("-30 V")
-    if ref and w30 is not None:
-        cvd["systematic"] = CV_SYSTEMATIC_NOTE.format(
-            w=w30, d=100.0 * (w30 - MEASURED_W_30V_UM) / MEASURED_W_30V_UM
-        )
-        cvd["measured_W_minus30V_um"] = MEASURED_W_30V_UM
-    elif measured_cv:
+    d30 = None if w30 is None else 100.0 * (w30 - MEASURED_W_30V_UM) / MEASURED_W_30V_UM
+    if ref:
         cvd["systematic"] = (
-            "No out-of-fit C-V comparison: the whole digitised curve is a fit input "
+            CV_SYSTEMATIC_NOTE.format(w=w30, d=d30)
+            if w30 is not None
+            else "No out-of-fit C-V comparison: the whole digitised curve is a fit input "
             "(see cv.calibration)."
         )
+        cvd["measured_W_minus30V_um"] = MEASURED_W_30V_UM
+    elif prev_default and w30 is not None:
+        cvd["systematic"] = CV_SYSTEMATIC_NPLUS_NOTE.format(w=w30, d=d30)
         cvd["measured_W_minus30V_um"] = MEASURED_W_30V_UM
     else:
         cvd["systematic"] = CV_SYSTEMATIC_OTHER
@@ -239,9 +247,9 @@ def build_spec(config, report=None) -> dict:
         CALIBRATION_NOTE
         if ref
         else (
-            MEASURED_CV_NOTE
-            if measured_cv
-            else "Calibration at 0 / -10 V applies to the reference device only."
+            NPLUS_CALIBRATION_NOTE
+            if prev_default
+            else "The C-V fit applies to the reference device (default stack) only."
         )
     )
     spec["cv"] = cvd
@@ -263,7 +271,7 @@ def build_spec(config, report=None) -> dict:
     spec["cce"] = ccd
 
     dark = _ok_result(report, "dark")
-    from etna.core.device import DEFAULT_STACK, MEASURED_CV_STACK
+    from etna.core.device import DEFAULT_STACK, NPLUS_CALIBRATION
 
     n_t = (
         float(dark.metadata.get("N_t", config.N_t)) if dark is not None else config.N_t
@@ -271,10 +279,10 @@ def build_spec(config, report=None) -> dict:
     calibrated = (
         ref and n_t == DEFAULT_STACK["N_t"] and config.E_t == DEFAULT_STACK["E_t"]
     )
-    calibrated_measured = (
-        measured_cv
-        and n_t == MEASURED_CV_STACK["N_t"]
-        and config.E_t == MEASURED_CV_STACK["E_t"]
+    calibrated_prev = (
+        prev_default
+        and n_t == NPLUS_CALIBRATION["N_t"]
+        and config.E_t == NPLUS_CALIBRATION["E_t"]
     )
     dd = {
         "available": dark is not None,
@@ -286,9 +294,9 @@ def build_spec(config, report=None) -> dict:
             else (
                 (
                     DARK_CALIBRATION_NOTE
-                    + f" (N_t = {n_t:.7g} refitted on the measured-C-V profile preset.)"
+                    + f" (N_t = {n_t:.7g} fitted on the previous default profile.)"
                 )
-                if calibrated_measured
+                if calibrated_prev
                 else (
                     f"N_t = {n_t:.4g}, E_t = {config.E_t:g} eV on this device: the dark-current "
                     "calibration (default stack, N_t = "
@@ -339,14 +347,15 @@ def build_spec(config, report=None) -> dict:
         VALIDATION_LABEL,
         "Measurement comparisons (the 'stated' exceptions): "
         + (
-            "C-V eps*A/C at -30 V vs Photons Fig. 4b (see cv.systematic; 0 / -10 V are "
-            "calibration inputs); dark current is a calibration to the measured bound."
+            "the full digitised Photons Fig. 4b C-V is a FIT INPUT of the default stack "
+            "(see cv.calibration: plateau rms 0.013 um, knee rms 0.24 um), not a "
+            "validation; dark current is a calibration to the measured bound."
             if ref
             else (
-                "the full digitised Photons Fig. 4b C-V is a FIT INPUT of this preset "
-                "(see cv.calibration), not a validation; dark current is a calibration "
-                "to the measured bound."
-                if measured_cv
+                "C-V eps*A/C at -30 V vs Photons Fig. 4b (see cv.systematic; 0 / -10 V are "
+                "calibration inputs of this previous default); dark current is a "
+                "calibration to the measured bound."
+                if prev_default
                 else "none for this config (they apply to the reference device only)."
             )
         ),

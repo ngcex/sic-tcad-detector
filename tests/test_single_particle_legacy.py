@@ -21,6 +21,8 @@ import pytest
 LEGACY_2D = dict(
     substrate_thickness_cm=1e-4,
     nplus_thickness_cm=None,
+    buffer_thickness_cm=None,  # builder default since 2026-10-18: the graded transition
+    buffer_end_doping=None,
     N_D_junction=2.931417e15,
     N_D_bulk=8.823059e13,
     L_transition=9.872267e-5,

@@ -33,5 +33,6 @@ def test_api_routes_nplus_to_the_engine_and_matches_devsim():
     np.testing.assert_allclose(
         cv.metadata["depletion_widths"], ref_cv["depletion_widths"], rtol=1e-10
     )
-    # reach-through with n+: depletion edge within one Debye length of the epi end
-    assert 10.0 < cv.metadata["reach_through_V"] < 15.0
+    # reach-through with n+ and the graded transition (default since 2026-10-18): edge
+    # within one Debye length of the transition start, 3.1 V (12.3 V with the abrupt n+)
+    assert 2.0 < cv.metadata["reach_through_V"] < 5.0

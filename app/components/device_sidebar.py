@@ -55,9 +55,12 @@ def assemble_config(values: dict) -> DeviceConfig:
         N_D_nplus=values.get("N_D_nplus", DeviceConfig.N_D_nplus),
         N_t=values.get("N_t", DeviceConfig.N_t),
         E_t=values.get("E_t", DeviceConfig.E_t),
-        # graded n-/n+ transition: opt-in preset only (both None = the default model)
-        buffer_thickness_um=values.get("buffer_thickness_um"),
-        buffer_end_doping=values.get("buffer_end_doping"),
+        # graded n-/n+ transition: optional keys, default = the default stack's (both
+        # None = abrupt epi end, e.g. the legacy / previous calibrated presets)
+        buffer_thickness_um=values.get(
+            "buffer_thickness_um", DeviceConfig.buffer_thickness_um
+        ),
+        buffer_end_doping=values.get("buffer_end_doping", DeviceConfig.buffer_end_doping),
     )
 
 
@@ -145,21 +148,21 @@ def render_device_sidebar() -> None:
         "cathode contact directly on the n- epi, p+ 1 um, N_D_junction 2.93e15, N_D_bulk "
         "8.82e13, L 0.987 um, N_t 2.8e12, E_t 0.65 (overrides the fields above). It "
         "reproduces the old numbers; its non-convergence wall at deep reverse bias is a "
-        "contact artefact. Off = the default stack: p+ / graded n- epi / 1 um n+ (1e19).",
+        "contact artefact. Off = the default stack: p+ / graded n- epi with a graded n-/n+ "
+        "transition / 1 um n+ (1e19).",
     )
-    measured_cv_on = st.sidebar.checkbox(
-        "measured C-V profile (digitised Fig. 4b)",
+    nplus_cal_on = st.sidebar.checkbox(
+        "previous calibrated model (n+, no buffer)",
         value=False,
-        key="cfg_measured_cv_on",
-        help="Applies the measured-C-V preset (etna.measured_cv_config): epi doping and a "
-        "graded n-/n+ transition FITTED on the full digitised Photons Fig. 4b C-V curve "
-        "(eps*A/C every 250 mV, 0 to -60 V; chi2 198/224, plateau rms 0.013 um) -- "
-        "N_D_junction 8.2e15, L 0.46 um, N_D_bulk 3.4e13, transition 1.14 um rising to "
-        "4.5e16 at the epi end, 1e19 n+ beyond, N_t refitted to 18 pA (overrides the doping "
-        "fields above). The default's abrupt epi/n+ form puts the C-V knee at -8..-10 V where "
-        "the measurement has it at -1..-4 V. NOT the default: N_D_bulk is below every "
-        "documented doping statement and the epi/n+ position is not fixed by the data "
-        "(lab/cv_gap/notes/LOG.md).",
+        key="cfg_nplus_cal_on",
+        help="Applies the previous default (etna.nplus_calibrated_config, 2026-10-17): "
+        "exponential epi calibrated on two C-V points (N_D_junction 2.958237e15, N_D_bulk "
+        "8.252732e13, L 0.987 um held), ABRUPT 1e19 n+ at the epi end (no graded "
+        "transition), N_t 2.805336e12 (overrides the doping fields). Its C-V knee is at "
+        "-8..-10 V where the measurement has it at -1..-4 V. The default (unchecked) is the "
+        "measured-C-V profile: a fit to the digitised Photons Fig. 4b (plateau rms 0.013 um, "
+        "knee rms 0.24 um; N_D_bulk 3.4e13 below the documented 0.5-1e14; epi/n+ position "
+        "set by the fit, not by SIMS).",
     )
     nplus_thickness_um = DeviceConfig.nplus_thickness_um
     N_D_nplus = DeviceConfig.N_D_nplus
@@ -215,13 +218,40 @@ def render_device_sidebar() -> None:
         L_transition_um = st.sidebar.number_input(
             "Transition length (µm)",
             value=DeviceConfig.L_transition_um,
-            step=0.001,
-            format="%.3f",
+            step=1e-7,  # idem (0.4638630)
+            format="%.7f",
             key="cfg_L_transition_um",
         )
         # N_D hidden this mode — programmatically set to default; assemble_config
         # also forces N_D=None for "graded", this default is a harmless input.
         N_D = DeviceConfig.N_D
+    # graded n-/n+ transition before the epi end (the default stack's C-V fit); off =
+    # abrupt epi/n+ step
+    buffer_on = st.sidebar.checkbox(
+        "graded n-/n+ transition (C-V fit)",
+        value=True,
+        key="cfg_buffer_on",
+        help="N_D rises log-linearly from the epi value to 'N_D at the epi end' over the "
+        "last part of the epi (1e19 n+ beyond): the form fitted on the digitised measured "
+        "C-V; not a measured profile (SIMS would settle it). Off = abrupt epi/n+ step.",
+    )
+    if buffer_on:
+        buffer_thickness_um = st.sidebar.number_input(
+            "n-/n+ transition thickness (µm)",
+            value=DeviceConfig.buffer_thickness_um,
+            step=1e-6,
+            format="%.6f",
+            key="cfg_buffer_thickness_um",
+        )
+        buffer_end_doping = st.sidebar.number_input(
+            "N_D at the epi end (cm⁻³)",
+            value=DeviceConfig.buffer_end_doping,
+            step=1e9,
+            format="%.3e",
+            key="cfg_buffer_end_doping",
+        )
+    else:
+        buffer_thickness_um = buffer_end_doping = None
 
     st.sidebar.divider()
 
@@ -258,6 +288,8 @@ def render_device_sidebar() -> None:
         "area_cm2": area_cm2,
         "nplus_thickness_um": nplus_thickness_um,
         "N_D_nplus": N_D_nplus,
+        "buffer_thickness_um": buffer_thickness_um,
+        "buffer_end_doping": buffer_end_doping,
     }
 
     if legacy_on:
@@ -268,19 +300,19 @@ def render_device_sidebar() -> None:
             "Historical model active: cathode directly on the n- epi (no n+ layer), "
             "pre-flip doping and dark-current fit."
         )
-        if measured_cv_on:
+        if nplus_cal_on:
             st.sidebar.warning(
-                "Both presets checked: the historical model wins (the measured C-V "
-                "profile needs the n+ stack); untick it to apply the measured profile."
+                "Both presets checked: the historical model wins; untick it to apply the "
+                "previous calibrated model."
             )
-    elif measured_cv_on:
-        from etna import MEASURED_CV_PRESET
+    elif nplus_cal_on:
+        from etna import NPLUS_CALIBRATED_PRESET
 
-        values.update(MEASURED_CV_PRESET)
+        values.update(NPLUS_CALIBRATED_PRESET)
         st.sidebar.info(
-            "Measured C-V profile active: doping fitted on the digitised Photons Fig. 4b "
-            "curve (graded n-/n+ transition over the last 1.14 um of the epi). A fit, "
-            "not the default stack."
+            "Previous calibrated model active: 3-point n+ calibration, abrupt epi/n+ step "
+            "(no graded transition), N_t 2.805336e12. Its C-V knee (-8..-10 V) disagrees "
+            "with the digitised measurement (-1..-4 V)."
         )
 
     try:

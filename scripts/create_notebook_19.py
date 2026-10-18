@@ -140,8 +140,18 @@ V_STEP_MAX = 2.5          # adaptive ramp start step; measured cheaper than 5 V 
 # stack (p+ 1 um on the n- epi, cathode directly on the epi, no n+ layer). The planar
 # baseline is therefore pinned to the same stack so that the comparison is
 # structure-vs-structure, not stack-vs-stack (create_2d_dd_device defaults to the n+
-# stack since 2026-10-17).
-LEGACY_STACK = dict(substrate_thickness_cm=1e-4, nplus_thickness_cm=None)
+# stack since 2026-10-17). Since 2026-10-18 the builders also default to the graded n-/n+
+# transition and the measured-C-V doping: the planar baseline pins the abrupt epi end and
+# the alternative structures' doping (the previous default's, NPLUS_CALIBRATION).
+LEGACY_STACK = dict(
+    substrate_thickness_cm=1e-4,
+    nplus_thickness_cm=None,
+    buffer_thickness_cm=None,
+    buffer_end_doping=None,
+    N_D_junction=2.958237e15,
+    N_D_bulk=8.252732e13,
+    L_transition=0.987e-4,
+)
 
 
 def ramp_cathode(info, V, contact="cathode"):

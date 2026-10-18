@@ -32,7 +32,16 @@ def _name(tag):
 # The direct-vs-balanced floors below are measured on the no-n+ geometry (p+ 1 um, cathode
 # on the epi); the builders default to the n+ stack since 2026-10-17, where the direct
 # cathode current is the 1e19 majority term (round-off ~1e-8 A/cm^2), so pin it explicitly.
-LEGACY_GEOM = dict(substrate_thickness_cm=1e-4, nplus_thickness_cm=None)
+# no n+, no graded transition (builders default to both); doping pinned to the previous
+# default's (the numbers below were measured on it; the fallback is the measured-C-V
+# profile since 2026-10-18)
+LEGACY_GEOM = dict(
+    substrate_thickness_cm=1e-4,
+    nplus_thickness_cm=None,
+    buffer_thickness_cm=None,
+    buffer_end_doping=None,
+    N_D_junction=2.958237e15, N_D_bulk=8.252732e13, L_transition=0.987e-4,
+)
 
 
 @pytest.fixture(scope="module")

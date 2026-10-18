@@ -19,8 +19,11 @@ EPI, SUB = 10e-4, 1e-4
 GRADED = dict(N_D_junction=2.90e15, N_D_bulk=8.50e13, L_transition=1.0e-4)
 BIASES = np.array([0.0, -5.0, -10.0, -20.0, -40.0])  # multiples of 0.5 V: devsim lattice
 # This file checks the engine on the no-n+ geometry (p+ 1 um, cathode on the epi); the
-# builders default to the n+ stack since 2026-10-17 (the n+ parity: test_nplus_engine.py).
-LEGACY_GEOM = dict(substrate_thickness_cm=SUB, nplus_thickness_cm=None)
+# builders default to the n+ stack since 2026-10-17 (the n+ parity: test_nplus_engine.py)
+# and to its graded n-/n+ transition since 2026-10-18 (explicit None: abrupt epi end).
+LEGACY_GEOM = dict(
+    substrate_thickness_cm=SUB, nplus_thickness_cm=None, buffer_thickness_cm=None, buffer_end_doping=None
+)
 
 
 def _devsim_cv(name, biases=BIASES, **kw):

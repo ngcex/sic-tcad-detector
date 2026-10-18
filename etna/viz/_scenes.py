@@ -31,7 +31,9 @@ from manim import (
     Write,
 )
 
-COLORS = {"p+": "#d6604d", "epi": "#92c5de", "n+": "#2166ac"}
+# "buffer": the graded n-/n+ transition layer of the default stack (since 2026-10-18), as
+# etna.export.cross_section._COLORS
+COLORS = {"p+": "#d6604d", "epi": "#92c5de", "buffer": "#4393c3", "n+": "#2166ac"}
 FG = "#ffffff"
 LABEL_COLOR = "#f4a582"
 

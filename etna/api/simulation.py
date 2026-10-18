@@ -160,18 +160,18 @@ def _reach_through_V(W, bias_array, config: DeviceConfig) -> "float | None":
     With an n+ layer the n/N_D >= 0.5 edge approaches the epi end only
     asymptotically (electron tail of the n-/n+ high-low junction), so full
     depletion is taken as the edge within one Debye length L_D of the epi end,
-    L_D = sqrt(eps V_t / (q N_D_epi_end)) (0.41 um on the default device). A
-    definition, not a measurement: 12.30 V on the default stack (paper: ~10 V; 10.30 V
-    with the doping calibrated on the depletion edge before 2026-10-17; the legacy
-    model's mesh rule gave 17.0 V). The 2D sweep's is_fully_depleted gate uses the
-    analytic graded V_fd instead (9.93 V on the default stack, |V| >= 1.2 V_fd =
-    11.92 V): the looser of the two definitions.
+    L_D = sqrt(eps V_t / (q N_D_epi_end)). A definition, not a measurement.
 
-    With a graded n-/n+ transition (``buffer_thickness_um``) the low-doped epi ends
-    where the transition starts, so "the epi end" of the rule is the buffer start
-    (x_epi_end - Lb) and L_D is taken at the epi doping there: the edge then creeps
-    into the transition for tens of volts (the measured -10..-60 V "creep"), which is
-    not full depletion of the sensitive volume but of the transition itself.
+    With a graded n-/n+ transition (``buffer_thickness_um``; the default stack since
+    2026-10-18) the low-doped epi ends where the transition starts, so "the epi end" of
+    the rule is the buffer start (x_epi_end - Lb) and L_D is taken at the epi doping
+    there (0.64 um at 3.4e13): 3.10 V on the default stack. The edge then creeps into
+    the transition for tens of volts (the measured -10..-60 V "creep"), which is not
+    full depletion of the sensitive volume but of the transition itself. The 2D sweep's
+    is_fully_depleted gate uses the analytic V_fd instead (2.74 V on the default stack,
+    |V| >= 1.2 V_fd = 3.28 V). Previous default (nplus_calibrated_config, abrupt
+    epi/n+): 12.30 V (L_D 0.41 um; analytic 9.93 V, gate 11.92 V); legacy model's mesh
+    rule: 17.0 V.
     """
     epi_cm = config.epi_thickness_um * 1e-4
     if config.buffer_thickness_um is not None:
@@ -612,14 +612,14 @@ def run_cv(
 
     Full depletion: ``metadata["reach_through_V"]`` is the smallest |V| at which
     the epi is fully depleted (default stack: depletion edge within one Debye
-    length of the n-/n+ step, 12.30 V -- a definition; see ``_reach_through_V``),
-    or None if not reached. C-V calibration: the default doping is solved exactly on
-    eps*A/C at 0 / -10 V (calibration inputs, not validation points). Known C-V
-    residual: eps*A/C(-30 V) = 9.98 um vs the measured 9.73 um (+2.6 %); the full
-    digitised curve (lab/cv_gap) shows the default's abrupt epi/n+ form also puts the
-    C-V knee at -8..-10 V where the measurement has it at -1..-4 V. The opt-in
-    ``measured_cv_config()`` preset (graded n-/n+ transition, ``buffer_thickness_um``)
-    fits the whole curve (plateau rms 0.013 um); the default is unchanged. Legacy model (no n+,
+    length of the START of the graded n-/n+ transition, 3.10 V -- a definition; see
+    ``_reach_through_V``), or None if not reached. C-V: the default doping is a FIT to
+    the full digitised Photons Fig. 4b curve (lab/cv_gap; plateau rms 0.013 um over
+    -5..-59 V, knee rms 0.24 um; eps*A/C 1.655 / 9.519 / 9.750 um at 0 / -10 / -30 V vs
+    1.68 / 9.52 / 9.73), so the measured curve is a calibration input, not an independent
+    validation. The previous default (``nplus_calibrated_config()``, abrupt epi/n+,
+    3-point calibration) puts the knee at -8..-10 V and misses -30 V by +2.6 %; reach-
+    through 12.30 V there. Legacy model (no n+,
     ``legacy_config()``): W reaches the epi end to within the last mesh interval
     (17.0 V) and devsim stops converging at about -64 V, an artefact of the ohmic
     cathode directly on the n- epi, not a physical device limit.
@@ -1092,9 +1092,10 @@ def run_cce(
     self-consistent with the DeviceConfig. This makes CCE output diverge
     slightly from the original v3.0 CCE notebooks, which used cce_vs_bias's own
     hardcoded calibration (N_D_junction=2.90e15, N_D_bulk=8.50e13,
-    L_transition=1.0e-4 cm). The DeviceConfig defaults (N_D_junction=2.93e15,
-    N_D_bulk=8.82e13, L_transition_um=0.987) override those hardcoded defaults
-    cleanly via cce_vs_bias's `device_kwargs.update` mechanism.
+    L_transition=1.0e-4 cm). The DeviceConfig values (since 2026-10-18 the
+    measured-C-V default stack, DEFAULT_STACK) override those defaults cleanly via
+    cce_vs_bias's `device_kwargs.update` mechanism (device_kwargs carries every
+    stack key, including the graded n-/n+ transition).
 
     Device lifecycle (bucket-a)
     ---------------------------

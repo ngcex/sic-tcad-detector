@@ -30,6 +30,10 @@ def test_graded_doping_profile_sets_donors():
             N_D_junction=1e15,
             N_D_bulk=5e13,
             L_transition=2e-4,
+            # the exponential epi alone (the builders add the default stack's graded
+            # n-/n+ transition since 2026-10-18)
+            buffer_thickness_cm=None,
+            buffer_end_doping=None,
         )
 
         donors = np.array(

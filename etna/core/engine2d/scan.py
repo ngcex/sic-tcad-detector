@@ -39,6 +39,8 @@ from etna.core.device2d import (
     _L_TRANSITION_DEFAULT,
     _N_D_BULK_DEFAULT,
     _N_D_JUNCTION_DEFAULT,
+    _BUFFER_END_DOPING_DEFAULT,
+    _BUFFER_THICKNESS_DEFAULT_CM,
     _NPLUS_DEFAULT_CM,
     _SUBSTRATE_DEFAULT_CM,
 )
@@ -142,9 +144,10 @@ def _nplus_reason(device_kwargs, allow_generation=True):
 
 def _buffer_reason(device_kwargs, epi_thickness_cm):
     """Reason (or None) for the graded n-/n+ transition keywords in ``device_kwargs``
-    (popped). Both absent / None = no buffer (today's model)."""
-    t = device_kwargs.pop("buffer_thickness_cm", None)
-    nd = device_kwargs.pop("buffer_end_doping", None)
+    (popped). An absent keyword means create_sic_2d_device's default (the default
+    stack's transition); both explicitly None = abrupt epi end (no transition)."""
+    t = device_kwargs.pop("buffer_thickness_cm", _BUFFER_THICKNESS_DEFAULT_CM)
+    nd = device_kwargs.pop("buffer_end_doping", _BUFFER_END_DOPING_DEFAULT)
     if t is None and nd is None:
         return None
     if t is None or nd is None:

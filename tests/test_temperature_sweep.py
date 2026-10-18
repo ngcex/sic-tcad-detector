@@ -126,15 +126,19 @@ class TestSweepIVUsesRefreshedTATField:
 
         from etna.core.dark_current import create_dark_current_device, dark_current_sweep
 
+        from etna.core.device import DEFAULT_STACK as S
+
         df = sweep_iv_vs_temperature([300.0], V_reverse=-30)
         name = f"b01_ref_{uuid.uuid4().hex[:8]}"
+        # the sweep's device: the default stack (measured-C-V profile since 2026-10-18;
+        # was a hardcoded 2.90e15 / 8.50e13 / 1 um before 2026-10-17)
         dev = create_dark_current_device(
             device_name=name,
             T=300.0,
             doping_profile="graded",
-            N_D_junction=2.90e15,
-            N_D_bulk=8.50e13,
-            L_transition=1.0e-4,
+            N_D_junction=S["N_D_junction"],
+            N_D_bulk=S["N_D_bulk"],
+            L_transition=S["L_transition"],
         )
         try:
             J_ref = abs(dark_current_sweep(dev, [-30.0], area=1.0, V_step=0.5)["J_total"][-1])
