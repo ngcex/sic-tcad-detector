@@ -61,7 +61,9 @@ def sweep_iv_vs_temperature(
     -------
     df : pd.DataFrame
         DataFrame with columns: T, I_reverse, n_i, mu_n, mu_p, E_g.
-        Indexed by integer row number.
+        Indexed by integer row number. I_reverse is the magnitude of the 1D
+        reverse current DENSITY (A/cm^2, extract_steady_state_current); multiply
+        by the area for a current.
     """
 
     from etna.core.drift_diffusion import create_dd_device, extract_steady_state_current, ramp_bias
@@ -341,7 +343,11 @@ def extract_temperature_coefficient(temperatures, values, quantity_name="CCE"):
         - 'slope': dQuantity/dT (temperature coefficient)
         - 'intercept': fit intercept
         - 'r_squared': R^2 of the linear fit
-        - 'unit': string describing the unit (e.g., "%/K", "pA/K")
+        - 'unit': unit of the slope, assuming the units the ETNA callers pass: "1/K"
+          for a CCE given as a fraction (multiply the slope by 100 for %/K),
+          "A/cm^2/K" for a current density such as sweep_iv_vs_temperature's
+          I_reverse, else "<quantity_name>/K". No rescaling is applied (audit-v7
+          B-13: the labels used to be "%/K" and "pA/K", off by 100 and 1e12)
         - 'quantity_name': the quantity name passed in
     """
     temperatures = np.asarray(temperatures, dtype=float)
@@ -351,9 +357,9 @@ def extract_temperature_coefficient(temperatures, values, quantity_name="CCE"):
 
     # Infer unit from quantity name
     if "CCE" in quantity_name.upper():
-        unit = "%/K"
+        unit = "1/K"  # CCE is a fraction (0-1)
     elif "CURRENT" in quantity_name.upper() or quantity_name.upper().startswith("I"):
-        unit = "pA/K"
+        unit = "A/cm^2/K"  # 1D current density (extract_steady_state_current)
     else:
         unit = f"{quantity_name}/K"
 
