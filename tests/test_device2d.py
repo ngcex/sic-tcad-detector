@@ -191,16 +191,9 @@ class TestMeshStructure:
 
 
 # ---------------------------------------------------------------------------
-# Phase 26 / CONS-01 skeleton test classes.
-#
-# These hold the test surface in place BEFORE implementation. Every body is
-# decorated @pytest.mark.xfail(strict=True) so they collect (proving the surface
-# exists) but cannot produce a false green. Plans 02-04 replace the xfail bodies
-# with real assertions, flipping xfail -> pass:
-#   - Plan 02 adds the 2D-aware W extractor + reset_devsim_fully() + node helpers
-#     -> wires TestCalibrationCV, TestResetStateLeak, TestGradedDopingSmoothness
-#   - Plan 03 calibrates the 2D defaults
-#     -> wires TestReverseBiasConvergence and TestCalibrationCV assertions
+# Phase 26 / CONS-01 acceptance tests (2D C-V vs the 1D twin, reset of the
+# cylindrical globals, graded-doping smoothness, reverse-bias convergence). They
+# started as xfail(strict) skeletons; all now carry real assertions.
 # ---------------------------------------------------------------------------
 
 
