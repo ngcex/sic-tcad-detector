@@ -35,6 +35,7 @@ import math
 import numpy as np
 
 from etna.core.charge_collection_2d import _ALPHA_RANGE_CM, in_mesh_generation_fraction
+from etna.core.device import DEFAULT_N_A
 from etna.core.device2d import (
     _L_TRANSITION_DEFAULT,
     _N_D_BULK_DEFAULT,
@@ -73,7 +74,7 @@ ENGINE2D_BOX = {
 # Device keywords the engine accepts with one value only (create_sic_2d_device defaults).
 _FIXED_KWARGS = {
     "doping_profile": "graded",
-    "N_A": 1e19,
+    "N_A": DEFAULT_N_A,
     "T": 300,
     "N_D": None,
 }
@@ -425,7 +426,7 @@ ENGINE2D_DARK_BOX = {
 }
 _DARK_FIXED = {
     "doping_profile": "graded",
-    "N_A": 1e19,
+    "N_A": DEFAULT_N_A,
     "T": 300,
     "N_D": None,
 }

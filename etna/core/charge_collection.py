@@ -15,7 +15,10 @@ References:
     - Knoll, "Radiation Detection and Measurement", 4th ed.
 """
 
-from etna.core.solver_tol import DC_REL_ERROR
+from etna.core.solver_tol import (
+    DC_ABS_ERROR,
+    DC_REL_ERROR,
+)
 import logging
 import uuid
 
@@ -41,7 +44,7 @@ logger = logging.getLogger(__name__)
 
 # graded-doping defaults of the fluence sweeps = cce_vs_bias = the default stack
 from etna.core.device import DEFAULT_STACK as _STACK  # noqa: E402
-from etna.core.device import mobility_doping  # noqa: E402
+from etna.core.device import graded_stack_kwargs, mobility_doping  # noqa: E402
 
 
 def full_compensation_reason(damaged):
@@ -527,15 +530,10 @@ def cce_vs_bias(
     # graded doping of the default stack (etna.core.device.DEFAULT_STACK); was a
     # fourth set 2.90e15 / 8.50e13 / 1.0e-4 before the n+ flip. Geometry (p+, n+) comes
     # from device_kwargs (the facades pass the full DeviceConfig stack).
-    from etna.core.device import DEFAULT_STACK
-
     kwargs = dict(
         device_name=dev_name,
         epi_thickness_cm=epi_thickness_cm,
-        doping_profile="graded",
-        N_D_junction=DEFAULT_STACK["N_D_junction"],
-        N_D_bulk=DEFAULT_STACK["N_D_bulk"],
-        L_transition=DEFAULT_STACK["L_transition"],
+        **graded_stack_kwargs(),
     )
     if device_kwargs:
         kwargs.update(device_kwargs)
@@ -619,7 +617,7 @@ def cce_vs_bias(
 
             devsim.solve(
                 type="dc",
-                absolute_error=1e10,
+                absolute_error=DC_ABS_ERROR,
                 relative_error=DC_REL_ERROR,
                 maximum_iterations=40,
             )
@@ -645,7 +643,7 @@ def cce_vs_bias(
             add_generation_to_dd(device_info, zero_gen)
             devsim.solve(
                 type="dc",
-                absolute_error=1e10,
+                absolute_error=DC_ABS_ERROR,
                 relative_error=DC_REL_ERROR,
                 maximum_iterations=40,
             )
@@ -941,7 +939,7 @@ def _cce_fluence_devsim(dev_kw, damaged, V_bias, alpha_range_cm, generation_rate
         add_generation_to_dd(device_info, gen_values)
         devsim.solve(
             type="dc",
-            absolute_error=1e10,
+            absolute_error=DC_ABS_ERROR,
             relative_error=DC_REL_ERROR,
             maximum_iterations=40,
         )
@@ -1265,7 +1263,7 @@ def cce_vs_bias_at_fluence(
             add_generation_to_dd(device_info, gen_values)
             devsim.solve(
                 type="dc",
-                absolute_error=1e10,
+                absolute_error=DC_ABS_ERROR,
                 relative_error=DC_REL_ERROR,
                 maximum_iterations=40,
             )
@@ -1283,7 +1281,7 @@ def cce_vs_bias_at_fluence(
             add_generation_to_dd(device_info, zero_gen)
             devsim.solve(
                 type="dc",
-                absolute_error=1e10,
+                absolute_error=DC_ABS_ERROR,
                 relative_error=DC_REL_ERROR,
                 maximum_iterations=40,
             )
@@ -1369,10 +1367,7 @@ def cce_post_anneal(
     """
     dev_kw = dict(
         epi_thickness_cm=epi_thickness_cm,
-        doping_profile="graded",
-        N_D_junction=_STACK["N_D_junction"],
-        N_D_bulk=_STACK["N_D_bulk"],
-        L_transition=_STACK["L_transition"],
+        **graded_stack_kwargs(),
     )
     dev_kw.update(device_kwargs or {})
     from etna.core.device import apply_damaged_params, create_sic_device
@@ -1494,7 +1489,7 @@ def cce_post_anneal(
         add_generation_to_dd(device_info, gen_values)
         devsim.solve(
             type="dc",
-            absolute_error=1e10,
+            absolute_error=DC_ABS_ERROR,
             relative_error=DC_REL_ERROR,
             maximum_iterations=40,
         )
@@ -1685,10 +1680,7 @@ def cce_vs_epi_thickness(
         dev_name = f"cce_epi_{dev_id}"
 
         dev_kw = dict(
-            doping_profile="graded",
-            N_D_junction=_STACK["N_D_junction"],
-            N_D_bulk=_STACK["N_D_bulk"],
-            L_transition=_STACK["L_transition"],
+            **graded_stack_kwargs(),
         )
         dev_kw.update(device_kwargs or {})  # geometry / doping overrides (not epi)
         device_info = create_dd_device(
@@ -1729,7 +1721,7 @@ def cce_vs_epi_thickness(
             add_generation_to_dd(device_info, gen_values)
             devsim.solve(
                 type="dc",
-                absolute_error=1e10,
+                absolute_error=DC_ABS_ERROR,
                 relative_error=DC_REL_ERROR,
                 maximum_iterations=40,
             )

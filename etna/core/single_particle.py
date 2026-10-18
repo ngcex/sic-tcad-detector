@@ -36,7 +36,16 @@ from etna.core.charge_collection_2d import (
 )
 from etna.core.charge_collection import add_generation_to_dd
 from etna.core.drift_diffusion import extract_contact_current
-from etna.core.solver_tol import DC_REL_ERROR
+from etna.core.solver_tol import (
+    DC_ABS_ERROR,
+    DC_REL_ERROR,
+    RELAXED_ABS_ERROR,
+    RELAXED_REL_ERROR,
+    TRANSIENT_ABS_ERROR,
+    TRANSIENT_RELAXED_ABS_ERROR,
+    TRANSIENT_RELAXED_REL_ERROR,
+    TRANSIENT_REL_ERROR,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -205,7 +214,7 @@ def simulate_single_particle(
         # stagnates near 1e-9 and can only reach the relaxed retry; solver_tol)
         devsim.solve(
             type="transient_dc",
-            absolute_error=1e10,
+            absolute_error=DC_ABS_ERROR,
             relative_error=DC_REL_ERROR,
             maximum_iterations=30,
         )
@@ -214,8 +223,8 @@ def simulate_single_particle(
         logger.info("transient_dc failed at strict tolerances, retrying relaxed")
         devsim.solve(
             type="transient_dc",
-            absolute_error=1e12,
-            relative_error=1e-8,
+            absolute_error=RELAXED_ABS_ERROR,
+            relative_error=RELAXED_REL_ERROR,
             maximum_iterations=100,
         )
     logger.debug("Transient state initialized (transient_dc with zero gen)")
@@ -232,8 +241,8 @@ def simulate_single_particle(
         devsim.solve(
             type="transient_bdf1",
             tdelta=dt_inject,
-            absolute_error=1e10,
-            relative_error=1e-8,
+            absolute_error=TRANSIENT_ABS_ERROR,
+            relative_error=TRANSIENT_REL_ERROR,
             maximum_iterations=100,
             charge_error=1e10,
         )
@@ -242,8 +251,8 @@ def simulate_single_particle(
         devsim.solve(
             type="transient_bdf1",
             tdelta=dt_inject,
-            absolute_error=1e12,
-            relative_error=1e-6,
+            absolute_error=TRANSIENT_RELAXED_ABS_ERROR,
+            relative_error=TRANSIENT_RELAXED_REL_ERROR,
             maximum_iterations=200,
             charge_error=1e10,
         )
@@ -286,8 +295,8 @@ def simulate_single_particle(
             devsim.solve(
                 type="transient_bdf1",
                 tdelta=dt,
-                absolute_error=1e10,
-                relative_error=1e-8,
+                absolute_error=TRANSIENT_ABS_ERROR,
+                relative_error=TRANSIENT_REL_ERROR,
                 maximum_iterations=100,
                 charge_error=1e10,
             )
@@ -297,8 +306,8 @@ def simulate_single_particle(
                 devsim.solve(
                     type="transient_bdf1",
                     tdelta=dt,
-                    absolute_error=1e12,
-                    relative_error=1e-6,
+                    absolute_error=TRANSIENT_RELAXED_ABS_ERROR,
+                    relative_error=TRANSIENT_RELAXED_REL_ERROR,
                     maximum_iterations=200,
                     charge_error=1e10,
                 )

@@ -23,6 +23,7 @@ from etna.core.batched.material import (
 )
 from etna.core.batched.poisson import PoissonBatch
 from etna.core.batched.transport import ContinuityBatch
+from etna.core.device import DEFAULT_N_A
 from etna.core.devsim_lock import serialized
 from etna.core.generation_profiles import alpha_generation_profile
 from etna.core.incomplete_ionization import ionized_acceptor_concentration
@@ -233,7 +234,7 @@ def cce_sweep(
     junction_pos,
     G,
     T=300.0,
-    N_A=1e19,
+    N_A=DEFAULT_N_A,
     N_D=None,
     tol=1e-8,
     gummel_tol=1e-6,

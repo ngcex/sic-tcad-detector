@@ -23,7 +23,12 @@ References:
     - reference experimental device structure
 """
 
-from etna.core.solver_tol import DC_REL_ERROR
+from etna.core.solver_tol import (
+    DC_ABS_ERROR,
+    DC_REL_ERROR,
+    RELAXED_ABS_ERROR,
+    RELAXED_REL_ERROR,
+)
 import logging
 
 import devsim
@@ -36,6 +41,7 @@ from etna.core.sic_material import (
 )
 from etna.core.incomplete_ionization import ionized_acceptor_concentration
 from etna.core.device import (
+    DEFAULT_N_A,
     DEFAULT_STACK,
     _buffer_term,
     _check_nplus,
@@ -196,7 +202,7 @@ def create_sic_2d_device(
     half_width_um=50.0,
     epi_thickness_cm=10e-4,
     substrate_thickness_cm=_SUBSTRATE_DEFAULT_CM,
-    N_A=1e19,
+    N_A=DEFAULT_N_A,
     N_D=None,
     T=300,
     doping_profile="graded",
@@ -586,7 +592,7 @@ def calibrate_graded_doping_2d(
     half_width_um=50.0,
     epi_thickness_cm=10e-4,
     substrate_thickness_cm=1e-4,
-    N_A=1e19,
+    N_A=DEFAULT_N_A,
     T=300,
     x0=None,
     maxiter=80,
@@ -709,7 +715,7 @@ def calibrate_graded_doping_2d(
             try:
                 devsim.solve(
                     type="dc",
-                    absolute_error=1e10,
+                    absolute_error=DC_ABS_ERROR,
                     relative_error=DC_REL_ERROR,
                     maximum_iterations=40,
                 )
@@ -717,8 +723,8 @@ def calibrate_graded_doping_2d(
                 try:
                     devsim.solve(
                         type="dc",
-                        absolute_error=1e12,
-                        relative_error=1e-8,
+                        absolute_error=RELAXED_ABS_ERROR,
+                        relative_error=RELAXED_REL_ERROR,
                         maximum_iterations=100,
                     )
                 except devsim.error:

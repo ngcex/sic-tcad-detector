@@ -39,8 +39,13 @@ from etna.core.generation_profiles import (
     confine_generation_to_epi,
     proton_generation_profile,
 )
-from etna.core.device import DEFAULT_STACK as _STACK
-from etna.core.solver_tol import DC_REL_ERROR
+from etna.core.device import DEFAULT_STACK as _STACK, graded_stack_kwargs
+from etna.core.solver_tol import (
+    DC_ABS_ERROR,
+    DC_REL_ERROR,
+    RELAXED_ABS_ERROR,
+    RELAXED_REL_ERROR,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -257,7 +262,7 @@ class TransientSolver:
         # tolerance (was 1e-10: Newton is quadratic, the 1D outputs are identical)
         devsim.solve(
             type="transient_dc",
-            absolute_error=1e10,
+            absolute_error=DC_ABS_ERROR,
             relative_error=DC_REL_ERROR,
             maximum_iterations=30,
         )
@@ -367,7 +372,7 @@ class TransientSolver:
             try:
                 devsim.solve(
                     type=self.method,
-                    absolute_error=1e10,
+                    absolute_error=DC_ABS_ERROR,
                     relative_error=DC_REL_ERROR,
                     maximum_iterations=40,
                     tdelta=dt,
@@ -377,8 +382,8 @@ class TransientSolver:
                 # Retry with relaxed tolerances and more iterations
                 devsim.solve(
                     type=self.method,
-                    absolute_error=1e12,
-                    relative_error=1e-8,
+                    absolute_error=RELAXED_ABS_ERROR,
+                    relative_error=RELAXED_REL_ERROR,
                     maximum_iterations=100,
                     tdelta=dt,
                     charge_error=1e10,
@@ -701,10 +706,7 @@ def transient_cce_vs_dose_rate(
     raw_values = []
     dev_kw = dict(
         epi_thickness_cm=epi_thickness_cm,
-        doping_profile="graded",
-        N_D_junction=_STACK["N_D_junction"],
-        N_D_bulk=_STACK["N_D_bulk"],
-        L_transition=_STACK["L_transition"],
+        **graded_stack_kwargs(),
     )
     dev_kw.update(device_kwargs or {})
     if contact is None:
