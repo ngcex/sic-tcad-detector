@@ -3,7 +3,7 @@ id: B-10
 title: proton_generation_profile ignores E_MeV except to validate the range; the "30/70/150 MeV" profiles are identical curves
 severity: low
 category: docs
-status: open 2026-10-18 (presentation part done: dead _R_sic_mm removed earlier, 087adb0 docstring 'energy-independent by construction' + test G(30)==G(150)==G(62); open: notebook 03 still plots three identical 30/70/150 MeV curves and the PSTAR range entries are unverified; physics owner, see B-INDEX)
+status: open 2026-10-18 (presentation part done: dead _R_sic_mm removed earlier, 91194a5 docstring 'energy-independent by construction' + test G(30)==G(150)==G(62); open: notebook 03 still plots three identical 30/70/150 MeV curves and the PSTAR range entries are unverified; physics owner, see B-INDEX)
 location: etna/core/generation_profiles.py:255-304 (proton_generation_profile; `_R_sic_mm` noqa F841 at ~l.296), 29-35 (PROTON_RANGE_WATER_MM); notebooks/03_charge_collection.ipynb
 labels: [generation, documentation, dead-code, raw-F10]
 ---

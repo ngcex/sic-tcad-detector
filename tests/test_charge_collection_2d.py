@@ -353,7 +353,7 @@ class TestCCEHeatmapExcludesNplus:
     """cce_heatmap_2d: the n+ layer below the epi is not active volume (no devsim).
 
     Before the fix the default depth step was y >= junction_pos, so the n+ nodes got
-    CCE 1 and entered the active-fraction denominator (same bug class as dbc01b0).
+    CCE 1 and entered the active-fraction denominator (same bug class as 01085a9).
     """
 
     @staticmethod

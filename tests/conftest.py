@@ -30,7 +30,7 @@ if os.environ.get("PYTEST_XDIST_WORKER"):
 def _restore_main_module():
     """streamlit's AppTest (tests/test_app_*) leaves its page script installed as
     sys.modules["__main__"] for the rest of the worker process (TECH-DEBT WP-F note b).
-    Spawned worker pools no longer depend on it (65b1ebc), but put the real __main__
+    Spawned worker pools no longer depend on it (a3f7eb1), but put the real __main__
     back after every test so no later test sees a page script as __main__."""
     main = sys.modules.get("__main__")
     yield

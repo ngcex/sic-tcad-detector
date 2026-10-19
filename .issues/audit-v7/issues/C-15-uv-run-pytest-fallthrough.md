@@ -4,7 +4,7 @@ source: raw-C F15
 title: `uv run pytest` silently falls through to a system pytest after a plain `uv sync`, because dev deps are an optional extra rather than a uv dependency group
 severity: low
 category: improvement
-status: resolved (documented, a6ce6da)
+status: resolved (documented, 2790a8f)
 location:
   - pyproject.toml:20-24 ([project.optional-dependencies] dev = [pytest, jupyter])
   - README.md:76, :85
@@ -72,8 +72,8 @@ resolves inside the env and `uv run pytest tests/test_app_csv_export.py -q` coll
 
 S
 
-## Status 2026-10-18 (final-c): resolved (documented, a6ce6da)
+## Status 2026-10-18 (final-c): resolved (documented, 2790a8f)
 
-- a6ce6da deliberately kept ONE dev extra (pytest, xdist, jupyter, nbstripout, ruff) and documented the footgun: pyproject.toml comment above [project.optional-dependencies], README "Always sync with --extra dev" (audit C-15), docs/USAGE.md install section and troubleshooting row. CI syncs with --extra dev.
+- 2790a8f deliberately kept ONE dev extra (pytest, xdist, jupyter, nbstripout, ruff) and documented the footgun: pyproject.toml comment above [project.optional-dependencies], README "Always sync with --extra dev" (audit C-15), docs/USAGE.md install section and troubleshooting row. CI syncs with --extra dev.
 - The plain-`uv sync` fall-through still exists by design; a [dependency-groups] copy was not added (it would duplicate the dependency list, change the lock and the install docs).
 - Evidence: `grep -n "C-15" pyproject.toml README.md docs/USAGE.md` -> the three notes.

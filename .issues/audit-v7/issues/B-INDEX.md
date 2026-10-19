@@ -28,7 +28,7 @@ Each claim was re-checked against the code. Devsim runs were done for B-01, B-02
 
 - B-05: on truncation, the converged prefix is kept rather than the whole temperature point being dropped. There is also a risk of mis-pairing V and CCE for voltages not in ramp order.
 - B-13: notebook 06 does its own scaling and never prints `unit`.
-- B-15: the commit dates and history were wrong; the outputs date from bf560fd (2026-05-17).
+- B-15: the commit dates and history were wrong; the outputs date from f434c64 (2026-05-17).
 - B-08: adds a new observation, that the Gamma branch is discontinuous and below 1.
 
 **Suggested order:** B-03, then B-02, then B-15 (unblocks the notebook 20 deliverable). Next B-01 (shares the structural E_field_node fix with B-02). Then B-06, B-07, B-04, B-05, and finally the low-severity items.
@@ -37,44 +37,44 @@ Each claim was re-checked against the code. Devsim runs were done for B-01, B-02
 
 Status column synced from the issue files and the git log; evidence per change:
 
-- B-01: fixed. a7eea2b: sweep_iv_vs_temperature refreshes TAT field/gamma per bias step (PERF-02 section 7)
-- B-02: fixed. 9d19d9c: TAT node E-field on 2D meshes uses |grad Potential| (dimension branch, dark_current.py get_dimension == 2)
-- B-03: fixed. 845a66b: create_sic_2d_device returns the resolved N_D_junction/N_D_bulk/L_transition, never None (device2d.py 'audit B-03')
-- B-04: fixed. 820410a: compare_cce_hecht_vs_dd compares on the biases the DD sweep reached and returns 'truncated'; 9a84d0d test
-- B-06: fixed. d7f4b24: N_t recalibrated to 2.8e12, 18 pA is the calibration input, not a prediction (PERF-02 section 7)
-- B-16: partial. 3c546a0: the injection step is recorded (times starts at dt_inject) so the IndexError is gone and a non-converged run warns 'Q_collected is truncated'; open: a failed first post-injection step still yields a finite truncated CCE instead of NaN/raise
+- B-01: fixed. 69df110: sweep_iv_vs_temperature refreshes TAT field/gamma per bias step (PERF-02 section 7)
+- B-02: fixed. 2e9fdaa: TAT node E-field on 2D meshes uses |grad Potential| (dimension branch, dark_current.py get_dimension == 2)
+- B-03: fixed. 64dcb89: create_sic_2d_device returns the resolved N_D_junction/N_D_bulk/L_transition, never None (device2d.py 'audit B-03')
+- B-04: fixed. 45ce800: compare_cce_hecht_vs_dd compares on the biases the DD sweep reached and returns 'truncated'; a78c5aa test
+- B-06: fixed. 0af94c1: N_t recalibrated to 2.8e12, 18 pA is the calibration input, not a prediction (PERF-02 section 7)
+- B-16: partial. 0b48645: the injection step is recorded (times starts at dt_inject) so the IndexError is gone and a non-converged run warns 'Q_collected is truncated'; open: a failed first post-injection step still yields a finite truncated CCE instead of NaN/raise
 
 Counts after the sync: 5 fixed, 10 open, 1 partial (the Totals line above is the audit-time count).
 
 ## Status sync 2026-10-18 (wp-c2)
 
-- B-09: fixed. 910e2a6: plot_electric_field_multi removed (no caller).
-- B-12: fixed. ce2e236, 910e2a6, a78cbdf, 834e1ae, dd84a64 (item list in the issue file status).
-- B-14: fixed. c22c602: cce_2d_center is the centre-column CCE.
+- B-09: fixed. 8c8dec4: plot_electric_field_multi removed (no caller).
+- B-12: fixed. 8136768, 8c8dec4, 2e2ee4d, f256d10, 12d7739 (item list in the issue file status).
+- B-14: fixed. 3d7a375: cce_2d_center is the centre-column CCE.
 - B-16: closed. Verified by WP-A (issue file): a failed injection raises the devsim error; the 'partial' note above predates it.
 
 Counts after this sync (from the issue files): 1 closed, 8 fixed, 7 open.
 ## Status sync 2026-10-18 (final-verify)
 
-Branch final-abd (from final-verify 7fe3cfb). Each item was re-checked against the
+Branch final-abd (from final-verify 3727bd0). Each item was re-checked against the
 current code before it was changed or closed.
 
-- B-05: fixed. 317d2c4 changed two functions:
+- B-05: fixed. f361cf0 changed two functions:
   - `cce_vs_bias_at_fluence` catches the ramp `RuntimeError`. It returns the reached biases with `truncated` and `requested_v_stop`, as `cce_vs_bias` does.
   - `sweep_cce_vs_temperature` pairs each CCE with the voltage the sweep returned, in both the hecht and dd branches; the hecht branch had the same bug. It also adds a `truncated` column.
 
   Evidence: `pytest tests/test_truncation_b05.py` gives 3 passed.
 
-- B-13: fixed. 9456d76: the unit is "1/K" for a CCE fraction and "A/cm^2/K" for the 1D current density, with no rescaling. Evidence: `pytest tests/test_temperature_sweep.py -k "Coefficient or unit"` gives 3 passed.
-- B-15: closed. 0907a1f re-executed notebook 20 after the B-02/B-03 fixes and retracted its claims; f6bbb28 stripped all notebook outputs. Evidence: notebook 20 has 0 outputs, `grep -c "Valid results: 2\|solver_callback"` gives 0, and its cells print the sweep's valid count explicitly.
-- B-11: partial. df5f9e0 made two changes:
+- B-13: fixed. 871fe94: the unit is "1/K" for a CCE fraction and "A/cm^2/K" for the 1D current density, with no rescaling. Evidence: `pytest tests/test_temperature_sweep.py -k "Coefficient or unit"` gives 3 passed.
+- B-15: closed. 5ad2ec8 re-executed notebook 20 after the B-02/B-03 fixes and retracted its claims; 8498e1e stripped all notebook outputs. Evidence: notebook 20 has 0 outputs, `grep -c "Valid results: 2\|solver_callback"` gives 0, and its cells print the sweep's valid count explicitly.
+- B-11: partial. 79e3777 made two changes:
   - The mc_coupling docstring now says positions are loaded but unused and that the lateral CCE does not enter the spectrum.
   - `load_cce_let_table` exposes `let_min`/`let_max`, and `process_mc_ensemble` counts and logs events outside the CCE table (`n_clamped`).
 
   Evidence: `test_out_of_table_let_is_counted_and_logged`. The lateral weighting is a model change; see the paragraph below.
 
-- B-08: still open. The docs are fixed: the module docstring by 00ce048, and the discontinuous Kt < 4 branch documented in `_compute_gamma_factors` by 087adb0. The `I_TAT`/`J_TAT` keys are kept, because renaming them is API churn across the app, notebooks and tests with no numerical gain. The Gamma form itself is physics; see below.
-- B-07 and B-10: still open (physics). The non-physics parts are done in 087adb0:
+- B-08: still open. The docs are fixed: the module docstring by cf64bef, and the discontinuous Kt < 4 branch documented in `_compute_gamma_factors` by 91194a5. The `I_TAT`/`J_TAT` keys are kept, because renaming them is API churn across the app, notebooks and tests with no numerical gain. The Gamma form itself is physics; see below.
+- B-07 and B-10: still open (physics). The non-physics parts are done in 91194a5:
   - B-07: an out-of-table energy is logged once, and the `run_radiation_damage` docstring now has a caution.
   - B-10: the docstring now says "energy-independent by construction", and a test pins G(30) == G(150) == G(62).
 
@@ -89,7 +89,7 @@ It is not fixed here because both possible fixes change physics results or behav
 - Changing the default energy, for example to 62 MeV as used elsewhere in the code, changes every default damage result and the default fluence grid.
 - Raising outside the table breaks the default API call.
 
-087adb0 only makes the clamp visible: a warning logged once per energy, plus the docstring. The kappa values are also known placeholders (radiation_damage.py C-5 note).
+91194a5 only makes the clamp visible: a warning logged once per energy, plus the docstring. The kappa values are also known placeholders (radiation_damage.py C-5 note).
 
 Owner: Giada Petringa / INFN-LNS, or the user. They should choose the intended beam energy for the default.
 

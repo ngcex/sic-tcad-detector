@@ -3,7 +3,7 @@ id: A-15
 title: calibrate_graded_doping_2d destroys every devsim device in the process on each trial (undocumented at the call site)
 severity: low
 category: improvement
-status: fixed 2026-10-18 (WP-A 93944c4: Cartesian globals restored once at entry, each trial deletes only its own device and mesh)
+status: fixed 2026-10-18 (WP-A 95c1bdc: Cartesian globals restored once at entry, each trial deletes only its own device and mesh)
 location: etna/core/device2d.py:552 (import), ~664-665 (finally: reset_devsim_fully(preserve_solver=True) inside objective), 509-512 (docstring)
 labels: [audit-v7, slice-A, side-effect, devsim]
 source: raw-A-core-solvers.md F15

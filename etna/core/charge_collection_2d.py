@@ -610,7 +610,7 @@ def cce_heatmap_2d(device_info, cce_lateral, cce_1d_depth=None):
 
     # Epi = [junction_pos, epi_end]. With an n+ layer (default stack) the mesh goes on
     # to the cathode below epi_end; y >= junction_pos alone counted the n+ as active
-    # epi (same bug class as compare_cce_2d_vs_1d, commit dbc01b0).
+    # epi (same bug class as compare_cce_2d_vs_1d, commit 01085a9).
     epi_end = device_info.get("epi_end", junction_pos + device_info["epi_thickness_cm"])
     epi_mask = (y_nodes >= junction_pos) & (y_nodes <= epi_end + 1e-12)
 

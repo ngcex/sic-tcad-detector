@@ -3,7 +3,7 @@ id: A-08
 title: devsim_reset.py rationale is false for devsim 2.10 (reset_devsim() does clear globals) and docs cite stale src/ paths
 severity: low
 category: docs
-status: closed  # 2026-10-18: 7acbe10 (wp-c1) docstrings/etna paths; 93944c4 device2d 'src.' refs; WP-F cc4afe6 removed the dead step 3, corrected _CARTESIAN_DEFAULTS to devsim's values, fixed the test docstrings; test_reset_undoes_every_cylindrical_global_without_the_removed_step pins the devsim behaviour
+status: closed  # 2026-10-18: f21d4ff (wp-c1) docstrings/etna paths; 95c1bdc device2d 'src.' refs; WP-F 497b001 removed the dead step 3, corrected _CARTESIAN_DEFAULTS to devsim's values, fixed the test docstrings; test_reset_undoes_every_cylindrical_global_without_the_removed_step pins the devsim behaviour
 location: etna/core/devsim_reset.py:1-25 (header), 35, 48, 63-66, step 3 (~111-117); etna/core/device2d.py:484, 509; tests/test_devsim_reset.py:1-5
 labels: [audit-v7, slice-A, docs, devsim]
 source: raw-A-core-solvers.md F8

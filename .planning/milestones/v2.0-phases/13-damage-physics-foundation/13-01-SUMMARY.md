@@ -77,8 +77,8 @@ completed: 2026-03-24
 
 Each task was committed atomically:
 
-1. **Task 1: Create radiation_damage.py module** - `56bc6e3` (feat)
-2. **Task 2: Create comprehensive unit tests** - `cedc8a1` (test)
+1. **Task 1: Create radiation_damage.py module** - `84b9c27` (feat)
+2. **Task 2: Create comprehensive unit tests** - `30c8038` (test)
 
 ## Files Created/Modified
 

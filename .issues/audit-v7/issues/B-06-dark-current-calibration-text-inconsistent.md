@@ -3,7 +3,7 @@ id: B-06
 title: Dark-current calibration claims (18 pA / 8 pA / N_t=1e12) contradict each other and the code (~141 pA at -30 V, 0.05 cm^2); area defaults differ
 severity: medium
 category: docs
-status: fixed  # 2026-10-18 sync: d7f4b24: N_t recalibrated to 2.8e12, 18 pA is the calibration input, not a prediction (PERF-02 section 7)
+status: fixed  # 2026-10-18 sync: 0af94c1: N_t recalibrated to 2.8e12, 18 pA is the calibration input, not a prediction (PERF-02 section 7)
 location: etna/core/dark_current.py:11-20 (module docstring), 115-117 (setup_tat_model docstring), 184-188 (C8 comment), 353/429/562 (area=0.05), 700/925 (area=0.04); etna/core/sic_material.py:68; tests/test_dark_current.py:228-247
 labels: [dark-current, calibration, documentation, physics-honesty, raw-F6]
 ---

@@ -4,7 +4,7 @@ source: raw-C F12
 title: DeviceConfig has no validation; an unknown doping_profile silently becomes uniform, and uniform with N_D=None silently uses a hidden default
 severity: low
 category: bug
-status: open (partial: numeric validation fixed in 00ce048; doping_profile cases need a contract decision)
+status: open (partial: numeric validation fixed in cf64bef; doping_profile cases need a contract decision)
 location:
   - etna/api/device.py:25-43 (DeviceConfig, no __post_init__)
   - etna/core/device.py:92-93 (`if N_D is None: N_D = DEFAULT_N_D`, DEFAULT_N_D = 1.07e15 at :33)
@@ -78,7 +78,7 @@ S
 
 ## Status 2026-10-18 (final-c): open (partial)
 
-- Fixed in 00ce048: DeviceConfig.__post_init__ rejects non-positive / NaN geometry, doping, area, N_t, out-of-gap E_t, T outside 100-600 K, N_A < 1e17, donors >= N_A, inconsistent buffer / donor_table settings; dataclasses.replace re-validates.
+- Fixed in cf64bef: DeviceConfig.__post_init__ rejects non-positive / NaN geometry, doping, area, N_t, out-of-gap E_t, T outside 100-600 K, N_A < 1e17, donors >= N_A, inconsistent buffer / donor_table settings; dataclasses.replace re-validates.
 - Still open (repro on final-c): `DeviceConfig(doping_profile="Graded")` and `DeviceConfig(doping_profile="uniform")` (N_D None) both construct; device_kwargs passes them on, and the uniform path substitutes DEFAULT_N_D = 1.07e15 (etna/api/simulation.py validated_domain_reason / compensation_fluence, etna/core/device.py).
 - Why not fixed here: the __post_init__ docstring says doping_profile is "deliberately not validated here (downstream code decides)", and two tests pin that acceptance (tests/test_app_robustness.py::test_device_config_accepts_defaults_and_edges, tests/test_api_engine_switch.py::test_outside_validated_domain_uses_devsim with doping_profile="linear"). Rejecting them changes the public contract.
 - Owner: Cesare (API owner). Decision needed: reject unknown doping_profile and require N_D for "uniform" in __post_init__ (then update the two pinned tests), or keep the current contract and document the DEFAULT_N_D fallback.

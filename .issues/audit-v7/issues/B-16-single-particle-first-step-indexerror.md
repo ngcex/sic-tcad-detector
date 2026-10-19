@@ -3,7 +3,7 @@ id: B-16
 title: simulate_single_particle masks a first-step transient failure with IndexError (times[-1] on an empty list)
 severity: low
 category: bug
-status: closed 2026-10-18 (verified by WP-A: already resolved by d9e4532-era refactor; times starts with the injection step, a failed injection raises the devsim error, build_cce_let_table records NaN)
+status: closed 2026-10-18 (verified by WP-A: already resolved by c1d719c-era refactor; times starts with the injection step, a failed injection raises the devsim error, build_cce_let_table records NaN)
 location: etna/core/single_particle.py:226-287 (transient loop and summary log); etna/core/single_particle.py:428-429 (build_cce_let_table generic except)
 labels: [single-particle, transient, error-handling, raw-F16]
 ---

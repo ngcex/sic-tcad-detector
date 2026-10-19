@@ -67,7 +67,7 @@ run_dark_current(DeviceConfig()): 3.45 s -> 2.10 s (same machine, back to back).
 The three other copies of the ramp (sensitivity_sweep, dark_current_vs_fluence,
 dark_current_post_anneal) now share dark_current_at_bias.
 
-Refactored callers vs the pre-change module (git show 2f86879:etna/core/dark_current.py),
+Refactored callers vs the pre-change module (git show fd2e866:etna/core/dark_current.py),
 lab/engine_box/bench/dark_refactor_parity.py, area 0.04:
 
 - dark_current_vs_fluence, fluences 0 / 1e12 / 1e13 / 2e13 (the last fully compensated,
@@ -89,7 +89,7 @@ etna/core/transient.py (WP-A), so the change is a WP-A follow-up: hoist the buil
 and ramp above the loop in transient_cce_vs_dose_rate, snapshot once, restore per rate
 (delete the device once in a finally). Side note for WP-A: the 20 Gy/s point comes out
 at exactly 1.0 (clipped) on the default stack while 50-230 Gy/s give 0.99980-0.99984.
-Correction 2026-10-18 (WP-F, 010d795): on f232b37 (local per-node mobility, A-03) the 20 Gy/s
+Correction 2026-10-18 (WP-F, ac7894a): on ffbef70 (local per-node mobility, A-03) the 20 Gy/s
 point is raw 0.999725, not clipped; the exact 1.0 was the pre-A-03 raw 1.00028, clipped to 1
 below the 5 % warning margin. The dataframe/metadata now carry transient_cce_raw. Build-once
 landed: 7.48 -> 2.15 s on DeviceConfig(), bit-identical.

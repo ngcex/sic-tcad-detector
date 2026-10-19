@@ -79,8 +79,8 @@ completed: 2026-03-26
 
 Each task was committed atomically:
 
-1. **Task 1: Parameterize device geometry in fluence sweep functions** - `2d8171c` (feat)
-2. **Task 2: Add single-defect constructor, uncertainty envelope, and parametric sweep functions with tests** - `a084f8c` (feat)
+1. **Task 1: Parameterize device geometry in fluence sweep functions** - `30032bc` (feat)
+2. **Task 2: Add single-defect constructor, uncertainty envelope, and parametric sweep functions with tests** - `c0735b0` (feat)
 
 ## Files Created/Modified
 

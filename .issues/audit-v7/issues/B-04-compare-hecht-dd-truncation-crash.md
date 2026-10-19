@@ -3,7 +3,7 @@ id: B-04
 title: compare_cce_hecht_vs_dd raises ValueError (length mismatch) whenever the DD sweep truncates
 severity: medium
 category: bug
-status: fixed  # 2026-10-18 sync: 820410a: compare_cce_hecht_vs_dd compares on the biases the DD sweep reached and returns 'truncated'; 9a84d0d test
+status: fixed  # 2026-10-18 sync: 45ce800: compare_cce_hecht_vs_dd compares on the biases the DD sweep reached and returns 'truncated'; a78c5aa test
 location: etna/core/charge_collection.py:1471-1505 (compare_cce_hecht_vs_dd); etna/core/charge_collection.py:612-623 (cce_vs_bias truncated return); etna/core/validation.py:62; etna/core/plotting.py:541-549 (plot_cce_comparison)
 labels: [cce, hecht, truncation, robustness, raw-F4]
 ---

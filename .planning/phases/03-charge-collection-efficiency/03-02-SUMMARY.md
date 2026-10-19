@@ -81,8 +81,8 @@ completed: 2026-03-21
 
 Each task was committed atomically:
 
-1. **Task 1: Add radiation generation to DD solver and extract CCE** - `8b01c1f` (feat)
-2. **Task 2: CCE vs bias sweep with Hecht comparison and tests** - `59394ee` (feat)
+1. **Task 1: Add radiation generation to DD solver and extract CCE** - `d26de7a` (feat)
+2. **Task 2: CCE vs bias sweep with Hecht comparison and tests** - `3459f17` (feat)
 
 ## Files Created/Modified
 

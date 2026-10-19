@@ -68,9 +68,9 @@ completed: 2026-07-13
 
 ## Task Commits
 
-1. **Task 1: Live-devsim spike — confirm ParametricSweep(param="T") + run_dark_current tolerates a minimal single-point bias request** - `4f2d6f7` (docs)
-2. **Task 2: Extend app/components/results.py with build_damage_figure, build_dark_current_figure, and two new to_csv_bytes branches** - `3bd4ce0` (feat)
-3. **Task 3: Add CSV export tests for damage/dark_current + fix the Pitfall-4 regression in test_unknown_sim_type_raises_value_error** - `d54b33c` (test)
+1. **Task 1: Live-devsim spike — confirm ParametricSweep(param="T") + run_dark_current tolerates a minimal single-point bias request** - `27b1cf4` (docs)
+2. **Task 2: Extend app/components/results.py with build_damage_figure, build_dark_current_figure, and two new to_csv_bytes branches** - `6bcdf3c` (feat)
+3. **Task 3: Add CSV export tests for damage/dark_current + fix the Pitfall-4 regression in test_unknown_sim_type_raises_value_error** - `13ea661` (test)
 
 **Plan metadata:** (this commit, following SUMMARY)
 

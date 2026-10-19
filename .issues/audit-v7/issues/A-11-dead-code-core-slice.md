@@ -3,7 +3,7 @@ id: A-11
 title: Dead / test-only code and unused locals in the core slice
 severity: low
 category: dead-code
-status: fixed 2026-10-18 (wp-c2 ce2e236: unused import + kT_eV locals removed; 834e1ae: mobility_caughey_thomas kept as the 300 K reference, depletion_width_from_capacitance kept as public utility, M_c/B/E_D_* marked informational, NC_300/NV_300 pinned to compute_ni(300) within 1 %; 910e2a6: effective_dos kept for A-02; skip_init via A-05)
+status: fixed 2026-10-18 (wp-c2 8136768: unused import + kT_eV locals removed; f256d10: mobility_caughey_thomas kept as the 300 K reference, depletion_width_from_capacitance kept as public utility, M_c/B/E_D_* marked informational, NC_300/NV_300 pinned to compute_ni(300) within 1 %; 8c8dec4: effective_dos kept for A-02; skip_init via A-05)
 location: etna/core/sic_material.py (mobility_caughey_thomas ~156-187, effective_dos ~308-328, fields M_c, E_D_hex, E_D_cub, B, NC_300, NV_300); etna/core/device.py:23 (unused import), :140 (kT_eV); etna/core/device2d.py:318 (kT_eV); etna/core/cv_analysis.py:~66-84 (depletion_width_from_capacitance); etna/core/transient.py:232 (skip_init)
 labels: [audit-v7, slice-A, dead-code, cleanup]
 source: raw-A-core-solvers.md F11

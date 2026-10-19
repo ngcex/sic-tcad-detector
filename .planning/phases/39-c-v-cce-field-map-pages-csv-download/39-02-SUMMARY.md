@@ -63,8 +63,8 @@ completed: 2026-07-11
 
 Each task was committed atomically:
 
-1. **Task 1: Plotly figure builders in results.py** - `aeb2126` (feat)
-2. **Task 2: to_csv_bytes serializer + pure unit test** - `53236ef` (test)
+1. **Task 1: Plotly figure builders in results.py** - `a5a7a19` (feat)
+2. **Task 2: to_csv_bytes serializer + pure unit test** - `c4e1ae1` (test)
 
 **Plan metadata:** (this commit)
 
@@ -96,8 +96,8 @@ _Note: Task 1's commit also included the `to_csv_bytes` function body since both
 **2. [Process note, not a Rule 1-4 deviation] Task 1 and Task 2's edits to `results.py` landed in one file-write, split across two commits**
 
 - **Found during:** Staging Task 2's commit
-- **Issue:** The entire `app/components/results.py` (builders + `to_csv_bytes`) was authored in a single `Write` call before running Task 1's acceptance-criteria gate. Task 1's commit (`aeb2126`) therefore already contains the `to_csv_bytes` function body that Task 2's action described adding.
-- **Fix:** No code fix needed — content is correct and matches both tasks' specs exactly. Task 2's commit (`53236ef`) captures the new test file, which is the file genuinely unique to Task 2's `<files>` list.
+- **Issue:** The entire `app/components/results.py` (builders + `to_csv_bytes`) was authored in a single `Write` call before running Task 1's acceptance-criteria gate. Task 1's commit (`a5a7a19`) therefore already contains the `to_csv_bytes` function body that Task 2's action described adding.
+- **Fix:** No code fix needed — content is correct and matches both tasks' specs exactly. Task 2's commit (`c4e1ae1`) captures the new test file, which is the file genuinely unique to Task 2's `<files>` list.
 - **Files modified:** None (documentation-only note).
 - **Verification:** `git diff --stat HEAD` before Task 2's commit was empty for `results.py`, confirming no re-edit occurred; all Task 1 and Task 2 acceptance criteria independently verified pass against the final committed state.
 - **Committed in:** N/A (process observation only)
@@ -141,6 +141,6 @@ _Completed: 2026-07-11_
 - FOUND: app/components/results.py
 - FOUND: tests/test_app_csv_export.py
 - FOUND: .planning/phases/39-c-v-cce-field-map-pages-csv-download/39-02-SUMMARY.md
-- FOUND commit aeb2126 (feat: Plotly figure builders)
-- FOUND commit 53236ef (test: to_csv_bytes unit test)
+- FOUND commit a5a7a19 (feat: Plotly figure builders)
+- FOUND commit c4e1ae1 (test: to_csv_bytes unit test)
 - Re-ran plan-level `<verification>`: `uv run pytest tests/test_app_csv_export.py -x` → 4 passed; `uv run python -c "from app.components.results import build_cv_figure, build_cce_figure, build_field_figures, build_mott_schottky_figure, to_csv_bytes"` → exit 0; `grep -c "import streamlit" app/components/results.py tests/test_app_csv_export.py` → 0 for both

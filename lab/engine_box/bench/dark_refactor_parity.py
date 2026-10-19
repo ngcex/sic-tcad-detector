@@ -6,7 +6,7 @@ from etna.core import dark_current as new
 from etna.core.devsim_lock import quiet_devsim
 from etna.core.devsim_reset import reset_devsim_fully
 
-# pre-change module: git show 2f86879:etna/core/dark_current.py > /tmp/wpb/dc_old.py
+# pre-change module: git show fd2e866:etna/core/dark_current.py > /tmp/wpb/dc_old.py
 spec = importlib.util.spec_from_file_location("dc_old", "/tmp/wpb/dc_old.py")
 old = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(old)

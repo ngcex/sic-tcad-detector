@@ -67,9 +67,9 @@ completed: 2026-07-02
 
 ## Task Commits
 
-1. **Task 1: Implement run_cv() facade in etna/api/simulation.py** - `291dba8` (feat)
-2. **Task 2: Re-export run_cv from etna and create examples/cv_example.py** - `f0c5eee` (feat)
-3. **Task 3: Add tests/test_api_cv.py (output shape + physically reasonable C)** - `cf44013` (test)
+1. **Task 1: Implement run_cv() facade in etna/api/simulation.py** - `f1335bc` (feat)
+2. **Task 2: Re-export run_cv from etna and create examples/cv_example.py** - `6632b39` (feat)
+3. **Task 3: Add tests/test_api_cv.py (output shape + physically reasonable C)** - `542a622` (test)
 
 _Note: Task 3 is tdd="true"; because the implementation (run_cv) already existed from Tasks 1-2, this task's single commit adds the test asserting the already-implemented behavior — matching the plan's own sequencing (implement Task 1, wire+prove Task 2, test Task 3)._
 
@@ -112,9 +112,9 @@ None - no external service configuration required.
 - FOUND: `examples/cv_example.py`
 - FOUND: `tests/test_api_cv.py`
 - FOUND: `etna/__init__.py` (modified)
-- FOUND commit: 291dba8
-- FOUND commit: f0c5eee
-- FOUND commit: cf44013
+- FOUND commit: f1335bc
+- FOUND commit: 6632b39
+- FOUND commit: 542a622
 
 ---
 

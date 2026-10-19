@@ -65,8 +65,8 @@ completed: 2026-03-29
 
 Each task was committed atomically:
 
-1. **Task 1: Create device2d.py with 2D mesh generation and graded doping** - `1ad59f7` (feat)
-2. **Task 2: Create test_device2d.py with mesh and doping verification tests** - `e6e606a` (test)
+1. **Task 1: Create device2d.py with 2D mesh generation and graded doping** - `0aa23d5` (feat)
+2. **Task 2: Create test_device2d.py with mesh and doping verification tests** - `daca5e1` (test)
 
 ## Files Created/Modified
 

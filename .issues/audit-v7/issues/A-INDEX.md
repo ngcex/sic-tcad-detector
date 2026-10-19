@@ -43,31 +43,31 @@ Cross-references (kept as separate issues, not merged):
 
 Status column synced from the issue files and the git log; evidence per change:
 
-- A-01: fixed. b7cd9c1: cv_sweep solves off-lattice targets (tests/test_cv_sweep_lattice.py); run_cv on the batched engine is exact (PERF-02 item checked)
-- A-07: fixed. 61990a5 (ramp_voltage called with its signature), then 2127b60 rewrote nb19: no ramp_voltage call left in notebooks/19 or scripts/create_notebook_19.py
-- A-08: closed. 7acbe10 (wp-c1) docstrings/paths; 93944c4 device2d 'src.' refs; WP-F cc4afe6 dead step 3 removed, _CARTESIAN_DEFAULTS = devsim's values, test docstrings fixed.
+- A-01: fixed. 5964fac: cv_sweep solves off-lattice targets (tests/test_cv_sweep_lattice.py); run_cv on the batched engine is exact (PERF-02 item checked)
+- A-07: fixed. 399a4da (ramp_voltage called with its signature), then 2e7de3b rewrote nb19: no ramp_voltage call left in notebooks/19 or scripts/create_notebook_19.py
+- A-08: closed. f21d4ff (wp-c1) docstrings/paths; 95c1bdc device2d 'src.' refs; WP-F 497b001 dead step 3 removed, _CARTESIAN_DEFAULTS = devsim's values, test docstrings fixed.
 
 Counts after the sync: 2 fixed, 11 open, 2 partial (the Totals line above is the audit-time count).
 
 ## Status sync 2026-10-18 (wp-c2)
 
-- A-03: fixed. 1D 36c8997; 2D c344f39 (merged f232b37): device2d, alternative structures and engine2d use the local per-node mobility.
-- A-04, A-05: fixed. 03c7c17 (issue files already said so; index synced).
-- A-11: fixed. ce2e236 (unused import, kT_eV), 834e1ae (kept symbols with reasons, NC/NV pinned to compute_ni), 910e2a6 (effective_dos kept for A-02).
-- A-15: fixed. 93944c4 (issue file already said so; index synced).
+- A-03: fixed. 1D d8a9209; 2D cc252bb (merged ffbef70): device2d, alternative structures and engine2d use the local per-node mobility.
+- A-04, A-05: fixed. ce11872 (issue files already said so; index synced).
+- A-11: fixed. 8136768 (unused import, kT_eV), f256d10 (kept symbols with reasons, NC/NV pinned to compute_ni), 8c8dec4 (effective_dos kept for A-02).
+- A-15: fixed. 95c1bdc (issue file already said so; index synced).
 
 Counts after this sync (from the issue files): 1 closed, 7 fixed, 7 open.
 ## Status sync 2026-10-18 (final-verify)
 
-Branch final-abd (from final-verify 7fe3cfb). Each item was re-checked against the
+Branch final-abd (from final-verify 3727bd0). Each item was re-checked against the
 current code before it was changed or closed.
 
-- A-06: fixed. d579dc7 removed the Poisson-only `ramp_voltage` / `voltage_sweep`; the only caller was `test_voltage_sweep_short`. Bias sweeps are `drift_diffusion.ramp_bias` / `cv_analysis.cv_sweep`. Evidence: `grep -rn 'voltage_sweep\|ramp_voltage' etna app tests scripts notebooks examples` finds nothing; `pytest tests/test_poisson.py` gives 13 passed.
-- A-09: fixed. 7f1eabd added `etna.core.devsim_reset.delete_device_and_mesh`, now used by the 32 per-call `finally` blocks in etna/core and etna/api. Evidence: `pytest tests/test_devsim_reset.py -k mesh` passes 2 new tests: the helper removes `{name}_mesh`, and after `run_dark_current` `devsim.get_mesh_list()` is `[]`.
-- A-10: fixed. Item 3 by 834e1ae, item 4 by a78cbdf, items 1, 2 and 5 by 4ff507a (docstrings only; the device2d `x0` is now described as an optimizer starting guess). Evidence: `grep -n W_simulated etna/core/device.py` matches only the "No W_simulated" note.
-- A-12: fixed. 7d7d026 changed both validators. `validate_cv` sets out-of-range experimental voltages to NaN and leaves them out of the metrics; it also returns `extrapolated` and `n_extrapolated`. `validate_iv` uses a target bias only if a simulated point lies within 0.25 V; otherwise the value is NaN, the pass flag is False and the bias is listed in `missing_targets`. Evidence: `pytest tests/test_validation.py` gives 23 passed (6 new). Notebook 02's grids contain -60 V and ±2 V, so its numbers change only if its reverse sweep truncates before -60 V. In that case the dark current now shows NaN instead of a value from a lower bias.
-- A-13: fixed. d13ec97: `iv_sweep` starts from the live contact bias and returns `truncated`. Evidence: `pytest tests/test_iv_sweep_balanced.py` gives 3 passed (1 new: after `ramp_bias(-10)`, the only bias set is -9.5 V).
-- A-14: fixed. 00ce048 added the DeviceConfig validation; 53270cd added the 1D mesh guard. Evidence: `test_thin_p_plus_layer_builds` builds `create_sic_device(substrate_thickness_cm=2e-6)`, and its smallest node position is 0.
+- A-06: fixed. 97e6986 removed the Poisson-only `ramp_voltage` / `voltage_sweep`; the only caller was `test_voltage_sweep_short`. Bias sweeps are `drift_diffusion.ramp_bias` / `cv_analysis.cv_sweep`. Evidence: `grep -rn 'voltage_sweep\|ramp_voltage' etna app tests scripts notebooks examples` finds nothing; `pytest tests/test_poisson.py` gives 13 passed.
+- A-09: fixed. 5f551a0 added `etna.core.devsim_reset.delete_device_and_mesh`, now used by the 32 per-call `finally` blocks in etna/core and etna/api. Evidence: `pytest tests/test_devsim_reset.py -k mesh` passes 2 new tests: the helper removes `{name}_mesh`, and after `run_dark_current` `devsim.get_mesh_list()` is `[]`.
+- A-10: fixed. Item 3 by f256d10, item 4 by 2e2ee4d, items 1, 2 and 5 by cad9894 (docstrings only; the device2d `x0` is now described as an optimizer starting guess). Evidence: `grep -n W_simulated etna/core/device.py` matches only the "No W_simulated" note.
+- A-12: fixed. faf40d8 changed both validators. `validate_cv` sets out-of-range experimental voltages to NaN and leaves them out of the metrics; it also returns `extrapolated` and `n_extrapolated`. `validate_iv` uses a target bias only if a simulated point lies within 0.25 V; otherwise the value is NaN, the pass flag is False and the bias is listed in `missing_targets`. Evidence: `pytest tests/test_validation.py` gives 23 passed (6 new). Notebook 02's grids contain -60 V and ±2 V, so its numbers change only if its reverse sweep truncates before -60 V. In that case the dark current now shows NaN instead of a value from a lower bias.
+- A-13: fixed. 54c7135: `iv_sweep` starts from the live contact bias and returns `truncated`. Evidence: `pytest tests/test_iv_sweep_balanced.py` gives 3 passed (1 new: after `ramp_bias(-10)`, the only bias set is -9.5 V).
+- A-14: fixed. cf64bef added the DeviceConfig validation; 4d6f266 added the 1D mesh guard. Evidence: `test_thin_p_plus_layer_builds` builds `create_sic_device(substrate_thickness_cm=2e-6)`, and its smallest node position is 0.
 - A-02: still open, physics. See the paragraph below.
 
 Counts after this sync (`grep -h '^status:' A-[0-9]*.md`): 1 closed, 13 fixed, 1 open (A-02).
@@ -82,7 +82,7 @@ Counts after this sync (`grep -h '^status:' A-[0-9]*.md`): 1 closed, 13 fixed, 1
 | 1e16        | 9.6e-4 | 0.33       |
 | 1e17        | 6.0e-3 | 0.14       |
 
-It is not fixed here because the fix changes physics results, including the default device. At N_A = 1e19 the Gibbs branch still has a blend weight of 0.12, so swapping in the neutrality form moves the default ionized fraction from 0.132 to 0.138 (+4 %). That shifts V_bi and every baseline. Since 00ce048, `DeviceConfig` rejects N_A < 1e17, which limits user exposure through the API and app; core callers can still pass lower values.
+It is not fixed here because the fix changes physics results, including the default device. At N_A = 1e19 the Gibbs branch still has a blend weight of 0.12, so swapping in the neutrality form moves the default ionized fraction from 0.132 to 0.138 (+4 %). That shifts V_bi and every baseline. Since cf64bef, `DeviceConfig` rejects N_A < 1e17, which limits user exposure through the API and app; core callers can still pass lower values.
 
 Owner: Giada Petringa / INFN-LNS physics group, or the user.
 

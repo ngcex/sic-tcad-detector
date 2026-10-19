@@ -26,7 +26,7 @@ default-stack recalibrations and the n+ substrate all five parity tests failed a
 the committed dumps (NetDoping), and dumps regenerated now fail too (checked: the current
 devsim device has the n+ layer, NetDoping differs by 700x on those rows). The spike is
 superseded by `etna/core/engine2d/`, whose parity vs devsim is `tests/test_engine2d*.py`.
-To rerun the spike as it was, check out commit 7aff7c9 (dumps included); the generators
+To rerun the spike as it was, check out commit 099c13c (dumps included); the generators
 are `bench/dump_mesh.py HW`, `bench/devsim_scan_dump.py 50 50 10`, `bench/bench_go_nogo.py 50 150`
 (`ref_{50,150}_50.npz` had no generator in the repo). The tests skip without the dumps.
 

@@ -67,8 +67,8 @@ completed: 2026-03-20
 
 Each task was committed atomically:
 
-1. **Task 1: Descope bias-dependent W targets and update ROADMAP/REQUIREMENTS** - `763aff8` (chore)
-2. **Task 2: Fix PLAN frontmatter and make tests honest** - `993bb8b` (fix)
+1. **Task 1: Descope bias-dependent W targets and update ROADMAP/REQUIREMENTS** - `3254daf` (chore)
+2. **Task 2: Fix PLAN frontmatter and make tests honest** - `67ef55b` (fix)
 
 ## Files Created/Modified
 

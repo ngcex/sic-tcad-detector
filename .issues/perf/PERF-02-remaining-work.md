@@ -12,7 +12,7 @@ Read PERF-01 first. Audit issues A-*, B-* are still open (D-01, D-04, C-01, C-04
 
 ## 1. Finish "complete the suite" (was in progress, interrupted)
 - [ ] Slow-test baseline never captured: run `pytest -n auto --dist loadfile -m slow` on HEAD and on
-      commit 98a14b4 (a git worktree), diff the outcomes. Only the run on HEAD had started (killed).
+      commit 8428e62 (a git worktree), diff the outcomes. Only the run on HEAD had started (killed).
       Slow-only files: test_api_device, test_api_field, test_alternative_structures (+ slow tests in others).
 - [ ] Verify xdist + numba: cold `etna/core/batched/__pycache__` race (first -n auto run was cold and
       passed: 527 passed), warm run time, and whether 10 workers x 10 numba threads oversubscribe
@@ -81,7 +81,7 @@ D-02/B-06 (DESIGN-1 "18 pA" not produced by the model: measured 141 pA), A-02..A
 - Next candidates: run_field and temperature sweep onto the batched engine; SuperLU timing for one
   factorization; remaining slow tests: test_2d_vs_1d_cv_centerline (153 s), test_center_matches_1d (132 s).
 
-## 7. Tolerance, B-01, N_t (2026-10-17, commits adf4d3b, a7eea2b, d7f4b24)
+## 7. Tolerance, B-01, N_t (2026-10-17, commits 1f6a6bd, 69df110, 0af94c1)
 - DC rel tolerance 1e-10 -> 1e-8 via `etna/core/solver_tol.DC_REL_ERROR` at the measured steady-state sites
   (transient, flash_recombination, single_particle, device.py still 1e-10). 2D build 50 um 7.7 s, 150 um 28.9 s
   (from 102/390 s); zero strict failures at 150 um; a live converged 2D device no longer breaks later builds.

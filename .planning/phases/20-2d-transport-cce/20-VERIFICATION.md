@@ -71,7 +71,7 @@ All 6 required exports present: `integrate_over_mesh_2d`, `create_2d_dd_device`,
 | TRNS-02     | 20-01       | User can compute CCE as function of lateral position, quantifying edge-to-center ratio | SATISFIED | `cce_lateral_scan` returns `x_positions_cm`, `cce_values`, `edge_to_center_ratio`                    |
 | TRNS-03     | 20-01       | User can generate 2D CCE heatmap showing active vs dead regions                        | SATISFIED | `cce_heatmap_2d` returns `cce_map` + `active_fraction`; `plot_cce_heatmap_2d` visualizes with RdYlGn |
 | TRNS-04     | 20-01       | User can compare 2D CCE to 1D CCE and quantify active-to-geometric volume ratio        | SATISFIED | `compare_cce_2d_vs_1d` returns `cce_1d`, `cce_2d_center`, `active_to_geometric_ratio`                |
-| NBKV-01     | 20-02       | Publication-quality notebook for 2D electrostatics and CCE validation against 1D       | SATISFIED | Notebook 15 with 27 cells, 9 sections, human-verified (commit 26aa21d)                               |
+| NBKV-01     | 20-02       | Publication-quality notebook for 2D electrostatics and CCE validation against 1D       | SATISFIED | Notebook 15 with 27 cells, 9 sections, human-verified (commit 6003225)                               |
 
 No orphaned requirements found. All 5 requirement IDs from plan frontmatter are accounted for.
 
@@ -95,13 +95,13 @@ Plan truth 2 states "within **5%**" but the test `test_compute_cce_2d_center_mat
 
 ### Human Verification Required
 
-Plan 20-02, Task 2 was a `checkpoint:human-verify gate="blocking"` task. The SUMMARY records this was approved (commit `26aa21d`: "docs(20-02): notebook 15 approved — 2D electrostatics and CCE analysis"). No further human verification is needed for phase acceptance.
+Plan 20-02, Task 2 was a `checkpoint:human-verify gate="blocking"` task. The SUMMARY records this was approved (commit `6003225`: "docs(20-02): notebook 15 approved — 2D electrostatics and CCE analysis"). No further human verification is needed for phase acceptance.
 
 ---
 
 ### No-Modification Constraint Check
 
-Commits 24b37a6, a862d91, f53ea71, ca59c92, 3fa25ad, 05ea47a, 075ce19, 22d6232, 26aa21d only touch:
+Commits 5722e0e, 2fb71ab, 006e841, de3bb0e, 81ed39a, 9520e70, 2dd8f1c, 3005c10, 6003225 only touch:
 
 - `src/charge_collection_2d.py` (new)
 - `src/plotting2d.py` (extended — allowed by Plan 02)

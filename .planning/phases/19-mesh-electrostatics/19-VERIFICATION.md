@@ -91,10 +91,10 @@ All 4 commits documented in SUMMARYs verified present in git log:
 
 | Commit    | Plan  | Files Changed                           | Content                                  |
 | --------- | ----- | --------------------------------------- | ---------------------------------------- |
-| `1ad59f7` | 19-01 | `src/device2d.py` (+467 lines)          | 2D mesh generation with graded doping    |
-| `e6e606a` | 19-01 | `tests/test_device2d.py` (+192 lines)   | 9 device2d tests                         |
-| `6c0d225` | 19-02 | `src/plotting2d.py` (+354 lines)        | Visualization + validation utilities     |
-| `9788d54` | 19-02 | `tests/test_plotting2d.py` (+220 lines) | 8 Poisson/validation/visualization tests |
+| `0aa23d5` | 19-01 | `src/device2d.py` (+467 lines)          | 2D mesh generation with graded doping    |
+| `daca5e1` | 19-01 | `tests/test_device2d.py` (+192 lines)   | 9 device2d tests                         |
+| `f34352c` | 19-02 | `src/plotting2d.py` (+354 lines)        | Visualization + validation utilities     |
+| `1142c19` | 19-02 | `tests/test_plotting2d.py` (+220 lines) | 8 Poisson/validation/visualization tests |
 
 `src/device.py` last modified in phase 14 — no phase 19 commits touched it. Frozen status confirmed.
 

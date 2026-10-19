@@ -78,8 +78,8 @@ completed: 2026-03-21
 
 Each task was committed atomically:
 
-1. **Task 1: Generation profile models (alpha + proton Bragg peak)** - `6142ef6` (feat)
-2. **Task 2: Hecht equation and CCE utilities** - `2289007` (feat)
+1. **Task 1: Generation profile models (alpha + proton Bragg peak)** - `d37de46` (feat)
+2. **Task 2: Hecht equation and CCE utilities** - `7dab01f` (feat)
 
 ## Files Created/Modified
 
@@ -106,7 +106,7 @@ Each task was committed atomically:
 - **Fix:** Changed comparison to drift-fraction-only CCE (W/d_epi \* Hecht(V,W)), which correctly shows diffusion adds to collection
 - **Files modified:** tests/test_charge_collection.py
 - **Verification:** All 19 tests pass
-- **Committed in:** 2289007
+- **Committed in:** 7dab01f
 
 ---
 

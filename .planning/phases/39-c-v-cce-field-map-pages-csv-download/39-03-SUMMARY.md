@@ -66,8 +66,8 @@ completed: 2026-07-11
 
 Each task was committed atomically:
 
-1. **Task 1: C-V page + AppTest — 1D guard, Run→cache→render→download** - `d8fb564` (feat)
-2. **Task 2: CCE page + AppTest — 1D guard, Run→cache→render→download** - `304424a` (feat)
+1. **Task 1: C-V page + AppTest — 1D guard, Run→cache→render→download** - `7b53e68` (feat)
+2. **Task 2: CCE page + AppTest — 1D guard, Run→cache→render→download** - `3a973c0` (feat)
 
 **Plan metadata:** committed as part of this final documentation commit.
 
@@ -122,5 +122,5 @@ _Completed: 2026-07-11_
 - FOUND: tests/test_app_cv_page.py
 - FOUND: tests/test_app_cce_page.py
 - FOUND: .planning/phases/39-c-v-cce-field-map-pages-csv-download/39-03-SUMMARY.md
-- FOUND: commit d8fb564
-- FOUND: commit 304424a
+- FOUND: commit 7b53e68
+- FOUND: commit 3a973c0

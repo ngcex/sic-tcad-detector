@@ -78,8 +78,8 @@ completed: 2026-03-23
 
 Each task was committed atomically:
 
-1. **Task 1: Add T-dependent material property functions** - `5881766` (feat)
-2. **Task 2: Add unit tests for T-dependent functions** - `d55bd69` (test)
+1. **Task 1: Add T-dependent material property functions** - `2fb057a` (feat)
+2. **Task 2: Add unit tests for T-dependent functions** - `8ec72fc` (test)
 
 ## Files Created/Modified
 
@@ -102,7 +102,7 @@ Each task was committed atomically:
 - **Fix:** Recalculated E_g_0 = 3.2965625 eV to produce exactly 3.26 eV at 300K
 - **Files modified:** src/sic_material.py (E_g_0 field in SiC4H_Parameters)
 - **Verification:** bandgap(300) returns exactly 3.26; all existing tests still pass (compute_ni uses hardcoded value)
-- **Committed in:** 5881766 (Task 1 commit)
+- **Committed in:** 2fb057a (Task 1 commit)
 
 ---
 
@@ -133,5 +133,5 @@ _Completed: 2026-03-23_
 - [x] src/sic_material.py exists
 - [x] tests/test_material.py exists
 - [x] 10-01-SUMMARY.md exists
-- [x] Commit 5881766 (Task 1) found
-- [x] Commit d55bd69 (Task 2) found
+- [x] Commit 2fb057a (Task 1) found
+- [x] Commit 8ec72fc (Task 2) found

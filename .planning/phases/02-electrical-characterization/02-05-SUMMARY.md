@@ -66,8 +66,8 @@ completed: 2026-03-21
 
 Each task was committed atomically:
 
-1. **Task 1: Fix validate_iv pass/fail semantics and notebook Cell 9 summary** - `c01fa3c` (fix)
-2. **Task 2: Update ROADMAP and REQUIREMENTS to reflect ideal-SRH baseline** - `229e761` (docs)
+1. **Task 1: Fix validate_iv pass/fail semantics and notebook Cell 9 summary** - `cdbf79e` (fix)
+2. **Task 2: Update ROADMAP and REQUIREMENTS to reflect ideal-SRH baseline** - `284abb9` (docs)
 
 ## Files Created/Modified
 

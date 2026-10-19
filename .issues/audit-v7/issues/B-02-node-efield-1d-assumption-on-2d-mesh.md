@@ -3,7 +3,7 @@ id: B-02
 title: _compute_node_efield assumes a 1D edge chain; on 2D meshes it gives nodes the field of unrelated edges (get_dark_current_2d / notebook 20 noise floor)
 severity: high
 category: bug
-status: fixed  # 2026-10-18 sync: 9d19d9c: TAT node E-field on 2D meshes uses |grad Potential| (dimension branch, dark_current.py get_dimension == 2)
+status: fixed  # 2026-10-18 sync: 2e9fdaa: TAT node E-field on 2D meshes uses |grad Potential| (dimension branch, dark_current.py get_dimension == 2)
 location: etna/core/dark_current.py:233-265 (_compute_node_efield), 94-230 (setup_tat_model); etna/core/optimization.py:380-433 (get_dark_current_2d); scripts/create_notebook_20.py:428
 labels: [physics, dark-current, 2d, tat, microdosimetry, raw-F2]
 ---
@@ -54,7 +54,7 @@ M
 
 ## Resolution (closed 2026-10-18, WP-B)
 
-Fixed in 9d19d9c: `_compute_node_efield` branches on `devsim.get_dimension(device)`. On 2D
+Fixed in 2e9fdaa: `_compute_node_efield` branches on `devsim.get_dimension(device)`. On 2D
 meshes it takes |grad Potential| from devsim's node gradient (`vector_gradient`); the 1D
 edge-chain average is kept for 1D only (now vectorised, bit-identical). Test plan covered by
 tests/test_tat_efield_2d.py (2D centre column vs 1D twin within 3 %, field integral = potential

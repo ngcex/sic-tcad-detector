@@ -75,8 +75,8 @@ completed: 2026-04-01
 
 Each task was committed atomically:
 
-1. **Task 1: Extend create_2d_dd_device to accept device parameter kwargs** - `7d3e990` (feat)
-2. **Task 2: Create optimization.py with sweep, noise floor, and scoring functions** - `6e21f0b` (feat)
+1. **Task 1: Extend create_2d_dd_device to accept device parameter kwargs** - `8de1919` (feat)
+2. **Task 2: Create optimization.py with sweep, noise floor, and scoring functions** - `1ac0b7a` (feat)
 
 ## Files Created/Modified
 

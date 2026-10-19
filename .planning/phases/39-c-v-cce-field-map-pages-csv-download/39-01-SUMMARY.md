@@ -64,7 +64,7 @@ completed: 2026-07-11
 Each task was committed atomically:
 
 1. **Task 1: Materialize plotly into the venv via uv** — no source files modified (dependency materialization only); verified inline, no separate commit (folded into Task 2's commit per plan's `files_modified` scope, which lists only the test file)
-2. **Task 2: Spike — prove etna.run_cv is mockable under AppTest.from_function** - `c8d1c7d` (test)
+2. **Task 2: Spike — prove etna.run_cv is mockable under AppTest.from_function** - `61ad205` (test)
 
 **Plan metadata:** (this commit, following SUMMARY write)
 
@@ -119,6 +119,6 @@ _Completed: 2026-07-11_
 ## Self-Check: PASSED
 
 - FOUND: `tests/test_app_run_mockability.py`
-- FOUND commit: `c8d1c7d`
+- FOUND commit: `61ad205`
 - Re-ran all task-level acceptance criteria: all PASS
 - Re-ran plan-level `<verification>`: `uv run python -c "import plotly.graph_objects"` exit 0; `uv run pytest tests/test_app_run_mockability.py -x` exit 0, 1 passed

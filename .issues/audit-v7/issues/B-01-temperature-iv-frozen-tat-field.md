@@ -3,7 +3,7 @@ id: B-01
 title: sweep_iv_vs_temperature(use_tat=True) ramps with a frozen zero-bias E_field_node, so leakage comes out ~7.6x too low
 severity: high
 category: bug
-status: fixed  # 2026-10-18 sync: a7eea2b: sweep_iv_vs_temperature refreshes TAT field/gamma per bias step (PERF-02 section 7)
+status: fixed  # 2026-10-18 sync: 69df110: sweep_iv_vs_temperature refreshes TAT field/gamma per bias step (PERF-02 section 7)
 location: etna/core/temperature_sweep.py:88-102; etna/core/dark_current.py:141,210,233-265; etna/core/drift_diffusion.py ramp_bias (~l.245-310)
 labels: [physics, dark-current, temperature, tat, silent-wrong-result, raw-F1]
 ---

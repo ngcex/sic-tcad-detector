@@ -66,6 +66,6 @@ S
 
 ## Status 2026-10-18 (final-c): fixed
 
-- C-01 (8fd9602 + a0bd37c) made run_cce / run_temperature_sweep honour T, N_A and the substrate; T x run_temperature_sweep is disabled with a warning since 00ce048.
-- 0d55a48: the last no-op pair, area_cm2 x {run_cce, run_temperature_sweep} (CCE is dimensionless), now shows a warning and disables Run; area x run_cv still runs.
+- C-01 (930ffdf + 8eff930) made run_cce / run_temperature_sweep honour T, N_A and the substrate; T x run_temperature_sweep is disabled with a warning since cf64bef.
+- 4d5fb13: the last no-op pair, area_cm2 x {run_cce, run_temperature_sweep} (CCE is dimensionless), now shows a warning and disables Run; area x run_cv still runs.
 - Evidence: `uv run pytest -q tests/test_app_batch_sweep_page.py` -> 9 passed (incl. test_area_sweep_with_cce_facade_is_disabled_with_warning); `uv run pytest -q tests/test_api_config_forwarding.py` -> 19 passed.

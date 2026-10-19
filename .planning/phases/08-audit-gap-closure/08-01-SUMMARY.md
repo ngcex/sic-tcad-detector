@@ -66,9 +66,9 @@ completed: 2026-03-22
 
 Each task was committed atomically:
 
-1. **Task 1: Add sparse cache warning to notebook 05** - `f5aeb9b` (feat)
-2. **Task 2: Add validate_iv and validate_cv unit tests** - `9e59d63` (test)
-3. **Task 3: Fix ROADMAP progress table for Phases 6 and 7** - `b1ded5a` (fix)
+1. **Task 1: Add sparse cache warning to notebook 05** - `962a0c8` (feat)
+2. **Task 2: Add validate_iv and validate_cv unit tests** - `9bd4cfa` (test)
+3. **Task 3: Fix ROADMAP progress table for Phases 6 and 7** - `2a4e062` (fix)
 
 ## Files Created/Modified
 
@@ -93,7 +93,7 @@ Each task was committed atomically:
 - **Fix:** Changed `is True`/`is False` to `== True`/`== False` with noqa comments
 - **Files modified:** tests/test_validation.py
 - **Verification:** All 17 tests pass
-- **Committed in:** 9e59d63 (Task 2 commit)
+- **Committed in:** 9bd4cfa (Task 2 commit)
 
 **2. [Rule 2 - Missing Critical] Also marked top-level phase checkboxes**
 
@@ -102,7 +102,7 @@ Each task was committed atomically:
 - **Fix:** Changed `- [ ]` to `- [x]` for Phase 6 and Phase 7 in the phases list
 - **Files modified:** .planning/ROADMAP.md
 - **Verification:** grep confirms both top-level and detail checkboxes marked
-- **Committed in:** b1ded5a (Task 3 commit)
+- **Committed in:** 2a4e062 (Task 3 commit)
 
 ---
 

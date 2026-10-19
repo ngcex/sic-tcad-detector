@@ -107,8 +107,8 @@ drift-diffusion solution equals one quasi-Fermi Poisson equation (dpsi 1.4e-14 V
 
 ## Status 2026-10-16 — promotion DONE for run_cv / run_cce (branch fix/audit-v7-top, pushed)
 
-Commits: 98a14b4 engine + parity tests; c6519f0 run_cv/run_cce on the engine (devsim fallback);
-3f0269c run_cv_batch/run_cce_batch + batched ParametricSweep; follow-up fixes from Fable reviews;
+Commits: 8428e62 engine + parity tests; c08286a run_cv/run_cce on the engine (devsim fallback);
+7db54eb run_cv_batch/run_cce_batch + batched ParametricSweep; follow-up fixes from Fable reviews;
 test commit with xdist/testpaths/module-scoped 2D fixture. Each step was reviewed read-only by Fable
 (reports kept in scratchpad/perf/, untracked) and checked per test file against a baseline.
 

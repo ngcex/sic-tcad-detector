@@ -85,4 +85,4 @@ S
 
 ## Resolution (2026-10-18)
 
-Resolved by a6ce6da (WP-D): `uv lock --upgrade-package urllib3 anyio gitpython tornado jupyterlab jupyter-server notebook mistune soupsieve`; CI nightly job runs pip-audit on the all-extras export (.github/workflows/ci.yml). Re-checked on wp-c2 after the merge: `uv export --frozen --all-extras --no-hashes --no-emit-project | uvx pip-audit --no-deps --disable-pip -r -` -> "No known vulnerabilities found".
+Resolved by 2790a8f (WP-D): `uv lock --upgrade-package urllib3 anyio gitpython tornado jupyterlab jupyter-server notebook mistune soupsieve`; CI nightly job runs pip-audit on the all-extras export (.github/workflows/ci.yml). Re-checked on wp-c2 after the merge: `uv export --frozen --all-extras --no-hashes --no-emit-project | uvx pip-audit --no-deps --disable-pip -r -` -> "No known vulnerabilities found".

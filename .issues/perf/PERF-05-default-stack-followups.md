@@ -1,6 +1,6 @@
 # PERF-05: follow-ups after the default-stack flip and core cleanup (2026-10-17)
 
-From the independent review of 72beb9b (no blockers):
+From the independent review of c644b30 (no blockers):
 
 - `calibrate_graded_doping` (device.py) and `calibrate_graded_doping_2d` (device2d.py) default
   to p+ 1 um and do not pass nplus, so they now build p+ 1 um + default n+ (neither model).
@@ -11,7 +11,7 @@ From the independent review of 72beb9b (no blockers):
   is overstated.
 - `test_cce_increases_with_bias` is pinned to legacy until the single-particle estimator
   (Option A, advisor) lands; `test_v3_cce_center_100um_preserved` now guards the DEFAULT
-  model (0.95346904), name is misleading. DONE 2026-10-18 (wp-c2 6517841): renamed
+  model (0.95346904), name is misleading. DONE 2026-10-18 (wp-c2 7164a7b): renamed
   test_default_2d_builder_cce_uniform_generation_10V_hw50/_hw150, JSON metadata.key_names.
 - `microdosimetric_sweep(n_jobs>1)` spawn workers do not pin numba/BLAS threads
   (oversubscription); no app path uses n_jobs today.
@@ -137,7 +137,7 @@ share 0: the stripe is confined to the epi); default + nplus_generation 50 V 0.9
 0.954963 at 50 V (share 6.07e-4); v3 cce_center 0.95394391 -> 0.95452362; test_nplus 2D
 abrupt-n+ nplus_generation 0.9621205 -> 0.9625666. Engine vs devsim after the change: max
 |dCCE| 7.9e-15 over these cases (<= 1e-11 gate).
-Notebooks re-run into scratch (base 68af67e vs this branch; tracked notebooks untouched):
+Notebooks re-run into scratch (base 98e018a vs this branch; tracked notebooks untouched):
 nb06 75 s: I_reverse(300 K) 3.680e-10 -> 3.941e-10 A/cm2 (+7.1 %: N_t refit + profile),
 W(0 V, 300 K) 1.689 -> 1.649 um (edge), CCE(300 K) 0.9942 -> 0.9944, dI/dT clinical
 4.758e-10 -> 5.095e-10 A/cm2/K. nb07 55 s: N_t 2.81e12 -> 2.85e12; its own -30 V device
@@ -154,7 +154,7 @@ over all nodes). Legacy hw 25, 10 V, LET 1: 0.961613 -> 0.962940 vs steady-state
 (gap -9.5e-4 -> +3.8e-4); default hw 25, 50 V (anode): 0.999970 -> 0.999966 (box vs
 triangle only; the track touches no contact with the n+ layer), so nb16's default-stack
 CCE(LET) table moves by ~4e-6 (lab/default_flip/bench/sp_contacts.py).
-Suite time old -> new: base 68af67e 912 passed in 266 s -> this branch 913 passed in 290 s
+Suite time old -> new: base 98e018a 912 passed in 266 s -> this branch 913 passed in 290 s
 (same machine, -n auto --dist loadfile; base re-measured in a scratch copy with its own venv).
 Uniform-profile configs (sidebar uniform mode, DESIGN-1's zero-bias variant) now inherit the
 1.14 um graded transition unless it is switched off (buffer_thickness_um=None).

@@ -3,7 +3,7 @@ id: D-11
 title: Stale src/ module names, /physics/etna cd paths, "46 pytest modules" count and xfail-skeleton comments
 severity: low
 category: docs
-status: fixed 2026-10-18 (wp-c1 7acbe10 scripts; wp-c2 6517841 v3 docstring, fa2ecfa test_plotting, 732c086 test_device2d banner; README by WP-D c0d62e6; no src/ reference left in etna/ app/ tests/)
+status: fixed 2026-10-18 (wp-c1 f21d4ff scripts; wp-c2 7164a7b v3 docstring, 268435f test_plotting, 6a1cc29 test_device2d banner; README by WP-D e91511c; no src/ reference left in etna/ app/ tests/)
 location: README.md:123; scripts/freeze_v3_baselines.py:23; scripts/diagnose_1d_2d_parity.py:27; src/-references in scripts/freeze_v3_baselines.py, scripts/run_calibration_2d.py, scripts/regression_sweep_v3_notebooks.py, tests/test_devsim_reset.py, tests/test_v3_baseline_regression.py, tests/test_plotting.py, tests/test_device2d.py, etna/core/devsim_reset.py, etna/core/device2d.py; tests/test_device2d.py:196-212; tests/test_v3_baseline_regression.py:7
 labels: [docs, comment-rot, src-rename]
 source: raw-D F11

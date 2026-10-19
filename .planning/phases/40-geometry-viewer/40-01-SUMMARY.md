@@ -81,5 +81,5 @@ None — the builder is fully wired against the real `MeshData` interface. (Page
 
 - FOUND: app/components/geometry_viewer.py
 - FOUND: tests/test_app_geometry_viewer.py
-- FOUND commit c9a8cee (feat: builder)
-- FOUND commit a751389 (test: unit tests)
+- FOUND commit e5a82e6 (feat: builder)
+- FOUND commit ae6549e (test: unit tests)

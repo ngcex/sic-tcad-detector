@@ -71,7 +71,7 @@ fluence_min=1e16, fluence_max=1e13 (st.error shown and the facade is not called)
 
 S
 
-## Status 2026-10-18 (final-c): fixed (00ce048, test e08916e)
+## Status 2026-10-18 (final-c): fixed (cf64bef, test cdd52ee)
 
-- 00ce048: Run checks `0 < fluence_min <= fluence_max` (and V_bias <= 0) before geomspace; errors go through show_error. e08916e pins it.
+- cf64bef: Run checks `0 < fluence_min <= fluence_max` (and V_bias <= 0) before geomspace; errors go through show_error. cdd52ee pins it.
 - Evidence: `uv run pytest -q tests/test_app_radiation_damage_page.py` -> 8 passed (test_invalid_fluence_range_is_rejected_before_the_facade: min 0, min < 0, min > max -> st.error, facade never called).

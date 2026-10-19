@@ -66,8 +66,8 @@ completed: 2026-03-21
 
 Each task was committed atomically:
 
-1. **Task 1: Register pytest slow marker and add cv_sweep integration test** - `afa5909` (feat)
-2. **Task 2: Add agreement metrics to compare_cce_hecht_vs_dd** - `8b060da` (included in concurrent 06-01 commit)
+1. **Task 1: Register pytest slow marker and add cv_sweep integration test** - `bffb6fc` (feat)
+2. **Task 2: Add agreement metrics to compare_cce_hecht_vs_dd** - `14efe13` (included in concurrent 06-01 commit)
 
 ## Files Created/Modified
 
@@ -77,7 +77,7 @@ Each task was committed atomically:
 
 ## Decisions Made
 
-- Task 2 changes to src/charge_collection.py were committed as part of the concurrent 06-01 plan execution (commit 8b060da) because both plans modified the same file simultaneously. The changes are correct and verified.
+- Task 2 changes to src/charge_collection.py were committed as part of the concurrent 06-01 plan execution (commit 14efe13) because both plans modified the same file simultaneously. The changes are correct and verified.
 
 ## Deviations from Plan
 

@@ -1,7 +1,7 @@
 # lab/microdosimeter running log
 
 Petringa et al. 2025, Physica Medica 140, 105675 (papers/" Microdosimetry.pdf", leading space).
-Branch feat/microdosimeter off fix/audit-v7-top (b5ced83). All commands run from the repo root.
+Branch feat/microdosimeter off fix/audit-v7-top (503f6fd). All commands run from the repo root.
 Benches: `bench/digitise_fig4b.py`, `bench/fit_vfd.py`, `bench/cce_bias.py`, `bench/buffer_w.py`;
 helpers in `mdlab.py`. Outputs: `notes/*.out`, `notes/cce_bias.npz`.
 

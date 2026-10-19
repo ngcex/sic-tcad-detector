@@ -109,7 +109,7 @@ def test_legacy_preset_matches_the_old_default():
 
 
 def test_legacy_preset_reproduces_the_pre_flip_numbers():
-    """Values of DeviceConfig() before the n+ flip (commit f60be71, scratch baseline)."""
+    """Values of DeviceConfig() before the n+ flip (commit 2e9ca52, scratch baseline)."""
     c = legacy_config()
     cv = sim.run_cv(c, 0.0, -30.0, 31)
     W = np.asarray(cv.metadata["depletion_widths"]) * 1e4

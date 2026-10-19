@@ -1,6 +1,6 @@
 # lab/tabulated_profile: the 19-knot measured-C-V inversion as an OPT-IN tabulated donor profile (WP-E)
 
-Branch wp-e (worktree) off fix/audit-v7-top (f232b37). Implements the "tabulated profile"
+Branch wp-e (worktree) off fix/audit-v7-top (ffbef70). Implements the "tabulated profile"
 next step of lab/cv_gap (LOG section 6) and lab/buffer_profile (section 7) as an OPT-IN model:
 DEFAULT_STACK and `DeviceConfig()` are unchanged (checked by tests/test_measured_cv_tabulated.py
 and the untouched tests/test_default_stack.py). All commands from the repo root;

@@ -82,8 +82,8 @@ indistinguishable from a complete one. The app path itself is labeled correctly 
 
 S
 
-## Status 2026-10-18 (final-c): fixed (e10c83d + f88e0bb)
+## Status 2026-10-18 (final-c): fixed (5ca8e98 + 1d57122)
 
-- e10c83d: run_dark_current reports `truncated`, `requested_v_start/stop`, `reached_v_stop`.
-- f88e0bb: the Dark Current page aggregate is `sim_type="dark_current_vs_T"` (CSV `T_K,I_total_A`); run_dark_current keeps `"dark_current"` (x = bias) and to_csv_bytes exports it as `bias_V,I_total_A` (+ `past_reach_through` column for the legacy model, `# truncated:` and `# validity:` header lines); build_dark_current_figure titles the axis Temperature or Bias by sim_type.
+- 5ca8e98: run_dark_current reports `truncated`, `requested_v_start/stop`, `reached_v_stop`.
+- 1d57122: the Dark Current page aggregate is `sim_type="dark_current_vs_T"` (CSV `T_K,I_total_A`); run_dark_current keeps `"dark_current"` (x = bias) and to_csv_bytes exports it as `bias_V,I_total_A` (+ `past_reach_through` column for the legacy model, `# truncated:` and `# validity:` header lines); build_dark_current_figure titles the axis Temperature or Bias by sim_type.
 - Evidence: `uv run pytest -q tests/test_app_csv_export.py tests/test_app_dark_current_page.py` -> passed (test_run_dark_current_shape_is_labelled_bias_not_temperature, test_run_dark_current_truncation_and_legacy_validity_are_exported; page CSV still starts with T_K).

@@ -3,7 +3,7 @@ id: B-12
 title: Dead code and test-only symbols in the physics-model slice (dead assignment, unused import/guard/variable, unwired anneal chain, stale docstring)
 severity: low
 category: dead-code
-status: fixed 2026-10-18 (wp-c2: ce2e236 import warnings; 910e2a6 compute_cce_from_current, compute_microdosimetric_means, plot_electric_field_multi removed, list_root_trees kept; 834e1ae anneal chain / events_to_charge_profiles kept as public API with reasons, doping overridable via device_kwargs and read from graded_stack_kwargs (a78cbdf); dd84a64 _R_sic_mm, None guard, citation, validate_2d_vs_1d reason; the hecht_cce_partial_depletion defaults text was already corrected; mu_e dead assignment already gone)
+status: fixed 2026-10-18 (wp-c2: 8136768 import warnings; 8c8dec4 compute_cce_from_current, compute_microdosimetric_means, plot_electric_field_multi removed, list_root_trees kept; f256d10 anneal chain / events_to_charge_profiles kept as public API with reasons, doping overridable via device_kwargs and read from graded_stack_kwargs (2e2ee4d); 12d7739 _R_sic_mm, None guard, citation, validate_2d_vs_1d reason; the hecht_cce_partial_depletion defaults text was already corrected; mu_e dead assignment already gone)
 location: etna/core/{charge_collection,dark_current,radiation_damage,mc_coupling,microdosimetry,plotting,plotting2d,generation_profiles,optimization}.py (per item below)
 labels: [dead-code, cleanup, raw-F12]
 ---

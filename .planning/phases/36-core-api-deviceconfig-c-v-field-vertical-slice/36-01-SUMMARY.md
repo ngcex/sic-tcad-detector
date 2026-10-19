@@ -67,9 +67,9 @@ completed: 2026-07-02
 
 ## Task Commits
 
-1. **Task 1: Create SimResult and MeshData dataclasses in etna/api/results.py** - `111973e` (feat)
-2. **Task 2: Promote DeviceConfig to etna/api/device.py and add build_device() facade** - `fa6d586` (feat)
-3. **Task 3: Re-export public API from `etna/__init__.py` and remove the stub** - `d68460f` (refactor)
+1. **Task 1: Create SimResult and MeshData dataclasses in etna/api/results.py** - `b662d65` (feat)
+2. **Task 2: Promote DeviceConfig to etna/api/device.py and add build_device() facade** - `a40aa9c` (feat)
+3. **Task 3: Re-export public API from `etna/__init__.py` and remove the stub** - `1b95ccf` (refactor)
 
 _Note: no TDD tasks in this plan; each task is a single commit._
 
@@ -112,9 +112,9 @@ None - no external service configuration required.
 - FOUND: `etna/api/results.py`
 - FOUND: `etna/api/device.py`
 - FOUND: `etna/__init__.py` (modified)
-- FOUND commit: 111973e
-- FOUND commit: fa6d586
-- FOUND commit: d68460f
+- FOUND commit: b662d65
+- FOUND commit: a40aa9c
+- FOUND commit: 1b95ccf
 
 ---
 

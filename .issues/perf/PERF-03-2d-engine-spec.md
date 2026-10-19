@@ -188,16 +188,16 @@ Status: written from code and logs only; nothing was run. **GUESS** marks infere
 
 
 ## Outcome (2026-10-16)
-- Spike GO (lab/solver2d, 7aff7c9): 150 um build+ramp+10-point scan 50 s devsim vs 0.73 s (68x; 9.9x with the full-2D ramp).
-- Promoted as etna/core/engine2d (ff3ad1f), used only by microdosimetric_sweep(solver="auto"); default stays "devsim".
+- Spike GO (lab/solver2d, 099c13c): 150 um build+ramp+10-point scan 50 s devsim vs 0.73 s (68x; 9.9x with the full-2D ramp).
+- Promoted as etna/core/engine2d (8668cfa), used only by microdosimetric_sweep(solver="auto"); default stays "devsim".
   ENGINE2D_BOX: hw 25-150, epi 10 um ONLY (gated), N_D_bulk 5e13-5e14, V 20-80, default device keywords. Outside: devsim.
   Gate on notebook 20's 36 configs (serial): devsim 1187 s vs 8.8 s (135x); NaN rows (8, V=80 punch-through) and is_valid
   identical; centre CCE max diff 1.17e-5 (hw=150, 5e14, 20 V = devsim's contact-current roundoff, grows with width,
   unchanged at rel 1e-12, engine is width independent). Punch-through rule: dark field before cathode > 5e4 V/cm -> NaN row,
   4.45e4-5e4 -> devsim decides (calibrated at hw=25/epi 10 um; widen only with a parity run).
-- Edge/centre CCE was an O(h) artefact of the triangle-rule I_gen (fd631e3: box rule now; ratio = 1 within 1e-6); ranking by
-  the ratio ordered noise -> sweep now ranks operating points (2bdf1ec). DESIGN-2/notebook 20/README claims retracted (0907a1f).
-- Found on the way: get_dark_current_2d was 0.501x (missing x2 for the mirrored half device, e302f0c); B-03 (845a66b).
+- Edge/centre CCE was an O(h) artefact of the triangle-rule I_gen (175460c: box rule now; ratio = 1 within 1e-6); ranking by
+  the ratio ordered noise -> sweep now ranks operating points (8141bd1). DESIGN-2/notebook 20/README claims retracted (5ad2ec8).
+- Found on the way: get_dark_current_2d was 0.501x (missing x2 for the mirrored half device, d5cc514); B-03 (64dcb89).
 - Open: create_sic_2d_device can leak a half-built mesh if it raises inside engine2d's grid builder; single_particle still uses the
   triangle rule (track charge); the generator script is stale vs the notebook (guarded by NB20_FORCE_REGENERATE);
   n_jobs for the engine path only 1.9x (import cost per worker, serial is fine); engine default switch left to the user.

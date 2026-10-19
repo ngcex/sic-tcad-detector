@@ -3,7 +3,7 @@ id: D-09
 title: 45 ruff F-rule findings (unused imports, dead assignments incl. leftover I_generated, unasserted W_60)
 severity: low
 category: dead-code
-status: fixed 2026-10-18 (wp-c2 ce2e236: ruff.toml F/E9/W6, 45 -> 0 findings; b09760c scoped for CI `ruff check .`)
+status: fixed 2026-10-18 (wp-c2 8136768: ruff.toml F/E9/W6, 45 -> 0 findings; 9a24277 scoped for CI `ruff check .`)
 location: etna/core/{device.py:23,140; dark_current.py:42,633; charge_collection.py:964,1353,1397; optimization.py:25; radiation_damage.py:1061; temperature_sweep.py:21,24; alternative_structures.py:60,346; device2d.py:318; single_particle.py:156-157; flash_recombination.py:259}; scripts/diagnose_1d_2d_parity.py:48; scripts/regression_sweep_v3_notebooks.py:24; tests/* (26 findings)
 labels: [lint, dead-code, ruff]
 source: raw-D F9

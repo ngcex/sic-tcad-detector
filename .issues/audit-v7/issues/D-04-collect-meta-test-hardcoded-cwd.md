@@ -3,7 +3,7 @@ id: D-04
 title: test_full_suite_collects_with_module_present always fails — subprocess cwd hardcoded to nonexistent /Users/ngcex/projects/physics/etna
 severity: medium
 category: bug
-status: fixed  # 2026-10-18 sync: a38134d: stale cwd in the collect meta-test fixed
+status: fixed  # 2026-10-18 sync: fd81f26: stale cwd in the collect meta-test fixed
 location: tests/test_radiation_damage.py:423-440
 labels: [tests, stale-path, always-red]
 source: raw-D F4

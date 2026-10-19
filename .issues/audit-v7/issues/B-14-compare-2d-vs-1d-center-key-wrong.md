@@ -3,7 +3,7 @@ id: B-14
 title: compare_cce_2d_vs_1d returns "cce_2d_center" equal to the full-area CCE, not the center CCE
 severity: low
 category: docs
-status: fixed 2026-10-18 (wp-c2 c22c602: cce_2d_center = centre-column CCE; equal to the full-area value to ~1e-9 on the laterally uniform device, notebook 15 output unchanged at 4 decimals)
+status: fixed 2026-10-18 (wp-c2 3d7a375: cce_2d_center = centre-column CCE; equal to the full-area value to ~1e-9 on the laterally uniform device, notebook 15 output unchanged at 4 decimals)
 location: etna/core/charge_collection_2d.py:497-515 (compare_cce_2d_vs_1d return dict); notebooks/15_2d_electrostatics_cce.ipynb; scripts/create_notebook_15*.py
 labels: [2d, cce, wrong-key, raw-F14]
 ---

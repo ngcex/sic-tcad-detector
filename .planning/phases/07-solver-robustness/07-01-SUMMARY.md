@@ -65,8 +65,8 @@ completed: 2026-03-21
 
 Each task was committed atomically:
 
-1. **Task 1: Add time_node_model to equation re-registrations and add regression test** - `e99ec8a` (fix)
-2. **Task 2: Update ROADMAP Phase 4 SC-3 wording** - `daab947` (docs)
+1. **Task 1: Add time_node_model to equation re-registrations and add regression test** - `6d558e2` (fix)
+2. **Task 2: Update ROADMAP Phase 4 SC-3 wording** - `6f880b5` (docs)
 
 ## Files Created/Modified
 
@@ -90,7 +90,7 @@ Each task was committed atomically:
 - **Fix:** Added transient_dc initialization step in the regression test before the BDF1 solve
 - **Files modified:** tests/test_flash_recombination.py
 - **Verification:** Test passes successfully with transient_dc init + BDF1 step
-- **Committed in:** e99ec8a (Task 1 commit)
+- **Committed in:** 6d558e2 (Task 1 commit)
 
 ---
 

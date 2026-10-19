@@ -3,7 +3,7 @@ id: D-15
 title: run_microdosimetry / Streamlit page default sv_width_um=150 vs DESIGN-2's only validated SV width (100 um)
 severity: low
 category: docs
-status: closed 2026-10-18 (no numerical mismatch: mean_chord_length uses 4V/S only with width AND depth, so run_microdosimetry's sv_width_um is inert and l_bar = 2 * thickness = 20 um for 150 and 100 um alike; 087adb0 documents it in the facade docstring and the app help, test_sv_width_does_not_enter_l_bar pins it. Default kept (design decision). The finite-SV l_bar question is physics, see D-INDEX)
+status: closed 2026-10-18 (no numerical mismatch: mean_chord_length uses 4V/S only with width AND depth, so run_microdosimetry's sv_width_um is inert and l_bar = 2 * thickness = 20 um for 150 and 100 um alike; 91194a5 documents it in the facade docstring and the app help, test_sv_width_does_not_enter_l_bar pins it. Default kept (design decision). The finite-SV l_bar question is physics, see D-INDEX)
 location: deliverables/DESIGN-2-microdosimetry-geometry.md:35,97-98; etna/api/simulation.py:843-847 (sv_width_um=150.0, used at ~:888 mean_chord_length); app/workflows/microdosimetry.py:57-58
 labels: [docs, microdosimetry, defaults, foundry-deliverable]
 source: raw-D F15

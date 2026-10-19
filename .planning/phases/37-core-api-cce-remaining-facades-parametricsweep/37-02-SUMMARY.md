@@ -80,12 +80,12 @@ completed: 2026-07-09
 
 Each task committed atomically:
 
-1. **Task 1: facade + microdosimetry test scaffolds (RED)** — `1d6be78` (test)
-2. **Task 2: bucket-a facades** — `4593519` (feat)
-3. **Task 3: bucket-b facades** — `c6460fb` (feat)
-4. **Task 4: bucket-c run_microdosimetry + re-export all 6 (GREEN)** — `d4b9783` (feat)
+1. **Task 1: facade + microdosimetry test scaffolds (RED)** — `1a93e57` (test)
+2. **Task 2: bucket-a facades** — `ec45c89` (feat)
+3. **Task 3: bucket-b facades** — `9d05c1b` (feat)
+4. **Task 4: bucket-c run_microdosimetry + re-export all 6 (GREEN)** — `da4bc66` (feat)
 
-_TDD gate compliance: `test(...)` RED commit (`1d6be78`) precedes the `feat(...)` GREEN commit (`d4b9783`). No REFACTOR needed._
+_TDD gate compliance: `test(...)` RED commit (`1a93e57`) precedes the `feat(...)` GREEN commit (`da4bc66`). No REFACTOR needed._
 
 ## Files Created/Modified
 
@@ -115,7 +115,7 @@ _TDD gate compliance: `test(...)` RED commit (`1d6be78`) precedes the `feat(...)
 - **Found during:** Tasks 3 and 4.
 - **Issue:** The plan's acceptance greps (e.g. `run_dark_current` body must have `build_device(` count 0; `run_microdosimetry` body must have `devsim\.|reset_devsim_fully\(|build_device\(` count 0) matched _explanatory prose_ in my docstrings/comments — a docstring saying "a bare `build_device()` would omit…" and a comment "Bucket-c: no devsim." Both were purely descriptive, but they tripped the literal grep AC (false positives).
 - **Fix:** Reworded the prose to "the bare device-builder facade" and "no TCAD solve" so the grep gates return the intended 0. No code path or behavior changed — only comment/docstring wording.
-- **Committed in:** `c6460fb` (Task 3), `d4b9783` (Task 4).
+- **Committed in:** `9d05c1b` (Task 3), `da4bc66` (Task 4).
 
 ---
 
@@ -145,10 +145,10 @@ None — no external service configuration required.
 - `tests/test_api_microdosimetry.py` — FOUND
 - `etna/api/simulation.py` 6 facades — FOUND (grep def count: run_radiation_damage/run_temperature_sweep/run_flash_recombination=3, run_dark_current/run_transient=2, run_microdosimetry=1)
 - `etna/__init__.py` 6 re-exports — FOUND
-- Commit `1d6be78` (Task 1 RED) — FOUND
-- Commit `4593519` (Task 2 bucket-a) — FOUND
-- Commit `c6460fb` (Task 3 bucket-b) — FOUND
-- Commit `d4b9783` (Task 4 bucket-c + GREEN) — FOUND
+- Commit `1a93e57` (Task 1 RED) — FOUND
+- Commit `ec45c89` (Task 2 bucket-a) — FOUND
+- Commit `9d05c1b` (Task 3 bucket-b) — FOUND
+- Commit `da4bc66` (Task 4 bucket-c + GREEN) — FOUND
 
 ---
 

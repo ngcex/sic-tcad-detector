@@ -3,7 +3,7 @@ id: D-14
 title: cwd-relative data paths in three tests silently skip (or fail) when pytest is not launched from repo root
 severity: low
 category: improvement
-status: fixed 2026-10-18 (final-abd df5f9e0: the three tests anchor data paths on __file__ and assert instead of skip. Evidence: cd /tmp && uv run --project <repo> pytest <repo>/tests/test_v3_baseline_regression.py::test_v3_notebook_list_unchanged <repo>/tests/test_mc_coupling.py <repo>/tests/test_app_microdosimetry_page.py -> 29 passed, 0 skipped)
+status: fixed 2026-10-18 (final-abd 79e3777: the three tests anchor data paths on __file__ and assert instead of skip. Evidence: cd /tmp && uv run --project <repo> pytest <repo>/tests/test_v3_baseline_regression.py::test_v3_notebook_list_unchanged <repo>/tests/test_mc_coupling.py <repo>/tests/test_app_microdosimetry_page.py -> 29 passed, 0 skipped)
 location: tests/test_v3_baseline_regression.py:23,27-28; tests/test_mc_coupling.py:426-428; tests/test_app_microdosimetry_page.py:91
 labels: [tests, paths, silent-skip]
 source: raw-D F14

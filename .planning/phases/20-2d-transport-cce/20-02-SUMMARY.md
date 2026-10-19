@@ -68,12 +68,12 @@ completed: 2026-03-30
 
 ## Task Commits
 
-1. **Task 1: Create notebook + plot_cce_heatmap_2d** - `ca59c92` (feat)
-2. **Fix: sys.path import** - `3fa25ad` (fix)
-3. **Fix: device lifecycle management** - `05ea47a` (fix)
-4. **Fix: validation using pre-extracted data** - `075ce19` (fix)
-5. **Fix: scientifically correct notebook rewrite** - `22d6232` (fix)
-6. **Task 2: Human verification approved** - `26aa21d` (docs)
+1. **Task 1: Create notebook + plot_cce_heatmap_2d** - `de3bb0e` (feat)
+2. **Fix: sys.path import** - `81ed39a` (fix)
+3. **Fix: device lifecycle management** - `9520e70` (fix)
+4. **Fix: validation using pre-extracted data** - `2dd8f1c` (fix)
+5. **Fix: scientifically correct notebook rewrite** - `3005c10` (fix)
+6. **Task 2: Human verification approved** - `6003225` (docs)
 
 ## Files Created/Modified
 

@@ -64,7 +64,7 @@ extraction workflow this tab exists for.
 
 S
 
-## Status 2026-10-18 (final-c): fixed (00ce048 + f88e0bb)
+## Status 2026-10-18 (final-c): fixed (cf64bef + 1d57122)
 
-- 00ce048: figure axes "Capacitance (F)" and "1/C² (F⁻²)". f88e0bb: CSV column renamed to `one_over_C2_per_F2`.
+- cf64bef: figure axes "Capacitance (F)" and "1/C² (F⁻²)". 1d57122: CSV column renamed to `one_over_C2_per_F2`.
 - Evidence: `uv run pytest -q tests/test_app_csv_export.py` -> 22 passed (test_cv_csv_columns_and_header with the new header, test_cv_figure_axes_are_absolute_farads).

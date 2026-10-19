@@ -132,7 +132,7 @@ etna/core/optimization.py (`microdosimetric_sweep(..., solver="devsim"|"auto")`,
 "solver" column). Tests: tests/test_engine2d.py (16 fast + 3 slow, all pass; slow 21 s).
 
 Changes vs the lab spike:
-- I_generated = sum(NodeVolume*G) (box rule), matching compute_cce_2d after fd631e3.
+- I_generated = sum(NodeVolume*G) (box rule), matching compute_cce_2d after 175460c.
 - Mesh: still devsim's mesh-only build (create_sic_2d_device, no equations, ~30-90 ms); not
   regenerated in numpy. Every engine assumption is ASSERTED on that device (grid_from_arrays):
   full tensor grid, NodeVolume == rectangular dual, Donors/Acceptors identical across columns,
@@ -544,7 +544,7 @@ engine2d gate. microdosimetric_sweep defaults to the stack (nplus_thickness_cm=N
 LEGACY_STACK / etna.legacy_config(): no n+, p+ 1 um, 2.93e15 / 8.82e13 / 0.987, N_t 2.8e12,
 E_t 0.65; reproduces the pre-flip DeviceConfig() numbers to <= 1e-9 (tests/test_default_stack.py).
 
-Before (DeviceConfig() at f60be71 = legacy) -> after (DeviceConfig(), scratch baseline.py):
+Before (DeviceConfig() at 2e9ca52 = legacy) -> after (DeviceConfig(), scratch baseline.py):
 | quantity | before | after |
 |---|---|---|
 | CCE -10 / -30 / -50 V | 0.963266 / 0.997719 / 0.998474 | 0.999021 / 0.999706 / 0.999819 |

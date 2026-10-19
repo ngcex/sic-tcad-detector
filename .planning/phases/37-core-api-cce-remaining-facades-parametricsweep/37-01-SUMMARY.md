@@ -66,8 +66,8 @@ completed: 2026-07-09
 
 Each task was committed atomically (TDD):
 
-1. **Task 1: CCE test scaffold (RED)** - `d60c66d` (test)
-2. **Task 2: Implement run_cce facade + re-export (GREEN)** - `7fbf492` (feat)
+1. **Task 1: CCE test scaffold (RED)** - `de61f17` (test)
+2. **Task 2: Implement run_cce facade + re-export (GREEN)** - `71d872b` (feat)
 
 _TDD gate compliance: `test(...)` RED commit precedes `feat(...)` GREEN commit. No REFACTOR needed._
 
@@ -101,7 +101,7 @@ _TDD gate compliance: `test(...)` RED commit precedes `feat(...)` GREEN commit. 
 
 ## Issues Encountered
 
-**Stale worktree base (setup signal — surfaced for orchestrator).** This worktree branch was spawned from commit `1370b65`, **51 commits behind `main` (`485879c`)**, and was missing the entire `etna/api/` package and all Phase 35/36/37 planning files that Plan 37-01 depends on. Since the branch had zero unique commits (`main..HEAD` == 0), it was advanced non-destructively with `git merge --ff-only main` (not `git reset --hard`, which is prohibited outside the startup branch check). Post-merge, `etna/api/simulation.py` and `37-01-PLAN.md` were present and execution proceeded normally. **Orchestrator note:** worktrees for this phase should be branched from current `main`, not a stale base.
+**Stale worktree base (setup signal — surfaced for orchestrator).** This worktree branch was spawned from commit `a4f5341`, **51 commits behind `main` (`5996272`)**, and was missing the entire `etna/api/` package and all Phase 35/36/37 planning files that Plan 37-01 depends on. Since the branch had zero unique commits (`main..HEAD` == 0), it was advanced non-destructively with `git merge --ff-only main` (not `git reset --hard`, which is prohibited outside the startup branch check). Post-merge, `etna/api/simulation.py` and `37-01-PLAN.md` were present and execution proceeded normally. **Orchestrator note:** worktrees for this phase should be branched from current `main`, not a stale base.
 
 ## Known Stubs
 
@@ -121,8 +121,8 @@ None - no external service configuration required.
 - `tests/test_api_cce.py` — FOUND
 - `etna/api/simulation.py::run_cce` — FOUND (grep -c "def run_cce" == 1)
 - `etna/__init__.py` run_cce re-export — FOUND
-- Commit `d60c66d` (Task 1 RED) — FOUND
-- Commit `7fbf492` (Task 2 GREEN) — FOUND
+- Commit `de61f17` (Task 1 RED) — FOUND
+- Commit `71d872b` (Task 2 GREEN) — FOUND
 
 ---
 

@@ -65,8 +65,8 @@ completed: 2026-07-15
 Each task was committed atomically:
 
 1. **Task 1: Run the acceptance-gate test suite under per-file/per-class isolation** — no commit (read-only measurement; ran tests, made zero file changes, confirmed `pyproject.toml`/`uv.lock` byte-identical before and after)
-2. **Task 2: Correct the six stale requirement checkboxes and traceability rows** — `aaf08aa` (docs)
-3. **Task 3: Write the v5.0 milestone audit document** — `234f792` (docs)
+2. **Task 2: Correct the six stale requirement checkboxes and traceability rows** — `99ea565` (docs)
+3. **Task 3: Write the v5.0 milestone audit document** — `648fe54` (docs)
 
 _Note: Task 1 intentionally has no commit — it only runs the existing suite, producing no file changes to stage. This is correct per the plan's `<action>` instruction ("Do NOT modify any test file or source file; this task only RUNS the existing suite")._
 
@@ -78,7 +78,7 @@ _Note: Task 1 intentionally has no commit — it only runs the existing suite, p
 ## Decisions Made
 
 - Reconciled REQUIREMENTS.md to the running-app/source-verified reality per Phase 43-RESEARCH.md's Pitfall 1 guidance, rather than trusting the stale checkboxes — this is a doc correction (Decision #1 from research), not new code.
-- Adopted the PKG-03 per-file/per-class test isolation convention as the SC4 gate, since bare single-process `pytest -q` is proven unsatisfiable on this machine (devsim resource exhaustion, reproduces on pre-refactor commit `fe3b43c`). Documented this as an explicit reinterpretation in the audit doc rather than silently substituting it.
+- Adopted the PKG-03 per-file/per-class test isolation convention as the SC4 gate, since bare single-process `pytest -q` is proven unsatisfiable on this machine (devsim resource exhaustion, reproduces on pre-refactor commit `33f54bc`). Documented this as an explicit reinterpretation in the audit doc rather than silently substituting it.
 - Rejected `pytest-forked` as an alternative path to a literal single-command `pytest -q` — no new dependencies are permitted in an audit phase, and the package was never verified for legitimacy.
 - Reconciled the notebook count to 21 workflow files (not 20) in the audit doc, with an explicit one-line note so this isn't re-litigated in a future audit.
 - Explicitly did NOT build any of the 7 NONE-coverage pages or fix the `ramp_bias` convergence bug — every gap is logged as a discrete `v6.0:` tech-debt item per the phase's audit-only constraint (ROADMAP "no new code," SC3 "logged, not fixed").
@@ -110,9 +110,9 @@ None - no external service configuration required.
 - FOUND: `.planning/REQUIREMENTS.md`
 - FOUND: `.planning/milestones/v5.0-MILESTONE-AUDIT.md`
 - FOUND: `.planning/phases/43-integration-audit-all-20-notebook-workflows/43-01-SUMMARY.md`
-- FOUND commit: `aaf08aa` (Task 2)
-- FOUND commit: `234f792` (Task 3)
-- FOUND commit: `38a9289` (this summary)
+- FOUND commit: `99ea565` (Task 2)
+- FOUND commit: `648fe54` (Task 3)
+- FOUND commit: `0eca099` (this summary)
 
 _Phase: 43-integration-audit-all-20-notebook-workflows_
 _Completed: 2026-07-15_

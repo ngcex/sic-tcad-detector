@@ -59,7 +59,7 @@ nbclient. **15/20 PASS; 5 TIMEOUT; 0 functional regressions.**
   #16 single_particle, #20 feasibility) all exceed the 1800 s/cell limit on heavy
   devsim sweeps. #13 reproduces `Timeout waiting for execute reply` standalone at a
   300 s cell limit — confirming compute-time, not error. #13/#14 are unchanged
-  since pre-Phase-26 (commit 209e91d) and use explicit doping grids, so the
+  since pre-Phase-26 (commit 7096804) and use explicit doping grids, so the
   calibration cannot have changed their behavior.
 
 ## CONS-01 SC#4 verdict

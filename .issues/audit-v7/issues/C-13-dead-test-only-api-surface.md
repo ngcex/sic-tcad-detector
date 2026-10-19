@@ -59,9 +59,9 @@ test_api_field accordingly.
 
 S
 
-## Status 2026-10-18 (final-c): fixed (f88e0bb + 9122689)
+## Status 2026-10-18 (final-c): fixed (1d57122 + 607e5ed)
 
-- (a) 9122689: MeshData.regions/.contacts are LIVE: app/components/geometry_viewer.py draws each contact as a dashed line at its depth (vertical in the 1D bar chart, horizontal on the reversed 2D depth axis) and outlines 2D regions; empty lists draw nothing. MeshData docstring rewritten (units, dict keys, devsim and engine2d producers). Live check: run_field 1D -> lines at 0 and 11.3 um; 2D (engine2d) -> rect + lines at 0 and 11.3 um.
-- (b) build_device(device_name=...) kept; 9122689 adds tests/test_api_device.py::test_build_device_forwards_explicit_device_name (1D and 2D, no devsim).
-- (c) f88e0bb: to_csv_bytes branches for "temperature" (T_K, CCE, solver from solver_per_T; voltage_V/method header), "flash" (dose_rate_Gy_s, CCE; V_bias/E_MeV + scope WARNING) and "transient" (dose_rate_Gy_s, CCE_clipped_0_1, CCE_raw from transient_cce_raw; current_contact header).
+- (a) 607e5ed: MeshData.regions/.contacts are LIVE: app/components/geometry_viewer.py draws each contact as a dashed line at its depth (vertical in the 1D bar chart, horizontal on the reversed 2D depth axis) and outlines 2D regions; empty lists draw nothing. MeshData docstring rewritten (units, dict keys, devsim and engine2d producers). Live check: run_field 1D -> lines at 0 and 11.3 um; 2D (engine2d) -> rect + lines at 0 and 11.3 um.
+- (b) build_device(device_name=...) kept; 607e5ed adds tests/test_api_device.py::test_build_device_forwards_explicit_device_name (1D and 2D, no devsim).
+- (c) 1d57122: to_csv_bytes branches for "temperature" (T_K, CCE, solver from solver_per_T; voltage_V/method header), "flash" (dose_rate_Gy_s, CCE; V_bias/E_MeV + scope WARNING) and "transient" (dose_rate_Gy_s, CCE_clipped_0_1, CCE_raw from transient_cce_raw; current_contact header).
 - Evidence: `uv run pytest -q tests/test_app_geometry_viewer.py tests/test_app_csv_export.py` and `uv run pytest -q tests/test_api_device.py -k forwards` pass (3 viewer tests, 3 round-trip tests, 1 device_name test).

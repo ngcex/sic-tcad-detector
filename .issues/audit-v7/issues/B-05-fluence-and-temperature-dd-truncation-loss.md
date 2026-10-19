@@ -3,7 +3,7 @@ id: B-05
 title: cce_vs_bias_at_fluence loses every converged point on a mid-sweep failure; sweep_cce_vs_temperature("dd") hides truncation
 severity: medium
 category: bug
-status: fixed 2026-10-18 (final-abd 317d2c4: cce_vs_bias_at_fluence keeps the converged prefix with truncated / requested_v_stop; sweep_cce_vs_temperature hecht and dd pair CCE with the returned voltages and add a truncated column. Evidence: pytest tests/test_truncation_b05.py -> 3 passed)
+status: fixed 2026-10-18 (final-abd f361cf0: cce_vs_bias_at_fluence keeps the converged prefix with truncated / requested_v_stop; sweep_cce_vs_temperature hecht and dd pair CCE with the returned voltages and add a truncated column. Evidence: pytest tests/test_truncation_b05.py -> 3 passed)
 location: etna/core/charge_collection.py:819-1015 (cce_vs_bias_at_fluence, try/finally with no except at ~973-1010); etna/core/temperature_sweep.py:303-309; etna/api/simulation.py:528 (run_temperature_sweep method param)
 labels: [cce, radiation-damage, temperature, truncation, raw-F5]
 ---

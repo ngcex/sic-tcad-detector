@@ -75,7 +75,7 @@ returns the same y_F as the file-path call. The existing microdosimetry AppTests
 
 S
 
-## Status 2026-10-18 (final-c): fixed (ae5a5b1)
+## Status 2026-10-18 (final-c): fixed (ba9a5af)
 
 - run_microdosimetry accepts `str | os.PathLike | IO` (load_mc_events_csv only calls pd.read_csv on it); the page passes `io.BytesIO(uploaded.getvalue())`; tempfile/os code and the finally cleanup removed.
 - Evidence: `uv run pytest -q tests/test_api_microdosimetry.py tests/test_app_microdosimetry_page.py` pass (test_in_memory_stream_gives_the_same_spectrum_as_the_path: identical y_F, y_D, y; test_real_pipeline_reads_the_upload_in_memory: the real facade receives a BytesIO); `grep -n tempfile app/workflows/microdosimetry.py` -> none.

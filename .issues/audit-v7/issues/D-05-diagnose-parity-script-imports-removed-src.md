@@ -3,7 +3,7 @@ id: D-05
 title: scripts/diagnose_1d_2d_parity.py imports removed `src` package unguarded and crashes in run_1d()
 severity: medium
 category: bug
-status: fixed  # 2026-10-18 sync: 7acbe10 (wp-c1): diagnose_1d_2d_parity.py imports etna.core.cv_analysis at both sites
+status: fixed  # 2026-10-18 sync: f21d4ff (wp-c1): diagnose_1d_2d_parity.py imports etna.core.cv_analysis at both sites
 location: scripts/diagnose_1d_2d_parity.py:137 (guarded), :196 (unguarded), :269 (call from run_1d), :363-371 (only devsim.error caught)
 labels: [scripts, stale-import, src-rename]
 source: raw-D F5

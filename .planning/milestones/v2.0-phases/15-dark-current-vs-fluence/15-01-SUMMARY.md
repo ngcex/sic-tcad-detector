@@ -65,8 +65,8 @@ completed: 2026-03-25
 
 Each task was committed atomically:
 
-1. **Task 1: Implement dark_current_vs_fluence() and plot_dark_current_vs_fluence()** - `715551f` (feat)
-2. **Task 2: Integration tests for dark current vs fluence** - `d4d0a0f` (test)
+1. **Task 1: Implement dark_current_vs_fluence() and plot_dark_current_vs_fluence()** - `3716ad1` (feat)
+2. **Task 2: Integration tests for dark current vs fluence** - `89b2818` (test)
 
 ## Files Created/Modified
 
@@ -89,7 +89,7 @@ Each task was committed atomically:
 - **Issue:** Plan specified 5-100 pA but actual pristine dark current with area=0.04 cm^2 is ~111 pA
 - **Fix:** Widened acceptance range to 5-200 pA (still within order-of-magnitude of 18 pA target)
 - **Files modified:** tests/test_dark_current.py
-- **Committed in:** d4d0a0f (Task 2 commit)
+- **Committed in:** 89b2818 (Task 2 commit)
 
 **2. [Rule 1 - Bug] pytest.approx default abs tolerance masked fluence change**
 
@@ -97,7 +97,7 @@ Each task was committed atomically:
 - **Issue:** Default abs=1e-12 in pytest.approx exceeded actual I_total difference (~1.26e-13 A) at 1e12 fluence, causing false equality
 - **Fix:** Set abs=0 and rel=1e-4 so relative comparison detects the ~0.1% change
 - **Files modified:** tests/test_dark_current.py
-- **Committed in:** d4d0a0f (Task 2 commit)
+- **Committed in:** 89b2818 (Task 2 commit)
 
 **3. [Rule 1 - Bug] Solver does not diverge at extreme dark current fluence**
 
@@ -105,7 +105,7 @@ Each task was committed atomically:
 - **Issue:** Plan expected NaN at 1e15 fluence (solver divergence), but dark current model converges even at 1e18 because no generation injection is used
 - **Fix:** Changed test to verify graceful handling (accepts finite or NaN, no crash) instead of requiring NaN
 - **Files modified:** tests/test_dark_current.py
-- **Committed in:** d4d0a0f (Task 2 commit)
+- **Committed in:** 89b2818 (Task 2 commit)
 
 ---
 

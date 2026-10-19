@@ -23,7 +23,7 @@ REF = Path(os.environ.get("SOLVER2D_REF", NOTES))  # ref_{50,150}_50.npz
 # The devsim dumps are not committed (2026-10-18): this spike engine is frozen at the
 # 2026-10-16 device (no n+), so against the current defaults all 5 tests fail on NetDoping
 # with the old or regenerated dumps. Superseded by etna/core/engine2d (tests/test_engine2d*.py);
-# to rerun the spike, check out 7aff7c9 (see lab/solver2d/README.md).
+# to rerun the spike, check out 099c13c (see lab/solver2d/README.md).
 _NEEDED = [NOTES / "mesh_hw25.npz", NOTES / "mesh_hw50.npz", NOTES / "scan_hw50_V50.npz",
            REF / "ref_50_50.npz", REF / "ref_150_50.npz"]
 pytestmark = pytest.mark.skipif(

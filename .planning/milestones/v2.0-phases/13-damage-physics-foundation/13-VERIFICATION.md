@@ -110,10 +110,10 @@ All 4 commits documented in summaries are present in git log:
 
 | Hash      | Description                                            |
 | --------- | ------------------------------------------------------ |
-| `56bc6e3` | feat(13-01): create radiation damage physics module    |
-| `cedc8a1` | test(13-01): add comprehensive unit tests              |
-| `6af22c3` | test(13-02): add v1.1 regression safety tests          |
-| `b4274fd` | feat(13-02): create radiation damage overview notebook |
+| `84b9c27` | feat(13-01): create radiation damage physics module    |
+| `30c8038` | test(13-01): add comprehensive unit tests              |
+| `9c649ee` | test(13-02): add v1.1 regression safety tests          |
+| `af5ae75` | feat(13-02): create radiation damage overview notebook |
 
 ---
 

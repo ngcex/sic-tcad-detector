@@ -3,7 +3,7 @@ id: A-05
 title: simulate_pulse(skip_init=...) is a dead parameter; per-pulse I_dark in simulate_pulse_train includes residual carriers from the previous pulse
 severity: medium
 category: bug
-status: fixed 2026-10-18 (WP-A 03c7c17: initialize() stores the dark baseline, pulse train reuses it)
+status: fixed 2026-10-18 (WP-A ce11872: initialize() stores the dark baseline, pulse train reuses it)
 location: etna/core/transient.py:232 (param), 255-258 (docstring), ~279-281 (unconditional I_dark extraction), ~506-516 (simulate_pulse_train passes skip_init=(i > 0))
 labels: [audit-v7, slice-A, transient, flash, dead-parameter]
 source: raw-A-core-solvers.md F5

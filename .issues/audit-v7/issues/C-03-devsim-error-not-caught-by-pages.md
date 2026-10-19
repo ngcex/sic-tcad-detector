@@ -73,7 +73,7 @@ import devsim. Also see C-12 for `DeviceConfig.__post_init__` validation.
 
 S
 
-## Status 2026-10-18 (final-c): fixed (00ce048)
+## Status 2026-10-18 (final-c): fixed (cf64bef)
 
 - Every devsim-calling page now catches `Exception` and routes it through `app.components.page_utils.show_error`, which treats the devsim `error` class (by name) as a solver failure (friendly st.error + details expander). DeviceConfig.__post_init__ rejects substrate_thickness_um <= 0 and the other non-positive inputs, and the sidebar shows the validation error instead of building.
 - Evidence: `grep -c "except RuntimeError" app/workflows/*.py` -> 0 in every file; `uv run pytest -q tests/test_app_robustness.py -k "devsim_error or stale or invalid_sidebar or rejects_out_of_range"` -> 15 passed (test_devsim_error_shows_friendly_error_with_details).

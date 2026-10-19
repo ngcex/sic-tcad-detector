@@ -65,8 +65,8 @@ completed: 2026-03-21
 
 Each task was committed atomically:
 
-1. **Task 1: Create flash_recombination module with Auger model and continuation solver** - `acecf24` (feat)
-2. **Task 2: Integration tests for Auger model and high-injection convergence** - `ff6ce9e` (test)
+1. **Task 1: Create flash_recombination module with Auger model and continuation solver** - `53bbfdc` (feat)
+2. **Task 2: Integration tests for Auger model and high-injection convergence** - `4756db1` (test)
 
 ## Files Created/Modified
 

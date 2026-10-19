@@ -82,8 +82,8 @@ The microdosimetry page already maps ValueError to `st.error`. DeviceConfig-leve
 
 S
 
-## Status 2026-10-18 (final-c): fixed (00ce048 + ae5a5b1)
+## Status 2026-10-18 (final-c): fixed (cf64bef + ba9a5af)
 
-- 00ce048: DeviceConfig rejects area/doping/geometry <= 0 (and NaN); the microdosimetry page inputs have min_value=0.1.
-- ae5a5b1: run_microdosimetry raises ValueError for sv dimensions <= 0 or non-finite, a header-only CSV, non-finite or negative edep, and a CSV in which no event deposits energy.
+- cf64bef: DeviceConfig rejects area/doping/geometry <= 0 (and NaN); the microdosimetry page inputs have min_value=0.1.
+- ba9a5af: run_microdosimetry raises ValueError for sv dimensions <= 0 or non-finite, a header-only CSV, non-finite or negative edep, and a CSV in which no event deposits energy.
 - Evidence: `uv run pytest -q tests/test_api_microdosimetry.py` -> 7 passed (test_meaningless_inputs_raise_instead_of_silent_spectrum, 5 cases).

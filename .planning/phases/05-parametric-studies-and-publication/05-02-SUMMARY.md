@@ -74,9 +74,9 @@ completed: 2026-03-21
 
 Each task was committed atomically:
 
-1. **Task 1: Add parametric multi-panel plot functions to plotting.py** - `8b07b0a` (feat)
-2. **Task 2: Create notebook generator and executed notebook** - `ae5ba2a` (feat)
-3. **Task 3: Verify publication figures and notebook quality** - checkpoint approved (with fix `d9df125`)
+1. **Task 1: Add parametric multi-panel plot functions to plotting.py** - `82b9b72` (feat)
+2. **Task 2: Create notebook generator and executed notebook** - `fd9b12a` (feat)
+3. **Task 3: Verify publication figures and notebook quality** - checkpoint approved (with fix `a997175`)
 
 **Plan metadata:** (pending)
 
@@ -110,7 +110,7 @@ Each task was committed atomically:
 - **Fix:** Added 8.5e13 to N_D_BULK_VALUES in both the notebook generator and the notebook, regenerated cached results and re-executed notebook
 - **Files modified:** scripts/create_notebook_05.py, notebooks/05_parametric_studies.ipynb, figures/parametric_results.json
 - **Verification:** All three parametric figures now display data correctly
-- **Committed in:** `d9df125`
+- **Committed in:** `a997175`
 
 ---
 
@@ -133,7 +133,7 @@ None - no external service configuration required.
 
 ## Self-Check: PASSED
 
-All 10 files verified present. All 3 commits (8b07b0a, ae5ba2a, d9df125) verified in git log.
+All 10 files verified present. All 3 commits (82b9b72, fd9b12a, a997175) verified in git log.
 
 ---
 

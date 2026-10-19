@@ -80,8 +80,8 @@ completed: 2026-03-31
 
 ## Task Commits
 
-1. **Task 1: Create microdosimetry.py module** - `5e3f338` (feat)
-2. **Task 2: Create test_microdosimetry.py** - `8b8a99b` (test)
+1. **Task 1: Create microdosimetry.py module** - `61dfc15` (feat)
+2. **Task 2: Create test_microdosimetry.py** - `acbf2d1` (test)
 
 ## Files Created/Modified
 

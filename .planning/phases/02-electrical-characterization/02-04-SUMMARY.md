@@ -76,7 +76,7 @@ completed: 2026-03-21
 
 Each task was committed atomically:
 
-1. **Task 1: Run doping calibration and update notebook with calibrated parameters** - `a00f93e` (feat)
+1. **Task 1: Run doping calibration and update notebook with calibrated parameters** - `5ea2bde` (feat)
 2. **Task 2: Verify calibrated Phase 2 results** - checkpoint:human-verify (approved, no code commit)
 
 **Plan metadata:** (pending)
@@ -106,7 +106,7 @@ Each task was committed atomically:
 - **Fix:** Corrected sign convention in poisson.py ramp_voltage
 - **Files modified:** src/poisson.py
 - **Verification:** W(V) now decreases with increasing reverse bias as expected
-- **Committed in:** a00f93e
+- **Committed in:** 5ea2bde
 
 **2. [Rule 1 - Bug] Fixed depletion width extraction under bias**
 
@@ -115,7 +115,7 @@ Each task was committed atomically:
 - **Fix:** Corrected extraction logic in cv_analysis.py
 - **Files modified:** src/cv_analysis.py
 - **Verification:** Extracted W matches expected physical behavior
-- **Committed in:** a00f93e
+- **Committed in:** 5ea2bde
 
 **3. [Rule 1 - Bug] Fixed mesh cleanup issue**
 
@@ -124,7 +124,7 @@ Each task was committed atomically:
 - **Fix:** Added proper mesh cleanup between voltage steps
 - **Files modified:** src/poisson.py
 - **Verification:** Sequential bias sweeps produce consistent results
-- **Committed in:** a00f93e
+- **Committed in:** 5ea2bde
 
 ---
 
@@ -158,4 +158,4 @@ _Completed: 2026-03-21_
 - src/poisson.py: FOUND
 - src/cv_analysis.py: FOUND
 - notebooks/02_electrical_characterization.ipynb: FOUND
-- Commit a00f93e: FOUND
+- Commit 5ea2bde: FOUND

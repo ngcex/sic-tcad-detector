@@ -93,5 +93,5 @@ None — no new security surface. The quantity selectbox is a fixed hardcoded op
 
 - FOUND: app/workflows/field_map.py
 - FOUND: tests/test_app_field_page.py
-- FOUND commit 03b4b64 (feat: route 2D through, branch render, selectbox)
-- FOUND commit 5a0ebc1 (test: 2D route + selectbox + no-resolve)
+- FOUND commit 6e52889 (feat: route 2D through, branch render, selectbox)
+- FOUND commit 854ef39 (test: 2D route + selectbox + no-resolve)

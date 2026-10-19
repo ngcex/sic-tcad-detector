@@ -3,7 +3,7 @@ id: A-14
 title: 1D mesh builder has no guard for thin substrates (negative mesh line -> opaque devsim error) while the 2D builder does; DeviceConfig unvalidated
 severity: low
 category: improvement
-status: fixed 2026-10-18 (DeviceConfig validation 00ce048; mesh guard final-abd 53270cd, same as the 2D builder. Evidence: pytest tests/test_poisson.py::test_thin_p_plus_layer_builds -> create_sic_device(substrate_thickness_cm=2e-6) builds, min x = 0)
+status: fixed 2026-10-18 (DeviceConfig validation cf64bef; mesh guard final-abd 4d6f266, same as the 2D builder. Evidence: pytest tests/test_poisson.py::test_thin_p_plus_layer_builds -> create_sic_device(substrate_thickness_cm=2e-6) builds, min x = 0)
 location: etna/core/device.py:108 (pos=junction_pos - 5e-6 unconditional) vs etna/core/device2d.py:244-247 (guarded); etna/api/device.py:30 (substrate_thickness_um unvalidated); app/components/device_sidebar.py:80-85 (min_value=0.0)
 labels: [audit-v7, slice-A, input-validation, mesh]
 source: raw-A-core-solvers.md F14

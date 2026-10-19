@@ -3,7 +3,7 @@ id: D-06
 title: scripts/create_notebook_15.py is a dead superseded generator writing to a nonexistent absolute path
 severity: low
 category: dead-code
-status: fixed  # 2026-10-18 sync: 7acbe10 (wp-c1): dead create_notebook_15.py v1 deleted, create_notebook_15_v2.py -> create_notebook_15.py
+status: fixed  # 2026-10-18 sync: f21d4ff (wp-c1): dead create_notebook_15.py v1 deleted, create_notebook_15_v2.py -> create_notebook_15.py
 location: scripts/create_notebook_15.py:477-480; scripts/create_notebook_15_v2.py:609
 labels: [scripts, dead-code, notebooks]
 source: raw-D F6

@@ -81,8 +81,8 @@ completed: 2026-03-23
 
 Each task was committed atomically:
 
-1. **Task 1: Create temperature sweep module and tests** - `f69446d` (feat)
-2. **Task 2: Create Jupyter notebook 06 for T-dependent characterization** - `84858e3` (feat)
+1. **Task 1: Create temperature sweep module and tests** - `ca4b4bc` (feat)
+2. **Task 2: Create Jupyter notebook 06 for T-dependent characterization** - `5324aa4` (feat)
 
 ## Files Created/Modified
 
@@ -106,7 +106,7 @@ Each task was committed atomically:
 - **Issue:** pandas not installed in .venv despite being needed by temperature_sweep.py
 - **Fix:** `uv pip install pandas` -- added pandas 3.0.1
 - **Verification:** `import pandas` succeeds, all tests pass
-- **Committed in:** f69446d (Task 1 commit, pandas used in module)
+- **Committed in:** ca4b4bc (Task 1 commit, pandas used in module)
 
 ---
 
@@ -138,5 +138,5 @@ _Completed: 2026-03-23_
 - [x] tests/test_temperature_sweep.py exists
 - [x] notebooks/06_temperature_dependence.ipynb exists
 - [x] 10-03-SUMMARY.md exists
-- [x] Commit f69446d (Task 1) found
-- [x] Commit 84858e3 (Task 2) found
+- [x] Commit ca4b4bc (Task 1) found
+- [x] Commit 5324aa4 (Task 2) found

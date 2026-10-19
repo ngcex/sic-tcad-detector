@@ -1,6 +1,6 @@
 # lab/finite_implant: is the -30 V C-V residual lateral (fringe) capacitance?
 
-Branch lab/finite-implant off fix/audit-v7-top (d433b9b). LAB ONLY: devsim, nothing in etna/
+Branch lab/finite-implant off fix/audit-v7-top (18eca36). LAB ONLY: devsim, nothing in etna/
 changed, production defaults untouched. All commands from the repo root.
 
 Code: `fi2d.py` (builder + Poisson solve), `run_one.py` (one config per process -> notes/TAG.json),

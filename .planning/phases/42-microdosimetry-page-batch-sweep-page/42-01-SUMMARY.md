@@ -79,9 +79,9 @@ completed: 2026-07-14
 
 Each task was committed atomically:
 
-1. **Task 1: Two pure figure builders** - `3abea6d` (feat)
-2. **Task 2: Bulk-CSV serializer + microdosimetry to_csv_bytes branch** - `254f909` (feat)
-3. **Task 3: Extend CSV tests + batch-sweep spike** - `218523b` (test) + `177935e` (docs — SPIKE-NOTES.md)
+1. **Task 1: Two pure figure builders** - `8eb9b98` (feat)
+2. **Task 2: Bulk-CSV serializer + microdosimetry to_csv_bytes branch** - `2aab2e5` (feat)
+3. **Task 3: Extend CSV tests + batch-sweep spike** - `2648e05` (test) + `edcba6d` (docs — SPIKE-NOTES.md)
 
 _Task 3 is a tdd task, but its implementation (the serializer + branch) already landed in Task 2 by plan design — so its test commit is test-after and passed immediately (no RED phase); the spike output is committed as docs._
 
@@ -117,7 +117,7 @@ None - no external service configuration required.
 ## Self-Check: PASSED
 
 - Files exist: app/components/results.py, tests/test_app_csv_export.py, 42-01-SPIKE-NOTES.md — all FOUND
-- Commits exist: 3abea6d, 254f909, 218523b, 177935e — all FOUND
+- Commits exist: 8eb9b98, 2aab2e5, 2648e05, edcba6d — all FOUND
 - `uv run pytest tests/test_app_csv_export.py -q` → 9 passed
 - Module purity: no `st.*` calls in results.py
 

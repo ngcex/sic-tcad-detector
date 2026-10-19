@@ -54,7 +54,7 @@ completed: 2026-06-15
 ## Performance
 
 - **Duration:** ~95 min
-- **Started:** 2026-06-15T12:?? (worktree base 387a995)
+- **Started:** 2026-06-15T12:?? (worktree base 8d05fbd)
 - **Completed:** 2026-06-15T13:38Z
 - **Tasks:** 3
 - **Files created:** 2 · **Files modified:** 3
@@ -85,11 +85,11 @@ completed: 2026-06-15
 
 ## Task Commits
 
-1. **Task 1 (RED): failing tests for reset_devsim_fully** - `828fca0` (test)
-2. **Task 1 (GREEN): reset_devsim_fully + optimization refactor** - `71d5512` (feat)
-3. **Task 2 (RED): 2D W extractor + smoothness tests** - `8b8ec7d` (test)
-4. **Task 2 (GREEN): extract_depletion_width_2d_center** - `2bd4177` (feat)
-5. **Task 3: TestResetStateLeak cylindrical-leak canary** - `318afca` (test)
+1. **Task 1 (RED): failing tests for reset_devsim_fully** - `41e0dfb` (test)
+2. **Task 1 (GREEN): reset_devsim_fully + optimization refactor** - `768023f` (feat)
+3. **Task 2 (RED): 2D W extractor + smoothness tests** - `9e228c3` (test)
+4. **Task 2 (GREEN): extract_depletion_width_2d_center** - `1aaf617` (feat)
+5. **Task 3: TestResetStateLeak cylindrical-leak canary** - `e5c0bcf` (test)
 
 ## Files Created/Modified
 
@@ -157,7 +157,7 @@ None — both helpers are fully wired to real devsim node data; no placeholder/e
 ## Self-Check: PASSED
 
 - Files verified present: `src/devsim_reset.py`, `tests/test_devsim_reset.py`, `26-02-SUMMARY.md`
-- Commits verified present: `828fca0`, `71d5512`, `8b8ec7d`, `2bd4177`, `318afca`
+- Commits verified present: `41e0dfb`, `768023f`, `9e228c3`, `1aaf617`, `e5c0bcf`
 
 ---
 

@@ -3,7 +3,7 @@ id: A-07
 title: Notebook 19 calls poisson.ramp_voltage with ramp_bias's kwargs (V_target=, contact=) -> guaranteed TypeError, masked by an earlier convergence failure
 severity: low
 category: bug
-status: fixed  # 2026-10-18 sync: 61990a5 (ramp_voltage called with its signature), then 2127b60 rewrote nb19: no ramp_voltage call left in notebooks/19 or scripts/create_notebook_19.py
+status: fixed  # 2026-10-18 sync: 399a4da (ramp_voltage called with its signature), then 2e7de3b rewrote nb19: no ramp_voltage call left in notebooks/19 or scripts/create_notebook_19.py
 location: scripts/create_notebook_19.py:513-514; notebooks/19_alternative_structures.ipynb cell 12; etna/core/poisson.py:169-178 (signature)
 labels: [audit-v7, slice-A, notebook, latent-crash]
 source: raw-A-core-solvers.md F7

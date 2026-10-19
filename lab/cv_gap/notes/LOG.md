@@ -1,6 +1,6 @@
 # lab/cv_gap: the full measured C-V vs the four explanations of the -30 V gap
 
-Branch lab/cv-gap off fix/audit-v7-top (38b103f). LAB ONLY: nothing in etna/ changed.
+Branch lab/cv-gap off fix/audit-v7-top (89e322f). LAB ONLY: nothing in etna/ changed.
 All commands from the repo root; `uv run python lab/cv_gap/<script>`.
 
 ## 0. Question

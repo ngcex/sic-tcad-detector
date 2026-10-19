@@ -70,9 +70,9 @@ completed: 2026-07-02
 
 ## Task Commits
 
-1. **Task 1: Implement run_field() with post-build MeshData extraction (1D + 2D)** - `9c5b2e9` (feat)
-2. **Task 2: Re-export run_field from etna** - `12668d1` (feat)
-3. **Task 3: Add tests/test_api_field.py (MeshData populated + correct node count + physical field sanity)** - `c80bfe5` (test)
+1. **Task 1: Implement run_field() with post-build MeshData extraction (1D + 2D)** - `03af5f8` (feat)
+2. **Task 2: Re-export run_field from etna** - `1c85231` (feat)
+3. **Task 3: Add tests/test_api_field.py (MeshData populated + correct node count + physical field sanity)** - `0ce4e9c` (test)
 
 _Note: Task 3 is `tdd="true"`; because the implementation (`run_field`) already existed from Task 1, this task's single commit adds the test asserting the already-implemented behavior — matching the plan's own sequencing (implement Task 1, wire Task 2, test Task 3), identical to Plan 02's precedent._
 
@@ -115,9 +115,9 @@ None - no external service configuration required.
 - FOUND: `tests/test_api_field.py`
 - FOUND: `etna/api/simulation.py` (modified, contains `run_field`)
 - FOUND: `etna/__init__.py` (modified, re-exports `run_field`)
-- FOUND commit: 9c5b2e9
-- FOUND commit: 12668d1
-- FOUND commit: c80bfe5
+- FOUND commit: 03af5f8
+- FOUND commit: 1c85231
+- FOUND commit: 0ce4e9c
 
 ---
 

@@ -3,7 +3,7 @@ id: A-12
 title: validate_cv / validate_iv silently clamp or snap when the sweep does not reach the experimental voltages
 severity: low
 category: improvement
-status: fixed 2026-10-18 (final-abd 7d7d026: validate_cv NaNs and excludes experimental voltages outside the simulated range, returns extrapolated / n_extrapolated, raises if none inside; validate_iv takes a target only within 0.25 V, else NaN, pass False, missing_targets. Evidence: pytest tests/test_validation.py -> 23 passed, 6 new)
+status: fixed 2026-10-18 (final-abd faf40d8: validate_cv NaNs and excludes experimental voltages outside the simulated range, returns extrapolated / n_extrapolated, raises if none inside; validate_iv takes a target only within 0.25 V, else NaN, pass False, missing_targets. Evidence: pytest tests/test_validation.py -> 23 passed, 6 new)
 location: etna/core/validation.py:~126-131, ~145-148 (argmin nearest-point picks in validate_iv), ~206 (np.interp clamp in validate_cv)
 labels: [audit-v7, slice-A, validation, silent-failure]
 source: raw-A-core-solvers.md F12

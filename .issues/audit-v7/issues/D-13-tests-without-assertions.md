@@ -3,7 +3,7 @@ id: D-13
 title: Five tests have no assertions (incl. print-only test_full_pipeline_diagnostic and a slow transient smoke test)
 severity: low
 category: improvement
-status: fixed 2026-10-18 (wp-c2 48745b2 + ce2e236: every listed test asserts; W_60 asserted; scanner false positives are helper-asserting tests)
+status: fixed 2026-10-18 (wp-c2 a02224a + 8136768: every listed test asserts; W_60 asserted; scanner false positives are helper-asserting tests)
 location: tests/test_analytical.py:328; tests/test_device2d.py:475; tests/test_devsim_reset.py:39; tests/test_flash_recombination.py:323; tests/test_poisson.py:55; tests/test_poisson.py:164 (W_60 unasserted)
 labels: [tests, weak-assertions]
 source: raw-D F13

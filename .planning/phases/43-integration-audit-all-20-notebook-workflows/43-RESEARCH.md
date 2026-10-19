@@ -209,7 +209,7 @@ browser-confirmed verification). The audit should correct these.
 | UI-04       | `[~]`               | PARTIAL (upstream blocker)     | `run_cce` non-convergence at default bias; graceful `st.error`; works at shallow bias                        |
 | UI-05       | `[~]`               | PARTIAL (upstream blocker)     | `run_field` non-convergence at default `bias_V=-100`; graceful `st.error`; 2D shallow-bias browser-confirmed |
 | UI-06       | `[~]`               | PARTIAL                        | CSV download browser-confirmed on C-V; CCE/field blocked by UI-04/05                                         |
-| **UI-07**   | **`[ ]`**           | **SATISFIED (stale box)**      | `38-VERIFICATION.md`: cross-page persistence, Playwright-confirmed (commit `f1bc8b7`)                        |
+| **UI-07**   | **`[ ]`**           | **SATISFIED (stale box)**      | `38-VERIFICATION.md`: cross-page persistence, Playwright-confirmed (commit `5eb1791`)                        |
 | VIZ-01      | `[ ]`               | SATISFIED (stale box)          | `40-VERIFICATION.md`: real 2D solve → heatmap, browser-confirmed 2026-07-13                                  |
 | VIZ-02      | `[ ]`               | SATISFIED (stale box)          | `40-VERIFICATION.md`: 1D → depth-profile bar, browser-confirmed                                              |
 | VIZ-03      | `[ ]`               | SATISFIED (stale box)          | `40-VERIFICATION.md`: quantity dropdown, no re-solve (call-counter test + browser)                           |
@@ -352,7 +352,7 @@ line 110).
 
 1. **How is SC4's `pytest -q` satisfied given devsim resource exhaustion?**
    - **What we know:** Bare single-process `pytest -q` is _proven unsatisfiable_ on this machine
-     (reproduces on pre-refactor commit `fe3b43c`) — `35-02-SUMMARY.md`, STATE.md line 129. PKG-03
+     (reproduces on pre-refactor commit `33f54bc`) — `35-02-SUMMARY.md`, STATE.md line 129. PKG-03
      was formally redefined to accept **per-file/per-class isolation** (all 25 modules pass
      individually).
    - **What's unclear:** SC4 is worded literally ("a final `pytest -q` run … passes all tests").
