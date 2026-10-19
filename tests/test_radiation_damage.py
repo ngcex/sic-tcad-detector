@@ -14,6 +14,7 @@ Validates:
 import ast
 import subprocess
 import sys
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -281,7 +282,6 @@ class TestComputeDamagedParams:
         """Fluence=0 returns pristine values unchanged (exact equality)."""
         N_D = np.array([1e15, 5e14, 1e14])
         r = compute_damaged_params(1e-6, 6e-7, N_D, 0.0)
-        assert r["tau_n"] is not None
         assert r["tau_n"] == 1e-6  # exact equality, not approx
         assert r["tau_p"] == 6e-7
         assert r["N_D_profile"] is N_D  # same object, no copy
@@ -433,7 +433,7 @@ class TestRegressionSafety:
             ],
             capture_output=True,
             text=True,
-            cwd="/Users/ngcex/projects/physics/etna",
+            cwd=str(Path(__file__).resolve().parents[1]),
             timeout=120,
         )
         assert result.returncode == 0, (
@@ -866,3 +866,18 @@ class TestMakeSingleDefectParams:
         single = make_single_defect_params()
         assert single.eta_EH67 > 0
         assert single.eta_EH4 > 0
+
+
+def test_hardness_factor_out_of_table_warns_once(caplog):
+    """audit-v7 B-07: outside the NIEL table the edge kappa is used and logged once."""
+    import etna.core.radiation_damage as rd
+
+    rd._WARNED_OUT_OF_TABLE.discard((5.6, 30, 150))
+    with caplog.at_level("WARNING", logger="etna.core.radiation_damage"):
+        assert rd.get_hardness_factor(5.6) == rd.NIEL_HARDNESS_PROTON_SIC[30]
+        assert rd.get_hardness_factor(5.6) == rd.NIEL_HARDNESS_PROTON_SIC[30]
+    assert caplog.text.count("outside the NIEL table") == 1
+    caplog.clear()
+    with caplog.at_level("WARNING", logger="etna.core.radiation_damage"):
+        rd.get_hardness_factor(62.0)
+    assert "outside the NIEL table" not in caplog.text

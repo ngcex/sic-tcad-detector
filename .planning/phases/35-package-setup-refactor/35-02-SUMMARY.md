@@ -46,7 +46,7 @@ key-decisions:
   - "Also rewrote one stale cached notebook OUTPUT line (not source) in notebooks/17_mc_coupling.ipynb containing 'from src.mc_coupling' printed by a previous execution, for grep-cleanliness even though outputs are not re-executed in this phase"
   - 'uv.lock committed as untracked artifact from re-running uv pip install -e ".[dev]" after the git mv — first lockfile since pyproject.toml existed'
   - "Did NOT touch .planning/config.json trailing-newline diff — pre-existing, unrelated to this plan, left as the user's working-tree state"
-  - "PKG-03's acceptance gate redefined from bare single-process `pytest -q` to per-file/per-class isolation — the single-process gate was proven unsatisfiable even on the pre-refactor commit (fe3b43c), so this corrects a plan defect rather than weakening the gate. Decision made via advisor consultation after closing a verification gap (see below)."
+  - "PKG-03's acceptance gate redefined from bare single-process `pytest -q` to per-file/per-class isolation — the single-process gate was proven unsatisfiable even on the pre-refactor commit (33f54bc), so this corrects a plan defect rather than weakening the gate. Decision made via advisor consultation after closing a verification gap (see below)."
 
 patterns-established:
   - "When relocating a module deeper in the tree, grep for Path(__file__).parent chains and re-verify parent-count against the new depth"
@@ -87,7 +87,7 @@ completed: 2026-07-02
 
 ## Task Commits
 
-1. **Task 1: Move src/ to etna/core/ and rewrite all import statements** - `e0988d5` (feat) — includes the microdosimetry path-depth bugfix and uv.lock
+1. **Task 1: Move src/ to etna/core/ and rewrite all import statements** - `ec13554` (feat) — includes the microdosimetry path-depth bugfix and uv.lock
 2. **Task 2: Full acceptance gate — per-file slow-test verification** — documentation-only update (this SUMMARY.md, STATE.md, ROADMAP.md); no source changes required, verification was read-only
 
 ## Files Created/Modified
@@ -117,7 +117,7 @@ completed: 2026-07-02
 - **Issue:** `data_dir = Path(__file__).parent.parent / "data"` resolved to `etna/data/` instead of `<project_root>/data/` because the module moved from `src/microdosimetry.py` (depth 1 from root) to `etna/core/microdosimetry.py` (depth 2 from root) — one more `.parent` needed to climb back to root.
 - **Fix:** Changed to `Path(__file__).parent.parent.parent / "data"`.
 - **Files modified:** `etna/core/microdosimetry.py`
-- **Commit:** `e0988d5`
+- **Commit:** `ec13554`
 - **Verification:** `tests/test_microdosimetry.py` went from 1 failed + 4 errors (all `FileNotFoundError`) to 29/29 passed.
 
 ### Out-of-scope discoveries logged (not fixed)
@@ -136,7 +136,7 @@ Running bare `pytest -q` (or `-m "not slow"`) in a single process consistently a
 
 1. **Content diff check:** `git show HEAD:src/poisson.py` vs `etna/core/poisson.py` — the only differences are `from src.X` -> `from etna.core.X` import lines. Line 140 (the crash site) is byte-identical.
 2. **Isolated single-file run:** `tests/test_drift_diffusion.py` alone passes in 0.30s (4/4). The crash only manifests after ~100 accumulated devsim device builds in one interpreter process.
-3. **Reproduced on the pre-refactor commit:** Created a disposable worktree at `fe3b43c` (pre-refactor, still on `src/` layout) and ran the identical command. **It crashed at the exact same test, same line, same C-level abort.** This conclusively demonstrates the crash predates this plan.
+3. **Reproduced on the pre-refactor commit:** Created a disposable worktree at `33f54bc` (pre-refactor, still on `src/` layout) and ran the identical command. **It crashed at the exact same test, same line, same C-level abort.** This conclusively demonstrates the crash predates this plan.
 4. **Documented in the project's own README:** _"devsim note: the full drift-diffusion test suite is slow and stacking many DD device builds in one interpreter can exhaust devsim's process resources. Run DD-heavy test classes one at a time..."_
 
 ### Verification gap closed: full slow-test suite, not just the fast subset
@@ -184,7 +184,7 @@ Per advisor consultation: the bare single-process `pytest -q` gate was proven un
 - FOUND: `/Users/ngcex/projects/physics/etna/etna/core/device.py`
 - FOUND: `/Users/ngcex/projects/physics/etna/etna/core/microdosimetry.py` (with path-depth fix)
 - MISSING (expected): `/Users/ngcex/projects/physics/etna/src/` — removed by `git mv`
-- FOUND commit: `e0988d5` (feat(35-02): rename src/ to etna/core/ and rewrite all imports)
+- FOUND commit: `ec13554` (feat(35-02): rename src/ to etna/core/ and rewrite all imports)
 - Verified: `grep -r 'from src\.' etna/core/ tests/ scripts/ notebooks/` returns zero matches
 - Verified: `grep -r 'patch("src\.' tests/` returns zero matches
 - Verified: `python -c "from etna.core.device import create_sic_device"` exits 0
@@ -192,7 +192,7 @@ Per advisor consultation: the bare single-process `pytest -q` gate was proven un
 - Verified: `python -c "import etna; etna.__version__"` == "5.0.0"
 - Verified: `git diff --exit-code tests/baselines/v3_frozen.json` exits 0 (baseline unchanged)
 - Verified: all 25 test files pass individually under per-file isolation, including all `@pytest.mark.slow` devsim integration tests (see table above)
-- Gate redefined (not blocked): bare `pytest -q` (full suite, single process) is unsatisfiable on this machine — proven pre-existing via reproduction on commit `fe3b43c`. Per-file/per-class isolation accepted as the PKG-03 gate per advisor-reviewed decision.
+- Gate redefined (not blocked): bare `pytest -q` (full suite, single process) is unsatisfiable on this machine — proven pre-existing via reproduction on commit `33f54bc`. Per-file/per-class isolation accepted as the PKG-03 gate per advisor-reviewed decision.
 
 ---
 

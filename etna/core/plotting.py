@@ -73,53 +73,6 @@ def plot_electric_field(x_cm, E_field, voltage_label="", ax=None, **kwargs):
     return ax
 
 
-def plot_electric_field_multi(results_dict, ax=None, junction_offset=True):
-    """Plot E-field profiles for multiple bias voltages.
-
-    Parameters
-    ----------
-    results_dict : dict
-        Dictionary with 'voltages', 'E_fields' keys from voltage_sweep().
-        E_fields is a list of (x, E) tuples.
-    ax : matplotlib.axes.Axes or None
-        Axes to plot on.
-    junction_offset : bool
-        If True, offset x by junction position so x=0 is at the junction.
-
-    Returns
-    -------
-    ax : matplotlib.axes.Axes
-    """
-    if ax is None:
-        fig, ax = plt.subplots()
-
-    voltages = results_dict["voltages"]
-    E_fields = results_dict["E_fields"]
-
-    # Select a subset of voltages for clarity
-    n_curves = min(8, len(voltages))
-    indices = np.linspace(0, len(voltages) - 1, n_curves, dtype=int)
-
-    cmap = plt.cm.viridis
-    colors = [cmap(i / (n_curves - 1)) for i in range(n_curves)]
-
-    for i, idx in enumerate(indices):
-        V = voltages[idx]
-        x, E = E_fields[idx]
-        x_um = np.asarray(x) * 1e4
-        label = f"{V:.0f} V" if V == int(V) else f"{V:.1f} V"
-        ax.plot(x_um, np.abs(E), color=colors[i], label=label)
-
-    ax.set_xlabel("Depth ($\\mu$m)")
-    ax.set_ylabel("|Electric Field| (V/cm)")
-    ax.set_title("Electric Field vs Depth at Multiple Biases")
-    ax.set_yscale("log")
-    ax.grid(True, alpha=0.3)
-    ax.legend(loc="best", title="Bias")
-
-    return ax
-
-
 def plot_depletion_width_vs_bias(
     voltages,
     W_numerical,
@@ -422,7 +375,8 @@ def plot_cv_comparison(cv_sim, cv_exp=None, ax=None):
         fig, ax = plt.subplots()
 
     V_sim = np.asarray(cv_sim["voltages"])
-    W_sim_um = np.asarray(cv_sim["depletion_widths"]) * 1e4  # cm -> um
+    # eps*A/C (as the measured W) when available, else the given widths
+    W_sim_um = np.asarray(cv_sim.get("W_from_C", cv_sim["depletion_widths"])) * 1e4
 
     ax.plot(V_sim, W_sim_um, "b-", linewidth=1.5, label="Simulation")
 
@@ -915,8 +869,25 @@ def plot_parametric_bias(
     return fig
 
 
+FIGURE_DIR_ENV = "ETNA_FIGURE_DIR"
+
+
+def figure_dir():
+    """Directory save_figure writes to: ``$ETNA_FIGURE_DIR`` if set, else ``./figures``
+    relative to the current working directory (read at call time).
+
+    Before 2026-10-18 it was ``etna/figures`` next to the package, i.e. inside
+    site-packages for an installed etna.
+    """
+    return os.path.abspath(os.environ.get(FIGURE_DIR_ENV) or "figures")
+
+
 def save_figure(fig, filename, dpi=300):
-    """Save figure to figures/ directory in both PNG and PDF formats.
+    """Save figure in both PNG and PDF formats into ``figure_dir()``.
+
+    ``figure_dir()`` is ``$ETNA_FIGURE_DIR`` or ``./figures`` relative to the current
+    working directory (created if missing; e.g. ``notebooks/figures`` for a notebook
+    run from ``notebooks/``).
 
     Parameters
     ----------
@@ -926,10 +897,18 @@ def save_figure(fig, filename, dpi=300):
         Filename without extension (e.g., "efield_profile").
     dpi : int
         Resolution for PNG.
+
+    Returns
+    -------
+    list of str
+        The written paths (PNG, PDF).
     """
-    fig_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "figures")
+    fig_dir = figure_dir()
     os.makedirs(fig_dir, exist_ok=True)
 
+    paths = []
     for ext in ("png", "pdf"):
         path = os.path.join(fig_dir, f"{filename}.{ext}")
+        paths.append(path)
         fig.savefig(path, dpi=dpi, bbox_inches="tight")
+    return paths

@@ -4,7 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "etna"
-version = "5.0.0"
+# single source of truth: etna/_version.py (__version__), read by hatch below
+dynamic = ["version"]
 description = "ETNA: Epitaxial Tcad Numerical Analysis — SiC TCAD simulator library for 4H-SiC detectors (INFN-LNS Petringa group)"
 requires-python = ">=3.13"
 dependencies = [
@@ -15,16 +16,34 @@ dependencies = [
     "plotly>=5.0",
     "streamlit>=1.30",
     "pandas>=2.0",
+    "numba>=0.60",
 ]
 
 [project.optional-dependencies]
+# The ONE development dependency set: `uv sync --extra dev` (add `--extra viz` for the
+# Export page's animations / GDSII). A plain `uv sync` installs no extras and REMOVES
+# these tools from .venv (then `uv run pytest` may fall through to a system pytest,
+# audit C-15): always sync with --extra dev.
 dev = [
     "pytest>=7.0",
+    "pytest-xdist>=3.8.0",
     "jupyter>=1.0",
+    "nbstripout>=0.9.1",
+    "ruff>=0.17.1",
 ]
+viz = [
+    "gdstk>=1.0.1",
+    "manim>=0.22.0",
+]
+
+[tool.hatch.version]
+path = "etna/_version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["etna"]
+# save_figure() (etna/core/plotting.py) writes notebook figures next to the package;
+# they are build artefacts, never package data.
+exclude = ["etna/figures"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

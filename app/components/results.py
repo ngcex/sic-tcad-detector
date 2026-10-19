@@ -28,8 +28,9 @@ def build_cv_figure(result: SimResult) -> go.Figure:
     fig.update_layout(
         title="C-V Characteristic",
         xaxis_title="Voltage (V)",
-        yaxis_title="Capacitance (F/cm²)",
+        yaxis_title="Capacitance (F)",
     )
+    _add_reach_through_line(fig, result, signed=True)
     return fig
 
 
@@ -40,37 +41,63 @@ def build_mott_schottky_figure(result: SimResult) -> go.Figure:
     fig.update_layout(
         title="Mott-Schottky Plot (1/C² vs V)",
         xaxis_title="Voltage (V)",
-        yaxis_title="1/C² (cm⁴/F²)",
+        yaxis_title="1/C² (F⁻²)",
     )
+    _add_reach_through_line(fig, result, signed=True)
     return fig
 
 
-def build_cce_figure(result: SimResult) -> go.Figure:
-    """CCE vs |reverse bias|, with a reference line at CCE=1.0."""
-    fig = go.Figure(
-        data=go.Scatter(x=np.abs(result.x), y=result.y, mode="lines+markers")
+def _add_reach_through_line(fig, result, signed: bool) -> None:
+    """Dashed vertical marker at the full-depletion voltage, when known."""
+    v_rt = result.metadata.get("reach_through_V")
+    if v_rt is None:
+        return
+    fig.add_vline(
+        x=-v_rt if signed else v_rt,
+        line_dash="dot",
+        line_color="#9AA0A6",
+        annotation_text="full depletion",
+        annotation_position="top",
     )
+
+
+def build_cce_figure(result: SimResult) -> go.Figure:
+    """CCE vs reverse bias (-V), with a reference line at CCE=1.0.
+
+    Only reverse-bias points (V <= 0) are plotted, on a -V axis; forward-bias
+    points are dropped rather than folded onto the reverse axis by abs().
+    """
+    x = np.asarray(result.x, dtype=float)
+    y = np.asarray(result.y, dtype=float)
+    reverse = x <= 0
+    fig = go.Figure(data=go.Scatter(x=-x[reverse], y=y[reverse], mode="lines+markers"))
     fig.add_hline(y=1.0, line_dash="dash", line_color="gray", opacity=0.5)
     fig.update_layout(
         title="CCE vs Reverse Bias",
-        xaxis_title="|Reverse Bias| (V)",
+        xaxis_title="Reverse bias −V (V)",
         yaxis_title="Charge Collection Efficiency",
         yaxis_range=[0, 1.1],
     )
+    _add_reach_through_line(fig, result, signed=False)
     return fig
 
 
 def build_damage_figure(result: SimResult) -> go.Figure:
-    """CCE vs proton fluence (log-x), NaN-tolerant.
+    """CCE vs proton fluence (log-x).
 
-    Does not call `.dropna()` or otherwise filter NaN — Plotly renders a NaN
-    y-value as a native line gap, so a partial-convergence result (see
-    RESEARCH.md Pitfall 2) still displays the remaining points cleanly.
+    Points flagged ``metadata["valid"] == False`` (not solved: full donor
+    compensation or solver failure) are dropped; without that key any NaN is
+    left in and Plotly renders it as a line gap.
     """
+    x = np.asarray(result.x, dtype=float)
+    y = np.asarray(result.y, dtype=float)
+    if "valid" in result.metadata:  # drop unsolved (e.g. fully compensated) points
+        keep = np.asarray(result.metadata["valid"], dtype=bool)
+        x, y = x[keep], y[keep]
     fig = go.Figure(
         data=go.Scatter(
-            x=result.x,
-            y=result.y,
+            x=x,
+            y=y,
             mode="lines+markers",
             line=dict(color="#1F6FEB"),
         )
@@ -80,6 +107,7 @@ def build_damage_figure(result: SimResult) -> go.Figure:
         title="CCE vs Proton Fluence",
         xaxis_title="Proton Fluence (p/cm²)",
         xaxis_type="log",
+        xaxis_exponentformat="power",
         yaxis_title="Charge Collection Efficiency",
         yaxis_range=[0, 1.1],
     )
@@ -87,47 +115,34 @@ def build_damage_figure(result: SimResult) -> go.Figure:
 
 
 def build_dark_current_figure(result: SimResult) -> go.Figure:
-    """Dark current decomposition vs temperature, log-y, zero/negative-guarded.
+    """Total dark current (log-y, |I|) vs temperature or vs bias.
 
-    Input is a single AGGREGATED SimResult with sim_type="dark_current",
-    x=temperature array (K), y=I_total array (A), and
-    metadata={"I_SRH": array, "I_TAT": array, "I_SRV": array} — one value
-    per temperature. The aggregation from the list[SimResult] returned by
-    ParametricSweep into this single-SimResult shape happens in the Wave 2
-    dark current PAGE code, not here — this builder stays a pure
-    single-SimResult-in / go.Figure-out function, consistent with every
-    other builder in this module.
-
-    I_TAT can be negative (net generation, not recombination sign) and
-    I_SRV can be exactly 0.0 at default S_n/S_p — each trace is abs()'d and
-    only added if it has any positive value, mirroring
-    etna.core.dark_current.plot_dark_current_decomposition's existing
-    abs() + zero-guard pattern.
+    Two shapes: the Dark Current page's AGGREGATED ``sim_type="dark_current_vs_T"``
+    (x = temperature K at one bias) and ``run_dark_current``'s native
+    ``sim_type="dark_current"`` (x = bias V). Only the total is plotted: the
+    SRH/TAT split is a modelling partition, not a measured decomposition, and
+    the surface (SRV) term is identically zero at the ohmic cathode.
     """
-    fig = go.Figure()
-    components = [
-        ("Total", result.y, "#1A1A1A"),
-        ("SRH (bulk)", result.metadata["I_SRH"], "#1F6FEB"),
-        ("TAT (effective)", result.metadata["I_TAT"], "#D32F2F"),
-        ("SRV (surface)", result.metadata["I_SRV"], "#2E7D32"),
-    ]
-    for label, values, color in components:
-        I = np.abs(np.asarray(values))
-        if np.any(I > 0):
-            fig.add_trace(
-                go.Scatter(
-                    x=result.x,
-                    y=I,
-                    mode="lines+markers",
-                    name=label,
-                    line=dict(color=color),
-                )
-            )
+    vs_T = result.sim_type == "dark_current_vs_T"
+    fig = go.Figure(
+        data=go.Scatter(
+            x=result.x,
+            y=np.abs(np.asarray(result.y, dtype=float)),
+            mode="lines+markers",
+            name="Total",
+            line=dict(color="#1A1A1A"),
+        )
+    )
     fig.update_layout(
-        title="Dark Current Decomposition vs Temperature",
-        xaxis_title="Temperature (K)",
-        yaxis_title="Absolute Dark Current (A)",
+        title=(
+            "Dark Current vs Temperature (calibrated budget estimate)"
+            if vs_T
+            else "Dark Current vs Bias (calibrated budget estimate)"
+        ),
+        xaxis_title="Temperature (K)" if vs_T else "Bias V (V)",
+        yaxis_title="|Dark current| (A)",
         yaxis_type="log",
+        yaxis_exponentformat="power",
     )
     return fig
 
@@ -155,15 +170,33 @@ def build_microdosimetry_figure(result: SimResult) -> go.Figure:
     return fig
 
 
+# Human labels for the sweepable DeviceConfig fields (Batch Sweep).
+PARAM_LABELS = {
+    "epi_thickness_um": "Epi thickness (µm)",
+    "substrate_thickness_um": "Substrate thickness (µm)",
+    "N_A": "N_A substrate (cm⁻³)",
+    "N_D_junction": "N_D junction (cm⁻³)",
+    "N_D_bulk": "N_D bulk (cm⁻³)",
+    "L_transition_um": "Transition length (µm)",
+    "T": "Temperature (K)",
+    "area_cm2": "Area (cm²)",
+    "buffer_thickness_um": "n-/n+ transition thickness (µm)",
+    "buffer_end_doping": "N_D at the epi end (cm⁻³)",
+}
+
+
 # Value-keyed qualitative palette: cycled by TRACE ORDER (i % len), NOT a
 # fixed-quantity mapping — one color per swept value.
 _SWEEP_PALETTE = ["#1F6FEB", "#D32F2F", "#2E7D32", "#1A1A1A", "#9AA0A6"]
 
 # Per-facade axis titles keyed by the SIM_FACADES selectbox LABEL.
 _SWEEP_AXIS_TITLES = {
-    "CCE vs bias (run_cce)": ("Bias V (V)", "Charge Collection Efficiency"),
-    "C-V (run_cv)": ("Bias V (V)", "Capacitance (F)"),
-    "CCE vs temperature (run_temperature_sweep)": ("Temperature (K)", "Value"),
+    "CCE vs reverse bias": ("Bias V (V)", "Charge Collection Efficiency"),
+    "C-V (capacitance vs bias)": ("Bias V (V)", "Capacitance (F)"),
+    "CCE vs temperature (Hecht, analytical)": (
+        "Temperature (K)",
+        "Charge Collection Efficiency",
+    ),
 }
 
 
@@ -185,13 +218,13 @@ def build_sweep_overlay_figure(results, param, values, sim_label) -> go.Figure:
                 x=res.x,
                 y=res.y,
                 mode="lines+markers",
-                name=f"{param}={val}",
+                name=f"{PARAM_LABELS.get(param, param)} = {val:g}",
                 line=dict(color=_SWEEP_PALETTE[i % len(_SWEEP_PALETTE)]),
             )
         )
     x_title, y_title = _SWEEP_AXIS_TITLES.get(sim_label, ("(facade x-axis)", "Value"))
     fig.update_layout(
-        title=f"Parametric Sweep: {param}",
+        title=f"Parametric Sweep: {PARAM_LABELS.get(param, param)}",
         xaxis_title=x_title,
         yaxis_title=y_title,
     )
@@ -211,6 +244,22 @@ def build_field_figures(result: SimResult) -> tuple[go.Figure, go.Figure]:
         xaxis_title="Depth (µm)",
         yaxis_title="Electric Field (V/cm)",
     )
+    # scale the axis to the peak without the nm-scale spikes at the abrupt doping steps
+    from etna.api.results import peak_field_1d
+
+    pk = peak_field_1d(result.x, result.y, result.config)
+    if pk is not None and pk[2]:
+        efield_fig.update_yaxes(range=[0, 1.2 * pk[0]])
+        efield_fig.add_annotation(
+            text="y-axis clipped: nm-scale spikes at the abrupt doping steps not shown",
+            xref="paper",
+            yref="paper",
+            x=1,
+            y=1.06,
+            showarrow=False,
+            xanchor="right",
+            font=dict(size=10),
+        )
 
     potential = result.metadata["potential"]
     potential_fig = go.Figure(data=go.Scatter(x=result.x, y=potential, mode="lines"))
@@ -223,10 +272,116 @@ def build_field_figures(result: SimResult) -> tuple[go.Figure, go.Figure]:
     return efield_fig, potential_fig
 
 
+CROSS_CHECK_SCOPE = (
+    "the batched engine and devsim agree (relative difference <= 3e-6) at the "
+    "checked biases down to -40 V (-100 V with the n+ layer); not validated "
+    "against measurement"
+)
+DEVSIM_ONLY_TEXT = (
+    "devsim result; not cross-checked against the batched engine and not "
+    "validated against measurement"
+)
+ENGINE2D_TEXT = (
+    "engine2d dark state; matches devsim to ~1e-14 V in the parity runs "
+    "(half-width 25-50 um); not validated against measurement"
+)
+
+
+def provenance_text(metadata: dict) -> str:
+    """Solver-specific statement of what a result was (and was not) checked against."""
+    solver = metadata.get("solver")
+    note = metadata.get("domain_note")
+    if solver == "batched":
+        if metadata.get("validated_domain", True):
+            return f"inside the engine/devsim cross-check domain ({CROSS_CHECK_SCOPE})"
+        return (
+            "OUTSIDE the engine/devsim cross-check domain"
+            + (f" ({note})" if note else "")
+            + "; not validated against measurement"
+        )
+    if solver == "engine2d":
+        return ENGINE2D_TEXT
+    if solver is None or solver == "failed":
+        return ""
+    text = (
+        DEVSIM_ONLY_TEXT
+        if solver == "devsim"
+        else (
+            f"{solver}; not cross-checked against the batched engine and not "
+            "validated against measurement"
+        )
+    )
+    if metadata.get("validated_domain") is False and note:
+        text += f" (outside the engine parameter box: {note})"
+    return text
+
+
+def _provenance_header_lines(metadata: dict) -> list[str]:
+    """'# solver:' / '# validated_domain:' lines (only for keys present)."""
+    lines = []
+    if "solver" in metadata:
+        lines.append(f"# solver: {metadata['solver']}")
+        if metadata.get("fallback_reason"):
+            lines.append(f"# solver_fallback: {metadata['fallback_reason']}")
+    if "validated_domain" in metadata:
+        note = metadata.get("domain_note")
+        lines.append(
+            f"# validated_domain: {bool(metadata['validated_domain'])}"
+            + (f" ({note})" if note else "")
+            + " -- True = device inside the batched engine's parameter box"
+        )
+    text = provenance_text(metadata)
+    if text:
+        lines.append(f"# provenance: {text}")
+    return lines
+
+
+def _sweep_header_lines(result: SimResult) -> list[str]:
+    """Truncation and full-depletion notes for bias sweeps (C-V, CCE)."""
+    md = result.metadata
+    lines = []
+    cfg = getattr(result, "config", None)
+    legacy = cfg is not None and getattr(cfg, "nplus_thickness_um", None) is None
+    if md.get("truncated") and len(result.x):
+        why = (
+            "model/solver artefact of the legacy model: ohmic cathode on the n- epi, "
+            "no n+ layer; beyond full depletion, outside the validated domain"
+            if legacy
+            else "solver non-convergence; outside the validated domain"
+        )
+        lines.append(
+            f"# truncated: sweep stopped at {np.min(result.x):.2f} V "
+            f"(requested down to {md.get('requested_v_stop', float('nan')):.2f} V) "
+            f"— devsim did not converge further ({why})"
+        )
+    if "reach_through_V" in md:
+        v_rt = md["reach_through_V"]
+        if v_rt is None:
+            lines.append("# reach_through_V: none (not reached or not computed)")
+        else:
+            why = (
+                "epi fully depleted; legacy model: beyond it the result depends on the "
+                "cathode model, ohmic contact on the n- epi, no n+ layer"
+                if legacy
+                else "epi fully depleted: depletion edge within one Debye length of the "
+                "n-/n+ step -- a definition, not a measurement"
+            )
+            lines.append(f"# reach_through_V: {v_rt:.2f} ({why})")
+    if md.get("cross_checked_to_V") is not None:
+        lines.append(
+            f"# cross_checked_to_V: {md['cross_checked_to_V']:.1f} (deepest |V| of "
+            "the engine-vs-devsim parity checks; deeper points are not validated)"
+        )
+    return lines
+
+
 def to_csv_bytes(result: SimResult) -> bytes:
     """Serialize a SimResult to downloadable CSV bytes.
 
-    Dispatches on `result.sim_type` ("cv" | "cce" | "field") to produce the
+    Dispatches on `result.sim_type` ("cv" | "cce" | "field" | "damage" |
+    "dark_current" (x = bias, run_dark_current) | "dark_current_vs_T" (x = T,
+    the Dark Current page aggregate) | "microdosimetry" | "temperature" |
+    "flash" | "transient"; anything else raises ValueError) to produce the
     correct columns, and prepends a commented "#" metadata header carrying
     an ISO-8601 UTC timestamp, the etna software version, and every
     field of the device config (for traceability). Pure function — no
@@ -237,17 +392,13 @@ def to_csv_bytes(result: SimResult) -> bytes:
             {
                 "bias_V": result.x,
                 "capacitance_F": result.y,
-                "one_over_C2_cm4_per_F2": result.metadata["one_over_C_squared"],
+                "one_over_C2_per_F2": result.metadata["one_over_C_squared"],
                 "depletion_width_cm": result.metadata["depletion_widths"],
             }
         )
-        extra_header_lines: list[str] = []
-        if result.metadata.get("truncated"):
-            extra_header_lines.append(
-                f"# truncated: sweep stopped at {result.x.min():.2f} V "
-                f"(requested down to {result.metadata['requested_v_stop']:.2f} V) "
-                "— solver reached full depletion / punch-through"
-            )
+        if "W_from_C" in result.metadata:  # eps*A/C of the small-signal C
+            df["W_from_C_cm"] = result.metadata["W_from_C"]
+        extra_header_lines = _sweep_header_lines(result)
     elif result.sim_type == "cce":
         df = pd.DataFrame(
             {
@@ -257,14 +408,27 @@ def to_csv_bytes(result: SimResult) -> bytes:
             }
         )
         extra_header_lines = [
-            f"# I_generated_A_per_cm2: {result.metadata['I_generated']}"
+            f"# I_generated_A_per_cm2: {result.metadata['I_generated']}",
+            *_sweep_header_lines(result),
         ]
-        if result.metadata.get("truncated"):
-            extra_header_lines.append(
-                f"# truncated: sweep stopped at {result.x.min():.2f} V "
-                f"(requested down to {result.metadata['requested_v_stop']:.2f} V) "
-                "— solver reached full depletion / punch-through"
-            )
+    elif result.sim_type == "field" and (
+        result.mesh is not None and result.mesh.y_coords is not None
+    ):
+        nv = result.mesh.node_values
+        df = pd.DataFrame(
+            {
+                "x_lateral_um": np.asarray(result.mesh.x_coords) * 1e4,
+                "y_depth_um": np.asarray(result.mesh.y_coords) * 1e4,
+                "Potential_V": nv["Potential"],
+                "NetDoping_cm-3": nv["NetDoping"],
+                "ElectricField_V_per_cm": nv["ElectricField"],
+            }
+        )
+        extra_header_lines = [
+            f"# bias_V: {result.metadata.get('bias_V')}",
+            "# 2D mesh node table (one row per node); ElectricField is |E| "
+            "interpolated onto the nodes",
+        ]
     elif result.sim_type == "field":
         df = pd.DataFrame(
             {
@@ -276,24 +440,83 @@ def to_csv_bytes(result: SimResult) -> bytes:
         )
         extra_header_lines = []
     elif result.sim_type == "damage":
-        df = pd.DataFrame({"fluence_p_per_cm2": result.x, "CCE": result.y})
+        cols = {"fluence_p_per_cm2": result.x, "CCE": result.y}
+        if "valid" in result.metadata:
+            cols["valid"] = np.asarray(result.metadata["valid"], dtype=bool)
+            cols["reason"] = result.metadata.get("reason") or [""] * len(result.x)
+        df = pd.DataFrame(cols)
         extra_header_lines = [
             f"# V_bias: {result.metadata['V_bias']}",
             f"# energy_MeV: {result.metadata['energy_MeV']}",
+            *(
+                [
+                    f"# compensation_fluence_p_per_cm2: "
+                    f"{result.metadata['compensation_fluence']:.4g} (epi fully "
+                    "compensated at or beyond it; such points are not solved)"
+                ]
+                if "compensation_fluence" in result.metadata
+                else []
+            ),
             "# WARNING: kappa (NIEL hardness factor) is a data-blocked placeholder; "
             "absolute Phi_crit numbers are unvalidated.",
         ]
-    elif result.sim_type == "dark_current":
-        df = pd.DataFrame(
-            {
-                "T_K": result.x,
-                "I_total_A": result.y,
-                "I_SRH_A": result.metadata["I_SRH"],
-                "I_TAT_A": result.metadata["I_TAT"],
-                "I_SRV_A": result.metadata["I_SRV"],
-            }
-        )
+    elif result.sim_type in ("dark_current", "dark_current_vs_T"):
+        md = result.metadata
         extra_header_lines = []
+        if result.sim_type == "dark_current_vs_T":  # Dark Current page aggregate
+            df = pd.DataFrame({"T_K": result.x, "I_total_A": result.y})
+            if "V_bias" in md:
+                extra_header_lines.append(f"# V_bias: {md['V_bias']}")
+        else:  # run_dark_current: one bias sweep at config.T
+            df = pd.DataFrame({"bias_V": result.x, "I_total_A": result.y})
+            past = md.get("past_reach_through")
+            if past is not None and np.size(past) == len(result.x):
+                df["past_reach_through"] = np.asarray(past, dtype=bool)
+            if md.get("truncated"):
+                reached = md.get("reached_v_stop")
+                extra_header_lines.append(
+                    "# truncated: sweep stopped at "
+                    + ("no bias point" if reached is None else f"{reached:.2f} V")
+                    + f" (requested down to {md.get('requested_v_stop', float('nan')):.2f}"
+                    " V) -- devsim did not converge further"
+                )
+            if md.get("validity_note"):
+                extra_header_lines.append(f"# validity: {md['validity_note']}")
+        extra_header_lines.append(
+            "# NOTE: absolute leakage is a calibration input (N_t fitted to the "
+            "experimental bound <18 pA up to -60 V at 4 mm2, 300 K); bias and "
+            "temperature dependence are heuristic. Budget estimate, not a prediction."
+        )
+    elif result.sim_type == "temperature":
+        md = result.metadata
+        cols = {"T_K": result.x, "CCE": result.y}
+        if np.size(md.get("solver_per_T", [])) == len(result.x) and len(result.x):
+            cols["solver"] = np.asarray(md["solver_per_T"], dtype=str)
+        df = pd.DataFrame(cols)
+        extra_header_lines = [
+            f"# voltage_V: {md.get('voltage_V')}",
+            f"# method: {md.get('method')}",
+        ]
+    elif result.sim_type == "flash":
+        md = result.metadata
+        df = pd.DataFrame({"dose_rate_Gy_s": result.x, "CCE": result.y})
+        extra_header_lines = [
+            f"# V_bias: {md.get('V_bias')}",
+            f"# E_MeV: {md.get('E_MeV')}",
+            "# WARNING: numerical sensitivity bound, NOT a validated FLASH "
+            "plasma-recombination prediction (high-injection physics not modelled; "
+            "see etna.core.flash_recombination).",
+        ]
+    elif result.sim_type == "transient":
+        md = result.metadata
+        cols = {"dose_rate_Gy_s": result.x, "CCE_clipped_0_1": result.y}
+        if np.size(md.get("transient_cce_raw", [])) == len(result.x) and len(result.x):
+            cols["CCE_raw"] = np.asarray(md["transient_cce_raw"], dtype=float)
+        df = pd.DataFrame(cols)
+        extra_header_lines = [
+            f"# V_bias: {md.get('V_bias')}",
+            f"# current_contact: {md.get('current_contact')}",
+        ]
     elif result.sim_type == "microdosimetry":
         df = pd.DataFrame({"y_keV_per_um": result.x, "y_times_d_y": result.y})
         extra_header_lines = [
@@ -314,6 +537,7 @@ def to_csv_bytes(result: SimResult) -> bytes:
         f"# software_version: {etna.__version__}",
         f"# generated: {generated_at}",
         f"# device: {device_fields}",
+        *_provenance_header_lines(result.metadata),
         *extra_header_lines,
     ]
 
@@ -333,7 +557,14 @@ def sweep_results_to_csv_bytes(results, param, values) -> bytes:
     `# swept_values:` instead. Pure — no `st.*`, no temp files.
     """
     frames = [
-        pd.DataFrame({param: val, "x": res.x, "y": res.y})
+        pd.DataFrame(
+            {
+                param: val,
+                "x": res.x,
+                "y": res.y,
+                "solver": res.metadata.get("solver", ""),
+            }
+        )
         for val, res in zip(values, results)
     ]
     combined = pd.concat(frames, ignore_index=True)

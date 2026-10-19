@@ -4,7 +4,7 @@ Run with: streamlit run app/main.py
 
 Wires the device-config sidebar (renders on every page, before pg.run(),
 so device_config persists across navigation per UI-07) and registers
-Home + all 7 workflow placeholder pages via callable-based st.Page.
+Home + the 9 workflow pages (10 st.Page entries) via callable-based st.Page.
 """
 
 import sys
@@ -23,6 +23,8 @@ from app.workflows.radiation_damage import render as render_radiation_damage
 from app.workflows.dark_current import render as render_dark_current
 from app.workflows.microdosimetry import render as render_microdosimetry
 from app.workflows.batch_sweep import render as render_batch_sweep
+from app.workflows.run_all import render as render_run_all
+from app.workflows.export import render as render_export
 
 st.set_page_config(
     page_title="ETNA — SiC TCAD Simulator",
@@ -35,13 +37,19 @@ st.set_page_config(
 # so the config survives navigation (UI-02 "on any page", UI-07 persistence).
 render_device_sidebar()
 
-# Keep this list easy to append to — Phases 39-42 add behavior to these same pages.
+# Keep this list easy to append to.
 # Explicit url_path= is required: every page module exposes a function named
 # `render`, so Streamlit's filename/callable-name URL-pathname inference would
 # otherwise collide across all 8 pages.
 pages = [
     st.Page(
         render_home, title="Home", icon=":material/home:", url_path="home", default=True
+    ),
+    st.Page(
+        render_run_all,
+        title="Run All",
+        icon=":material/play_circle:",
+        url_path="run-all",
     ),
     st.Page(
         render_cv, title="C-V Analysis", icon=":material/show_chart:", url_path="cv"
@@ -78,6 +86,9 @@ pages = [
         title="Batch Sweep",
         icon=":material/stacked_line_chart:",
         url_path="batch-sweep",
+    ),
+    st.Page(
+        render_export, title="Export", icon=":material/download:", url_path="export"
     ),
 ]
 

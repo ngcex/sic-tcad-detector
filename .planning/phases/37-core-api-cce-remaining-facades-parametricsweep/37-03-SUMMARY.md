@@ -74,10 +74,10 @@ completed: 2026-07-09
 
 Each task committed atomically:
 
-1. **Task 1: ParametricSweep unit test with fake sim_fn (RED)** — `35815ca` (test)
-2. **Task 2: implement ParametricSweep + re-export (GREEN)** — `0877e09` (feat)
+1. **Task 1: ParametricSweep unit test with fake sim_fn (RED)** — `27cf749` (test)
+2. **Task 2: implement ParametricSweep + re-export (GREEN)** — `08dfef3` (feat)
 
-_TDD gate compliance: the `test(...)` RED commit (`35815ca`) precedes the `feat(...)` GREEN commit (`0877e09`). No REFACTOR needed._
+_TDD gate compliance: the `test(...)` RED commit (`27cf749`) precedes the `feat(...)` GREEN commit (`08dfef3`). No REFACTOR needed._
 
 ## Files Created/Modified
 
@@ -98,7 +98,7 @@ _TDD gate compliance: the `test(...)` RED commit (`35815ca`) precedes the `feat(
 
 - **Found during:** Both tasks (verification).
 - **Issue:** This worktree has no `.venv`. The plan's literal verify commands use `.venv/bin/pytest` and bare `python -c`; the worktree lacks its own venv, so I invoked the _main_ checkout's interpreter (`/Users/ngcex/projects/physics/etna/.venv/bin/...`) — which risks resolving `etna` against main's editable install rather than the worktree source (the same Rule-3 concern documented in Waves 1 and 2).
-- **Fix:** Ran the main checkout's `.venv/bin/pytest` and `.venv/bin/python -c "..."` **from the worktree root** so cwd wins on `sys.path`. Confirmed worktree-source resolution two ways: (1) `python -c "import etna; print(etna.__file__)"` resolved to `agent-af67f31954216daa5/etna/__init__.py` (not main); (2) empirically, the 3 tests import `ParametricSweep`, which exists ONLY in this worktree (main is at f07c7d6 / Wave 2, with no `sweep.py`) — so a green run is positive proof pytest loaded the worktree source. All behavior assertions unchanged; only the harness invocation differs.
+- **Fix:** Ran the main checkout's `.venv/bin/pytest` and `.venv/bin/python -c "..."` **from the worktree root** so cwd wins on `sys.path`. Confirmed worktree-source resolution two ways: (1) `python -c "import etna; print(etna.__file__)"` resolved to `agent-af67f31954216daa5/etna/__init__.py` (not main); (2) empirically, the 3 tests import `ParametricSweep`, which exists ONLY in this worktree (main is at 97cb186 / Wave 2, with no `sweep.py`) — so a green run is positive proof pytest loaded the worktree source. All behavior assertions unchanged; only the harness invocation differs.
 - **Committed in:** N/A (harness-only).
 
 **2. [Rule 3 - Blocking] Reworded one docstring sentence to keep the devsim grep acceptance gate clean**
@@ -106,7 +106,7 @@ _TDD gate compliance: the `test(...)` RED commit (`35815ca`) precedes the `feat(
 - **Found during:** Task 1.
 - **Issue:** Task 1's AC requires `grep -Ec "import devsim|devsim\." tests/test_api_sweep.py` to return 0. My test-file docstring originally ended a sentence with the literal token "devsim." — purely explanatory prose, but it tripped the `devsim\.` grep (false positive).
 - **Fix:** Reworded the prose to "...touches the real solver." No code, import, or behavior changed — only a docstring sentence. Grep gate now returns 0.
-- **Committed in:** `35815ca` (Task 1).
+- **Committed in:** `27cf749` (Task 1).
 
 ---
 
@@ -137,8 +137,8 @@ None — no external service configuration required.
 - `etna/__init__.py` `ParametricSweep` re-export — FOUND (in import block + `__all__`)
 - `grep -Ec "replace\(.*self\.param" etna/api/sweep.py` == 1; `setattr(` == 0; `eval(` == 0
 - `.venv/bin/pytest tests/test_api_sweep.py -q` — 3 passed
-- Commit `35815ca` (Task 1 RED) — FOUND
-- Commit `0877e09` (Task 2 GREEN) — FOUND
+- Commit `27cf749` (Task 1 RED) — FOUND
+- Commit `08dfef3` (Task 2 GREEN) — FOUND
 
 ---
 

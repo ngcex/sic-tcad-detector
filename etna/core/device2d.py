@@ -23,6 +23,12 @@ References:
     - reference experimental device structure
 """
 
+from etna.core.solver_tol import (
+    DC_ABS_ERROR,
+    DC_REL_ERROR,
+    RELAXED_ABS_ERROR,
+    RELAXED_REL_ERROR,
+)
 import logging
 
 import devsim
@@ -34,13 +40,40 @@ from etna.core.sic_material import (
     srh_lifetime,
 )
 from etna.core.incomplete_ionization import ionized_acceptor_concentration
+from etna.core.device import (
+    DEFAULT_N_A,
+    DEFAULT_STACK,
+    _buffer_term,
+    _check_nplus,
+    _nplus_term,
+    buffer_spec,
+    default_buffer_for_profile,
+    acceptor_total_scale,
+    add_local_mobility_models,
+    donor_table_spec,
+    graded_base_expr,
+    mobility_doping,
+    set_tabulated_doping_profile,
+    table_min_doping,
+)
 
 logger = logging.getLogger(__name__)
 
-# Calibrated graded doping defaults (same as device.py)
-_N_D_JUNCTION_DEFAULT = 2.931417e+15  # cm^-3, calibrated Plan 26-03
-_N_D_BULK_DEFAULT = 8.823059e+13  # cm^-3, calibrated Plan 26-03
-_L_TRANSITION_DEFAULT = 9.872267e-05  # cm, calibrated Plan 26-03
+# Graded-doping fallbacks: the default stack (etna.core.device.DEFAULT_STACK). Before the
+# n+ flip these were 2.931417e15 / 8.823059e13 / 9.872267e-5 (Plan 26-03), a third set that
+# disagreed with DeviceConfig (2.93e15 / 8.82e13 / 0.987 um) and create_sic_device.
+_N_D_JUNCTION_DEFAULT = DEFAULT_STACK["N_D_junction"]  # cm^-3
+_N_D_BULK_DEFAULT = DEFAULT_STACK["N_D_bulk"]  # cm^-3
+_L_TRANSITION_DEFAULT = DEFAULT_STACK["L_transition"]  # cm
+_SUBSTRATE_DEFAULT_CM = DEFAULT_STACK[
+    "substrate_thickness_cm"
+]  # cm, p+ anode (was 1e-4)
+_NPLUS_DEFAULT_CM = DEFAULT_STACK[
+    "nplus_thickness_cm"
+]  # cm, n+ under the epi (was None)
+# graded n-/n+ transition of the default stack (was none before the 2026-10-18 flip)
+_BUFFER_THICKNESS_DEFAULT_CM = DEFAULT_STACK["buffer_thickness_cm"]
+_BUFFER_END_DOPING_DEFAULT = DEFAULT_STACK["buffer_end_doping"]
 
 # Physical constants (CGS)
 EPS_0 = 8.854e-14  # F/cm, vacuum permittivity
@@ -52,7 +85,9 @@ K_B_J = 1.3806503e-23  # J/K, Boltzmann constant
 DEFAULT_N_D = 1.07e15  # cm^-3
 
 
-def set_doping_profile_2d(device_name, region_name, junction_pos, N_A_ionized, N_D):
+def set_doping_profile_2d(
+    device_name, region_name, junction_pos, N_A_ionized, N_D, nplus=None, buffer=None
+):
     """Set step-function (uniform) doping profile on a 2D device.
 
     Acceptors in p+ substrate (y < junction_pos), donors in n- epi (y >= junction_pos).
@@ -70,6 +105,8 @@ def set_doping_profile_2d(device_name, region_name, junction_pos, N_A_ionized, N
         Ionized acceptor concentration (cm^-3).
     N_D : float
         Donor concentration in epi (cm^-3).
+    nplus, buffer : tuple or None
+        n+ layer / graded n-/n+ transition, as the 1D ``set_doping_profile``.
     """
     devsim.node_model(
         device=device_name,
@@ -81,7 +118,9 @@ def set_doping_profile_2d(device_name, region_name, junction_pos, N_A_ionized, N
         device=device_name,
         region=region_name,
         name="Donors",
-        equation=f"{N_D}*step(y-{junction_pos})",
+        equation=f"{N_D}*step(y-{junction_pos})"
+        + _buffer_term(f"{N_D}", buffer, coord="y")
+        + _nplus_term(nplus, coord="y"),
     )
     devsim.node_model(
         device=device_name,
@@ -99,12 +138,16 @@ def set_graded_doping_2d(
     N_D_junction,
     N_D_bulk,
     L_transition,
+    nplus=None,
+    buffer=None,
 ):
     """Set exponentially graded N_D(y) doping profile on a 2D device.
 
     N_D(y) = N_D_bulk + (N_D_junction - N_D_bulk) * exp(-(y - y_j) / L)
-    for y > junction_pos (n-side).  Acceptors are a step function in the
-    p+ substrate.  Doping is laterally uniform (no x-dependence).
+    for y > junction_pos (n-side), optionally rising log-linearly to ``buffer``'s
+    N_end over the last Lb of the epi (``etna.core.device._buffer_term``). Acceptors
+    are a step function in the p+ substrate.  Doping is laterally uniform (no
+    x-dependence).
 
     Parameters
     ----------
@@ -130,10 +173,13 @@ def set_graded_doping_2d(
         equation=f"{N_A_ionized}*step({junction_pos}-y)",
     )
 
+    base = graded_base_expr(
+        junction_pos, N_D_junction, N_D_bulk, L_transition, coord="y"
+    )
     donor_expr = (
-        f"({N_D_bulk} + ({N_D_junction} - {N_D_bulk}) * "
-        f"exp(-max(y - {junction_pos}, 0) / {L_transition})) "
-        f"* step(y - {junction_pos})"
+        f"{base} * step(y - {junction_pos})"
+        + _buffer_term(base, buffer, coord="y")
+        + _nplus_term(nplus, coord="y")
     )
     devsim.node_model(
         device=device_name,
@@ -155,20 +201,32 @@ def create_sic_2d_device(
     region_name="sic",
     half_width_um=50.0,
     epi_thickness_cm=10e-4,
-    substrate_thickness_cm=1e-4,
-    N_A=1e19,
+    substrate_thickness_cm=_SUBSTRATE_DEFAULT_CM,
+    N_A=DEFAULT_N_A,
     N_D=None,
     T=300,
     doping_profile="graded",
     N_D_junction=None,
     N_D_bulk=None,
     L_transition=None,
+    nplus_thickness_cm=_NPLUS_DEFAULT_CM,
+    N_D_nplus=DEFAULT_STACK["N_D_nplus"],
+    nplus_generation=False,
+    buffer_thickness_cm=_BUFFER_THICKNESS_DEFAULT_CM,
+    buffer_end_doping=_BUFFER_END_DOPING_DEFAULT,
+    donor_table=None,
 ):
     """Create a 2D p+/n- 4H-SiC diode device in devsim.
 
     Structure uses symmetry: x = 0 (center/symmetry plane) to half_width_cm.
     Depth: y = 0 (anode, top) to total_depth (cathode, bottom).
     Air buffer regions are added at top and bottom for contact detection.
+
+    ``donor_table`` (opt-in): tabulated epi donor profile in depth y, as
+    ``etna.core.device.create_sic_device`` (replaces the exponential epi and the graded
+    transition; the n+ step follows). The resolved ``N_D_junction`` / ``N_D_bulk`` of
+    the returned dict are then the table's junction value and minimum (informative; the
+    sweep's V_bi uses the former).
 
     Parameters
     ----------
@@ -182,7 +240,7 @@ def create_sic_2d_device(
     epi_thickness_cm : float
         Epitaxial layer thickness (cm). Default 10 um = 10e-4 cm.
     substrate_thickness_cm : float
-        p+ substrate thickness (cm). Default 1 um = 1e-4 cm.
+        p+ anode layer thickness (cm). Default DEFAULT_STACK (0.3 um; legacy 1 um).
     N_A : float
         Total acceptor concentration in p+ substrate (cm^-3).
     N_D : float or None
@@ -199,6 +257,14 @@ def create_sic_2d_device(
         For graded profile: donor concentration in bulk epi (cm^-3).
     L_transition : float or None
         For graded profile: characteristic decay length (cm).
+    nplus_thickness_cm, N_D_nplus, nplus_generation :
+        Optional n+ layer under the epi (cathode on its far end); see
+        ``etna.core.device.create_sic_device``. Default DEFAULT_STACK (1 um, 1e19);
+        nplus_thickness_cm=None = historical (legacy) model, cathode on the n- epi.
+    buffer_thickness_cm, buffer_end_doping :
+        Graded n-/n+ transition over the last ``buffer_thickness_cm`` of the epi, as
+        ``etna.core.device.create_sic_device``: default DEFAULT_STACK (1.136634 um to
+        4.516421e16); both None (explicit) = abrupt epi/n+ (previous default, legacy).
 
     Returns
     -------
@@ -212,7 +278,21 @@ def create_sic_2d_device(
     params = SiC4H_Parameters()
     half_width_cm = half_width_um * 1e-4  # um -> cm
     junction_pos = substrate_thickness_cm
-    total_depth = substrate_thickness_cm + epi_thickness_cm
+    epi_end = substrate_thickness_cm + epi_thickness_cm
+    _check_nplus(nplus_thickness_cm, N_D_nplus)
+    nplus = None if nplus_thickness_cm is None else (epi_end, N_D_nplus)
+    table = donor_table_spec(epi_thickness_cm, donor_table)
+    if table is not None and doping_profile != "graded":
+        raise ValueError(
+            f"donor_table requires doping_profile='graded' (got {doping_profile!r})"
+        )
+    buffer_thickness_cm, buffer_end_doping = default_buffer_for_profile(
+        doping_profile, buffer_thickness_cm, buffer_end_doping, donor_table
+    )
+    buffer = buffer_spec(
+        epi_end, epi_thickness_cm, buffer_thickness_cm, buffer_end_doping
+    )
+    total_depth = epi_end + (nplus_thickness_cm or 0.0)  # cathode position
     air_buffer = 1e-8  # cm, thin buffer for contact detection
 
     # --- Create 2D mesh ---
@@ -252,11 +332,14 @@ def create_sic_2d_device(
     # Epi intermediate points (same as 1D)
     epi_mid1 = junction_pos + 2e-4
     epi_mid2 = junction_pos + 5e-4
-    if epi_mid1 < total_depth - 1e-6:
+    if epi_mid1 < epi_end - 1e-6:
         devsim.add_2d_mesh_line(mesh=mesh_name, dir="y", pos=epi_mid1, ps=5e-6)
-    if epi_mid2 < total_depth - 1e-6:
+    if epi_mid2 < epi_end - 1e-6:
         devsim.add_2d_mesh_line(mesh=mesh_name, dir="y", pos=epi_mid2, ps=5e-6)
 
+    if nplus is not None:
+        # n-/n+ step at the epi end (1 nm), then the n+ layer down to the cathode
+        devsim.add_2d_mesh_line(mesh=mesh_name, dir="y", pos=epi_end, ps=1e-7)
     # Cathode surface
     devsim.add_2d_mesh_line(mesh=mesh_name, dir="y", pos=total_depth, ps=1e-5)
 
@@ -315,7 +398,6 @@ def create_sic_2d_device(
     devsim.create_device(mesh=mesh_name, device=device_name)
 
     # --- Set 4H-SiC material parameters ---
-    kT_eV = K_B_EV * T
     kT_J = K_B_J * T
     V_t = kT_J / Q
 
@@ -358,9 +440,12 @@ def create_sic_2d_device(
         value=V_t,
     )
 
-    # Doping- and temperature-dependent mobility
-    mu_n = mobility_caughey_thomas_T(N_D, T, "electron", params)
-    mu_p = mobility_caughey_thomas_T(N_A, T, "hole", params)
+    # Reference scalar mobilities at the EPI doping (mobility_doping), as the 1D builder;
+    # the transport uses the local per-node mobility (add_local_mobility_models below;
+    # engine2d builds the same edges from the evaluated doping rows).
+    N_D_mobility = mobility_doping(N_D, doping_profile, N_D_bulk, table)
+    mu_n = mobility_caughey_thomas_T(N_D_mobility, T, "electron", params)
+    mu_p = mobility_caughey_thomas_T(N_D_mobility, T, "hole", params)
     devsim.set_parameter(
         device=device_name,
         region=region_name,
@@ -408,7 +493,23 @@ def create_sic_2d_device(
     _N_D_bulk = N_D_bulk if N_D_bulk is not None else _N_D_BULK_DEFAULT
     _L_transition = L_transition if L_transition is not None else _L_TRANSITION_DEFAULT
 
-    if doping_profile == "graded":
+    if table is not None:
+        # informative resolved values: the table's junction value and minimum
+        _N_D_junction, _N_D_bulk = 10.0 ** table[1][0], table_min_doping(table)
+        set_tabulated_doping_profile(
+            device_name,
+            region_name,
+            junction_pos,
+            N_A_ionized,
+            table,
+            nplus=nplus,
+            coord="y",
+        )
+        logger.info(
+            f"Tabulated 2D doping: {len(table[0])} knots, N_D {_N_D_junction:.2e} at "
+            f"the junction, min {_N_D_bulk:.2e}"
+        )
+    elif doping_profile == "graded":
         set_graded_doping_2d(
             device_name,
             region_name,
@@ -417,6 +518,8 @@ def create_sic_2d_device(
             _N_D_junction,
             _N_D_bulk,
             _L_transition,
+            nplus=nplus,
+            buffer=buffer,
         )
         logger.info(
             f"Graded 2D doping: N_D_junction={_N_D_junction:.2e}, "
@@ -429,7 +532,12 @@ def create_sic_2d_device(
             junction_pos,
             N_A_ionized,
             N_D,
+            nplus=nplus,
+            buffer=buffer,
         )
+    add_local_mobility_models(
+        device_name, region_name, T, acceptor_total_scale(N_A, N_A_ionized), params
+    )
 
     num_nodes = len(
         devsim.get_node_model_values(device=device_name, region=region_name, name="x")
@@ -457,13 +565,25 @@ def create_sic_2d_device(
         "params": params,
         "mu_n": mu_n,
         "mu_p": mu_p,
+        "N_D_mobility": N_D_mobility,
         "num_nodes": num_nodes,
         "doping_profile": doping_profile,
-        "N_D_junction": N_D_junction,
-        "N_D_bulk": N_D_bulk,
-        "L_transition": L_transition,
+        "N_D_junction": _N_D_junction,  # resolved defaults (audit B-03), never None
+        "N_D_bulk": _N_D_bulk,
+        "L_transition": _L_transition,
         "half_width_cm": half_width_cm,
         "dimension": 2,
+        "epi_end": epi_end,
+        "nplus_thickness_cm": nplus_thickness_cm,
+        "N_D_nplus": N_D_nplus if nplus_thickness_cm is not None else None,
+        "nplus_generation": bool(nplus_generation),
+        "buffer_thickness_cm": buffer_thickness_cm if buffer is not None else None,
+        "buffer_end_doping": buffer_end_doping if buffer is not None else None,
+        "donor_table": (
+            None
+            if table is None
+            else tuple((float(d), float(n)) for d, n in donor_table)
+        ),
     }
 
 
@@ -472,7 +592,7 @@ def calibrate_graded_doping_2d(
     half_width_um=50.0,
     epi_thickness_cm=10e-4,
     substrate_thickness_cm=1e-4,
-    N_A=1e19,
+    N_A=DEFAULT_N_A,
     T=300,
     x0=None,
     maxiter=80,
@@ -481,17 +601,16 @@ def calibrate_graded_doping_2d(
 ):
     """Calibrate the 2D graded epi doping profile (CONS-01).
 
-    This is the 2D analog of ``src/device.py:calibrate_graded_doping``
-    (lines 468-637): it fits ``{N_D_junction, N_D_bulk, L_transition}`` with the
+    This is the 2D analog of ``etna.core.device.calibrate_graded_doping``: it fits ``{N_D_junction, N_D_bulk, L_transition}`` with the
     same Nelder-Mead simplex, the same parameter bounds, and the same
     sum-of-squared-relative-error cost against the validated 1D-twin
     C-V targets. Two things differ from the 1D version:
 
     1. Trial devices are built with
-       :func:`src.charge_collection_2d.create_2d_dd_device` (full 2D DD setup)
+       :func:`etna.core.charge_collection_2d.create_2d_dd_device` (full 2D DD setup)
        instead of the 1D ``create_dd_device``, and the depletion width is read
        at the symmetry-plane center column with
-       :func:`src.poisson.extract_depletion_width_2d_center` (NOT the 1D
+       :func:`etna.core.poisson.extract_depletion_width_2d_center` (NOT the 1D
        depletion-width extractor, which reads ``x`` as depth and would return
        the wrong W for a 2D mesh).
     2. The cost blends the three reference W targets (0, -10, -30 V — equal
@@ -502,14 +621,22 @@ def calibrate_graded_doping_2d(
        operating envelope to the full clinical reverse-bias range without
        distorting the validated low-bias fit.
 
+    Trial devices use the LEGACY geometry (no n+, no graded transition; p+
+    ``substrate_thickness_cm``, default 1 um), explicitly: the builders' defaults are the
+    measured-C-V stack (DEFAULT_STACK), which is not a 3-target calibration.
+
     The calibration target is the 2D solver reproducing its own validated 1D
     twin's C-V at the device center (RESEARCH.md Assumption A2 / success
     criterion #2), NOT an external 2D dataset.
 
-    Between every trial, :func:`src.devsim_reset.reset_devsim_fully` is called
-    (PITFALLS P03/P30) to clear all devsim global state — including the
-    cylindrical-axis assembly globals — so trials cannot contaminate each other.
-    Unique ``uuid4`` device names avoid name collisions (PITFALLS P20).
+    Process state: on entry the cylindrical-axis assembly globals a previous
+    axisymmetric build may have left (PITFALLS P03/P30, etna.core.devsim_reset) are
+    restored to their Cartesian values; each trial deletes only its own device and
+    mesh. Other devsim devices of the caller are NOT touched. (Until 2026-10-18 every
+    trial ended with ``reset_devsim_fully``, which deleted every device in the
+    process, audit-v7 A-15; planar trials never set the cylindrical globals, so the
+    per-trial reset bought nothing.) Unique ``uuid4`` device names avoid name
+    collisions (PITFALLS P20).
 
     Parameters
     ----------
@@ -523,7 +650,8 @@ def calibrate_graded_doping_2d(
         Forwarded to ``create_2d_dd_device`` for every trial build.
     x0 : array_like or None
         Initial simplex guess ``[N_D_junction, N_D_bulk, L_transition]``.
-        Default ``[2.9e15, 8.5e13, 1e-4]`` (the v3.0 1D-calibrated values).
+        Default ``[2.9e15, 8.5e13, 1e-4]``: a starting guess for the optimizer
+        (rounded v3.0 1D values), not the calibrated stack (DEFAULT_STACK).
     maxiter : int
         Maximum Nelder-Mead iterations.
     V_target_for_convergence_only : float
@@ -549,8 +677,16 @@ def calibrate_graded_doping_2d(
     import scipy.optimize
     from etna.core.charge_collection_2d import create_2d_dd_device
     from etna.core.poisson import extract_depletion_width_2d_center
-    from etna.core.devsim_reset import reset_devsim_fully
+    from etna.core.devsim_reset import _CARTESIAN_DEFAULTS
     import devsim.python_packages.simple_physics as simple_physics
+
+    # Planar assembly globals once, at entry (devsim's Cartesian values, without the
+    # device deletion of a full reset): a cylindrical build earlier in the process
+    # would otherwise corrupt the planar trials' Poisson weights.
+    # (raxis_zero / raxis_variable have no Cartesian value and devsim refuses an empty
+    # one; they are read only by the cylindrical models these five select.)
+    for name, value in _CARTESIAN_DEFAULTS.items():
+        devsim.set_parameter(name=name, value=value)
 
     if target_W_data is None:
         target_W_data = {0.0: 1.7e-4, -10.0: 9.5e-4, -30.0: 9.73e-4}
@@ -580,16 +716,16 @@ def calibrate_graded_doping_2d(
             try:
                 devsim.solve(
                     type="dc",
-                    absolute_error=1e10,
-                    relative_error=1e-10,
+                    absolute_error=DC_ABS_ERROR,
+                    relative_error=DC_REL_ERROR,
                     maximum_iterations=40,
                 )
             except devsim.error:
                 try:
                     devsim.solve(
                         type="dc",
-                        absolute_error=1e12,
-                        relative_error=1e-8,
+                        absolute_error=RELAXED_ABS_ERROR,
+                        relative_error=RELAXED_REL_ERROR,
                         maximum_iterations=100,
                     )
                 except devsim.error:
@@ -631,6 +767,11 @@ def calibrate_graded_doping_2d(
                 substrate_thickness_cm=substrate_thickness_cm,
                 N_A=N_A,
                 T=T,
+                # the historical 3-target edge calibration: legacy geometry (cathode on
+                # the epi, abrupt end), explicit since the builders default to the stack
+                nplus_thickness_cm=None,
+                buffer_thickness_cm=None,
+                buffer_end_doping=None,
             )
             device = device_info["device_name"]
             bias_name = simple_physics.GetContactBiasName("cathode")
@@ -662,7 +803,15 @@ def calibrate_graded_doping_2d(
             W_sim = []
             converged_to_target = False
         finally:
-            reset_devsim_fully(preserve_solver=True)
+            # only this trial's device and mesh (A-15: was reset_devsim_fully)
+            for fn, kw in (
+                (devsim.delete_device, {"device": trial_name}),
+                (devsim.delete_mesh, {"mesh": f"{trial_name}_mesh"}),
+            ):
+                try:
+                    fn(**kw)
+                except devsim.error:
+                    pass
 
         logger.info(
             f"trial {counter[0]} N_D_j={N_D_j:.3e} N_D_b={N_D_b:.3e} "

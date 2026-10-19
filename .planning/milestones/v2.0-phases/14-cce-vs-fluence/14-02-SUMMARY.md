@@ -76,7 +76,7 @@ completed: 2026-03-24
 
 Each task was committed atomically:
 
-1. **Task 1: Create CCE vs fluence publication notebook** - `3ffb1a1` (feat)
+1. **Task 1: Create CCE vs fluence publication notebook** - `b4356a0` (feat)
 
 ## Files Created/Modified
 
@@ -103,7 +103,7 @@ Each task was committed atomically:
 - **Fix:** Changed highest fluence from 1e14 to 5e13 p/cm^2 and added try/except wrapper around each `cce_vs_bias_at_fluence()` call
 - **Files modified:** notebooks/10_cce_vs_fluence.ipynb
 - **Verification:** Notebook executes end-to-end without errors; all 4 figures generated
-- **Committed in:** 3ffb1a1 (Task 1 commit)
+- **Committed in:** b4356a0 (Task 1 commit)
 
 ---
 

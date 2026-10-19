@@ -1,0 +1,122 @@
+# ETNA continuous integration.
+#
+# The LOCAL suite is the real gate (`uv run pytest -n auto`, see docs/USAGE.md "Tests");
+# CI is a sanity net on a free runner, so it runs only for main, pull requests, the
+# nightly schedule and manual dispatch, not on every branch push.
+#
+#   test     (push to main / pull request / manual): lock check, ruff, notebook hygiene,
+#            and the default test run (`-m "not exhaustive"` from pytest.ini).
+#   nightly  (schedule / manual): the `exhaustive` tests (redundant deep variants) and a
+#            dependency audit of the locked set (audit C-05).
+#
+# Installs `--extra dev` only (no `viz`): the GDSII and manim tests skip themselves when
+# gdstk / manim are absent.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 2 * * *" # nightly, 02:17 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONUNBUFFERED: "1"
+  MPLBACKEND: Agg
+  # numba's on-disk JIT cache (etna.core.batched / engine2d, all cache=True) lives
+  # outside the checkout so actions/cache can carry it between runs.
+  NUMBA_CACHE_DIR: ${{ github.workspace }}/.numba-cache
+
+jobs:
+  test:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    # Measured: 37-52 min with `-n auto --dist loadfile` before the 2026-10-18 scheduling
+    # and devsim-leak fixes (tests/_xdist_schedule.py, tests/conftest.py). Locally the
+    # suite is ~1700-2400 CPU-s; a 4-vCPU runner should now need roughly 15-25 min.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: System libraries for devsim (BLAS / LAPACK)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libopenblas-dev liblapack-dev
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Lock file is up to date
+        run: uv lock --check
+
+      - name: Install (dev extra)
+        run: uv sync --locked --extra dev
+
+      # numba validates a cached kernel by its source file's mtime + size. A fresh
+      # checkout (and every PR merge commit) gives each file a new mtime, so pin the
+      # sources to a constant. Safe because the cache key is the exact content hash of
+      # etna/** with no restore-keys: a partial match could pair an old kernel with a
+      # same-size edited source.
+      - name: Pin source mtimes for the numba cache
+        run: git ls-files -z etna | xargs -0 touch -d @1700000000
+
+      - name: numba JIT cache
+        uses: actions/cache@v4
+        with:
+          path: .numba-cache
+          key: numba-${{ runner.os }}-py3.13-${{ hashFiles('etna/**/*.py', 'uv.lock') }}
+
+      - name: Ruff
+        run: uv run --no-sync ruff check .
+
+      - name: Notebook hygiene (no outputs in tracked notebooks)
+        run: uv run --no-sync nbstripout --verify notebooks/*.ipynb
+
+      - name: Notebook generators in sync
+        run: uv run --no-sync python scripts/check_notebook_generators.py
+
+      # --dist loadgroup --no-loadscope-reorder come from pytest.ini (addopts)
+      - name: Tests (default run)
+        run: uv run --no-sync pytest -n 4 -q --durations=25
+
+  nightly:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: System libraries for devsim (BLAS / LAPACK)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libopenblas-dev liblapack-dev
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install (dev extra)
+        run: uv sync --locked --extra dev
+
+      - name: Pin source mtimes for the numba cache (see the test job)
+        run: git ls-files -z etna | xargs -0 touch -d @1700000000
+
+      - name: numba JIT cache
+        uses: actions/cache@v4
+        with:
+          path: .numba-cache
+          key: numba-${{ runner.os }}-py3.13-${{ hashFiles('etna/**/*.py', 'uv.lock') }}
+
+      - name: Exhaustive tests
+        run: uv run --no-sync pytest -n 4 -q -m exhaustive --durations=20
+
+      - name: Dependency audit of the locked set (runtime + all extras)
+        run: |
+          uv export --frozen --no-hashes --all-extras --no-emit-project > /tmp/req-all.txt
+          uvx pip-audit --no-deps --disable-pip -r /tmp/req-all.txt

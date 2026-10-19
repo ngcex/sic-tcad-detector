@@ -1,7 +1,8 @@
 """Unit tests for the pure app.components.results.to_csv_bytes seam.
 
-UI-06 coverage: CSV serialization for all three sim_types (cv, cce, field)
-plus the commented metadata header and the unknown-sim_type error path. No
+UI-06 coverage: CSV serialization for every sim_type (cv, cce, field, damage,
+dark_current (bias), dark_current_vs_T, microdosimetry, temperature, flash,
+transient) plus the commented metadata header and the unknown-sim_type error path. No
 Streamlit runtime and no devsim build are required — to_csv_bytes is a pure
 function operating on a hand-built SimResult fixture, imported directly
 (mirrors tests/test_app_device_sidebar.py's pure-seam shape).
@@ -52,13 +53,13 @@ def test_cv_csv_columns_and_header():
     non_comment_lines = [ln for ln in text.splitlines() if not ln.startswith("#")]
     assert (
         non_comment_lines[0]
-        == "bias_V,capacitance_F,one_over_C2_cm4_per_F2,depletion_width_cm"
+        == "bias_V,capacitance_F,one_over_C2_per_F2,depletion_width_cm"
     )
 
     # A data row matches the fixture values (first row: bias=0.0).
     first_data_row = non_comment_lines[1].split(",")
-    assert float(first_data_row[0]) == pytest.approx(0.0)
-    assert float(first_data_row[1]) == pytest.approx(1e-9)
+    assert float(first_data_row[0]) == pytest.approx(0.0, abs=0)
+    assert float(first_data_row[1]) == pytest.approx(1e-9, rel=1e-6, abs=0)
     assert float(first_data_row[2]) == pytest.approx(1e17)
     assert float(first_data_row[3]) == pytest.approx(1e-4)
 
@@ -66,7 +67,7 @@ def test_cv_csv_columns_and_header():
     assert list(df.columns) == [
         "bias_V",
         "capacitance_F",
-        "one_over_C2_cm4_per_F2",
+        "one_over_C2_per_F2",
         "depletion_width_cm",
     ]
     assert len(df) == 3
@@ -182,7 +183,7 @@ def test_dark_current_csv_columns_and_header():
     y = np.array([1e-13, 5e-12, 2e-10])
     result = SimResult(
         config=cfg,
-        sim_type="dark_current",
+        sim_type="dark_current_vs_T",
         x=x,
         y=y,
         metadata={
@@ -195,10 +196,13 @@ def test_dark_current_csv_columns_and_header():
     text = _decode(result)
 
     non_comment_lines = [ln for ln in text.splitlines() if not ln.startswith("#")]
-    assert non_comment_lines[0] == "T_K,I_total_A,I_SRH_A,I_TAT_A,I_SRV_A"
+    # Only the total: the SRH/TAT split is a modelling partition and I_SRV is
+    # identically zero at the ohmic cathode, so neither is exported.
+    assert non_comment_lines[0] == "T_K,I_total_A"
+    assert "calibration input" in text
 
     df = pd.read_csv(StringIO(text), comment="#")
-    assert list(df.columns) == ["T_K", "I_total_A", "I_SRH_A", "I_TAT_A", "I_SRV_A"]
+    assert list(df.columns) == ["T_K", "I_total_A"]
     assert len(df) == 3
 
 
@@ -276,7 +280,7 @@ def test_sweep_results_to_csv_bytes_shape():
     assert version_lines, "missing '# software_version:' header line"
 
     non_comment_lines = [ln for ln in text.splitlines() if not ln.startswith("#")]
-    assert non_comment_lines[0] == "epi_thickness_um,x,y"
+    assert non_comment_lines[0] == "epi_thickness_um,x,y,solver"
 
     df = pd.read_csv(StringIO(text), comment="#")
     assert "epi_thickness_um" in df.columns
@@ -302,7 +306,7 @@ def test_build_dark_current_figure_guards_zero_and_negative():
     cfg = DeviceConfig()
     result = SimResult(
         config=cfg,
-        sim_type="dark_current",
+        sim_type="dark_current_vs_T",
         x=np.array([250.0, 325.0, 400.0]),
         y=np.array([1e-13, 5e-12, 2e-10]),
         metadata={
@@ -314,8 +318,156 @@ def test_build_dark_current_figure_guards_zero_and_negative():
 
     fig = build_dark_current_figure(result)
 
-    assert len(fig.data) == 3
-    assert not any(t.name == "SRV (surface)" for t in fig.data)
+    # Total only (no SRH/TAT/SRV component traces), plotted as |I| on log-y.
+    assert len(fig.data) == 1
+    assert fig.data[0].name == "Total"
+    assert all(v > 0 for v in fig.data[0].y)
 
-    tat_trace = next(t for t in fig.data if t.name == "TAT (effective)")
-    assert all(v >= 0 for v in tat_trace.y)
+
+# --- audit-v7 C-06 / C-07 / C-13: units, dark-current shapes, remaining facades ---
+
+
+def _cv_result():
+    return SimResult(
+        config=DeviceConfig(),
+        sim_type="cv",
+        x=np.array([0.0, -5.0]),
+        y=np.array([1e-9, 5e-10]),
+        metadata={
+            "one_over_C_squared": np.array([1e18, 4e18]),
+            "depletion_widths": np.array([1e-4, 2e-4]),
+        },
+    )
+
+
+def test_cv_figure_axes_are_absolute_farads():
+    from app.components.results import build_cv_figure, build_mott_schottky_figure
+
+    assert build_cv_figure(_cv_result()).layout.yaxis.title.text == "Capacitance (F)"
+    assert (
+        build_mott_schottky_figure(_cv_result()).layout.yaxis.title.text == "1/C² (F⁻²)"
+    )
+
+
+def _dark_bias_result(**md):
+    base = {
+        "I_SRH": np.array([1e-13, 2e-13, 3e-13]),
+        "I_TAT": np.zeros(3),
+        "I_SRV": np.zeros(3),
+        "truncated": False,
+        "requested_v_start": 0.0,
+        "requested_v_stop": -20.0,
+        "reached_v_stop": -20.0,
+        "reach_through_V": None,
+        "past_reach_through": None,
+        "validity_note": None,
+    }
+    base.update(md)
+    return SimResult(
+        config=DeviceConfig(),
+        sim_type="dark_current",
+        x=np.array([0.0, -10.0, -20.0]),
+        y=np.array([1e-13, 2e-13, 3e-13]),
+        metadata=base,
+    )
+
+
+def test_run_dark_current_shape_is_labelled_bias_not_temperature():
+    text = _decode(_dark_bias_result())
+    df = pd.read_csv(StringIO(text), comment="#")
+    assert list(df.columns) == ["bias_V", "I_total_A"]
+    np.testing.assert_allclose(df["bias_V"], [0.0, -10.0, -20.0])
+    assert "# truncated:" not in text
+    fig = build_dark_current_figure(_dark_bias_result())
+    assert fig.layout.xaxis.title.text == "Bias V (V)"
+    assert "vs Bias" in fig.layout.title.text
+
+
+def test_dark_current_vs_T_figure_axis_is_temperature():
+    res = SimResult(
+        config=DeviceConfig(),
+        sim_type="dark_current_vs_T",
+        x=np.array([250.0, 300.0]),
+        y=np.array([1e-13, 1e-12]),
+        metadata={"V_bias": -20.0},
+    )
+    assert build_dark_current_figure(res).layout.xaxis.title.text == "Temperature (K)"
+    assert "# V_bias: -20.0" in _decode(res)
+
+
+def test_run_dark_current_truncation_and_legacy_validity_are_exported():
+    res = _dark_bias_result(
+        truncated=True,
+        reached_v_stop=-10.0,
+        past_reach_through=np.array([False, False, True]),
+        validity_note="reach-through 17 V; legacy model",
+    )
+    text = _decode(res)
+    trunc = [ln for ln in text.splitlines() if ln.startswith("# truncated:")]
+    assert trunc and "-10.00 V" in trunc[0] and "-20.00 V" in trunc[0]
+    assert "# validity: reach-through 17 V; legacy model" in text
+    df = pd.read_csv(StringIO(text), comment="#")
+    assert list(df.columns) == ["bias_V", "I_total_A", "past_reach_through"]
+    assert df["past_reach_through"].tolist() == [False, False, True]
+
+
+def test_temperature_csv_round_trip():
+    res = SimResult(
+        config=DeviceConfig(),
+        sim_type="temperature",
+        x=np.array([250.0, 300.0, 350.0]),
+        y=np.array([0.97, 0.98, 0.99]),
+        metadata={
+            "voltage_V": -30.0,
+            "method": "hecht",
+            "solver_per_T": np.array(["batched", "batched", "devsim"]),
+            "solver": "hecht (analytical; W from batched engine + devsim)",
+        },
+    )
+    text = _decode(res)
+    assert "# ETNA SiC TCAD Simulator — temperature result" in text
+    assert "# voltage_V: -30.0" in text and "# method: hecht" in text
+    df = pd.read_csv(StringIO(text), comment="#")
+    assert list(df.columns) == ["T_K", "CCE", "solver"]
+    np.testing.assert_allclose(df["T_K"], res.x)
+    np.testing.assert_allclose(df["CCE"], res.y)
+    assert df["solver"].tolist() == ["batched", "batched", "devsim"]
+
+
+def test_flash_csv_round_trip_carries_scope_warning():
+    res = SimResult(
+        config=DeviceConfig(),
+        sim_type="flash",
+        x=np.array([20.0, 100.0, 230.0]),
+        y=np.array([0.99, 0.98, 0.97]),
+        metadata={"V_bias": -30.0, "E_MeV": 62, "solver": "devsim"},
+    )
+    text = _decode(res)
+    assert "# V_bias: -30.0" in text and "# E_MeV: 62" in text
+    warn = [ln for ln in text.splitlines() if ln.startswith("# WARNING:")]
+    assert warn and "NOT a validated FLASH" in warn[0]
+    df = pd.read_csv(StringIO(text), comment="#")
+    assert list(df.columns) == ["dose_rate_Gy_s", "CCE"]
+    np.testing.assert_allclose(df["dose_rate_Gy_s"], res.x)
+    np.testing.assert_allclose(df["CCE"], res.y)
+
+
+def test_transient_csv_round_trip_exports_clipped_and_raw():
+    res = SimResult(
+        config=DeviceConfig(),
+        sim_type="transient",
+        x=np.array([20.0, 230.0]),
+        y=np.array([1.0, 0.95]),
+        metadata={
+            "V_bias": -30.0,
+            "transient_cce_raw": np.array([1.002, 0.95]),
+            "current_contact": "anode",
+            "solver": "devsim",
+        },
+    )
+    text = _decode(res)
+    assert "# current_contact: anode" in text
+    df = pd.read_csv(StringIO(text), comment="#")
+    assert list(df.columns) == ["dose_rate_Gy_s", "CCE_clipped_0_1", "CCE_raw"]
+    np.testing.assert_allclose(df["CCE_clipped_0_1"], res.y)
+    np.testing.assert_allclose(df["CCE_raw"], [1.002, 0.95])

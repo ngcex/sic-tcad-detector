@@ -61,7 +61,7 @@ completed: 2026-04-01
 
 Each task was committed atomically:
 
-1. **Task 1: Create notebook 18 with microdosimetric spectra pipeline** - `9cbcdfc` (feat)
+1. **Task 1: Create notebook 18 with microdosimetric spectra pipeline** - `32f769b` (feat)
 2. **Task 2: Human verification of notebook 18 figures and science** - checkpoint approved, no commit needed
 
 ## Files Created/Modified
@@ -97,7 +97,7 @@ None - no external service configuration required.
 - FOUND: scripts/create_notebook_18.py
 - FOUND: notebooks/18_microdosimetric_spectra.ipynb
 - FOUND: .planning/phases/23-microdosimetric-spectra/23-02-SUMMARY.md
-- FOUND: commit 9cbcdfc
+- FOUND: commit 32f769b
 
 ---
 

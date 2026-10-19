@@ -24,17 +24,19 @@ from etna.core.charge_collection_2d import (
     _robust_dc_solve,
 )
 from etna.core.device2d import create_sic_2d_device
-from etna.core.poisson import setup_poisson, solve_equilibrium
 from etna.core.drift_diffusion import (
-    setup_sic_drift_diffusion,
     ramp_bias,
 )
 from etna.core.charge_collection import add_generation_to_dd, compute_cce_from_dd
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def dd_device_2d():
-    """Create a 2D DD device with bias applied, clean up after test."""
+    """2D DD device with bias applied, built once per module (~100 s to build).
+
+    Shared by tests that only read it or leave it restored (cce_lateral_scan
+    zeroes the generation and re-solves afterwards); cleaned up at module end.
+    """
     device_info = create_2d_dd_device(half_width_um=50.0, V_bias=50.0)
     yield device_info
     try:
@@ -77,22 +79,11 @@ class TestIntegrateOverMesh2D:
             devsim.delete_device(device=dev_name)
 
 
-class TestCreate2DDDDevice:
-    """Tests for create_2d_dd_device."""
-
-    def test_device_has_dd_initialized(self, dd_device_2d):
-        """Device should have dd_initialized=True."""
-        assert dd_device_2d["dd_initialized"] is True
-
-    def test_device_is_2d(self, dd_device_2d):
-        """Device should have dimension=2."""
-        assert dd_device_2d["dimension"] == 2
-
-
 class TestComputeCCE2D:
     """Tests for 2D CCE computation."""
 
     @pytest.mark.slow
+    @pytest.mark.exhaustive  # covered tighter by TestCompareCCE2Dvs1D (hw 50: CCE_1D == CCE_2D to 1e-3)
     def test_center_matches_1d(self):
         """2D center CCE should match 1D CCE within 10% for wide device.
 
@@ -124,6 +115,11 @@ class TestComputeCCE2D:
             add_generation_to_dd(device_info_2d, gen_2d)
             _robust_dc_solve()
             cce_2d = compute_cce_2d(device_info_2d, gen_2d)
+
+            # devsim.solve is global: a live 2D device would be re-factored on
+            # every Newton step of the 1D ramp below. Drop it first.
+            devsim.delete_device(device=device_info_2d["device_name"])
+            device_info_2d = None
 
             # 1D reference
             from etna.core.drift_diffusion import create_dd_device
@@ -180,8 +176,15 @@ class TestCCELateralScan:
     """Tests for cce_lateral_scan."""
 
     @pytest.mark.slow
-    def test_edge_lower_than_center(self):
-        """CCE at edge should be lower than CCE at center for 100um SV."""
+    def test_edge_equals_center_for_uniform_device(self):
+        """Edge and centre CCE agree for the laterally uniform 100um SV.
+
+        This test used to assert edge < center. That was an artefact: I_generated was
+        integrated with a triangle rule that differs from the solver's box-rule source by
+        O(h), so the ratio read ~0.9998. Nothing in the model (depth-only doping,
+        full-width contacts, mirror sides) separates edge from centre, so the physical
+        answer is 1 (PERF-03).
+        """
         device_info = None
         try:
             device_info = create_2d_dd_device(half_width_um=50.0, V_bias=50.0)
@@ -191,20 +194,110 @@ class TestCCELateralScan:
             cce_edge = result["cce_values"][-1]
 
             assert cce_center > 0, f"Center CCE should be positive, got {cce_center}"
-            assert cce_edge < cce_center, (
-                f"Edge CCE ({cce_edge:.4f}) should be less than "
-                f"center CCE ({cce_center:.4f})"
-            )
-            assert result["edge_to_center_ratio"] < 1.0, (
-                f"edge_to_center_ratio ({result['edge_to_center_ratio']:.4f}) "
-                f"should be < 1.0"
-            )
+            assert cce_edge == pytest.approx(cce_center, rel=1e-6)
+            assert result["edge_to_center_ratio"] == pytest.approx(1.0, abs=1e-6)
         finally:
             if device_info is not None:
                 try:
                     devsim.delete_device(device=device_info["device_name"])
                 except Exception:
                     pass
+
+
+class TestCompareCCE2Dvs1D:
+    """Tests for compare_cce_2d_vs_1d."""
+
+    @pytest.mark.slow
+    def test_ratio_is_one_for_laterally_uniform_device(self):
+        """Active-to-geometric ratio of the laterally uniform SV is 1 (no edge loss).
+
+        The device is laterally uniform (mirror side walls, full-width contacts), so CCE(x)
+        is flat and the ratio is 1 (DESIGN-2: CCE uniformity is not a modelled result). The
+        former assertion ``ratio < 1.0`` held only through the round-off floor of the direct
+        cathode current (ratio 0.999999964, lateral CCE scattered by 5e-8); with the
+        balanced extraction the scatter is ~1e-9 and the ratio 1.0000000002.
+        """
+        # hw 25 (was 50: 30 -> 12 s): same numbers, the device is laterally uniform
+        # (hw 50 / 25: cce_1d 0.9998822732483303 both, cce_2d_center equal to 2e-16,
+        # ratio 1 + 6.3e-11 / 1 + 8.2e-10)
+        result = compare_cce_2d_vs_1d(half_width_um=25.0, V_bias=50.0, gen_rate=1e18)
+
+        assert result["cce_1d"] > 0, f"1D CCE should be > 0, got {result['cce_1d']}"
+        assert (
+            result["cce_2d_center"] > 0
+        ), f"2D center CCE should be > 0, got {result['cce_2d_center']}"
+        assert result["active_to_geometric_ratio"] == pytest.approx(1.0, abs=1e-6)
+        # 1D twin with the same (epi-confined) generation: the laterally uniform device
+        # gives the same CCE (the 1D side used to generate in the n+ too: 0.9543 vs 0.9998)
+        assert result["cce_1d"] == pytest.approx(result["cce_2d_center"], abs=1e-3)
+        # B-14: the centre key is the lateral scan's x = 0 point, not the full-area value
+        assert result["cce_2d_center"] == result["lateral_scan"]["cce_values"][0]
+        assert result["cce_2d_full_area"] == pytest.approx(
+            result["cce_2d_center"], abs=1e-6
+        )  # laterally uniform device
+
+    @pytest.mark.slow
+    def test_engine_2d_half_matches_devsim(self):
+        """solver="auto" runs the 2D half on the engine: same numbers as devsim to ~1e-14
+        (measured 2026-10-18 at hw 50 / 150, 50 V: <= 7e-15 on every key)."""
+        ref = compare_cce_2d_vs_1d(half_width_um=25.0, V_bias=30.0, gen_rate=1e18)
+        eng = compare_cce_2d_vs_1d(
+            half_width_um=25.0, V_bias=30.0, gen_rate=1e18, solver="auto"
+        )
+        assert ref["solver_2d"] == "devsim" and eng["solver_2d"] == "engine2d"
+        for key in (
+            "cce_1d",
+            "cce_2d_center",
+            "cce_2d_full_area",
+            "active_to_geometric_ratio",
+        ):
+            assert eng[key] == pytest.approx(ref[key], abs=1e-10), key
+        np.testing.assert_allclose(
+            eng["lateral_scan"]["cce_values"],
+            ref["lateral_scan"]["cce_values"],
+            atol=1e-10,
+        )
+        assert set(eng["lateral_scan"]) == set(ref["lateral_scan"])
+
+
+def test_cce_vs_bias_lateral_auto_uses_engine_and_falls_back():
+    """solver="auto": engine inside its box (V 5-80), devsim outside (here V = 2)."""
+    from etna.core.charge_collection_2d import cce_vs_bias_lateral
+    from etna.core.engine2d import lateral_cce_scan_2d
+
+    res = cce_vs_bias_lateral(
+        half_width_um=25.0, biases=[20.0, 2.0], n_points=3, solver="auto"
+    )
+    assert res["solvers"] == ["engine2d", "devsim"]
+    direct = lateral_cce_scan_2d(25.0, 20.0, n_lateral_points=3)
+    np.testing.assert_array_equal(res["scans"][0]["cce_values"], direct["cce_values"])
+    assert set(res["scans"][0]) == set(res["scans"][1])
+    with pytest.raises(ValueError):
+        cce_vs_bias_lateral(biases=[20.0], solver="gpu")
+
+
+# ---------------------------------------------------------------------------
+# Tests on the shared module-scoped 2D device. They stay LAST on purpose:
+# devsim.solve is global, so a live converged 2D device is re-solved inside every
+# later device build and its ~1e-9 noise floor can make those builds fail to
+# converge. Tests that build their own devices must run before the fixture exists.
+# ---------------------------------------------------------------------------
+
+
+class TestCreate2DDDDevice:
+    """Tests for create_2d_dd_device."""
+
+    def test_device_has_dd_initialized(self, dd_device_2d):
+        """Device should have dd_initialized=True."""
+        assert dd_device_2d["dd_initialized"] is True
+
+    def test_device_is_2d(self, dd_device_2d):
+        """Device should have dimension=2."""
+        assert dd_device_2d["dimension"] == 2
+
+
+class TestCCELateralScanSharedDevice:
+    """cce_lateral_scan on the shared device."""
 
     def test_returns_correct_keys(self, dd_device_2d):
         """Lateral scan result should have all expected keys."""
@@ -216,29 +309,18 @@ class TestCCELateralScan:
             "x_positions_um",
             "cce_values",
             "edge_to_center_ratio",
+            "in_mesh_generation_fraction",
+            "q_collected_over_deposited",
         }
         assert (
             set(result.keys()) == expected_keys
         ), f"Missing keys: {expected_keys - set(result.keys())}"
         assert len(result["cce_values"]) == 2
         assert len(result["x_positions_cm"]) == 2
-
-
-class TestCompareCCE2Dvs1D:
-    """Tests for compare_cce_2d_vs_1d."""
-
-    @pytest.mark.slow
-    def test_returns_ratio_less_than_one(self):
-        """Active-to-geometric ratio should be < 1.0 for 100um SV."""
-        result = compare_cce_2d_vs_1d(half_width_um=50.0, V_bias=50.0, gen_rate=1e18)
-
-        assert result["cce_1d"] > 0, f"1D CCE should be > 0, got {result['cce_1d']}"
-        assert (
-            result["cce_2d_center"] > 0
-        ), f"2D center CCE should be > 0, got {result['cce_2d_center']}"
-        assert result["active_to_geometric_ratio"] < 1.0, (
-            f"Active/geometric ratio ({result['active_to_geometric_ratio']:.4f}) "
-            f"should be < 1.0 (edge effects reduce effective volume)"
+        f_in = result["in_mesh_generation_fraction"]
+        assert 0.0 < f_in <= 1.0
+        np.testing.assert_allclose(
+            result["q_collected_over_deposited"], result["cce_values"] * f_in
         )
 
 
@@ -265,3 +347,81 @@ class TestCCEHeatmap2D:
         # Active fraction should be between 0 and 1
         af = result["active_fraction"]
         assert 0 <= af <= 1.0, f"active_fraction ({af}) should be between 0 and 1"
+
+
+class TestCCEHeatmapExcludesNplus:
+    """cce_heatmap_2d: the n+ layer below the epi is not active volume (no devsim).
+
+    Before the fix the default depth step was y >= junction_pos, so the n+ nodes got
+    CCE 1 and entered the active-fraction denominator (same bug class as 01085a9).
+    """
+
+    @staticmethod
+    def _mesh(monkeypatch):
+        import etna.core.charge_collection_2d as cc2d
+
+        jp, epi, npl = 0.3e-4, 10e-4, 1e-4
+        xs = np.linspace(0.0, 25e-4, 6)
+        ys = np.concatenate(
+            [
+                np.linspace(0, jp, 4),
+                np.linspace(jp, jp + epi, 21)[1:],
+                np.linspace(jp + epi, jp + epi + npl, 6)[1:],
+            ]
+        )
+        X, Y = np.meshgrid(xs, ys)
+        vals = {"x": X.ravel(), "y": Y.ravel()}
+        monkeypatch.setattr(
+            cc2d.devsim,
+            "get_node_model_values",
+            lambda device, region, name: list(vals[name]),
+        )
+        info = {
+            "device_name": "d",
+            "region_name": "r",
+            "substrate_thickness_cm": jp,
+            "epi_thickness_cm": epi,
+            "epi_end": jp + epi,
+            "nplus_thickness_cm": npl,
+        }
+        lateral = {"x_positions_cm": xs, "cce_values": np.ones_like(xs)}
+        return info, lateral, Y.ravel(), jp, jp + epi
+
+    def test_nplus_nodes_have_zero_cce(self, monkeypatch):
+        info, lateral, y, jp, epi_end = self._mesh(monkeypatch)
+        r = cce_heatmap_2d(info, lateral)
+        in_epi = (y >= jp) & (y <= epi_end + 1e-12)
+        assert np.all(r["cce_map"][y > epi_end + 1e-12] == 0.0)
+        assert np.all(r["cce_map"][y < jp] == 0.0)
+        assert np.all(r["cce_map"][in_epi] == 1.0)
+        assert r["active_fraction"] == 1.0
+
+    def test_active_fraction_denominator_is_epi_only(self, monkeypatch):
+        info, lateral, y, jp, epi_end = self._mesh(monkeypatch)
+        in_epi = (y >= jp) & (y <= epi_end + 1e-12)
+        top = in_epi & (y <= jp + 5e-4)
+        r = cce_heatmap_2d(info, lateral, cce_1d_depth=np.where(top, 1.0, 0.0))
+        assert r["active_fraction"] == pytest.approx(top.sum() / in_epi.sum())
+
+
+class TestLateralScanIsMeshIndependentForUniformDevice:
+    """PERF-03: the device is laterally uniform, so edge and centre CCE must agree.
+
+    With the old triangle rule for I_generated the ratio differed from 1 by ~1e-4
+    (O(h), mesh dependent); with the box rule that matches the solver's source it is 1
+    to solver tolerance.
+    """
+
+    @pytest.mark.slow
+    # same property, stronger checks, kept in the default run by
+    # TestCCELateralScan::test_edge_equals_center_for_uniform_device (hw 50, 5 points:
+    # edge == centre to rel 1e-6 and ratio 1 to 1e-6); this hw 25 mesh variant (~40 s
+    # under the full suite) runs with -m exhaustive
+    @pytest.mark.exhaustive
+    def test_edge_to_centre_ratio_is_one(self):
+        device_info = create_2d_dd_device(half_width_um=25.0, V_bias=50.0)
+        try:
+            scan = cce_lateral_scan(device_info, n_points=3, gen_rate=1e18)
+        finally:
+            devsim.delete_device(device=device_info["device_name"])
+        assert scan["edge_to_center_ratio"] == pytest.approx(1.0, abs=1e-6)

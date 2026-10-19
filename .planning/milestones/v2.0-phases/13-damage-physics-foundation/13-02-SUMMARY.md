@@ -65,8 +65,8 @@ completed: 2026-03-24
 
 Each task was committed atomically:
 
-1. **Task 1: Add v1.1 regression safety tests** - `6af22c3` (test)
-2. **Task 2: Create radiation damage overview notebook** - `b4274fd` (feat)
+1. **Task 1: Add v1.1 regression safety tests** - `9c649ee` (test)
+2. **Task 2: Create radiation damage overview notebook** - `af5ae75` (feat)
 
 ## Files Created/Modified
 
@@ -93,7 +93,7 @@ Each task was committed atomically:
 - **Fix:** Increased timeout to 600s in test_full_v11_test_suite_passes
 - **Files modified:** tests/test_radiation_damage.py
 - **Verification:** Test passes with 286s runtime
-- **Committed in:** 6af22c3 (Task 1 commit)
+- **Committed in:** 9c649ee (Task 1 commit)
 
 ---
 

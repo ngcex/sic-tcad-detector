@@ -74,8 +74,8 @@ completed: 2026-03-23
 
 ## Task Commits
 
-1. **Task 1: Add sensitivity_sweep and plot_dark_current_decomposition** - `db59fac` (feat)
-2. **Task 2: Create Jupyter notebook 07** - `49479ca` (feat)
+1. **Task 1: Add sensitivity_sweep and plot_dark_current_decomposition** - `cdfc63a` (feat)
+2. **Task 2: Create Jupyter notebook 07** - `45e36bb` (feat)
 
 ## Files Created/Modified
 

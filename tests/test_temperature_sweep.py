@@ -39,14 +39,15 @@ class TestTemperatureCoefficient:
 
         assert result["r_squared"] > 0.9
         assert result["slope"] < 0  # negative trend
-        assert result["unit"] == "%/K"
+        assert result["unit"] == "1/K"  # fraction per kelvin, not %/K (B-13)
 
     def test_current_unit(self):
-        """Current quantities should get pA/K unit."""
+        """Current quantities are 1D current densities: A/cm^2/K (B-13)."""
         T = np.array([300, 310])
         values = np.array([1e-12, 2e-12])
         result = extract_temperature_coefficient(T, values, "I_reverse")
-        assert result["unit"] == "pA/K"
+        assert result["unit"] == "A/cm^2/K"
+        assert result["slope"] == pytest.approx(1e-13)  # no rescaling to pA
 
 
 class TestSweepCCE:
@@ -62,7 +63,8 @@ class TestSweepCCE:
 
         assert isinstance(df, pd.DataFrame)
         assert len(df) == 3  # 3 temperatures x 1 voltage
-        assert set(df.columns) == {"T", "V", "CCE"}
+        assert set(df.columns) == {"T", "V", "CCE", "truncated"}  # B-05
+        assert not df["truncated"].any()
 
         for _, row in df.iterrows():
             assert (
@@ -97,7 +99,6 @@ class TestSweepIV:
         assert set(df.columns) == expected_cols
 
     @pytest.mark.slow
-    @pytest.mark.slow
     def test_iv_current_increases_with_temperature(self):
         """Reverse leakage current should increase with temperature.
 
@@ -114,3 +115,36 @@ class TestSweepIV:
         assert (
             I_values[-1] > I_values[0]
         ), f"I(310K)={I_values[-1]:.4e} should exceed I(290K)={I_values[0]:.4e}"
+
+
+class TestSweepIVUsesRefreshedTATField:
+    """B-01: the TAT field/gamma must follow the bias, not stay at their 0 V values."""
+
+    @pytest.mark.slow
+    def test_sweep_matches_dark_current_sweep(self):
+        import uuid
+
+        import devsim
+
+        from etna.core.dark_current import create_dark_current_device, dark_current_sweep
+
+        from etna.core.device import DEFAULT_STACK as S
+
+        df = sweep_iv_vs_temperature([300.0], V_reverse=-30)
+        name = f"b01_ref_{uuid.uuid4().hex[:8]}"
+        # the sweep's device: the default stack (measured-C-V profile since 2026-10-18;
+        # was a hardcoded 2.90e15 / 8.50e13 / 1 um before 2026-10-17)
+        dev = create_dark_current_device(
+            device_name=name,
+            T=300.0,
+            doping_profile="graded",
+            N_D_junction=S["N_D_junction"],
+            N_D_bulk=S["N_D_bulk"],
+            L_transition=S["L_transition"],
+        )
+        try:
+            J_ref = abs(dark_current_sweep(dev, [-30.0], area=1.0, V_step=0.5)["J_total"][-1])
+        finally:
+            devsim.delete_device(device=name)
+        assert df["I_reverse"].iloc[0] == pytest.approx(J_ref, rel=0.05)
+

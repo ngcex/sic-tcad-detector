@@ -90,7 +90,7 @@ None. Scan of `src/microdosimetry.py` (495 lines) found:
 
 The following item was already satisfied by a blocking checkpoint gate in Plan 23-02 (Task 2):
 
-**Notebook 18 figure quality and scientific correctness** — Human approved at checkpoint during Phase 23-02 execution (commit `9cbcdfc`). The plan required human sign-off before the task was marked done, and the SUMMARY records "Human-verified and approved for publication quality and scientific correctness."
+**Notebook 18 figure quality and scientific correctness** — Human approved at checkpoint during Phase 23-02 execution (commit `32f769b`). The plan required human sign-off before the task was marked done, and the SUMMARY records "Human-verified and approved for publication quality and scientific correctness."
 
 The following items remain in the "needs human if wanting independent confirmation" category but are NOT blocking given the checkpoint approval:
 
@@ -109,9 +109,9 @@ No gaps. All 9 observable truths verified, all 6 artifacts substantive and wired
 
 | Commit    | Description                                                           | Verified         |
 | --------- | --------------------------------------------------------------------- | ---------------- |
-| `5e3f338` | feat(23-01): create microdosimetry.py module with stopping power data | Found in git log |
-| `8b8a99b` | test(23-01): add comprehensive microdosimetry tests (25 tests pass)   | Found in git log |
-| `9cbcdfc` | feat(23-02): create notebook 18 microdosimetric spectra pipeline      | Found in git log |
+| `61dfc15` | feat(23-01): create microdosimetry.py module with stopping power data | Found in git log |
+| `acbf2d1` | test(23-01): add comprehensive microdosimetry tests (25 tests pass)   | Found in git log |
+| `32f769b` | feat(23-02): create notebook 18 microdosimetric spectra pipeline      | Found in git log |
 
 ---
 

@@ -92,6 +92,19 @@ def full_depletion_voltage_graded(
     return (Q / eps) * moment - V_bi
 
 
+def full_depletion_voltage_profile(depth_cm, N_D, V_bi, eps_r=9.7):
+    """``full_depletion_voltage_graded`` for a tabulated profile N_D(y) (cm^-3) on the
+    depths ``depth_cm`` (cm, from the junction to the end of the layer to deplete):
+    V_fd = (q/eps) * trapz(y N_D(y)) - V_bi. Used when the profile has no closed-form
+    moment (the graded n-/n+ transition of ``buffer_thickness_cm``); on the plain
+    exponential profile it agrees with the closed form to the quadrature error of the grid.
+    """
+    y = np.asarray(depth_cm, dtype=float)
+    nd = np.asarray(N_D, dtype=float)
+    eps = eps_r * EPS_0
+    return (Q / eps) * float(np.trapezoid(y * nd, y)) - V_bi
+
+
 def built_in_potential(N_A_ionized, N_D, n_i, T=300, k_B=K_B):
     """Compute built-in potential for a p-n junction.
 

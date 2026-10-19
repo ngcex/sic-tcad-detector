@@ -81,6 +81,8 @@ os.chdir('..')
 import matplotlib.pyplot as plt
 import numpy as np
 
+from etna.core.devsim_lock import set_devsim_quiet
+set_devsim_quiet(True)  # drop devsim's Newton log from direct core calls; ETNA_DEVSIM_VERBOSE=1 shows it
 from etna.core.microdosimetry import (
     mean_chord_length,
     lineal_energy_spectrum,
@@ -564,7 +566,7 @@ for bar in bars2:
 
 ax.set_xticks(x)
 ax.set_xticklabels(['$y_F$ (frequency mean)', '$y_D$ (dose mean)'], fontsize=13)
-ax.set_ylabel('Lineal energy (keV/$\\mu$m)')
+ax.set_ylabel(r'Lineal energy (keV/$\\mu$m)')
 ax.set_title('Microdosimetric Quantities: SiC Raw vs [PLACEHOLDER] "Tissue-Equivalent"')
 ax.legend(fontsize=12)
 ax.grid(True, alpha=0.3, axis='y')

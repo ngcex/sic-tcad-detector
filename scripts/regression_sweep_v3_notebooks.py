@@ -21,7 +21,6 @@ import datetime
 import json
 import pathlib
 import sys
-import traceback
 
 _PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
 BASELINE_PATH = _PROJECT_ROOT / "tests" / "baselines" / "v3_frozen.json"

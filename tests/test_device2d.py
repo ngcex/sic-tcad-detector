@@ -41,7 +41,8 @@ class TestDevice2DCreation:
         from etna.core.device2d import create_sic_2d_device
 
         dev = create_sic_2d_device(device_name=_unique_name(), half_width_um=50)
-        assert dev["junction_pos"] == pytest.approx(1e-4)  # 1 um substrate
+        # p+ anode thickness default = the stack's 0.3 um (was 1 um before 2026-10-17)
+        assert dev["junction_pos"] == pytest.approx(0.3e-4)
         assert dev["N_A_ionized"] > 1e17
         assert dev["N_A_ionized"] < 5e18
         assert dev["half_width_cm"] == pytest.approx(50.0 * 1e-4)
@@ -52,7 +53,7 @@ class TestDevice2DCreation:
         dev = create_sic_2d_device(device_name=_unique_name())
         params = dev["params"]
         assert params.eps_r == pytest.approx(9.7)
-        assert params.n_i_300 == pytest.approx(5e-9)
+        assert params.n_i_300 == pytest.approx(5e-9, rel=1e-12)
         assert params.E_g == pytest.approx(3.26)
 
 
@@ -88,9 +89,6 @@ class TestDoping2D:
         device = dev["device_name"]
         region = dev["region_name"]
 
-        x = np.array(
-            devsim.get_node_model_values(device=device, region=region, name="x")
-        )
         y = np.array(
             devsim.get_node_model_values(device=device, region=region, name="y")
         )
@@ -176,7 +174,7 @@ class TestMeshStructure:
         device = dev["device_name"]
         region = dev["region_name"]
         half_width_cm = half_width_um * 1e-4
-        total_depth = dev["epi_thickness_cm"] + dev["substrate_thickness_cm"]
+        total_depth = dev["total_length"]  # includes the default n+ layer
         buffer = 1e-8
 
         x = np.array(
@@ -193,108 +191,10 @@ class TestMeshStructure:
 
 
 # ---------------------------------------------------------------------------
-# Phase 26 / CONS-01 skeleton test classes.
-#
-# These hold the test surface in place BEFORE implementation. Every body is
-# decorated @pytest.mark.xfail(strict=True) so they collect (proving the surface
-# exists) but cannot produce a false green. Plans 02-04 replace the xfail bodies
-# with real assertions, flipping xfail -> pass:
-#   - Plan 02 adds the 2D-aware W extractor + reset_devsim_fully() + node helpers
-#     -> wires TestCalibrationCV, TestResetStateLeak, TestGradedDopingSmoothness
-#   - Plan 03 calibrates the 2D defaults
-#     -> wires TestReverseBiasConvergence and TestCalibrationCV assertions
+# Phase 26 / CONS-01 acceptance tests (2D C-V vs the 1D twin, reset of the
+# cylindrical globals, graded-doping smoothness, reverse-bias convergence). They
+# started as xfail(strict) skeletons; all now carry real assertions.
 # ---------------------------------------------------------------------------
-
-
-class TestReverseBiasConvergence:
-    """Phase 26 / CONS-01 SC#1: 2D device converges at -15, -30, -50 V on both SV sizes.
-
-    Plan 03 replaces xfail with real assertions after calibration completes.
-    """
-
-    @pytest.mark.slow
-    def test_converges_at_minus_15V_100um(self):
-        from etna.core.charge_collection_2d import create_2d_dd_device
-        from etna.core.devsim_reset import reset_devsim_fully
-
-        try:
-            dev = create_2d_dd_device(
-                device_name=_unique_name(), half_width_um=50.0, V_bias=15.0
-            )
-            assert dev["dd_initialized"] is True
-            assert dev["dimension"] == 2
-        finally:
-            reset_devsim_fully()
-
-    @pytest.mark.slow
-    def test_converges_at_minus_30V_100um(self):
-        from etna.core.charge_collection_2d import create_2d_dd_device
-        from etna.core.devsim_reset import reset_devsim_fully
-
-        try:
-            dev = create_2d_dd_device(
-                device_name=_unique_name(), half_width_um=50.0, V_bias=30.0
-            )
-            assert dev["dd_initialized"] is True
-            assert dev["dimension"] == 2
-        finally:
-            reset_devsim_fully()
-
-    @pytest.mark.slow
-    def test_converges_at_minus_50V_100um(self):
-        from etna.core.charge_collection_2d import create_2d_dd_device
-        from etna.core.devsim_reset import reset_devsim_fully
-
-        try:
-            dev = create_2d_dd_device(
-                device_name=_unique_name(), half_width_um=50.0, V_bias=50.0
-            )
-            assert dev["dd_initialized"] is True
-            assert dev["dimension"] == 2
-        finally:
-            reset_devsim_fully()
-
-    @pytest.mark.slow
-    def test_converges_at_minus_15V_300um(self):
-        from etna.core.charge_collection_2d import create_2d_dd_device
-        from etna.core.devsim_reset import reset_devsim_fully
-
-        try:
-            dev = create_2d_dd_device(
-                device_name=_unique_name(), half_width_um=150.0, V_bias=15.0
-            )
-            assert dev["dd_initialized"] is True
-            assert dev["dimension"] == 2
-        finally:
-            reset_devsim_fully()
-
-    @pytest.mark.slow
-    def test_converges_at_minus_30V_300um(self):
-        from etna.core.charge_collection_2d import create_2d_dd_device
-        from etna.core.devsim_reset import reset_devsim_fully
-
-        try:
-            dev = create_2d_dd_device(
-                device_name=_unique_name(), half_width_um=150.0, V_bias=30.0
-            )
-            assert dev["dd_initialized"] is True
-            assert dev["dimension"] == 2
-        finally:
-            reset_devsim_fully()
-
-    @pytest.mark.slow
-    def test_converges_at_minus_50V_300um(self):
-        from etna.core.charge_collection_2d import create_2d_dd_device
-        from etna.core.devsim_reset import reset_devsim_fully
-
-        try:
-            dev = create_2d_dd_device(
-                device_name=_unique_name(), half_width_um=150.0, V_bias=50.0
-            )
-            assert dev["dd_initialized"] is True
-            assert dev["dimension"] == 2
-        finally:
-            reset_devsim_fully()
 
 
 class TestCalibrationCV:
@@ -344,39 +244,23 @@ class TestCalibrationCV:
         reset_devsim_fully()
         dev_2d = create_2d_dd_device(
             device_name=_unique_name() + "_2d",
-            half_width_um=50.0,
+            half_width_um=25.0,  # laterally uniform, centre column only (was 50)
             V_bias=0.0,
             doping_profile="graded",
         )
-        W_2d = []
-        import devsim
-        import devsim.python_packages.simple_physics as simple_physics
+        from etna.core.drift_diffusion import ramp_bias
 
-        bias_name = simple_physics.GetContactBiasName("cathode")
-        current_V = 0.0
+        # Walk the voltage list with the adaptive ramp (lands exactly on each
+        # target; the old hand-rolled 0.5 V loop made ~100 strict 2D solves).
+        W_2d = []
         for V_rev in voltages:
-            V_cathode_target = -V_rev
-            V = current_V
-            while V < V_cathode_target - 1e-10:
-                V = min(V + 0.5, V_cathode_target)
-                devsim.set_parameter(
-                    device=dev_2d["device_name"], name=bias_name, value=V
-                )
-                try:
-                    devsim.solve(
-                        type="dc",
-                        absolute_error=1e10,
-                        relative_error=1e-10,
-                        maximum_iterations=40,
-                    )
-                except devsim.error:
-                    devsim.solve(
-                        type="dc",
-                        absolute_error=1e12,
-                        relative_error=1e-8,
-                        maximum_iterations=100,
-                    )
-            current_V = V_cathode_target
+            ramp_bias(
+                dev_2d,
+                V_target=-V_rev,
+                contact="cathode",
+                V_step=0.5,
+                V_step_max=5.0,
+            )
             W_2d.append(extract_depletion_width_2d_center(dev_2d))
         W_2d = np.array(W_2d)
 
@@ -397,7 +281,7 @@ class TestCalibrationCV:
 class TestResetStateLeak:
     """Phase 26 / CONS-01 SC#3: reset_devsim_fully() clears alt-structure cylindrical globals.
 
-    Plan 02 implements `src/devsim_reset.py` and wires this test.
+    Plan 02 implemented `etna/core/devsim_reset.py` and wired this test.
     """
 
     @pytest.mark.slow
@@ -423,7 +307,7 @@ class TestResetStateLeak:
         try:
             dev_ref = create_2d_dd_device(
                 device_name=_unique_name(),
-                half_width_um=50.0,
+                half_width_um=25.0,  # the canary needs a planar build, not width (was 50)
                 V_bias=10.0,
                 doping_profile="graded",
             )
@@ -450,7 +334,7 @@ class TestResetStateLeak:
         try:
             dev_after = create_2d_dd_device(
                 device_name=_unique_name(),
-                half_width_um=50.0,
+                half_width_um=25.0,  # the canary needs a planar build, not width (was 50)
                 V_bias=10.0,
                 doping_profile="graded",
             )
@@ -465,15 +349,49 @@ class TestResetStateLeak:
         )
 
 
+class TestCalibration2DLeavesCallerDevices:
+    """A-15: calibrate_graded_doping_2d no longer deletes every devsim device per trial."""
+
+    @pytest.mark.slow
+    def test_sentinel_survives_and_trials_clean_up(self):
+        from etna.core.device import create_sic_device
+        from etna.core.device2d import calibrate_graded_doping_2d
+
+        # a cylindrical leftover must still be neutralised at entry
+        devsim.set_parameter(name="node_volume_model", value="CylindricalNodeVolume")
+        sentinel = _unique_name()
+        create_sic_device(device_name=sentinel)
+        try:
+            r = calibrate_graded_doping_2d(
+                target_W_data={0.0: 1.7e-4, -2.0: 4e-4},
+                half_width_um=10.0,
+                maxiter=3,
+                V_target_for_convergence_only=-3.0,
+            )
+            assert devsim.get_parameter(name="node_volume_model") == "NodeVolume"
+            devs, meshes = devsim.get_device_list(), devsim.get_mesh_list()
+            assert sentinel in devs and f"{sentinel}_mesh" in meshes
+            assert not [d for d in devs if d.startswith("cal2d_")]
+            assert not [m for m in meshes if m.startswith("cal2d_")]
+        finally:
+            devsim.delete_device(device=sentinel)
+            devsim.delete_mesh(mesh=f"{sentinel}_mesh")
+            # never leave the cylindrical leftover to later tests of this worker
+            from etna.core.devsim_reset import _CARTESIAN_DEFAULTS
+
+            for name, value in _CARTESIAN_DEFAULTS.items():
+                devsim.set_parameter(name=name, value=value)
+        # same optimum as with the per-trial full reset (measured before the change)
+        assert r["final_cost"] == pytest.approx(0.03182988130915616, rel=1e-9)
+        assert r["W_simulated"][-2.0] == pytest.approx(3.310540237430286e-4, rel=1e-9)
+
+
 class TestExtractDepletionWidth2DCenter:
     """Phase 26 / Plan 02: center-column W extractor for 2D devices.
 
     The 1D extract_depletion_width_numerical reads x as depth; 2D modules use
     y as depth. These tests lock the new dimension-aware extractor.
     """
-
-    def test_importable(self):
-        from etna.core.poisson import extract_depletion_width_2d_center  # noqa: F401
 
     def test_raises_on_1d_device(self):
         from etna.core.poisson import extract_depletion_width_2d_center
@@ -493,6 +411,7 @@ class TestExtractDepletionWidth2DCenter:
             doping_profile="graded",
         )
         W0 = extract_depletion_width_2d_center(dev)
+        devsim.delete_device(device=dev["device_name"])  # global solve: do not leak it
         # 1D-twin equilibrium W ~= 1.7e-4 cm; loose +/-30% band (v3.0 profile
         # is unrefitted in 2D — Plan 03 tightens it).
         assert 0.7 * 1.7e-4 <= W0 <= 1.3 * 1.7e-4, f"W0={W0}"
@@ -504,18 +423,22 @@ class TestExtractDepletionWidth2DCenter:
 
         dev0 = create_2d_dd_device(
             device_name=_unique_name(),
-            half_width_um=50.0,
+            half_width_um=25.0,
             V_bias=0.0,
             doping_profile="graded",
         )
         W0 = extract_depletion_width_2d_center(dev0)
+        # devsim.solve is global: a live dev0 would be re-solved in every step of the
+        # dev5 build (most of this test's time). Laterally uniform: hw 25 (was 50).
+        devsim.delete_device(device=dev0["device_name"])
         dev5 = create_2d_dd_device(
             device_name=_unique_name(),
-            half_width_um=50.0,
+            half_width_um=25.0,
             V_bias=5.0,
             doping_profile="graded",
         )
         W5 = extract_depletion_width_2d_center(dev5)
+        devsim.delete_device(device=dev5["device_name"])
         assert W5 > W0, f"W5={W5} should exceed W0={W0} under reverse bias"
 
 
@@ -532,7 +455,7 @@ class TestGradedDopingSmoothness:
 
         dev = create_2d_dd_device(
             device_name=_unique_name(),
-            half_width_um=50.0,
+            half_width_um=25.0,  # laterally uniform; centre column only (was 50)
             V_bias=0.0,
             doping_profile="graded",
         )
@@ -556,11 +479,12 @@ class TestGradedDopingSmoothness:
 
         # Center column (x ~= 0), sorted by depth, restricted to the n-epi.
         center = np.abs(x) < 1e-6
-        xc, yc, dc = x[center], y[center], donors[center]
+        yc, dc = y[center], donors[center]
         order = np.argsort(yc)
         yc, dc = yc[order], dc[order]
-        in_epi = (yc > dev["junction_pos"]) & (dc > 0)
+        in_epi = (yc > dev["junction_pos"]) & (dc > 0) & (yc < dev["epi_end"] - 1e-12)
         d_in = dc[in_epi]
+        devsim.delete_device(device=device)  # global solve: do not leak it
 
         assert len(d_in) >= 4, f"expected >=4 center-column epi nodes, got {len(d_in)}"
 

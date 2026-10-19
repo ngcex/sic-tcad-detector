@@ -53,7 +53,10 @@ from devsim.python_packages.model_create import (
 import numpy as np
 
 from etna.core.charge_collection import add_generation_to_dd, compute_cce_from_dd
-from etna.core.generation_profiles import proton_generation_profile
+from etna.core.generation_profiles import confine_generation_to_epi, proton_generation_profile
+from etna.core.device import DEFAULT_STACK as _STACK
+from etna.core.solver_tol import DC_ABS_ERROR, FLASH_REL_ERROR
+from etna.core.devsim_reset import delete_device_and_mesh
 
 logger = logging.getLogger(__name__)
 
@@ -186,8 +189,8 @@ def solve_with_continuation(device_info, generation_values, n_steps=5):
         try:
             devsim.solve(
                 type="dc",
-                absolute_error=1e10,
-                relative_error=1e-10,
+                absolute_error=DC_ABS_ERROR,
+                relative_error=FLASH_REL_ERROR,
                 maximum_iterations=60,
             )
             current_frac = target_frac
@@ -213,8 +216,8 @@ def solve_with_continuation(device_info, generation_values, n_steps=5):
                 try:
                     devsim.solve(
                         type="dc",
-                        absolute_error=1e10,
-                        relative_error=1e-10,
+                        absolute_error=DC_ABS_ERROR,
+                        relative_error=FLASH_REL_ERROR,
                         maximum_iterations=60,
                     )
                     lo = mid
@@ -235,8 +238,8 @@ def solve_with_continuation(device_info, generation_values, n_steps=5):
                 try:
                     devsim.solve(
                         type="dc",
-                        absolute_error=1e10,
-                        relative_error=1e-10,
+                        absolute_error=DC_ABS_ERROR,
+                        relative_error=FLASH_REL_ERROR,
                         maximum_iterations=60,
                     )
                     current_frac = target_frac
@@ -256,7 +259,7 @@ def solve_with_continuation(device_info, generation_values, n_steps=5):
             if not converged_at_target:
                 return False
 
-    logger.info(f"Continuation complete: converged at 100% generation rate")
+    logger.info("Continuation complete: converged at 100% generation rate")
     return True
 
 
@@ -266,11 +269,31 @@ def cce_vs_dose_rate(
     epi_thickness_cm=10e-4,
     E_MeV=62,
     n_continuation_steps=5,
-    N_D_junction=2.90e15,
-    N_D_bulk=8.50e13,
-    L_transition=1.0e-4,
+    N_D_junction=_STACK["N_D_junction"],
+    N_D_bulk=_STACK["N_D_bulk"],
+    L_transition=_STACK["L_transition"],
+    device_kwargs=None,
+    solver="auto",
 ):
     """Compute CCE vs dose rate across the FLASH range (exploratory sensitivity bound).
+
+    Solver (since 2026-10-18): inside ``flash_engine_reason`` every dose rate (and the
+    no-Auger reference) is solved in one batch on the numba engine
+    (``etna.core.batched.dark.generation_cce``: same mesh, doping, midgap SRH + Auger
+    (C_n n + C_p p)(n p - n_i^2), proton generation and balanced cathode current as the
+    devsim path below; parity tests/test_flash_engine.py). Outside it, or if the engine
+    does not converge, the devsim continuation path runs. ``solver``: "auto",
+    "engine" (raise outside the scope) or "devsim" (reference); ``result["solver"]``
+    says which ran.
+
+    KNOWN (2026-10-18, open, physics owner): on the devsim path the Auger term added by
+    add_auger_recombination is overwritten by add_generation_to_dd (SRH-only
+    ElectronGeneration / HoleGeneration), so the "with Auger" CCE equals the no-Auger
+    reference bit for bit: both paths are SRH-only. The engine reproduces that (C_n =
+    C_p = 0). With Auger truly active, CCE drops by up to 5.6e-5 (minority recombination
+    in the 1e18-1e19 p+/n+ layers, where C n is comparable to 1/(tau n)), essentially
+    independent of the dose rate (<= 2e-9 across 20-230 Gy/s): the "Auger 9-14 orders
+    below SRH" statement holds in the epi, not in those layers.
 
     Sweeps dose rates (typically 20-230 Gy/s) at fixed reference conditions.
     NOTE (audit C2/C3): at these dose rates the Auger (n^3) term is ~9-14 orders
@@ -294,11 +317,14 @@ def cce_vs_dose_rate(
     n_continuation_steps : int
         Steps for generation-rate continuation ramp. Default: 5.
     N_D_junction : float
-        Donor concentration at junction (cm^-3). Default: 2.90e15.
+        Donor concentration at junction (cm^-3). Default: DEFAULT_STACK (8.185880e15).
     N_D_bulk : float
-        Donor concentration in bulk epi (cm^-3). Default: 8.50e13.
+        Donor concentration in bulk epi (cm^-3). Default: DEFAULT_STACK (3.382506e13).
     L_transition : float
-        Transition length for graded doping profile (cm). Default: 1.0e-4.
+        Transition length for graded doping profile (cm). Default: DEFAULT_STACK (0.4638630 um).
+    device_kwargs : dict or None
+        Additional keyword arguments for create_dd_device (e.g. N_A, T,
+        substrate_thickness_cm, doping_profile, N_D); override the defaults.
 
     Returns
     -------
@@ -316,22 +342,52 @@ def cce_vs_dose_rate(
     """
     from etna.core.drift_diffusion import create_dd_device, ramp_bias
 
+    if solver not in ("auto", "engine", "devsim"):
+        raise ValueError(f"solver must be 'auto', 'engine' or 'devsim' (got {solver!r})")
     dose_rates = np.asarray(dose_rates_Gy_s, dtype=float)
     sorted_idx = np.argsort(dose_rates)
     dose_rates_sorted = dose_rates[sorted_idx]
 
     cce_sorted = np.zeros(len(dose_rates))
 
-    # --- Device with Auger ---
-    dev_id = uuid.uuid4().hex[:8]
-    device_info = create_dd_device(
-        device_name=f"flash_sweep_{dev_id}",
+    dev_kw = dict(
         epi_thickness_cm=epi_thickness_cm,
         doping_profile="graded",
         N_D_junction=N_D_junction,
         N_D_bulk=N_D_bulk,
         L_transition=L_transition,
     )
+    dev_kw.update(device_kwargs or {})
+
+    fallback = None
+    if solver != "devsim":
+        reason = flash_engine_reason(dev_kw, V_bias)
+        if reason is not None and solver == "engine":
+            raise ValueError(f"cce_vs_dose_rate: batched engine unavailable ({reason})")
+        if reason is None:
+            out = _cce_vs_dose_rate_engine(dose_rates, V_bias, E_MeV, dev_kw)
+            if out is not None:
+                cce_values, cce_no_auger = out
+                return {
+                    "dose_rates": dose_rates,
+                    "cce_values": cce_values,
+                    "cce_no_auger_ref": float(cce_no_auger),
+                    "V_bias": V_bias,
+                    "epi_thickness_cm": epi_thickness_cm,
+                    "E_MeV": E_MeV,
+                    "N_D_junction": dev_kw["N_D_junction"],
+                    "N_D_bulk": dev_kw["N_D_bulk"],
+                    "L_transition": dev_kw["L_transition"],
+                    "solver": "batched",
+                }
+            fallback = "batched engine did not converge"
+            logger.warning("cce_vs_dose_rate: batched engine did not converge, using devsim")
+        else:
+            logger.info("cce_vs_dose_rate: using devsim (%s)", reason)
+
+    # --- Device with Auger ---
+    dev_id = uuid.uuid4().hex[:8]
+    device_info = create_dd_device(device_name=f"flash_sweep_{dev_id}", **dev_kw)
     device = device_info["device_name"]
     region = device_info["region_name"]
 
@@ -341,7 +397,7 @@ def cce_vs_dose_rate(
 
         # Ramp to bias (cathode voltage is -V_bias for reverse bias)
         cathode_V = -V_bias
-        ramp_bias(device_info, cathode_V, contact="cathode", V_step=0.5)
+        ramp_bias(device_info, cathode_V, contact="cathode", V_step=0.5, V_step_max=2.0)
 
         # Get mesh nodes
         x_nodes = np.array(
@@ -355,6 +411,7 @@ def cce_vs_dose_rate(
 
             # Zero generation in p+ substrate (x < junction_pos)
             gen_values[x_nodes < junction_pos] = 0.0
+            gen_values = confine_generation_to_epi(device_info, x_nodes, gen_values)
 
             converged = solve_with_continuation(
                 device_info, gen_values, n_steps=n_continuation_steps
@@ -374,34 +431,27 @@ def cce_vs_dose_rate(
             add_generation_to_dd(device_info, zero_gen)
             devsim.solve(
                 type="dc",
-                absolute_error=1e10,
-                relative_error=1e-10,
+                absolute_error=DC_ABS_ERROR,
+                relative_error=FLASH_REL_ERROR,
                 maximum_iterations=40,
             )
 
     finally:
         try:
-            devsim.delete_device(device=device)
+            delete_device_and_mesh(device)
         except Exception:
             pass
 
     # --- No-Auger reference at lowest dose rate ---
     dev_id2 = uuid.uuid4().hex[:8]
-    device_info2 = create_dd_device(
-        device_name=f"flash_noauger_{dev_id2}",
-        epi_thickness_cm=epi_thickness_cm,
-        doping_profile="graded",
-        N_D_junction=N_D_junction,
-        N_D_bulk=N_D_bulk,
-        L_transition=L_transition,
-    )
+    device_info2 = create_dd_device(device_name=f"flash_noauger_{dev_id2}", **dev_kw)
     device2 = device_info2["device_name"]
     region2 = device_info2["region_name"]
 
     try:
         # No Auger -- just SRH
         cathode_V = -V_bias
-        ramp_bias(device_info2, cathode_V, contact="cathode", V_step=0.5)
+        ramp_bias(device_info2, cathode_V, contact="cathode", V_step=0.5, V_step_max=2.0)
 
         x_nodes2 = np.array(
             devsim.get_node_model_values(device=device2, region=region2, name="x")
@@ -411,12 +461,13 @@ def cce_vs_dose_rate(
         lowest_rate = dose_rates_sorted[0]
         gen_ref = proton_generation_profile(x_nodes2, E_MeV, lowest_rate)
         gen_ref[x_nodes2 < junction_pos2] = 0.0
+        gen_ref = confine_generation_to_epi(device_info2, x_nodes2, gen_ref)
 
         add_generation_to_dd(device_info2, gen_ref)
         devsim.solve(
             type="dc",
-            absolute_error=1e10,
-            relative_error=1e-10,
+            absolute_error=DC_ABS_ERROR,
+            relative_error=FLASH_REL_ERROR,
             maximum_iterations=40,
         )
         cce_no_auger = compute_cce_from_dd(device_info2, gen_ref, contact="cathode")
@@ -426,7 +477,7 @@ def cce_vs_dose_rate(
 
     finally:
         try:
-            devsim.delete_device(device=device2)
+            delete_device_and_mesh(device2)
         except Exception:
             pass
 
@@ -442,10 +493,65 @@ def cce_vs_dose_rate(
         "V_bias": V_bias,
         "epi_thickness_cm": epi_thickness_cm,
         "E_MeV": E_MeV,
-        "N_D_junction": N_D_junction,
-        "N_D_bulk": N_D_bulk,
-        "L_transition": L_transition,
+        "N_D_junction": dev_kw["N_D_junction"],
+        "N_D_bulk": dev_kw["N_D_bulk"],
+        "L_transition": dev_kw["L_transition"],
+        "solver": "devsim",
+        **({"fallback_reason": fallback} if fallback else {}),
     }
+
+
+# Doping scope of the FLASH engine path: the C-V/CCE engine box
+# (etna.api.simulation._ENGINE_BOX) with the junction doping widened to 2e17, which
+# covers notebook 05b's proportionally scaled junction doping (N_D_junction =
+# 8.19e15 * N_D_bulk / 3.38e13, up to 1.2e17 at N_D_bulk 5e14); parity at the 05b grid
+# corners in tests/test_flash_engine.py.
+FLASH_ENGINE_N_D_JUNCTION = (1e15, 2e17)
+
+
+def flash_engine_reason(dev_kw, V_bias):
+    """Why the batched engine cannot serve cce_vs_dose_rate (None = it can)."""
+    from etna.core.dark_current import engine_box_reason
+
+    return engine_box_reason(
+        dev_kw, [V_bias], N_D_junction=FLASH_ENGINE_N_D_JUNCTION, legacy_max_V=40.0
+    )
+
+
+def _cce_vs_dose_rate_engine(dose_rates, V_bias, E_MeV, dev_kw):
+    """(cce per dose rate, no-Auger CCE at the lowest rate) on the engine, or None if a
+    point did not converge. Generation exactly as the devsim path: the proton profile on
+    the mesh nodes, zero in the p+, confined to the epi."""
+    from etna.core.batched.dark import generation_cce
+    from etna.core.dark_current import dark_reference
+    from etna.core.sic_material import srh_lifetime
+
+    ref = dark_reference(dev_kw)
+    info, x = ref["info"], ref["x"]
+    G = []
+    for rate in list(dose_rates) + [float(np.min(dose_rates))]:
+        g = proton_generation_profile(x, E_MeV, rate)
+        g[x < info["junction_pos"]] = 0.0
+        G.append(confine_generation_to_epi(info, x, g))
+    G = np.array(G)
+    params = info["params"]
+    common = dict(
+        tau_n=srh_lifetime(info["T"], "electron", params),
+        tau_p=srh_lifetime(info["T"], "hole", params),
+    )
+    args = (x, ref["donors"], ref["acceptors"], info["T"], info["N_A"], info["n_i"], V_bias)
+    # C_n = C_p = 0 on purpose: the devsim path's Auger term is NOT active during its
+    # solves (add_auger_recombination's ElectronGeneration / HoleGeneration are
+    # overwritten by add_generation_to_dd with the SRH-only expressions, so its "Auger"
+    # sweep is bit-equal to its no-Auger reference). The engine reproduces the existing
+    # numbers; switching Auger on is a physics decision (with Auger truly active CCE moves
+    # by up to 5.6e-5 at notebook 05b's N_D_bulk 5e14 corners, dose-rate independent to
+    # 2e-9; the engine's Auger term matches devsim's to 4e-13, tests/test_flash_engine.py).
+    cce, ok = generation_cce(*args, G[:-1], C_n=0.0, C_p=0.0, **common)
+    cce0, ok0 = generation_cce(*args, G[-1:], **common)
+    if not (ok.all() and ok0.all()):
+        return None
+    return cce, cce0[0]
 
 
 def parametric_cce_sweep(
@@ -454,10 +560,11 @@ def parametric_cce_sweep(
     N_D_bulk_values=(5e13, 1e14, 2e14, 5e14),
     bias_voltages=(-10.0, -30.0, -50.0),
     E_MeV=62,
-    N_D_junction_base=2.90e15,
-    N_D_bulk_base=8.50e13,
-    L_transition=1.0e-4,
+    N_D_junction_base=_STACK["N_D_junction"],
+    N_D_bulk_base=_STACK["N_D_bulk"],
+    L_transition=_STACK["L_transition"],
     n_continuation_steps=5,
+    device_kwargs=None,
 ):
     """Sweep CCE vs dose rate across epi thickness, doping, and bias combinations.
 
@@ -485,6 +592,11 @@ def parametric_cce_sweep(
         Transition length for graded doping profile (cm).
     n_continuation_steps : int
         Steps for generation-rate continuation ramp.
+
+    device_kwargs : dict or None
+        Forwarded to cce_vs_dose_rate (geometry overrides, e.g. the legacy
+        nplus_thickness_cm=None / buffer_thickness_cm=buffer_end_doping=None /
+        substrate_thickness_cm=1e-4).
 
     Returns
     -------
@@ -517,6 +629,7 @@ def parametric_cce_sweep(
                 N_D_bulk=N_D_b,
                 L_transition=L_transition,
                 n_continuation_steps=n_continuation_steps,
+                device_kwargs=device_kwargs,
             )
             results[(epi, N_D_b, V)] = result
         except Exception:

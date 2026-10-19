@@ -72,8 +72,8 @@ completed: 2026-03-25
 
 Each task was committed atomically:
 
-1. **Task 1: Add AnnealingParams and annealing functions** - `ec074c2` (feat)
-2. **Task 2: Add comprehensive unit tests** - `56de15e` (test)
+1. **Task 1: Add AnnealingParams and annealing functions** - `62dad6b` (feat)
+2. **Task 2: Add comprehensive unit tests** - `505f4c1` (test)
 
 ## Files Created/Modified
 
@@ -97,7 +97,7 @@ Each task was committed atomically:
 - **Fix:** Used `< 0.10` threshold, which correctly captures "practically stable" (5% recovery in 1 hour is negligible for detector performance)
 - **Files modified:** tests/test_radiation_damage.py
 - **Verification:** Test passes with correct physics
-- **Committed in:** 56de15e (Task 2 commit)
+- **Committed in:** 505f4c1 (Task 2 commit)
 
 **2. [Rule 1 - Bug] Direct K_tau computation instead of dataclasses.replace**
 
@@ -106,7 +106,7 @@ Each task was committed atomically:
 - **Fix:** Computed K_tau directly from effective etas and v_th, bypassing the dataclass entirely
 - **Files modified:** src/radiation_damage.py
 - **Verification:** All tests pass including full recovery edge case
-- **Committed in:** ec074c2 (Task 1 commit)
+- **Committed in:** 62dad6b (Task 1 commit)
 
 ---
 

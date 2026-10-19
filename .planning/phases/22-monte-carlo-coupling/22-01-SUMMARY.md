@@ -68,8 +68,8 @@ completed: 2026-03-31
 
 ## Task Commits
 
-1. **Task 1: Create mc_coupling.py module** - `5b884c9` (feat)
-2. **Task 2: Create test_mc_coupling.py** - `311fea0` (test)
+1. **Task 1: Create mc_coupling.py module** - `372c9e3` (feat)
+2. **Task 2: Create test_mc_coupling.py** - `e95137e` (test)
 
 ## Files Created/Modified
 
@@ -93,7 +93,7 @@ completed: 2026-03-31
 - **Fix:** Changed mock target to `patch("src.single_particle.ion_track_generation_2d")` which patches the actual function before local import resolves it
 - **Files modified:** tests/test_mc_coupling.py
 - **Verification:** Both charge profile tests pass
-- **Committed in:** 311fea0
+- **Committed in:** e95137e
 
 **2. [Rule 1 - Bug] Fixed ROOT test mocking strategy**
 
@@ -102,7 +102,7 @@ completed: 2026-03-31
 - **Fix:** Used `patch.dict("sys.modules", {"uproot": mock_uproot})` to inject mock at the sys.modules level before lazy import
 - **Files modified:** tests/test_mc_coupling.py
 - **Verification:** Both ROOT tests pass with mocked uproot
-- **Committed in:** 311fea0
+- **Committed in:** e95137e
 
 ---
 

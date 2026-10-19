@@ -81,8 +81,8 @@ completed: 2026-03-23
 
 Each task was committed atomically:
 
-1. **Task 1: Wire T-dependent functions into device.py, poisson.py, charge_collection.py** - `4e2c664` (feat)
-2. **Task 2: Add regression tests confirming v1.0 parity at T=300K** - `32d9e4a` (test)
+1. **Task 1: Wire T-dependent functions into device.py, poisson.py, charge_collection.py** - `e6bd98e` (feat)
+2. **Task 2: Add regression tests confirming v1.0 parity at T=300K** - `cd25bb7` (test)
 
 ## Files Created/Modified
 
@@ -130,5 +130,5 @@ _Completed: 2026-03-23_
 - [x] tests/test_poisson.py exists
 - [x] tests/test_charge_collection.py exists
 - [x] 10-02-SUMMARY.md exists
-- [x] Commit 4e2c664 (Task 1) found
-- [x] Commit 32d9e4a (Task 2) found
+- [x] Commit e6bd98e (Task 1) found
+- [x] Commit cd25bb7 (Task 2) found

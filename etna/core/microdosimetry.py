@@ -223,32 +223,6 @@ def lineal_energy_spectrum(
 # ---------------------------------------------------------------------------
 
 
-def compute_microdosimetric_means(bin_centers, f_y, bin_widths):
-    """Compute y_F and y_D from a pre-computed f(y) distribution.
-
-    Parameters
-    ----------
-    bin_centers : ndarray
-        Bin center values (keV/um).
-    f_y : ndarray
-        Frequency distribution values.
-    bin_widths : ndarray
-        Bin widths (dy).
-
-    Returns
-    -------
-    dict
-        y_F : float -- frequency-mean lineal energy
-        y_D : float -- dose-mean lineal energy
-    """
-    y_F = np.sum(bin_centers * f_y * bin_widths)
-    if y_F > 0:
-        y_D = np.sum(bin_centers**2 * f_y * bin_widths) / y_F
-    else:
-        y_D = 0.0
-    return {"y_F": y_F, "y_D": y_D}
-
-
 # ---------------------------------------------------------------------------
 # Stopping power loading and kappa computation
 # ---------------------------------------------------------------------------
@@ -638,7 +612,8 @@ def plot_yd_spectrum(
     ax.set_xlabel("y (keV/$\\mu$m)")
     ax.set_ylabel("y $\\cdot$ d(y)")
     ax.set_title("Dose-weighted lineal energy spectrum")
-    ax.legend(fontsize=8)
+    if ax.get_legend_handles_labels()[0]:  # nothing labelled -> no empty legend
+        ax.legend(fontsize=8)
 
     return ax
 
@@ -690,6 +665,7 @@ def plot_yf_spectrum(bin_centers, f_y, y_F=None, ax=None, label=None, color=None
     ax.set_xlabel("y (keV/$\\mu$m)")
     ax.set_ylabel("y $\\cdot$ f(y)")
     ax.set_title("Frequency-weighted lineal energy spectrum")
-    ax.legend(fontsize=8)
+    if ax.get_legend_handles_labels()[0]:  # nothing labelled -> no empty legend
+        ax.legend(fontsize=8)
 
     return ax

@@ -82,8 +82,8 @@ completed: 2026-03-20
 
 Each task was committed atomically:
 
-1. **Task 1: Create material parameter module, incomplete ionization model, and analytical formulas** - `4f6e714` (feat)
-2. **Task 2: Create comprehensive unit tests for all modules** - `1782fc6` (test)
+1. **Task 1: Create material parameter module, incomplete ionization model, and analytical formulas** - `9a7f523` (feat)
+2. **Task 2: Create comprehensive unit tests for all modules** - `831e3af` (test)
 
 ## Files Created/Modified
 
@@ -114,7 +114,7 @@ Each task was committed atomically:
 - **Fix:** Changed threshold to < 100 with explanatory docstring
 - **Files modified:** tests/test_material.py
 - **Verification:** Test passes with correct physics reasoning
-- **Committed in:** 1782fc6 (Task 2 commit)
+- **Committed in:** 831e3af (Task 2 commit)
 
 **2. [Rule 1 - Bug] Fixed W(-10V) integration test**
 
@@ -123,7 +123,7 @@ Each task was committed atomically:
 - **Fix:** Changed test to verify directional correctness (W(-10V) > 2\*W(0V)) with documented explanation of calibration tension
 - **Files modified:** tests/test_analytical.py
 - **Verification:** Test passes; tension documented for plan 01-02
-- **Committed in:** 1782fc6 (Task 2 commit)
+- **Committed in:** 831e3af (Task 2 commit)
 
 ---
 
@@ -152,4 +152,4 @@ _Completed: 2026-03-20_
 
 ## Self-Check: PASSED
 
-All 9 files verified present. Both task commits (4f6e714, 1782fc6) verified in git log.
+All 9 files verified present. Both task commits (9a7f523, 831e3af) verified in git log.

@@ -100,6 +100,58 @@ def test_bad_value_list_shows_error(monkeypatch):
     assert "sweep_results" not in at.session_state
 
 
+def test_non_finite_or_non_positive_values_are_rejected(monkeypatch):
+    """audit C-10: nan / inf / negative values never reach the facade."""
+    calls = []
+    monkeypatch.setattr(etna, "run_cce", lambda cfg, **k: calls.append(cfg))
+    for raw in ("10, nan", "10, inf", "10, -5", "0, 10"):
+        at = AppTest.from_function(_run_batch_sweep_page)
+        at.session_state["device_config"] = DeviceConfig()
+        at.run()
+        at.text_input(key="sweep_values").set_value(raw)
+        at.button[0].click()
+        at.run()
+        assert at.exception == [], raw
+        assert any("finite, positive" in (e.value or "") for e in at.error), raw
+        assert "sweep_results" not in at.session_state
+    assert calls == []
+
+
+def test_valid_values_still_run(monkeypatch):
+    monkeypatch.setattr(etna, "run_cce", _fake_run_cce)
+    at = AppTest.from_function(_run_batch_sweep_page)
+    at.session_state["device_config"] = DeviceConfig()
+    at.run()
+    at.text_input(key="sweep_values").set_value("10, 15")
+    at.button[0].click()
+    at.run()
+    assert at.exception == []
+    assert len(at.session_state["sweep_results"]) == 2
+
+
+def test_area_sweep_with_cce_facade_is_disabled_with_warning(monkeypatch):
+    """audit C-02: area cannot change a dimensionless CCE -> no identical overlay."""
+    monkeypatch.setattr(etna, "run_cce", _fake_run_cce)
+    from app.workflows.batch_sweep import SIM_FACADES
+
+    for label, attr in SIM_FACADES.items():
+        at = AppTest.from_function(_run_batch_sweep_page)
+        at.session_state["device_config"] = DeviceConfig()
+        at.run()
+        at.selectbox(key="sweep_param").set_value("area_cm2")
+        at.selectbox(key="sweep_sim").set_value(label)
+        at.run()
+        assert at.exception == []
+        warned = any(
+            "does not depend on the device area" in (w.value or "") for w in at.warning
+        )
+        run_button = [b for b in at.button if b.label == "Run simulation"][0]
+        if attr == "run_cv":  # C = eps*A/W: the area matters
+            assert not warned and not run_button.disabled
+        else:
+            assert warned and run_button.disabled, label
+
+
 def test_partial_value_failure_shows_warning_not_crash(monkeypatch):
     calls = {"n": 0}
 

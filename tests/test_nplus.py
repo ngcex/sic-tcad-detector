@@ -1,0 +1,177 @@
+"""Optional n+ layer under the n- epi (cathode on the n+): devsim builders and API routing.
+
+Reference numbers: lab/solver2d/notes/LOG.md "n+ substrate spike" (monkeypatched builders)
+and lab/solver2d/bench/nplus_check.py (production builders, identical to the spike).
+Default device = create_dd_device graded defaults (N_D_junction 2.9e15, N_D_bulk 8.5e13, L 1 um).
+"""
+
+import uuid
+
+import devsim
+import numpy as np
+import pytest
+
+from etna.api.device import DeviceConfig, device_kwargs, legacy_config
+from etna.core.charge_collection import cce_vs_bias
+from etna.core.device import create_sic_device
+from etna.core.drift_diffusion import create_dd_device, ramp_bias
+
+# p+ 1 um explicit: the spike geometry (builders default to the stack 0.3 um since 2026-10-17)
+# abrupt n+ step (the builders default to the graded n-/n+ transition since 2026-10-18)
+NPLUS = dict(
+    nplus_thickness_cm=1e-4,
+    N_D_nplus=1e19,
+    substrate_thickness_cm=1e-4,
+    buffer_thickness_cm=None,
+    buffer_end_doping=None,
+)
+# Doping the spike numbers were taken with: the core graded fallbacks before the n+ flip
+# (cce_vs_bias 2.90e15 / 8.50e13 / 1 um; device2d 2.931417e15 / 8.823059e13 / 0.9872267 um).
+# The fallbacks are now DEFAULT_STACK; pinned here so the tests keep checking the n+
+# physics against the same spike values.
+SPIKE_1D = dict(N_D_junction=2.90e15, N_D_bulk=8.50e13, L_transition=1.0e-4)
+SPIKE_2D = dict(N_D_junction=2.931417e15, N_D_bulk=8.823059e13, L_transition=9.872267e-5)
+
+
+def _name(tag):
+    return f"{tag}_{uuid.uuid4().hex[:8]}"
+
+
+def test_nplus_mesh_and_doping():
+    info = create_sic_device(device_name=_name("np"), doping_profile="graded", **NPLUS)
+    try:
+        dev, reg = info["device_name"], info["region_name"]
+        x = np.array(devsim.get_node_model_values(device=dev, region=reg, name="x"))
+        donors = np.array(
+            devsim.get_node_model_values(device=dev, region=reg, name="Donors")
+        )
+        assert info["epi_end"] == pytest.approx(11e-4)
+        assert info["total_length"] == pytest.approx(12e-4)
+        assert x[-1] == pytest.approx(12e-4)
+        assert np.all(donors[x > 11e-4 + 1e-12] > 1e19)
+        # epi: the graded fallback (DEFAULT_STACK N_D_junction 8.19e15 since 2026-10-18)
+        assert np.all(donors[(x > 1e-4) & (x < 11e-4 - 1e-12)] < 1e16)
+    finally:
+        devsim.delete_device(device=info["device_name"])
+
+
+def test_invalid_nplus_rejected():
+    with pytest.raises(ValueError):
+        create_sic_device(device_name=_name("bad"), nplus_thickness_cm=0.0)
+    with pytest.raises(ValueError):
+        DeviceConfig(nplus_thickness_um=-1.0)
+
+
+def test_cce_with_nplus_matches_spike_and_stays_below_one():
+    """Raw collected/generated ratio (before the [0, 1] clip) with the balanced extraction.
+    Spike (epi-only generation): 0.998867 0.999562 0.999708 0.999778 0.999820; with the
+    hole mobility at the epi doping since 2026-10-17 (was N_A, audit-v7 A-03): 0.999283 0.999721 0.999813 0.999858 0.999885;
+    both mobilities at N_D_bulk (was DEFAULT_N_D 1.07e15) since 2026-10-17: 0.999296 0.999726 0.999816 0.999860 0.999887."""
+    r = cce_vs_bias(-np.arange(10.0, 55.0, 10.0), device_kwargs=dict(NPLUS, **SPIKE_1D))
+    assert not r["truncated"]
+    raw = np.asarray(r["I_collected"]) / r["I_generated"]
+    assert np.all(raw < 1.0)
+    np.testing.assert_allclose(
+        raw, [0.999296, 0.999726, 0.999816, 0.999860, 0.999887], atol=2e-6
+    )
+
+
+def test_nplus_removes_the_1d_wall():
+    """Without n+ the fixed 0.5 V-step ramp stops at 67.5 V (default device); with n+ it
+    passes 100 V."""
+    info = create_dd_device(device_name=_name("wall"), **NPLUS)
+    try:
+        assert ramp_bias(info, 100.0, contact="cathode", V_step=0.5) is True
+        assert devsim.get_parameter(
+            device=info["device_name"], name="cathode_bias"
+        ) == pytest.approx(100.0, abs=1e-12)
+    finally:
+        devsim.delete_device(device=info["device_name"])
+
+
+@pytest.mark.slow
+def test_dark_current_independent_of_nplus_thickness():
+    """The effective-generation proxy is confined to the p+/epi, so the leakage does not
+    grow with the (arbitrary, truncated) n+ thickness."""
+    from etna.core.dark_current import (
+        AREA_DOSIMETER_CM2,
+        create_dark_current_device,
+        dark_current_sweep,
+    )
+
+    out = []
+    for t in (1e-4, 5e-4):
+        info = create_dark_current_device(device_name=_name("dk"), nplus_thickness_cm=t)
+        try:
+            out.append(
+                np.abs(
+                    dark_current_sweep(info, np.array([-10.0, -60.0]), area=AREA_DOSIMETER_CM2)[
+                        "I_total"
+                    ]
+                )
+            )
+        finally:
+            devsim.delete_device(device=info["device_name"])
+    np.testing.assert_allclose(out[0], out[1], rtol=1e-5)
+
+
+def test_device_kwargs_carry_nplus_explicitly():
+    # legacy: explicit None (the builders default to the stack's n+ layer since 2026-10-17)
+    legacy = device_kwargs(legacy_config())
+    assert legacy["nplus_thickness_cm"] is None and "N_D_nplus" not in legacy
+    assert device_kwargs(DeviceConfig())["nplus_thickness_cm"] == pytest.approx(1e-4)
+    kw = device_kwargs(DeviceConfig(nplus_thickness_um=2.0, N_D_nplus=5e18))
+    assert kw["nplus_thickness_cm"] == pytest.approx(2e-4)
+    assert kw["N_D_nplus"] == 5e18
+
+
+@pytest.mark.slow
+# 0.9995626 / 0.9619415 before the hole mobility at the epi doping since 2026-10-17 (was N_A, audit-v7 A-03);
+# 0.9997212 / 0.9621150 before both mobilities at N_D_bulk (was DEFAULT_N_D 1.07e15), 2026-10-17
+# 0.9621205 (True) before 2026-10-18: I_gen counted the never-injected cathode-row
+# generation (share 4.64e-4 with nplus_generation); now the injected generation only.
+# 0.9625666 (True) before the local per-node mobility in 2D (A-03: n+ holes at their own
+# 1e19 mobility, 76 instead of 124 cm2/Vs; the False case moves by < 2e-6).
+@pytest.mark.parametrize("gen_in_nplus, expected", [(False, 0.9997262), (True, 0.9625702)])
+def test_2d_cce_with_nplus(gen_in_nplus, expected):
+    """2D devsim (hw 25, -20 V, n+ 1 um): balanced raw CCE <= 1, equal to the 1D value
+    (0.999562, epi-only G), laterally flat; the direct contact current gives 1.0136 here."""
+    from etna.core.charge_collection import add_generation_to_dd
+    from etna.core.charge_collection_2d import (
+        Q,
+        cce_lateral_scan,
+        create_2d_dd_device,
+        injected_generation,
+        integrate_nodes_box_2d,
+    )
+    from etna.core.drift_diffusion import extract_steady_state_current
+    from etna.core.generation_profiles import alpha_depth_shape, confine_generation_to_epi
+    from etna.core.solver_tol import DC_REL_ERROR
+
+    info = create_2d_dd_device(
+        half_width_um=25.0, V_bias=20.0, device_name=_name("np2d"), nplus_generation=gen_in_nplus, **NPLUS,
+        **SPIKE_2D,
+    )
+    try:
+        y = np.array(devsim.get_node_model_values(device=info["device_name"], region="sic", name="y"))
+        ye = y - info["junction_pos"]
+        G = alpha_depth_shape(np.clip(ye, 0.0, None), alpha_range_cm=15e-4)
+        G = 1e18 * G / G.max()
+        G[ye < 0] = 0.0
+        G = confine_generation_to_epi(info, y, G)
+        add_generation_to_dd(info, G)
+        devsim.solve(type="dc", absolute_error=1e10, relative_error=DC_REL_ERROR, maximum_iterations=40)
+        # normalised by the injected generation (contact nodes are Dirichlet)
+        raw = abs(extract_steady_state_current(info, "cathode")) / (
+            Q * integrate_nodes_box_2d(info, injected_generation(info, G))
+        )
+        add_generation_to_dd(info, np.zeros_like(G))
+        devsim.solve(type="dc", absolute_error=1e10, relative_error=DC_REL_ERROR, maximum_iterations=40)
+        scan = cce_lateral_scan(info, n_points=3)
+    finally:
+        devsim.delete_device(device=info["device_name"])
+    assert raw < 1.0
+    assert raw == pytest.approx(expected, abs=2e-6)
+    np.testing.assert_allclose(scan["cce_values"], raw, atol=2e-6)
+    assert scan["in_mesh_generation_fraction"] == pytest.approx(0.8978 if gen_in_nplus else 0.8280, abs=1e-4)
+

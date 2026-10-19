@@ -71,3 +71,35 @@ def test_unknown_param_raises():
             values=[1],
             sim_fn=fake_sim,
         ).run()
+
+
+def test_sweep_uses_batched_twin_for_run_cv(monkeypatch):
+    """run_cv / run_cce sweeps are solved as one batch; any other sim_fn stays per-config."""
+    from etna.api import simulation
+
+    seen = {}
+    monkeypatch.setattr(
+        simulation,
+        "run_cv_batch",
+        lambda configs, **kw: seen.update(configs=configs, kw=kw) or ["batched"] * len(configs),
+    )
+    sweep = ParametricSweep(
+        base_config=DeviceConfig(), param="N_A", values=[1e18, 5e18],
+        sim_fn=simulation.run_cv, sim_kwargs={"n_points": 3},
+    )
+    assert sweep.run() == ["batched", "batched"]
+    assert [c.N_A for c in seen["configs"]] == [1e18, 5e18]
+    assert seen["kw"] == {"n_points": 3}
+
+
+def test_sweep_accepts_unhashable_callable():
+    """The batch routing must not require sim_fn to be hashable."""
+    from dataclasses import dataclass
+
+    @dataclass
+    class Facade:  # eq=True sets __hash__ = None
+        def __call__(self, cfg, **kw):
+            return cfg.N_A
+
+    out = ParametricSweep(DeviceConfig(), "N_A", [1e18, 2e18], Facade()).run()
+    assert out == [1e18, 2e18]

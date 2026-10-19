@@ -76,8 +76,8 @@ completed: 2026-04-01
 
 Each task was committed atomically:
 
-1. **Task 1: Create alternative_structures.py with all four mesh builders** - `3fb43a7` (feat)
-2. **Task 2: Create tests and validate mesh builders with Poisson solve** - `bc4d77f` (test)
+1. **Task 1: Create alternative_structures.py with all four mesh builders** - `d3eb2ea` (feat)
+2. **Task 2: Create tests and validate mesh builders with Poisson solve** - `af31b3f` (test)
 
 ## Files Created/Modified
 

@@ -12,3 +12,31 @@ __pycache__/
 papers/
 .DS_Store
 **/.DS_Store
+
+# Local tooling / scratch
+.venv/
+.playwright-mcp/
+scratchpad/
+
+# save_figure() output of notebooks 02-05 run from notebooks/ (./figures of the CWD since
+# 2026-10-18; etna/figures/ = the old location next to the package)
+notebooks/figures/
+etna/figures/
+
+# lab/solver2d devsim reference dumps: regenerated on demand (lab/solver2d/README.md)
+lab/solver2d/notes/*.npz
+
+# Build / tool artefacts
+.ipynb_checkpoints/
+*.egg-info/
+dist/
+build/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.scratch/
+.claude/worktrees/
+
+# numba JIT cache dir used by CI (NUMBA_CACHE_DIR)
+.numba-cache/

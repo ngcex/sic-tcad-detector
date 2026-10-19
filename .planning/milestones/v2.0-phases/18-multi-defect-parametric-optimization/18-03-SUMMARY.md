@@ -77,7 +77,7 @@ completed: 2026-03-26
 
 Each task was committed atomically:
 
-1. **Task 1: Validation notebook against published 4H-SiC irradiation data** - `b549fb6` (feat)
+1. **Task 1: Validation notebook against published 4H-SiC irradiation data** - `1f61f62` (feat)
 
 ## Files Created/Modified
 
@@ -101,7 +101,7 @@ Each task was committed atomically:
 - **Fix:** Reconstructed affected cells by replacing broken multi-line strings with properly escaped single-line equivalents using \\n
 - **Files modified:** notebooks/14_validation.ipynb
 - **Verification:** All 8 code cells pass ast.parse()
-- **Committed in:** b549fb6
+- **Committed in:** 1f61f62
 
 ---
 
@@ -132,4 +132,4 @@ _Completed: 2026-03-26_
 
 - notebooks/14_validation.ipynb: FOUND
 - 18-03-SUMMARY.md: FOUND
-- Commit b549fb6: FOUND
+- Commit 1f61f62: FOUND

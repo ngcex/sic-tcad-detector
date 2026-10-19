@@ -85,7 +85,7 @@ completed: 2026-04-01
 
 Each task was committed atomically:
 
-1. **Task 1: Create feasibility report notebook via generation script** - `05b0f1c` (feat)
+1. **Task 1: Create feasibility report notebook via generation script** - `2df010b` (feat)
 
 ## Files Created/Modified
 

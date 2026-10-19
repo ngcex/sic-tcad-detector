@@ -89,8 +89,8 @@ completed: 2026-03-21
 
 Each task was committed atomically:
 
-1. **Task 1: I-V sweep, C-V analysis, and validation modules** - `5c60f31` (feat)
-2. **Task 2: I-V and C-V plotting functions** - `79f6d5e` (feat)
+1. **Task 1: I-V sweep, C-V analysis, and validation modules** - `e1e478d` (feat)
+2. **Task 2: I-V and C-V plotting functions** - `78232f5` (feat)
 
 ## Files Created/Modified
 
@@ -129,7 +129,7 @@ None - no external service configuration required.
 
 ## Self-Check: PASSED
 
-All 6 files verified on disk. Both task commits (5c60f31, 79f6d5e) verified in git history. cv_analysis.py: 177 lines (>40 min). validation.py: 207 lines (>60 min). test_cv.py: 95 lines (>30 min). test_validation.py: 107 lines (>40 min). All required exports verified. 96 tests passing.
+All 6 files verified on disk. Both task commits (e1e478d, 78232f5) verified in git history. cv_analysis.py: 177 lines (>40 min). validation.py: 207 lines (>60 min). test_cv.py: 95 lines (>30 min). test_validation.py: 107 lines (>40 min). All required exports verified. 96 tests passing.
 
 ---
 

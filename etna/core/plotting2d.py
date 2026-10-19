@@ -281,6 +281,9 @@ def plot_doping_2d(device, region, ax=None):
 def validate_2d_vs_1d(device_info_2d, device_info_1d):
     """Compare 2D center-column solution against 1D reference.
 
+    Public diagnostic (no internal caller since notebook 15 was regenerated): the
+    potential / field parity check behind the 2D-vs-1D validation figures.
+
     Extracts potential along the center column (x=0) of the 2D device
     and compares against the 1D solution. Also computes E-field from
     the potential gradient and compares.

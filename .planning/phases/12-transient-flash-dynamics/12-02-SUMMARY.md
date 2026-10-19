@@ -71,8 +71,8 @@ completed: 2026-03-24
 
 Each task was committed atomically:
 
-1. **Task 1: Add multi-pulse train and dose-rate sweep functions** - `b0072ec` (feat)
-2. **Task 2: Create Jupyter notebook 08 for transient FLASH analysis** - `a4fa24f` (feat)
+1. **Task 1: Add multi-pulse train and dose-rate sweep functions** - `250cb96` (feat)
+2. **Task 2: Create Jupyter notebook 08 for transient FLASH analysis** - `49f6179` (feat)
 
 ## Files Created/Modified
 

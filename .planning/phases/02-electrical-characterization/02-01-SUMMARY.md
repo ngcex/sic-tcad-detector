@@ -89,8 +89,8 @@ completed: 2026-03-21
 
 Each task was committed atomically:
 
-1. **Task 1: Graded doping profile with scipy calibration** - `c9bf80d` (feat)
-2. **Task 2: SiC drift-diffusion solver with SRH recombination** - `9e92e68` (feat)
+1. **Task 1: Graded doping profile with scipy calibration** - `8ba85e1` (feat)
+2. **Task 2: SiC drift-diffusion solver with SRH recombination** - `c7c500e` (feat)
 
 ## Files Created/Modified
 
@@ -115,7 +115,7 @@ Each task was committed atomically:
 - **Fix:** Relaxed to 1e-10 A/cm^2 with documentation explaining the numerical origin
 - **Files modified:** tests/test_drift_diffusion.py
 - **Verification:** Test passes, current is physically negligible
-- **Committed in:** 9e92e68 (Task 2 commit)
+- **Committed in:** c7c500e (Task 2 commit)
 
 ---
 
@@ -139,7 +139,7 @@ None - no external service configuration required.
 
 ## Self-Check: PASSED
 
-All 3 files verified on disk. Both task commits (c9bf80d, 9e92e68) verified in git history. drift_diffusion.py: 241 lines (>150 min). tests: 213 lines (>80 min). All 3 required exports verified. 78 tests passing.
+All 3 files verified on disk. Both task commits (8ba85e1, c7c500e) verified in git history. drift_diffusion.py: 241 lines (>150 min). tests: 213 lines (>80 min). All 3 required exports verified. 78 tests passing.
 
 ---
 

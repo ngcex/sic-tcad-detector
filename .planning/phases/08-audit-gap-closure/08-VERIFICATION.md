@@ -77,7 +77,7 @@ No gaps. All three audit gap items are fully closed:
 
 3. **ROADMAP progress tracking** — Phase 6 and Phase 7 progress rows are updated to `2/2 Complete 2026-03-21` and `1/1 Complete 2026-03-21` respectively. All plan-level checkboxes (`06-01`, `06-02`, `07-01`) and both top-level phase bullets (`[x] Phase 6`, `[x] Phase 7`) are marked complete.
 
-Commits are present in git history: `f5aeb9b` (notebook warning), `9e59d63` (validation tests), `b1ded5a` (ROADMAP fix).
+Commits are present in git history: `962a0c8` (notebook warning), `9bd4cfa` (validation tests), `2a4e062` (ROADMAP fix).
 
 ---
 

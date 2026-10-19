@@ -63,9 +63,9 @@ completed: 2026-03-30
 
 ## Task Commits
 
-1. **Task 1: Create charge_collection_2d.py** - `24b37a6` (feat)
-2. **Fix: Robust DC solve + global solver fix** - `a862d91` (fix)
-3. **Task 2: Create test_charge_collection_2d.py** - `f53ea71` (test)
+1. **Task 1: Create charge_collection_2d.py** - `5722e0e` (feat)
+2. **Fix: Robust DC solve + global solver fix** - `2fb71ab` (fix)
+3. **Task 2: Create test_charge_collection_2d.py** - `006e841` (test)
 
 ## Files Created/Modified
 

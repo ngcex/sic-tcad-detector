@@ -67,8 +67,8 @@ completed: 2026-03-24
 
 Each task was committed atomically:
 
-1. **Task 1: Create damaged device helper and fluence sweep functions** - `9baf62f` (feat)
-2. **Task 2: Tests for fluence sweep functions** - `36ac7d7` (test)
+1. **Task 1: Create damaged device helper and fluence sweep functions** - `5af674c` (feat)
+2. **Task 2: Tests for fluence sweep functions** - `b099efd` (test)
 
 ## Files Created/Modified
 
@@ -93,7 +93,7 @@ Each task was committed atomically:
 - **Fix:** Reduced monotonicity test range from geomspace(1e11, 1e14) to geomspace(1e11, 5e13); reduced bias-sweep test fluence from 1e13 to 1e12
 - **Files modified:** tests/test_charge_collection.py
 - **Verification:** All 5 tests pass consistently
-- **Committed in:** 36ac7d7 (Task 2 commit)
+- **Committed in:** b099efd (Task 2 commit)
 
 ---
 

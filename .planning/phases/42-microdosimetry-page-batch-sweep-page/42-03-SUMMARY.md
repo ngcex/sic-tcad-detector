@@ -70,8 +70,8 @@ completed: 2026-07-14
 
 ## Task Commits
 
-1. **Task 1: Implement the batch sweep page** - `b41f7a2` (feat)
-2. **Task 2: AppTest coverage for the batch sweep page** - `2e75c46` (test)
+1. **Task 1: Implement the batch sweep page** - `5ed4bfc` (feat)
+2. **Task 2: AppTest coverage for the batch sweep page** - `373a905` (test)
 
 **Plan metadata:** _(this SUMMARY commit)_
 
@@ -98,8 +98,8 @@ None to the production code — plan executed exactly as written for both tasks.
 **1. [Rule 3 - Blocking] Worktree venv missing dev deps + stale base — pytest/streamlit resolved from miniconda without plotly**
 
 - **Found during:** Task 2 (running the AppTest suite)
-- **Issue:** Two coupled blockers in the freshly-created worktree. (a) The worktree branch was created from an old Phase-39-era base (`5e0b686`) via the known Claude Code worktree bug (#2015), so the Wave 1 (42-01) foundation — `build_sweep_overlay_figure`, `sweep_results_to_csv_bytes` — was absent and every import would fail. (b) The worktree `.venv` had only the base (production) deps, not the `dev` optional group, so `uv run pytest` fell back to miniconda's pytest, which ran the AppTest ScriptRunner against miniconda's streamlit where `plotly` is not installed → `ModuleNotFoundError: No module named 'plotly'` (the identical pre-existing `test_app_dark_current_page.py` failed the same way in this worktree but passes in the main repo).
-- **Fix:** (a) Per the Pattern A worktree startup contract, hard-reset the per-agent branch to main's Wave-1 tip (`git reset --hard 1a3051b`) — the worktree branch had zero unique commits (merge-base == its own HEAD), so no work was lost; this brought in the 42-01 foundation. (b) Ran the suite via `uv run --extra dev pytest`, which installs the already-declared `pytest>=7.0` dev dependency into the worktree venv so streamlit/plotly resolve from the venv. No new or unlisted package was installed.
+- **Issue:** Two coupled blockers in the freshly-created worktree. (a) The worktree branch was created from an old Phase-39-era base (`4a7cebe`) via the known Claude Code worktree bug (#2015), so the Wave 1 (42-01) foundation — `build_sweep_overlay_figure`, `sweep_results_to_csv_bytes` — was absent and every import would fail. (b) The worktree `.venv` had only the base (production) deps, not the `dev` optional group, so `uv run pytest` fell back to miniconda's pytest, which ran the AppTest ScriptRunner against miniconda's streamlit where `plotly` is not installed → `ModuleNotFoundError: No module named 'plotly'` (the identical pre-existing `test_app_dark_current_page.py` failed the same way in this worktree but passes in the main repo).
+- **Fix:** (a) Per the Pattern A worktree startup contract, hard-reset the per-agent branch to main's Wave-1 tip (`git reset --hard 2c6f7f2`) — the worktree branch had zero unique commits (merge-base == its own HEAD), so no work was lost; this brought in the 42-01 foundation. (b) Ran the suite via `uv run --extra dev pytest`, which installs the already-declared `pytest>=7.0` dev dependency into the worktree venv so streamlit/plotly resolve from the venv. No new or unlisted package was installed.
 - **Files modified:** None (environment/venv only; no source changes)
 - **Verification:** `uv run --extra dev pytest tests/test_app_batch_sweep_page.py -q` → 6 passed; combined run with `test_app_dark_current_page.py` + `test_app_csv_export.py` → 20 passed (no regression). NOTE for the verifier/orchestrator: the FIRST test invocation in this worktree MUST include `--extra dev` (e.g. `uv run --extra dev pytest ...`) — a bare `uv run pytest` re-syncs the venv to the base (production-only) group and falls back to the system (miniconda) interpreter where `plotly` is absent. Once `--extra dev` has run once, the dev deps persist and the plan's literal bare command (`uv run pytest tests/test_app_batch_sweep_page.py -q`) also passes (confirmed → 6 passed). In the main repo (dev deps already installed) the bare command passes directly.
 - **Committed in:** N/A (no code change — reset predates the task commits; venv state is not tracked)
@@ -125,14 +125,14 @@ None - no external service configuration required.
 
 - Batch Sweep page complete and tested; FEAT-04 satisfied.
 - Wave 2 sibling (plan 42-02, microdosimetry page) runs in a separate worktree touching disjoint files — no conflict expected on merge.
-- Note for the orchestrator: this worktree was reset to `1a3051b` (main's Wave-1 tip) at startup to recover from the #2015 old-base bug; the merge should be clean.
+- Note for the orchestrator: this worktree was reset to `2c6f7f2` (main's Wave-1 tip) at startup to recover from the #2015 old-base bug; the merge should be clean.
 
 ## Self-Check: PASSED
 
 - `app/workflows/batch_sweep.py` exists (modified) — FOUND
 - `tests/test_app_batch_sweep_page.py` exists (created) — FOUND
-- Commit `b41f7a2` (feat 42-03) — FOUND
-- Commit `2e75c46` (test 42-03) — FOUND
+- Commit `5ed4bfc` (feat 42-03) — FOUND
+- Commit `373a905` (test 42-03) — FOUND
 - `uv run --extra dev pytest tests/test_app_batch_sweep_page.py -q` — 6 passed
 
 ---

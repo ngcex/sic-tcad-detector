@@ -29,20 +29,46 @@ import devsim
 import numpy as np
 import pandas as pd
 
-from etna.core.charge_collection_2d import create_2d_dd_device, integrate_over_mesh_2d
+from etna.core.charge_collection_2d import (
+    create_2d_dd_device,
+    injected_generation,
+    integrate_nodes_box_2d,
+)
 from etna.core.charge_collection import add_generation_to_dd
 from etna.core.drift_diffusion import extract_contact_current
+from etna.core.solver_tol import (
+    DC_ABS_ERROR,
+    DC_REL_ERROR,
+    RELAXED_ABS_ERROR,
+    RELAXED_REL_ERROR,
+    TRANSIENT_ABS_ERROR,
+    TRANSIENT_RELAXED_ABS_ERROR,
+    TRANSIENT_RELAXED_REL_ERROR,
+    TRANSIENT_REL_ERROR,
+)
+from etna.core.devsim_reset import delete_device_and_mesh
 
 logger = logging.getLogger(__name__)
 
 # Physical constants
 Q_ELECTRON = 1.602e-19  # C, elementary charge
 
-# Headroom over the physical CCE ceiling (1.0) attributable to finite-step
-# trapezoidal-quadrature error on the collection-current pulse. Observed error
-# is ~0.6%; an excess beyond this tolerance signals a real bug, not numerics
-# (audit C4). Kept equal to the transient.py tolerance for symmetry.
-_QUADRATURE_TOL = 0.05
+# Headroom over the physical CCE ceiling (1.0) before the table builder warns. The
+# backward-Euler collected charge (collected_charge) has no quadrature error on top
+# of the time stepping, and the validated runs give CCE_raw <= 1 (default stack
+# 0.99997 at 50 V); an excess beyond this tolerance signals a bug, not numerics.
+# (The old 5 % headroom covered the post-injection trapezoid, audit C4.)
+_CCE_EXCESS_TOL = 1e-3
+
+# build_cce_let_table(method="linear"): a LET is synthesised from the let_max transient
+# once a simulated LET below it agrees with its synthesis to _LINEAR_ANCHOR_TOL
+# (CCE_raw); the simulated middle LET must agree to _LINEAR_CHECK_TOL (table tolerance).
+_LINEAR_ANCHOR_TOL = 2.5e-7
+_LINEAR_CHECK_TOL = 1e-6
+# rtol_converged of the let_max reference run: continues past the default stop so the
+# synthesised low-LET series (which stop later) are covered; its own row applies the
+# default stop to the same series (identical prefix, so that row is unchanged).
+_LINEAR_REF_RTOL = 1e-10
 
 
 def ion_track_generation_2d(
@@ -73,8 +99,9 @@ def ion_track_generation_2d(
     generation : ndarray
         Generation density at each mesh node (pairs/cm^3).
     Q_generated_C_per_cm : float
-        Total generated charge per unit z-depth (C/cm), computed via
-        mesh area integration: integrate(generation) * q_electron.
+        Total generated charge per unit z-depth (C/cm): the box-rule integral of the
+        injected generation (contact nodes zeroed) times q_electron, the convention of
+        compute_cce_2d.
     """
     device = device_info["device_name"]
     region = device_info["region_name"]
@@ -98,9 +125,17 @@ def ion_track_generation_2d(
 
     # Generation: pairs/cm^3
     generation = np.where(in_epi, pairs_per_cm * lateral, 0.0)
+    # Contact nodes carry no injected generation (Dirichlet rows): zero them so that
+    # Q_generated counts only the pairs the solver injects, the convention of
+    # compute_cce_2d (since 2026-10-18). Matters on the legacy diode, whose cathode row
+    # is the epi end (cathode share of the track ~1e-3); with the n+ layer the track
+    # touches no contact (anode in the p+, cathode at the end of the n+).
+    generation = injected_generation(device_info, generation)
 
-    # Q_generated = integrate(generation * dA) * q  [C/cm for 2D]
-    Q_generated_C_per_cm = integrate_over_mesh_2d(device_info, generation) * Q_ELECTRON
+    # Q_generated = integrate(generation * dA) * q  [C/cm for 2D], with the solver's box
+    # rule (the quadrature that injects the source term; compute_cce_2d's I_generated).
+    # Was the triangle rule (integrate_over_mesh_2d) before 2026-10-18.
+    Q_generated_C_per_cm = integrate_nodes_box_2d(device_info, generation) * Q_ELECTRON
 
     logger.info(
         f"Ion track: LET={LET_keV_um:.1f} keV/um, x_ion={x_ion_cm*1e4:.1f} um, "
@@ -117,15 +152,22 @@ def simulate_single_particle(
     t_collect=200e-9,
     dt_min=1e-13,
     dt_max=1e-9,
-    contact="cathode",
+    contact=None,
+    rtol_converged=1e-7,
+    n_converged=3,
 ):
     """Simulate single-particle charge collection transient.
 
     Uses the generation-pulse method (Approach A from research):
     1. Initialize transient state with zero generation
     2. Inject charge as a short pulse (generation/dt_inject for one timestep)
-    3. Zero generation and run BDF1 time-stepping until current returns to
-       baseline
+    3. Zero generation and run BDF1 time-stepping until the collected charge
+       has converged
+
+    Q_collected is the backward-Euler sum over every step, the injection step
+    included (collected_charge); the run stops when the charge added by a step is
+    below ``rtol_converged`` of the running total for ``n_converged`` consecutive
+    steps, or at ``t_collect`` (then ``converged`` is False and a warning is logged).
 
     Parameters
     ----------
@@ -141,30 +183,50 @@ def simulate_single_particle(
         Minimum time step during collection (s). Default: 1e-13.
     dt_max : float
         Maximum time step during collection (s). Default: 1e-9.
-    contact : str
-        Contact for current extraction.
+    contact : {"cathode", "anode"} or None
+        Contact whose (direct, conduction) current is integrated. None = "anode"
+        when the device has an n+ layer (``device_info["nplus_thickness_cm"]`` not
+        None), else "cathode" (the historical choice; legacy numbers unchanged).
+        With an n+ cathode the direct cathode current is the majority-carrier current
+        in 1e19 material, a small difference of huge Scharfetter-Gummel terms
+        dominated by round-off (same finding as transient_cce_vs_dose_rate). The
+        balanced steady-state form (extract_steady_state_current) is NOT used: it has
+        no dQ/dt term and is wrong in a transient.
+    rtol_converged : float
+        Relative charge increment below which a step counts as converged.
+    n_converged : int
+        Consecutive converged steps required to stop.
 
     Returns
     -------
     result : dict
-        - "times": time points (s), ndarray
+        - "times": end time of each step from the injection start (s), ndarray;
+          the first entry is the injection step (t = dt_inject)
         - "currents": contact current at each time (A/cm for 2D), ndarray
-        - "Q_collected": integrated collected charge (C/cm for 2D), float
+        - "Q_collected": collected charge (C/cm for 2D), float
         - "I_dark": baseline dark current (A/cm), float
         - "I_peak": peak signal current (A/cm), float
+        - "current_contact": the contact actually integrated, str
+        - "converged": False if t_collect / max_steps / a failed step ended the run
     """
-    device = device_info["device_name"]
-    region = device_info["region_name"]
+    if contact is None:
+        contact = (
+            "anode" if device_info.get("nplus_thickness_cm") is not None else "cathode"
+        )
+    if contact not in ("cathode", "anode"):
+        raise ValueError(f"contact must be 'cathode' or 'anode', got {contact!r}")
     n_nodes = len(generation_profile)
 
     # Step 1: Initialize transient state with zero generation
     zeros = np.zeros(n_nodes)
     add_generation_to_dd(device_info, zeros)
     try:
+        # the shared DC tolerance (was 1e-10, which on 2D devices at high bias
+        # stagnates near 1e-9 and can only reach the relaxed retry; solver_tol)
         devsim.solve(
             type="transient_dc",
-            absolute_error=1e10,
-            relative_error=1e-10,
+            absolute_error=DC_ABS_ERROR,
+            relative_error=DC_REL_ERROR,
             maximum_iterations=30,
         )
     except devsim.error:
@@ -172,8 +234,8 @@ def simulate_single_particle(
         logger.info("transient_dc failed at strict tolerances, retrying relaxed")
         devsim.solve(
             type="transient_dc",
-            absolute_error=1e12,
-            relative_error=1e-8,
+            absolute_error=RELAXED_ABS_ERROR,
+            relative_error=RELAXED_REL_ERROR,
             maximum_iterations=100,
         )
     logger.debug("Transient state initialized (transient_dc with zero gen)")
@@ -190,8 +252,8 @@ def simulate_single_particle(
         devsim.solve(
             type="transient_bdf1",
             tdelta=dt_inject,
-            absolute_error=1e10,
-            relative_error=1e-8,
+            absolute_error=TRANSIENT_ABS_ERROR,
+            relative_error=TRANSIENT_REL_ERROR,
             maximum_iterations=100,
             charge_error=1e10,
         )
@@ -200,8 +262,8 @@ def simulate_single_particle(
         devsim.solve(
             type="transient_bdf1",
             tdelta=dt_inject,
-            absolute_error=1e12,
-            relative_error=1e-6,
+            absolute_error=TRANSIENT_RELAXED_ABS_ERROR,
+            relative_error=TRANSIENT_RELAXED_REL_ERROR,
             maximum_iterations=200,
             charge_error=1e10,
         )
@@ -210,23 +272,27 @@ def simulate_single_particle(
     logger.debug(f"Current after injection: {I_after_inject:.4e} A/cm")
 
     # Step 4: Zero generation and time-step loop.
-    # Recording starts AFTER the injection step. The first BDF1 step (the 1 ps
-    # injection pulse) is numerically noisy and dominated by the fast field
-    # readjustment to the freshly injected charge; its contact-current sample is
-    # not representative of steady carrier collection. Because injection is
-    # effectively instantaneous (1 ps) while collection takes ~ns, essentially
-    # no real charge is collected during the excluded window (carriers drift a
-    # negligible distance in 1 ps), so excluding it does not under-count.
+    # The injection step IS recorded (t = dt_inject) and counted. Each BDF1 step
+    # returns the contact current at the END of the step, and the backward-Euler
+    # charge it moved through the contact during that step is I_k * dt_k; summing
+    # those right-endpoint terms over every step, the injection step included, is
+    # the charge the discretised equations actually conserve (collected_charge).
+    # The previous estimator (trapezoid over the post-injection samples, stopped at
+    # 1 % of the peak) dropped the injection step and the tail and mixed in a
+    # quadrature the solver does not use: legacy CCE 0.9776 / 1.0066 at 10 / 50 V
+    # (>1), default stack 0.982 / 0.977 (non-monotone). This sum gives legacy
+    # 0.9615 / 0.9985 (steady-state CCE 0.9609 / 0.9983) and default 0.99978 / 0.99997.
     # NOTE: extract_contact_current reads ONLY the continuity-equation
     # (conduction) contact current -- it does NOT include displacement current
     # (dD/dt lives in the Poisson/PotentialEquation, which is never queried).
-    # The residual CCE>1 seen downstream is trapezoidal-quadrature error, not
-    # displacement current (see the CCE clip comment in the table builder, C4).
     add_generation_to_dd(device_info, zeros)
 
-    times = []
-    currents = []
+    times = [dt_inject]
+    currents = [I_after_inject]
     t = dt_inject
+    Q_run = (abs(I_after_inject) - abs(I_dark)) * dt_inject
+    n_small = 0
+    converged = False
 
     I_peak = I_after_inject
     max_steps = 5000
@@ -240,8 +306,8 @@ def simulate_single_particle(
             devsim.solve(
                 type="transient_bdf1",
                 tdelta=dt,
-                absolute_error=1e10,
-                relative_error=1e-8,
+                absolute_error=TRANSIENT_ABS_ERROR,
+                relative_error=TRANSIENT_REL_ERROR,
                 maximum_iterations=100,
                 charge_error=1e10,
             )
@@ -251,8 +317,8 @@ def simulate_single_particle(
                 devsim.solve(
                     type="transient_bdf1",
                     tdelta=dt,
-                    absolute_error=1e12,
-                    relative_error=1e-6,
+                    absolute_error=TRANSIENT_RELAXED_ABS_ERROR,
+                    relative_error=TRANSIENT_RELAXED_REL_ERROR,
                     maximum_iterations=200,
                     charge_error=1e10,
                 )
@@ -264,22 +330,36 @@ def simulate_single_particle(
         I = extract_contact_current(device_info, contact)
         times.append(t)
         currents.append(I)
+        step_count += 1
 
         if abs(I) > abs(I_peak):
             I_peak = I
 
-        # Early termination: signal decayed to 1% of peak
-        if abs(I - I_dark) < 0.01 * abs(I_peak - I_dark) and t > 10 * dt_inject:
-            logger.debug(f"Early termination at t={t:.3e} s (signal < 1% peak)")
-            break
-
-        step_count += 1
+        # Convergence stop: the charge still being added is negligible against the
+        # charge collected so far for n_converged consecutive steps. Validated
+        # against 200 ns runs without a stop (legacy and default stack, 10 / 50 V,
+        # LET 0.5-500): the truncated sum agrees to <= 1.4e-7 in CCE.
+        dQ = (abs(I) - abs(I_dark)) * dt
+        Q_run += dQ
+        if Q_run != 0.0 and abs(dQ) < rtol_converged * abs(Q_run):
+            n_small += 1
+            if n_small >= n_converged:
+                converged = True
+                logger.debug(f"Collection converged at t={t:.3e} s")
+                break
+        else:
+            n_small = 0
 
     times = np.array(times)
     currents = np.array(currents)
+    if not converged:
+        logger.warning(
+            f"Single-particle collection not converged at t={t:.3e} s "
+            f"({step_count} steps, t_collect={t_collect:.1e} s): Q_collected is "
+            "truncated"
+        )
 
-    # Q_collected = integral(|I| - |I_dark|) dt, post-injection only
-    Q_collected = float(np.trapezoid(np.abs(currents) - np.abs(I_dark), times))
+    Q_collected = collected_charge(times, currents, I_dark)
 
     logger.info(
         f"Transient complete: {len(times)} steps, t_final={times[-1]:.3e} s, "
@@ -292,16 +372,39 @@ def simulate_single_particle(
         "Q_collected": Q_collected,
         "I_dark": float(I_dark),
         "I_peak": float(I_peak),
+        "current_contact": contact,
+        "converged": converged,
     }
+
+
+def collected_charge(times, currents, I_dark, t0=0.0):
+    """Backward-Euler collected charge: sum_k (|I_k| - |I_dark|) * (t_k - t_{k-1}).
+
+    ``times`` are the END times of consecutive implicit (BDF1) steps that start at
+    ``t0`` (the start of the injection step), ``currents`` the contact current the
+    solver returns at each of them. Each term is the charge the discretised
+    equations moved through the contact during that step, so the sum is exact for
+    the time-discrete system (no quadrature error on top of the time-stepping).
+    """
+    times = np.asarray(times, dtype=float)
+    currents = np.asarray(currents, dtype=float)
+    if times.size == 0:
+        return 0.0
+    dt = np.diff(times, prepend=t0)
+    return float(np.sum((np.abs(currents) - abs(I_dark)) * dt))
 
 
 def analyze_current_pulse(times, currents, I_dark):
     """Extract pulse characteristics from transient simulation.
 
+    Uses the same backward-Euler estimator as simulate_single_particle
+    (collected_charge): ``times`` are step end times measured from the injection
+    start (t = 0), so Q_collected here equals simulate_single_particle's.
+
     Parameters
     ----------
     times : array_like
-        Time points (s).
+        Step end times (s), from t = 0 at the injection start.
     currents : array_like
         Contact current at each time point (A/cm for 2D).
     I_dark : float
@@ -310,27 +413,24 @@ def analyze_current_pulse(times, currents, I_dark):
     Returns
     -------
     result : dict
-        - "Q_collected": integrated charge (C/cm for 2D)
+        - "Q_collected": collected charge (C/cm for 2D)
         - "I_peak": peak signal current magnitude (A/cm)
         - "t_peak": time of peak current (s)
         - "t_collection": time to collect 95% of total charge (s)
     """
-    times = np.asarray(times)
-    currents = np.asarray(currents)
+    times = np.asarray(times, dtype=float)
+    currents = np.asarray(currents, dtype=float)
 
     I_signal = np.abs(currents) - np.abs(I_dark)
-    Q_total = float(np.trapezoid(I_signal, times))
+    Q_total = collected_charge(times, currents, I_dark)
 
     I_peak = float(np.max(I_signal))
     t_peak = float(times[np.argmax(I_signal)])
 
-    # Collection time: when cumulative charge reaches 95%
-    if len(times) > 1:
-        Q_cumulative = np.cumsum(0.5 * (I_signal[:-1] + I_signal[1:]) * np.diff(times))
-        idx_95 = np.searchsorted(Q_cumulative, 0.95 * Q_total)
-        t_collection = float(times[min(idx_95 + 1, len(times) - 1)])
-    else:
-        t_collection = float(times[0])
+    # Collection time: end of the step at which the cumulative charge reaches 95%
+    Q_cumulative = np.cumsum(I_signal * np.diff(times, prepend=0.0))
+    idx_95 = int(np.searchsorted(Q_cumulative, 0.95 * Q_total))
+    t_collection = float(times[min(idx_95, len(times) - 1)])
 
     return {
         "Q_collected": Q_total,
@@ -347,12 +447,16 @@ def build_cce_let_table(
     let_min=0.1,
     let_max=1000.0,
     x_ion_cm=0.0,
+    contact=None,
+    device_kwargs=None,
+    method="linear",
 ):
     """Build CCE(LET) lookup table from transient simulations.
 
-    Creates a fresh 2D device for each LET value, injects an ion track at
-    the center, runs a transient simulation, and extracts CCE.  Device is
-    deleted after each simulation to avoid global solver coupling.
+    Builds ONE 2D device at (half_width_um, V_bias), snapshots its dark state, and
+    for each LET restores that state, injects an ion track, runs a transient
+    simulation and extracts CCE. The device is deleted at the end (devsim solves are
+    global: no other device may coexist during the sweep).
 
     Parameters
     ----------
@@ -368,89 +472,282 @@ def build_cce_let_table(
         Maximum LET (keV/um).
     x_ion_cm : float
         Lateral position of ion track (cm).
+    contact : {"cathode", "anode"} or None
+        Forwarded to simulate_single_particle (None = anode with n+, else cathode).
+    device_kwargs : dict or None
+        Extra keyword arguments for create_2d_dd_device (geometry / doping stack).
+    method : {"linear", "full"}
+        "full": one transient per LET. "linear" (default, n_let_points > 3): the
+        let_max transient is synthesised for the other LETs (see Notes); the lowest
+        LETs, where the synthesis is least accurate, are simulated bottom-up until one
+        agrees with its synthesis to 2.5e-7, and the middle LET is simulated as a
+        check (1e-6). Falls back to simulating the remaining LETs (with a warning) if
+        the check fails or a transient fails.
 
     Returns
     -------
     table : pandas.DataFrame
-        Columns: LET_keV_um, Q_generated_fC, Q_collected_fC, CCE,
-        t_collection_ns.
+        Columns: LET_keV_um, Q_generated_fC, Q_collected_fC, CCE (clipped to
+        [0, 1]), CCE_raw (unclipped Q_collected / Q_generated), t_collection_ns,
+        converged, simulated (False for the rows synthesised by method="linear").
+
+    Notes
+    -----
+    Why method="linear" is enough. The table's LETs are all low injection (peak
+    excess density 2.6e9-2.6e12 cm^-3 for 0.5-500 keV/um against N_D_bulk 3.4e13, no
+    plasma effects in the model), so the transient is linear in the deposited charge:
+    on the fixed time grid of simulate_single_particle (dt depends on t only) the
+    contact current at LET L is I_dark + (I_ref(t) - I_dark) * Q_gen(L) / Q_gen(ref).
+    The synthesis applies simulate_single_particle's own estimator and convergence
+    stop to that series, so it reproduces the per-LET runs, including their residual
+    ~1e-5 LET dependence. That dependence is numerical, from collected_charge's
+    sum (|I| - |I_dark|) dt: at the anode of the default stack I_dark (+2.0e-13 A/cm
+    at hw 50, 50 V) has the opposite sign to the signal current, an offset of order
+    I_dark * t_end / Q_gen ~ 1/LET (the sign-aware sum (I_dark - I) dt gives
+    0.9999715 / 0.9999703 / 0.9999703 at LET 0.5 / 15.8 / 500 against 0.9999624 /
+    0.9999699 / 0.9999703). The Newton tolerances are not the cause
+    (TRANSIENT_ABS_ERROR 1e10 -> 1e7 bit-identical, TRANSIENT_REL_ERROR 1e-8 -> 1e-11
+    moves CCE by 3e-9; lab/engine_box/bench/let_table_abs_tol.py). Synthesis vs
+    simulation (fresh runs, hw 50 / 150): 7.9e-8 / 7.4e-8 at LET 15.8, ~1e-6 at LET
+    0.5 (there the solver's tail stalls at I_dark, which a linear model does not
+    reproduce: hence the bottom-up simulated anchors). Parity on the full notebook-16
+    grids: lab/engine_box/bench/let_table_linear.py.
     """
+    if method not in ("linear", "full"):
+        raise ValueError(f"method must be 'linear' or 'full', got {method!r}")
     LET_values = np.logspace(np.log10(let_min), np.log10(let_max), n_let_points)
 
-    results = []
-    for i, LET in enumerate(LET_values):
-        device_info = None
+    # One device for the whole table: the build (mesh, Poisson, equilibrium, DD setup,
+    # bias ramp; ~25 s at hw 50, a quarter of a point) does not depend on the LET. The
+    # dark DC state (Potential / Electrons / Holes at V_bias) is snapshotted once and
+    # restored before each LET; simulate_single_particle's transient_dc then resets
+    # the time-integration history, as a fresh device would (the transient_cce_vs_
+    # dose_rate pattern, WP-F). Results are identical to the former build-per-LET
+    # loop (lab/engine_box/bench/let_table_build_once.py).
+    device_info = create_2d_dd_device(
+        half_width_um=half_width_um, V_bias=V_bias, **(device_kwargs or {})
+    )
+    try:
+        dark_state = _snapshot_dark_state(device_info)
+
+        def point(i, **sim_kw):
+            return _cce_let_point(
+                device_info,
+                dark_state,
+                LET_values[i],
+                x_ion_cm,
+                contact,
+                i,
+                n_let_points,
+                **sim_kw,
+            )
+
+        rows, done = None, {}
+        if method == "linear" and n_let_points > 3:
+            rows, done = _linear_table(device_info, LET_values, x_ion_cm, point)
+        if rows is None:  # "full", or the linear check failed: simulate the rest
+            rows = [done[i] if i in done else point(i) for i in range(n_let_points)]
+    finally:
         try:
-            device_info = create_2d_dd_device(
-                half_width_um=half_width_um, V_bias=V_bias
+            delete_device_and_mesh(device_info["device_name"])
+        except Exception:
+            pass
+
+    return pd.DataFrame(rows)
+
+
+def synthesize_linear_response(
+    times, currents, I_dark, scale, rtol_converged=1e-7, n_converged=3
+):
+    """simulate_single_particle's (Q_collected, times, currents) for a generation
+    ``scale`` times that of a run (``times``, ``currents``, ``I_dark``), assuming the
+    transient is linear in the generation: I = I_dark + scale * (I_run - I_dark) on the
+    same time grid, with the same estimator and convergence stop. None if the series
+    ends before the stop (the run being scaled is too short to cover it).
+    """
+    times = np.asarray(times, dtype=float)
+    I = I_dark + scale * (np.asarray(currents, dtype=float) - I_dark)
+    dt = np.diff(times, prepend=0.0)
+    Q_run = (abs(I[0]) - abs(I_dark)) * dt[0]
+    n_small = 0
+    for k in range(1, len(times)):
+        dQ = (abs(I[k]) - abs(I_dark)) * dt[k]
+        Q_run += dQ
+        if Q_run != 0.0 and abs(dQ) < rtol_converged * abs(Q_run):
+            n_small += 1
+            if n_small >= n_converged:
+                t, Ik = times[: k + 1], I[: k + 1]
+                return collected_charge(t, Ik, I_dark), t, Ik
+        else:
+            n_small = 0
+    return None
+
+
+def _linear_table(device_info, LET_values, x_ion_cm, point):
+    """(rows, simulated) for build_cce_let_table(method="linear"); rows is None when the
+    let_max transient fails or the middle-LET check misses (the caller then simulates
+    the rest). ``simulated`` maps grid index -> simulated row."""
+    n = len(LET_values)
+    i_hi, i_mid = n - 1, n // 2
+    row_hi, ref = point(i_hi, rtol_converged=_LINEAR_REF_RTOL, return_series=True)
+    if ref is None or not np.isfinite(row_hi["CCE_raw"]):
+        logger.warning("linear CCE(LET) table: let_max transient failed")
+        return None, {}
+    q_gen_hi = row_hi["Q_generated_fC"] * 1e-15
+
+    def synth(i, Q_gen=None):
+        if Q_gen is None:
+            _, Q_gen = ion_track_generation_2d(
+                device_info, LET_values[i], x_ion_cm=x_ion_cm
             )
+        out = synthesize_linear_response(
+            ref["times"], ref["currents"], ref["I_dark"], Q_gen / q_gen_hi
+        )
+        if out is None:
+            return None
+        Q_col, t, I = out
+        t95 = analyze_current_pulse(t, I, ref["I_dark"])["t_collection"]
+        row = _table_row(LET_values[i], Q_gen, Q_col, True, t95)
+        return {**row, "simulated": False}
 
-            generation, Q_gen = ion_track_generation_2d(
-                device_info, LET, x_ion_cm=x_ion_cm
-            )
+    # the let_max row: the default stop applied to its own (longer) series
+    hi = synth(i_hi, q_gen_hi)
+    if hi is None:
+        logger.warning("linear CCE(LET) table: let_max run did not converge")
+        return None, {}
+    sim = {i_hi: {**hi, "simulated": True}}
 
-            sim_result = simulate_single_particle(device_info, generation)
+    def miss(i):
+        s_row = synth(i, sim[i]["Q_generated_fC"] * 1e-15)
+        if s_row is None or not np.isfinite(sim[i]["CCE_raw"]):
+            return np.inf
+        return abs(s_row["CCE_raw"] - sim[i]["CCE_raw"])
 
-            Q_col = sim_result["Q_collected"]
-            cce_raw = Q_col / Q_gen if Q_gen > 0 else float("nan")
-            # Physical ceiling: CCE cannot exceed 1 in a linear DD detector.
-            # AUDIT C4: the residual CCE>1 here is finite-step TRAPEZOIDAL
-            # QUADRATURE error on the collection-current pulse (~0.6% for the
-            # default ~40-step transient), NOT displacement current as the
-            # previous comment claimed -- extract_contact_current reads only the
-            # continuity-equation (conduction) contact current, and the measured
-            # CCE_raw (~1.006) matches the analytical Hecht ceiling (0.996) to
-            # within quadrature error. Enforce the bound, but warn if the excess
-            # is too large to be quadrature (would signal a real bug).
-            if not np.isnan(cce_raw) and cce_raw > 1.0 + _QUADRATURE_TOL:
-                logger.warning(
-                    f"LET={LET:.1f}: CCE_raw={cce_raw:.4f} exceeds physical "
-                    f"ceiling by >{_QUADRATURE_TOL:.0%}; likely a bug, not "
-                    f"quadrature error (Q_col={Q_col:.3e}, Q_gen={Q_gen:.3e})."
-                )
-            cce = float(np.clip(cce_raw, 0.0, 1.0))
+    # bottom-up anchors: simulate until a LET agrees with its synthesis
+    i_first_synth = i_hi
+    for i in range(i_hi):
+        sim[i] = point(i)
+        if miss(i) <= _LINEAR_ANCHOR_TOL:
+            i_first_synth = i + 1
+            break
+    if i_mid not in sim:
+        sim[i_mid] = point(i_mid)
+    d_mid = miss(i_mid)
+    if not d_mid <= _LINEAR_CHECK_TOL:
+        logger.warning(
+            f"linear CCE(LET) table: middle LET {LET_values[i_mid]:.3g} keV/um misses "
+            f"its synthesis by {d_mid:.2e} in CCE (> {_LINEAR_CHECK_TOL:g}): "
+            "simulating the other LETs"
+        )
+        return None, sim
+    rows = []
+    for i in range(n):
+        row = sim.get(i)
+        if row is None:
+            row = synth(i) if i >= i_first_synth else None
+        if row is None:
+            row = sim[i] = point(i)
+        rows.append(row)
+    logger.info(
+        f"linear CCE(LET) table: {len(sim)} of {n} LETs simulated, middle-LET check "
+        f"|dCCE| = {d_mid:.2e}"
+    )
+    return rows, sim
 
-            pulse_info = analyze_current_pulse(
-                sim_result["times"], sim_result["currents"], sim_result["I_dark"]
-            )
-            t_coll_ns = pulse_info["t_collection"] * 1e9
 
-            results.append(
-                {
-                    "LET_keV_um": LET,
-                    "Q_generated_fC": Q_gen * 1e15,
-                    "Q_collected_fC": Q_col * 1e15,
-                    "CCE": cce,
-                    "t_collection_ns": t_coll_ns,
-                }
-            )
+# DC solution variables of the 2D DD device: the complete state create_2d_dd_device
+# leaves after the bias ramp (everything else is derived from them at each solve).
+_DARK_STATE_SOLUTIONS = ("Potential", "Electrons", "Holes")
 
-        except Exception as exc:
-            logger.warning(f"Simulation failed for LET={LET:.2f} keV/um: {exc}")
-            results.append(
-                {
-                    "LET_keV_um": LET,
-                    "Q_generated_fC": float("nan"),
-                    "Q_collected_fC": float("nan"),
-                    "CCE": float("nan"),
-                    "t_collection_ns": float("nan"),
-                }
-            )
 
-        finally:
-            if device_info is not None:
-                try:
-                    devsim.delete_device(device=device_info["device_name"])
-                except Exception:
-                    pass
+def _snapshot_dark_state(device_info):
+    device, region = device_info["device_name"], device_info["region_name"]
+    return {
+        name: list(
+            devsim.get_node_model_values(device=device, region=region, name=name)
+        )
+        for name in _DARK_STATE_SOLUTIONS
+    }
 
-        # Log progress every 5 LET values
-        if (i + 1) % 5 == 0 or i == 0:
-            logger.info(
-                f"CCE(LET) progress: {i+1}/{n_let_points} " f"(LET={LET:.2f} keV/um)"
-            )
 
-    return pd.DataFrame(results)
+def _restore_dark_state(device_info, dark_state):
+    device, region = device_info["device_name"], device_info["region_name"]
+    for name, values in dark_state.items():
+        devsim.set_node_values(device=device, region=region, name=name, values=values)
+
+
+def _cce_let_point(
+    device_info,
+    dark_state,
+    LET,
+    x_ion_cm,
+    contact,
+    i,
+    n_let_points,
+    return_series=False,
+    **sim_kw,
+):
+    """One CCE(LET) table row on the shared device, from the restored dark state
+    (with ``return_series``: (row, simulate_single_particle result or None))."""
+    sim_result = None
+    try:
+        _restore_dark_state(device_info, dark_state)
+        generation, Q_gen = ion_track_generation_2d(device_info, LET, x_ion_cm=x_ion_cm)
+        sim_result = simulate_single_particle(
+            device_info, generation, contact=contact, **sim_kw
+        )
+        pulse_info = analyze_current_pulse(
+            sim_result["times"], sim_result["currents"], sim_result["I_dark"]
+        )
+        row = _table_row(
+            LET,
+            Q_gen,
+            sim_result["Q_collected"],
+            sim_result["converged"],
+            pulse_info["t_collection"],
+        )
+        row["simulated"] = True
+    except Exception as exc:
+        logger.warning(f"Simulation failed for LET={LET:.2f} keV/um: {exc}")
+        row = {
+            "LET_keV_um": LET,
+            "Q_generated_fC": float("nan"),
+            "Q_collected_fC": float("nan"),
+            "CCE": float("nan"),
+            "CCE_raw": float("nan"),
+            "converged": False,
+            "t_collection_ns": float("nan"),
+            "simulated": True,
+        }
+
+    # Log progress every 5 LET values
+    if (i + 1) % 5 == 0 or i == 0:
+        logger.info(f"CCE(LET) progress: {i+1}/{n_let_points} (LET={LET:.2f} keV/um)")
+    return (row, sim_result) if return_series else row
+
+
+def _table_row(LET, Q_gen, Q_col, converged, t_collection_s):
+    """CCE(LET) table row (charges in C/cm, t_collection in s)."""
+    cce_raw = Q_col / Q_gen if Q_gen > 0 else float("nan")
+    # Physical ceiling: CCE cannot exceed 1 in a linear DD detector. The
+    # backward-Euler estimator gives CCE_raw <= 1 on the validated cases
+    # (the old post-injection trapezoid gave 1.0066, audit C4); the clip
+    # stays as a guard, with a warning if the excess is beyond numerics.
+    if not np.isnan(cce_raw) and cce_raw > 1.0 + _CCE_EXCESS_TOL:
+        logger.warning(
+            f"LET={LET:.1f}: CCE_raw={cce_raw:.6f} exceeds the physical "
+            f"ceiling by >{_CCE_EXCESS_TOL:g}; likely a bug "
+            f"(Q_col={Q_col:.3e}, Q_gen={Q_gen:.3e})."
+        )
+    return {
+        "LET_keV_um": LET,
+        "Q_generated_fC": Q_gen * 1e15,
+        "Q_collected_fC": Q_col * 1e15,
+        "CCE": float(np.clip(cce_raw, 0.0, 1.0)),
+        "CCE_raw": float(cce_raw),
+        "converged": bool(converged),
+        "t_collection_ns": t_collection_s * 1e9,
+    }
 
 
 def save_cce_let_table(table_df, filepath, geometry_info=None):
@@ -481,6 +778,9 @@ def save_cce_let_table(table_df, filepath, geometry_info=None):
         "Q_collected_fC": table_df["Q_collected_fC"].tolist(),
         "t_collection_ns": table_df["t_collection_ns"].tolist(),
     }
+    for optional in ("CCE_raw", "converged"):  # build_cce_let_table columns
+        if optional in table_df:
+            data[optional] = table_df[optional].tolist()
 
     with open(filepath, "w") as f:
         json.dump(data, f, indent=2)
@@ -518,6 +818,11 @@ def load_cce_let_table(filepath):
     def cce_interp(let_value):
         """Interpolate CCE at given LET using log-linear interpolation."""
         return float(np.interp(np.log10(let_value), np.log10(LET_valid), CCE_valid))
+
+    # np.interp clamps outside the table: expose the range so callers can flag it
+    # (process_mc_ensemble warns on clamped events; audit-v7 B-11)
+    cce_interp.let_min = float(LET_valid.min())
+    cce_interp.let_max = float(LET_valid.max())
 
     logger.info(
         f"Loaded CCE(LET) table from {filepath}: "

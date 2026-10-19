@@ -65,7 +65,7 @@ completed: 2026-07-14
 
 Each task was committed atomically:
 
-1. **Task 1 + Task 2: Implement render() and AppTest coverage** - `4b52849` (feat)
+1. **Task 1 + Task 2: Implement render() and AppTest coverage** - `72b5207` (feat)
    - Both files (`app/workflows/radiation_damage.py`, `tests/test_app_radiation_damage_page.py`) were staged together at commit time due to a concurrent-executor race described under Issues Encountered below; content for both tasks is verified correct and independently acceptance-tested.
 
 **Plan metadata:** (this commit, following SUMMARY write)
@@ -94,7 +94,7 @@ _Note: no separate TDD RED/GREEN split was used — the plan's `tdd="true"` tag 
 - **Fix:** Kept the banner text verbatim (per the stronger, explicit "do not paraphrase" instruction) and verified the criterion's intent using `grep -ci "data-blocked"` (case-insensitive), which returns 2. The corresponding AppTest assertion also matches case-insensitively (`"data-blocked" in w.value.lower()`).
 - **Files modified:** None beyond the planned implementation — this is a verification-method correction, not a code change.
 - **Verification:** `grep -ci "data-blocked" app/workflows/radiation_damage.py` returns 2; `test_kappa_banner_persistent` passes.
-- **Committed in:** `4b52849` (Task 1/2 commit)
+- **Committed in:** `72b5207` (Task 1/2 commit)
 
 ---
 
@@ -103,7 +103,7 @@ _Note: no separate TDD RED/GREEN split was used — the plan's `tdd="true"` tag 
 
 ## Issues Encountered
 
-**Concurrent-executor race on `app/workflows/radiation_damage.py` (transient, self-resolved by the sibling process).** During execution, a sibling Wave 2 executor working on Plan 41-03 (dark current page) was running in the _same working tree_ (not an isolated worktree — confirmed by HEAD moving underneath this session without any action from this agent). At one point HEAD (`a524112`, `test(41-03): add AppTest coverage for dark current temperature-sweep page`) contained a diff that included my exact, byte-identical `radiation_damage.py` content bundled under the 41-03 label — apparently picked up by a broad `git add` in that sibling process. Before I acted on this, the sibling process itself corrected the issue: it rewrote its own commits (`dd12e65` replacing `a524112`) so that `radiation_damage.py` reverted to the Phase 38 placeholder on `HEAD` and only `tests/test_app_dark_current_page.py` remained in that commit. This restored a clean, non-conflicting diff for my task, which I then committed under the correct `feat(41-02)` label at `4b52849`. No destructive git operations (no `reset --hard`, no `rebase`, no forced history rewrite) were performed by this agent — I only staged and committed my own files by explicit path, and unstaged (`git restore --staged`, not deleted) an unrelated `41-03-SUMMARY.md` file that a broad add had swept into my index. **Flagging for the orchestrator:** running two Wave 2 plans (41-02, 41-03) as separate executors against the same working tree without worktree isolation is an orchestration-level bug — it produced a transient but real history contamination event that happened to self-resolve this time. Future waves executing plans with independent `files_modified` sets should still use isolated worktrees or strictly serialized execution to avoid this class of race.
+**Concurrent-executor race on `app/workflows/radiation_damage.py` (transient, self-resolved by the sibling process).** During execution, a sibling Wave 2 executor working on Plan 41-03 (dark current page) was running in the _same working tree_ (not an isolated worktree — confirmed by HEAD moving underneath this session without any action from this agent). At one point HEAD (`a524112`, `test(41-03): add AppTest coverage for dark current temperature-sweep page`) contained a diff that included my exact, byte-identical `radiation_damage.py` content bundled under the 41-03 label — apparently picked up by a broad `git add` in that sibling process. Before I acted on this, the sibling process itself corrected the issue: it rewrote its own commits (`cfd4b5f` replacing `a524112`) so that `radiation_damage.py` reverted to the Phase 38 placeholder on `HEAD` and only `tests/test_app_dark_current_page.py` remained in that commit. This restored a clean, non-conflicting diff for my task, which I then committed under the correct `feat(41-02)` label at `72b5207`. No destructive git operations (no `reset --hard`, no `rebase`, no forced history rewrite) were performed by this agent — I only staged and committed my own files by explicit path, and unstaged (`git restore --staged`, not deleted) an unrelated `41-03-SUMMARY.md` file that a broad add had swept into my index. **Flagging for the orchestrator:** running two Wave 2 plans (41-02, 41-03) as separate executors against the same working tree without worktree isolation is an orchestration-level bug — it produced a transient but real history contamination event that happened to self-resolve this time. Future waves executing plans with independent `files_modified` sets should still use isolated worktrees or strictly serialized execution to avoid this class of race.
 
 ## User Setup Required
 
@@ -124,6 +124,6 @@ _Completed: 2026-07-14_
 - FOUND: app/workflows/radiation_damage.py
 - FOUND: tests/test_app_radiation_damage_page.py
 - FOUND: .planning/phases/41-radiation-damage-dark-current-pages/41-02-SUMMARY.md
-- FOUND commit: 4b52849 (feat(41-02): implement radiation damage Run->cache->render->download page)
+- FOUND commit: 72b5207 (feat(41-02): implement radiation damage Run->cache->render->download page)
 - `uv run pytest tests/test_app_radiation_damage_page.py -q` — 6 passed
 - All plan acceptance criteria re-verified against the committed file (see Deviations section for the one grep-case-sensitivity note)

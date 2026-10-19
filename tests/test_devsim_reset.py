@@ -1,7 +1,7 @@
-"""Tests for src/devsim_reset.py — the single-responsibility full reset utility.
+"""Tests for etna/core/devsim_reset.py — the single-responsibility full reset utility.
 
 Covers PITFALLS P03/P30 (cylindrical-axis globals leak from
-src/alternative_structures.py) and P20 (enumerate devices, never hardcode).
+etna/core/alternative_structures.py) and P20 (enumerate devices, never hardcode).
 
 The pure-constant tests (import + _CYLINDRICAL_GLOBALS contents) run without
 devsim. The behavioural tests (device deletion, cylindrical-state restore,
@@ -9,6 +9,26 @@ solver preservation) require a real devsim session.
 """
 
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def _restore_solver_state():
+    """Put devsim's solver parameters back after each test.
+
+    These tests deliberately set a bogus ``direct_solver`` and call resets that
+    can leave it "unknown"; without this restore the next ``devsim.solve`` in
+    the same process aborts the interpreter.
+    """
+    devsim = pytest.importorskip("devsim")
+    saved = {}
+    for key in ("direct_solver", "solver_callback"):
+        try:
+            saved[key] = devsim.get_parameter(name=key)
+        except Exception:
+            pass
+    yield
+    for key, value in saved.items():
+        devsim.set_parameter(name=key, value=value)
 
 
 def test_import_reset_devsim_fully():
@@ -41,9 +61,13 @@ def test_idempotent_on_empty_state():
     pytest.importorskip("devsim")
     from etna.core.devsim_reset import reset_devsim_fully
 
+    import devsim
+
     # Should not raise even with no devices / no cylindrical state.
     reset_devsim_fully()
+    assert list(devsim.get_device_list()) == []
     reset_devsim_fully(preserve_solver=False)
+    assert list(devsim.get_device_list()) == []
 
 
 class TestResetClearsState:
@@ -80,3 +104,74 @@ class TestResetClearsState:
         devsim.set_parameter(name="direct_solver", value="mkl_pardiso")
         reset_devsim_fully(preserve_solver=True)
         assert devsim.get_parameter(name="direct_solver") == "mkl_pardiso"
+
+
+def test_reset_undoes_every_cylindrical_global_without_the_removed_step():
+    """devsim.reset_devsim() alone (the former "restore Cartesian defaults" step was
+    dead and is removed) restores the five assembly models to devsim's own Cartesian
+    values == _CARTESIAN_DEFAULTS and removes raxis_zero / raxis_variable."""
+    devsim = pytest.importorskip("devsim")
+    from etna.core.devsim_reset import (
+        _CARTESIAN_DEFAULTS,
+        _CYLINDRICAL_GLOBALS,
+        reset_devsim_fully,
+    )
+
+    # exactly what alternative_structures._activate_cylindrical_coords sets
+    cyl = {
+        "raxis_zero": 0.0,
+        "raxis_variable": "x",
+        "node_volume_model": "CylindricalNodeVolume",
+        "edge_couple_model": "CylindricalEdgeCouple",
+        "element_edge_couple_model": "ElementCylindricalEdgeCouple",
+        "element_node0_volume_model": "ElementCylindricalNodeVolume@en0",
+        "element_node1_volume_model": "ElementCylindricalNodeVolume@en1",
+    }
+    assert set(cyl) == set(_CYLINDRICAL_GLOBALS)
+    for name, value in cyl.items():
+        devsim.set_parameter(name=name, value=value)
+    reset_devsim_fully()
+    for name, value in _CARTESIAN_DEFAULTS.items():
+        assert devsim.get_parameter(name=name) == value
+    for name in ("raxis_zero", "raxis_variable"):
+        with pytest.raises(devsim.error):
+            devsim.get_parameter(name=name)
+
+
+def test_solve_still_works_after_reset_tests():
+    """The solver parameters are intact, so a real equilibrium solve converges."""
+    pytest.importorskip("devsim")
+    from etna.core.drift_diffusion import create_dd_device
+
+    info = create_dd_device(device_name="post_reset_canary")
+    assert info["dd_initialized"]
+
+
+def test_delete_device_and_mesh_removes_the_mesh():
+    """audit-v7 A-09: devsim.delete_device leaves {name}_mesh alive; the helper does not."""
+    devsim = pytest.importorskip("devsim")
+    from etna.core.device import create_sic_device
+    from etna.core.devsim_reset import delete_device_and_mesh
+
+    info = create_sic_device(device_name="a09_helper")
+    assert "a09_helper_mesh" in devsim.get_mesh_list()
+    delete_device_and_mesh(info["device_name"])
+    assert "a09_helper" not in devsim.get_device_list()
+    assert "a09_helper_mesh" not in devsim.get_mesh_list()
+    with pytest.raises(devsim.error):
+        devsim.create_device(mesh="a09_helper_mesh", device="a09_reuse")
+
+
+def test_api_call_leaves_no_mesh_behind():
+    """A per-call API device is deleted with its mesh (run_dark_current, A-09)."""
+    devsim = pytest.importorskip("devsim")
+    from etna.api.device import DeviceConfig
+    from etna.api.simulation import run_dark_current
+
+    # the devsim path (the batched engine is the default inside its box since 2026-10-18)
+    res = run_dark_current(
+        DeviceConfig(), v_start=-10.0, v_stop=-20.0, n_points=2, solver="devsim"
+    )
+    assert res.metadata["solver"] == "devsim"  # a devsim mesh was really built
+    assert list(devsim.get_mesh_list()) == []
+    assert list(devsim.get_device_list()) == []

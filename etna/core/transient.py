@@ -29,14 +29,33 @@ import numpy as np
 import pandas as pd
 
 from etna.core.charge_collection import add_generation_to_dd
-from etna.core.drift_diffusion import create_dd_device, extract_contact_current, ramp_bias
+from etna.core.drift_diffusion import (
+    create_dd_device,
+    extract_contact_current,
+    ramp_bias,
+)
 from etna.core.flash_recombination import add_auger_recombination
-from etna.core.generation_profiles import proton_generation_profile
+from etna.core.generation_profiles import (
+    confine_generation_to_epi,
+    proton_generation_profile,
+)
+from etna.core.device import DEFAULT_STACK as _STACK, graded_stack_kwargs
+from etna.core.solver_tol import (
+    DC_ABS_ERROR,
+    DC_REL_ERROR,
+    RELAXED_ABS_ERROR,
+    RELAXED_REL_ERROR,
+)
+from etna.core.devsim_reset import delete_device_and_mesh
 
 logger = logging.getLogger(__name__)
 
 # Physical constants (CGS)
 Q_ELECTRON = 1.602e-19  # C (elementary charge)
+
+# DC solution variables of the 1D DD device: the complete state that ramp_bias leaves
+# (transient_cce_vs_dose_rate restores them per dose rate instead of rebuilding).
+_DARK_STATE_SOLUTIONS = ("Potential", "Electrons", "Holes")
 
 
 def pulse_envelope(t, t_rise, t_duration, t_fall):
@@ -169,6 +188,31 @@ def adaptive_dt(t, t_rise, t_duration, t_fall, dt_min=1e-8, dt_max=1e-4):
     return dt_max
 
 
+def pulse_time_step(t, t_rise, t_duration, t_fall, t_end, dt_min=1e-8, dt_max=1e-4):
+    """Next step (dt, t_next) of the pulse stepper: adaptive_dt clipped to the next
+    phase breakpoint (rise end, plateau end, fall end, t_end).
+
+    ``t_next`` is the breakpoint itself (not ``t + dt`` with its round-off) when the step
+    was clipped, so the stepper lands exactly on every phase edge. Before 2026-10-18 only
+    t_end clipped: a plateau step of dt_max overran the plateau end whenever t_duration
+    was not a multiple of it, the fall ramp was then taken at 100 % generation and never
+    resolved (.issues/audit-v7 A-04: +1.0 % generated charge at t_duration 0.55 ms,
+    +10.7 % at 50 us; the 1 ms default happened to be commensurate).
+    """
+    breakpoints = (t_rise, t_rise + t_duration, t_rise + t_duration + t_fall, t_end)
+    tol = 1e-6 * dt_min  # round-off of accumulated steps (1e-14 s at the default)
+    for b in breakpoints:  # a t within round-off of an edge IS on the edge
+        if abs(t - b) <= tol:
+            t = b
+    dt = adaptive_dt(t, t_rise, t_duration, t_fall, dt_min, dt_max)
+    for b in breakpoints:
+        if b > t:
+            if t + dt >= b - tol:
+                return b - t, b
+            return dt, t + dt
+    return dt, t + dt  # past t_end (callers stop before)
+
+
 class TransientSolver:
     """Transient drift-diffusion solver for FLASH pulse simulation.
 
@@ -180,14 +224,19 @@ class TransientSolver:
     device_info : dict
         Device info dict from create_dd_device(), already biased and
         with Auger recombination added. Must have dd_initialized=True.
-    contact : str
-        Contact at which to extract current. Default: "cathode".
+    contact : {"cathode", "anode"} or None
+        Contact at which to extract current. None (default) = "anode" when the device
+        has an n+ layer (the direct cathode current on the n+ is round-off, see
+        transient_cce_vs_dose_rate), else "cathode" (the historical choice).
     method : str
         Transient solve method. Default: "transient_bdf1".
     """
 
-    def __init__(self, device_info, contact="cathode", method="transient_bdf1"):
+    def __init__(self, device_info, contact=None, method="transient_bdf1"):
         self.device_info = device_info
+        if contact is None:
+            has_nplus = device_info.get("nplus_thickness_cm") is not None
+            contact = "anode" if has_nplus else "cathode"
         self.contact = contact
         self.method = method
 
@@ -210,13 +259,16 @@ class TransientSolver:
         # Set zero generation
         add_generation_to_dd(self.device_info, zeros)
 
-        # transient_dc solve to initialize time data (Phase 7 pattern)
+        # transient_dc solve to initialize time data (Phase 7 pattern); the shared DC
+        # tolerance (was 1e-10: Newton is quadratic, the 1D outputs are identical)
         devsim.solve(
             type="transient_dc",
-            absolute_error=1e10,
-            relative_error=1e-10,
+            absolute_error=DC_ABS_ERROR,
+            relative_error=DC_REL_ERROR,
             maximum_iterations=30,
         )
+        # dark baseline of the state just solved (simulate_pulse(skip_init=True))
+        self._I_dark = extract_contact_current(self.device_info, contact=self.contact)
         logger.info("Transient state initialized (transient_dc solve complete)")
 
     def simulate_pulse(
@@ -253,21 +305,34 @@ class TransientSolver:
         dose_rate_Gy_s : float or None
             Dose rate for metadata (Gy/s). Not used in computation.
         skip_init : bool
-            If True, skip the dark current measurement (device already has
-            transient state from a previous pulse). Used by
-            simulate_pulse_train for multi-pulse sequences. Default: False.
+            If True, do not re-measure the dark current: the baseline is the one
+            measured by initialize() (or by the previous pulse). Used by
+            simulate_pulse_train, where the device still carries the tail of the
+            previous pulse, which a fresh measurement would take as "dark" current.
+            Default: False. (Before 2026-10-18 the flag was ignored, A-05.)
 
         Returns
         -------
         result : dict
             Dictionary with:
-            - "times": np.array of time points (s)
-            - "currents": np.array of contact currents (A/cm^2)
+            - "times": np.array of step END times (s, from the pulse start t = 0):
+              the backward-Euler (BDF1) step solves the state at t + dt, so its
+              current is stamped t + dt (before 2026-10-18 it was stamped t, one step
+              early, A-04)
+            - "currents": np.array of contact currents (A/cm^2) at "times"
             - "I_dark": float, dark current before pulse (A/cm^2)
+            - "generation_integral": float, sum over the steps of envelope(t + dt) * dt
+              (s): the generation the discrete system actually received, per unit
+              G_spatial
             - "t_rise": float
             - "t_duration": float
             - "t_fall": float
             - "dose_rate_Gy_s": float or None
+
+        Notes
+        -----
+        Each step is clipped to the next phase breakpoint (pulse_time_step), and the
+        generation of the implicit step is the envelope at the step END, t + dt.
         """
         G_spatial = np.asarray(G_spatial, dtype=float)
 
@@ -276,38 +341,40 @@ class TransientSolver:
 
         t_end = t_rise + t_duration + t_fall + t_post
 
-        # Record dark current before pulse
-        I_dark = extract_contact_current(self.device_info, contact=self.contact)
+        # Dark current before the pulse (skip_init: keep the stored baseline)
+        if skip_init and getattr(self, "_I_dark", None) is not None:
+            I_dark = self._I_dark
+        else:
+            I_dark = extract_contact_current(self.device_info, contact=self.contact)
+            self._I_dark = I_dark
         logger.info(f"Dark current: {I_dark:.4e} A/cm^2")
 
         # Time-stepping loop
         t = 0.0
         times = []
         currents = []
+        gen_integral = 0.0
         step_count = 0
 
         while t < t_end:
-            # Compute envelope and time step
-            env = pulse_envelope(t, t_rise, t_duration, t_fall)
-            dt = adaptive_dt(t, t_rise, t_duration, t_fall, dt_min, dt_max)
-
-            # Don't overshoot t_end
-            if t + dt > t_end:
-                dt = t_end - t
-
-            # Update generation rate: G(x,t) = G_spatial(x) * envelope(t)
-            G_t = G_spatial * env
-            add_generation_to_dd(self.device_info, G_t)
+            dt, t_next = pulse_time_step(
+                t, t_rise, t_duration, t_fall, t_end, dt_min, dt_max
+            )
+            # Implicit (BDF1) step to t_next: generation at the step end
+            env = pulse_envelope(t_next, t_rise, t_duration, t_fall)
+            add_generation_to_dd(self.device_info, G_spatial * env)
 
             # Transient solve with retry at relaxed tolerances.
             # charge_error=1e10 effectively disables automatic step rejection
             # based on charge conservation error -- we manage time steps
-            # ourselves via adaptive_dt based on the pulse envelope phase.
+            # ourselves via pulse_time_step based on the pulse envelope phase.
+            # The first attempt uses the shared DC tolerance (was 1e-10); the retry
+            # differs only in absolute_error and the iteration cap.
             try:
                 devsim.solve(
                     type=self.method,
-                    absolute_error=1e10,
-                    relative_error=1e-10,
+                    absolute_error=DC_ABS_ERROR,
+                    relative_error=DC_REL_ERROR,
                     maximum_iterations=40,
                     tdelta=dt,
                     charge_error=1e10,
@@ -316,8 +383,8 @@ class TransientSolver:
                 # Retry with relaxed tolerances and more iterations
                 devsim.solve(
                     type=self.method,
-                    absolute_error=1e12,
-                    relative_error=1e-8,
+                    absolute_error=RELAXED_ABS_ERROR,
+                    relative_error=RELAXED_REL_ERROR,
                     maximum_iterations=100,
                     tdelta=dt,
                     charge_error=1e10,
@@ -327,12 +394,13 @@ class TransientSolver:
                     f"at t={t:.4e}, dt={dt:.4e}"
                 )
 
-            # Extract current
+            # Extract current: the state (and current) at the step end
             I_t = extract_contact_current(self.device_info, contact=self.contact)
-            times.append(t)
+            times.append(t_next)
             currents.append(I_t)
+            gen_integral += env * dt
 
-            t += dt
+            t = t_next
             step_count += 1
 
             if step_count % 50 == 0:
@@ -347,85 +415,109 @@ class TransientSolver:
             "times": np.array(times),
             "currents": np.array(currents),
             "I_dark": float(I_dark),
+            "generation_integral": float(gen_integral),
             "t_rise": t_rise,
             "t_duration": t_duration,
             "t_fall": t_fall,
             "dose_rate_Gy_s": dose_rate_Gy_s,
         }
 
-    def compute_transient_cce(self, result, G_spatial, x_nodes):
+    def compute_transient_cce(self, result, G_spatial, x_nodes, return_raw=False):
         """Compute charge collection efficiency from transient simulation.
 
-        Integrates (|I(t)| - |I_dark|) over time to get collected charge,
-        then divides by generated charge during the pulse plateau.
+        Backward-Euler (BDF1) estimator, the time-discrete charge balance of the
+        solved system (the estimator of single_particle.collected_charge):
+
+            Q_collected = sum_k (|I_k| - |I_dark|) * dt_k
+            Q_generated = q * integral(G dx) * sum_k envelope(t_k) * dt_k
+
+        with t_k the step END times ("times") and dt_k their spacing from t = 0. Both
+        sums run over the same steps, so the ratio is exact for the discrete system
+        (no quadrature error on top of the time stepping). The analytic trapezoid
+        area ``generated_charge_trapezoidal_pulse`` (t_rise/2 + t_duration + t_fall/2)
+        is logged as a cross-check: with ramps of 10 equal clipped steps the discrete
+        rise and fall sums are 0.55 t_rise and 0.45 t_fall, equal to it when
+        t_rise == t_fall.
+
+        Before 2026-10-18 this was the trapezoid of I over start-of-step stamps,
+        normalised by the analytic area, on a stepper that overran the plateau end
+        (A-04): 0.0098 instead of ~1 at t_duration 50 us, raw 1.00028 (> 1, clipped)
+        at the 1 ms default and 20 Gy/s. Kept differences from single_particle: a
+        trapezoidal pulse envelope instead of a one-step impulse, and the 1D
+        cathode/anode contact choice of TransientSolver.
 
         Parameters
         ----------
         result : dict
-            Result dictionary from simulate_pulse().
+            Result dictionary from simulate_pulse() (a single pulse; times from 0).
         G_spatial : array_like
             Spatial generation profile at mesh nodes (cm^-3 s^-1).
         x_nodes : array_like
             Mesh node positions (cm).
+        return_raw : bool
+            Also return the unclipped ratio Q_collected / Q_generated. Default False.
 
         Returns
         -------
         cce : float
-            Transient charge collection efficiency in [0, 1].
+            Transient charge collection efficiency in [0, 1] (the raw ratio clipped to
+            the physical ceiling 1; a raw value above 1.05 is logged as a bug).
+        cce_raw : float
+            Only with ``return_raw=True``: the unclipped ratio, so a clipped 1.0 can be
+            told apart from a measured one.
         """
-        times = result["times"]
-        currents = result["currents"]
+        times = np.asarray(result["times"], dtype=float)
+        currents = np.asarray(result["currents"], dtype=float)
         I_dark = result["I_dark"]
         t_duration = result["t_duration"]
         t_rise = result.get("t_rise", 0.0)
         t_fall = result.get("t_fall", 0.0)
 
-        # Collected charge: integral of (|I(t)| - |I_dark|) dt over the WHOLE
-        # waveform (rise + plateau + fall + post-pulse decay).
+        # Collected charge: right-endpoint (backward-Euler) sum over every step of the
+        # WHOLE waveform (rise + plateau + fall + post-pulse decay).
+        dts = np.diff(times, prepend=0.0)
         I_signal = np.abs(currents) - np.abs(I_dark)
-        Q_collected = np.trapezoid(I_signal, times)
+        Q_collected = float(np.sum(I_signal * dts))
 
         # Total generation rate per unit area: integral of G(x) dx
         G_total = np.trapezoid(
             np.asarray(G_spatial, dtype=float), np.asarray(x_nodes, dtype=float)
         )
 
-        # Generated charge over the FULL trapezoidal envelope (audit C4).
-        # Must match the integration window above: the collected-charge integral
-        # spans rise+plateau+fall, so the generated charge must count the rise
-        # and fall ramps too, not just the plateau. Using plateau-only here was
-        # the normalization bug that pushed CCE above 1 (masked by a [0, 2] clip).
-        Q_generated = generated_charge_trapezoidal_pulse(
+        # Generated charge: the envelope the solver applied, summed over the same
+        # steps (simulate_pulse "generation_integral"); analytic area as cross-check.
+        Q_analytic = generated_charge_trapezoidal_pulse(
             G_total, t_rise, t_duration, t_fall, q=Q_ELECTRON
         )
+        if "generation_integral" in result:
+            Q_generated = Q_ELECTRON * G_total * result["generation_integral"]
+        else:  # a result dict from elsewhere: the analytic envelope area
+            Q_generated = Q_analytic
 
         if Q_generated <= 0:
             logger.warning("Q_generated <= 0, returning CCE = 0")
-            return 0.0
+            return (0.0, float("nan")) if return_raw else 0.0
 
         cce_raw = Q_collected / Q_generated
 
-        # Physical ceiling: in a linear DD detector CCE cannot exceed 1. Any
-        # residual excess is finite-step trapezoidal-quadrature error on the
-        # current pulse (typically < ~1%). Enforce the physical bound, but assert
-        # the raw value is within quadrature tolerance -- a larger overshoot
-        # would indicate a real bug (e.g. window/normalization mismatch), not
-        # numerical noise, and must NOT be silently clipped. (Audit C4.)
+        # Physical ceiling: in a linear DD detector CCE cannot exceed 1. The discrete
+        # balance is exact up to the solver tolerance, so a larger excess means a real
+        # bug (window/normalisation mismatch) and is reported, not silently clipped.
         _QUADRATURE_TOL = 0.05  # 5% headroom over the physical ceiling
         if cce_raw > 1.0 + _QUADRATURE_TOL:
             logger.warning(
                 f"Transient CCE_raw={cce_raw:.4f} exceeds physical ceiling by "
-                f">{_QUADRATURE_TOL:.0%}; likely a normalization/window bug, not "
-                f"quadrature error (Q_collected={Q_collected:.4e}, "
-                f"Q_generated={Q_generated:.4e})."
+                f">{_QUADRATURE_TOL:.0%}; likely a normalization/window bug "
+                f"(Q_collected={Q_collected:.4e}, Q_generated={Q_generated:.4e})."
             )
         cce = float(np.clip(cce_raw, 0.0, 1.0))
 
         logger.info(
-            f"Transient CCE: {cce:.4f} (raw={cce_raw:.4f}, "
-            f"Q_collected={Q_collected:.4e}, Q_generated={Q_generated:.4e})"
+            f"Transient CCE: {cce:.4f} (raw={cce_raw:.6f}, "
+            f"Q_collected={Q_collected:.4e}, Q_generated={Q_generated:.4e}, "
+            f"analytic envelope {Q_analytic:.4e})"
         )
-        return cce
+        return (cce, float(cce_raw)) if return_raw else cce
 
 
 def simulate_pulse_train(
@@ -438,7 +530,7 @@ def simulate_pulse_train(
     t_gap=1e-3,
     dt_min=1e-8,
     dt_max=1e-4,
-    contact="cathode",
+    contact=None,
     dose_rate_Gy_s=None,
 ):
     """Simulate N consecutive FLASH pulses with inter-pulse carrier memory.
@@ -469,8 +561,9 @@ def simulate_pulse_train(
         Minimum time step (s). Default: 1e-8.
     dt_max : float
         Maximum time step (s). Default: 1e-4.
-    contact : str
-        Contact for current extraction. Default: "cathode".
+    contact : {"cathode", "anode"} or None
+        Contact for current extraction. None (default) = anode with n+, else cathode
+        (see TransientSolver).
     dose_rate_Gy_s : float or None
         Dose rate for metadata. Not used in computation.
 
@@ -491,8 +584,9 @@ def simulate_pulse_train(
     solver = TransientSolver(device_info, contact=contact)
     solver.initialize()
 
-    # Record dark current before first pulse
-    I_dark = extract_contact_current(device_info, contact=contact)
+    # Dark current before the first pulse (measured by initialize); every pulse uses
+    # it as its baseline (skip_init), not the tail of the previous pulse (A-05)
+    I_dark = solver._I_dark
 
     all_times = []
     all_currents = []
@@ -512,7 +606,7 @@ def simulate_pulse_train(
             dt_min=dt_min,
             dt_max=dt_max,
             dose_rate_Gy_s=dose_rate_Gy_s,
-            skip_init=(i > 0),
+            skip_init=True,
         )
 
         pulse_results.append(result_i)
@@ -551,12 +645,15 @@ def transient_cce_vs_dose_rate(
     dt_min=1e-8,
     dt_max=1e-4,
     epi_thickness_cm=10e-4,
+    device_kwargs=None,
+    contact=None,
 ):
     """Sweep dose rates and compute transient CCE at each.
 
-    For each dose rate, creates a fresh device, simulates a single FLASH
-    pulse, and extracts the transient CCE. Results are returned as a
-    pandas DataFrame for easy comparison with steady-state CCE.
+    Builds ONE device (Auger + bias ramp to V_bias), snapshots its dark DC state, and
+    for each dose rate restores that state, simulates a single FLASH pulse and extracts
+    the transient CCE; the device is deleted once at the end (also on error). Results
+    are returned as a pandas DataFrame for easy comparison with steady-state CCE.
 
     Parameters
     ----------
@@ -576,11 +673,30 @@ def transient_cce_vs_dose_rate(
         Maximum time step (s). Default: 1e-4.
     epi_thickness_cm : float
         Epitaxial layer thickness (cm). Default: 10e-4 (10 um).
+    device_kwargs : dict or None
+        Additional keyword arguments for create_dd_device (e.g. N_A, T,
+        substrate_thickness_cm, doping_profile, N_D); override the defaults.
+    contact : {"cathode", "anode"} or None
+        Contact whose (direct) current is integrated. None = "anode" when the device has
+        an n+ layer, else "cathode". The direct cathode current on the n+ is the
+        majority-carrier current in 1e19 material, dominated by round-off: on the
+        pre-2026-10-18 stack (-30 V, 20-230 Gy/s) it scattered 0.983-1.0 (clipped) vs the
+        anode's 0.99969-0.99987. Measured 2026-10-18 on the current default stack (local
+        mobility, step-end BDF1 estimator; anode): 0.999725 / 0.999868 / 0.999869 /
+        0.999870 / 0.999801 / 0.999822 at 20 / 50 / 100 / 150 / 200 / 230 Gy/s (spread
+        1.5e-4: the direct anode current carries round-off of ~1e-4 of q*integral(G);
+        the balanced steady-state CCE at 20 Gy/s is 0.999809, the direct steady-state
+        anode value 0.999729). With the scalar epi mobility (before the A-03 fix) the
+        20 Gy/s point read 1.00028 (clipped to 1). Without n+ the cathode is kept (spread 3e-8;
+        legacy numbers unchanged). The balanced steady-state form is not used: it has
+        no dQ/dt term.
 
     Returns
     -------
     df : pandas.DataFrame
-        DataFrame with columns ["dose_rate_Gy_s", "transient_cce"].
+        DataFrame with columns ["dose_rate_Gy_s", "transient_cce",
+        "transient_cce_raw"] (the unclipped Q_collected / Q_generated; transient_cce
+        is it clipped to [0, 1]); ``df.attrs["contact"]`` is the integrated contact.
     """
     if dose_rates is None:
         dose_rates = np.array([20, 50, 100, 150, 200, 230], dtype=float)
@@ -588,30 +704,49 @@ def transient_cce_vs_dose_rate(
         dose_rates = np.asarray(dose_rates, dtype=float)
 
     cce_values = []
-
-    for dose_rate in dose_rates:
-        dev_id = uuid.uuid4().hex[:8]
-        device_info = create_dd_device(
-            device_name=f"transient_sweep_{dev_id}",
-            epi_thickness_cm=epi_thickness_cm,
-            doping_profile="graded",
-            N_D_junction=2.90e15,
-            N_D_bulk=8.50e13,
-            L_transition=1.0e-4,
+    raw_values = []
+    dev_kw = dict(
+        epi_thickness_cm=epi_thickness_cm,
+        **graded_stack_kwargs(),
+    )
+    dev_kw.update(device_kwargs or {})
+    if contact is None:
+        # (a missing key = create_sic_device's default, the stack's n+ layer)
+        has_nplus = (
+            dev_kw.get("nplus_thickness_cm", _STACK["nplus_thickness_cm"]) is not None
         )
-        device = device_info["device_name"]
-        region = device_info["region_name"]
+        contact = "anode" if has_nplus else "cathode"
+    if contact not in ("cathode", "anode"):
+        raise ValueError(f"contact must be 'cathode' or 'anode', got {contact!r}")
 
-        try:
-            add_auger_recombination(device_info)
-
-            # Ramp bias via anode (reverse bias)
-            ramp_bias(device_info, V_bias, contact="anode")
-
-            # Get mesh and generation profile
-            x_nodes = np.array(
-                devsim.get_node_model_values(device=device, region=region, name="x")
+    # One device for the whole sweep: build, Auger and the bias ramp do not depend on
+    # the dose rate. The dark DC state (Potential / Electrons / Holes) at V_bias is
+    # snapshotted once and restored before each dose rate's initialize(), whose
+    # transient_dc solve also resets the time-integration history; results are
+    # bit-identical to the former build-per-dose-rate loop (6 rates: 7.37 -> 2.13 s,
+    # lab/engine_box/bench/transient_build_once.py).
+    dev_id = uuid.uuid4().hex[:8]
+    device_info = create_dd_device(device_name=f"transient_sweep_{dev_id}", **dev_kw)
+    device = device_info["device_name"]
+    region = device_info["region_name"]
+    try:
+        add_auger_recombination(device_info)
+        # Ramp bias via anode (reverse bias)
+        ramp_bias(device_info, V_bias, contact="anode")
+        dark_state = {
+            name: list(
+                devsim.get_node_model_values(device=device, region=region, name=name)
             )
+            for name in _DARK_STATE_SOLUTIONS
+        }
+        x_nodes = np.array(
+            devsim.get_node_model_values(device=device, region=region, name="x")
+        )
+        for dose_rate in dose_rates:
+            for name, values in dark_state.items():
+                devsim.set_node_values(
+                    device=device, region=region, name=name, values=values
+                )
             G_spatial = proton_generation_profile(
                 x_nodes, E_MeV=62, dose_rate_Gy_s=dose_rate
             )
@@ -619,9 +754,10 @@ def transient_cce_vs_dose_rate(
             # Zero generation in p+ region
             junction_pos = device_info["junction_pos"]
             G_spatial[x_nodes < junction_pos] = 0.0
+            G_spatial = confine_generation_to_epi(device_info, x_nodes, G_spatial)
 
             # Transient simulation
-            solver = TransientSolver(device_info, contact="cathode")
+            solver = TransientSolver(device_info, contact=contact)
             solver.initialize()
 
             result = solver.simulate_pulse(
@@ -634,17 +770,28 @@ def transient_cce_vs_dose_rate(
                 dose_rate_Gy_s=dose_rate,
             )
 
-            cce = solver.compute_transient_cce(result, G_spatial, x_nodes)
+            cce, cce_raw = solver.compute_transient_cce(
+                result, G_spatial, x_nodes, return_raw=True
+            )
             cce_values.append(cce)
+            raw_values.append(cce_raw)
 
             logger.info(
-                f"transient_cce_vs_dose_rate: {dose_rate:.0f} Gy/s " f"-> CCE={cce:.4f}"
+                f"transient_cce_vs_dose_rate: {dose_rate:.0f} Gy/s "
+                f"-> CCE={cce:.4f} (raw {cce_raw:.6f})"
             )
+    finally:
+        try:
+            delete_device_and_mesh(device)
+        except Exception:
+            pass
 
-        finally:
-            try:
-                devsim.delete_device(device=device)
-            except Exception:
-                pass
-
-    return pd.DataFrame({"dose_rate_Gy_s": dose_rates, "transient_cce": cce_values})
+    df = pd.DataFrame(
+        {
+            "dose_rate_Gy_s": dose_rates,
+            "transient_cce": cce_values,
+            "transient_cce_raw": raw_values,
+        }
+    )
+    df.attrs["contact"] = contact
+    return df

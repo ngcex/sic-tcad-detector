@@ -82,7 +82,7 @@ completed: 2026-04-01
 
 Each task was committed atomically:
 
-1. **Task 1: Create notebook generator script and notebook for alternative structure comparison** - `24b6a80` (feat)
+1. **Task 1: Create notebook generator script and notebook for alternative structure comparison** - `0e2a570` (feat)
 
 ## Files Created/Modified
 

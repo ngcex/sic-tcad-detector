@@ -57,6 +57,12 @@ class TestSiC4HParameters:
     def test_nv_300(self):
         assert self.p.NV_300 == 2.49e19
 
+    def test_literature_dos_matches_compute_ni(self):
+        """The documented NC/NV(300 K) agree with what the solvers use (audit A-11)."""
+        _, NC, NV, _ = compute_ni(300)
+        assert NC == pytest.approx(self.p.NC_300, rel=0.01)  # 1.6951e19
+        assert NV == pytest.approx(self.p.NV_300, rel=0.01)  # 2.5088e19
+
 
 class TestComputeNi:
     """Test first-principles n_i calculation."""
@@ -300,9 +306,10 @@ class TestRegressionT300K:
         from etna.core.device import create_sic_device
 
         dev = create_sic_device(device_name=f"reg300_mu_{uuid.uuid4().hex[:6]}", T=300)
-        # v1.0 uses mobility_caughey_thomas(N_D) with N_D=1.07e15
+        # v1.0 uses mobility_caughey_thomas(N_D) with N_D=1.07e15; hole mobility at the epi doping since 2026-10-17 (was N_A, audit-v7 A-03):
+        # mu_p 75.68 -> 121.12 cm2/Vs
         mu_n_v1 = mobility_caughey_thomas(1.07e15, "electron")
-        mu_p_v1 = mobility_caughey_thomas(1e19, "hole")
+        mu_p_v1 = mobility_caughey_thomas(1.07e15, "hole")
         assert dev["mu_n"] == pytest.approx(mu_n_v1, rel=1e-10)
         assert dev["mu_p"] == pytest.approx(mu_p_v1, rel=1e-10)
 

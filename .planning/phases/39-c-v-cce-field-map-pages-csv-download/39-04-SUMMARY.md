@@ -63,7 +63,7 @@ completed: 2026-07-11
 
 Each task was committed atomically:
 
-1. **Task 1: Field map page + AppTest — 1D pre-check, Run→cache→render(E-field + potential)→download** - `1051b41` (feat)
+1. **Task 1: Field map page + AppTest — 1D pre-check, Run→cache→render(E-field + potential)→download** - `72e4179` (feat)
 
 **Plan metadata:** committed as part of this final documentation commit.
 
@@ -111,4 +111,4 @@ _Completed: 2026-07-11_
 - FOUND: app/workflows/field_map.py
 - FOUND: tests/test_app_field_page.py
 - FOUND: .planning/phases/39-c-v-cce-field-map-pages-csv-download/39-04-SUMMARY.md
-- FOUND: commit 1051b41
+- FOUND: commit 72e4179

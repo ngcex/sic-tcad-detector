@@ -66,7 +66,7 @@ Phase 7 declares `requirements: []` in its plan frontmatter. REQUIREMENTS.md tra
 
 | File                   | Line | Pattern                                             | Severity | Impact                                                                                              |
 | ---------------------- | ---- | --------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------- |
-| `.planning/ROADMAP.md` | 174  | `- [ ] 07-01-PLAN.md` plan checkbox still unchecked | Warning  | Plan was completed (commit `e99ec8a`, `daab947`) but the plan list checkbox was not ticked to `[x]` |
+| `.planning/ROADMAP.md` | 174  | `- [ ] 07-01-PLAN.md` plan checkbox still unchecked | Warning  | Plan was completed (commit `6d558e2`, `6f880b5`) but the plan list checkbox was not ticked to `[x]` |
 | `.planning/ROADMAP.md` | 190  | Progress table shows Phase 7 "Pending", "0/0" plans | Warning  | Table not updated to reflect completed phase; should read "Complete" with "1/1" and today's date    |
 
 No blocker anti-patterns found. Both issues are documentation tracking inconsistencies; they do not affect the correctness of the code fix or the regression test.

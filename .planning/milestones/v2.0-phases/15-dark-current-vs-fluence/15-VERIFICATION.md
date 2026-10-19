@@ -37,7 +37,7 @@ re_verification: false
 
 | Artifact                                     | Expected                                                         | Status   | Details                                                                                                                                                                                                                                                                               |
 | -------------------------------------------- | ---------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/dark_current.py`                        | `dark_current_vs_fluence()` and `plot_dark_current_vs_fluence()` | VERIFIED | Both functions present at lines 655 and 869 respectively; fully implemented (282 lines added in commit 715551f)                                                                                                                                                                       |
+| `src/dark_current.py`                        | `dark_current_vs_fluence()` and `plot_dark_current_vs_fluence()` | VERIFIED | Both functions present at lines 655 and 869 respectively; fully implemented (282 lines added in commit 3716ad1)                                                                                                                                                                       |
 | `tests/test_dark_current.py`                 | `TestDarkCurrentVsFluence` integration tests (6 tests)           | VERIFIED | Class at line 311 with 6 test methods: `test_pristine_baseline_matches_calibration`, `test_dark_current_changes_with_fluence`, `test_monotonic_increase_moderate_fluence`, `test_component_decomposition_present`, `test_delta_j_computed`, `test_extreme_fluence_handled_gracefully` |
 | `notebooks/05_dark_current_vs_fluence.ipynb` | Publication-quality dark current vs fluence notebook             | VERIFIED | 8 cells present; covers intro, imports, sweep, component plot, delta-J analysis, multi-bias comparison, discussion, summary table                                                                                                                                                     |
 
@@ -117,10 +117,10 @@ All commit hashes cited in SUMMARY documents exist in git history:
 
 | Commit    | Claim                                                            | Verified                                            |
 | --------- | ---------------------------------------------------------------- | --------------------------------------------------- |
-| `715551f` | feat: dark_current_vs_fluence() + plot_dark_current_vs_fluence() | Yes — 282 lines added to src/dark_current.py        |
-| `d4d0a0f` | test: TestDarkCurrentVsFluence (6 integration tests)             | Yes — TestDarkCurrentVsFluence class with 6 methods |
-| `c3ad5fc` | feat: 05_dark_current_vs_fluence.ipynb (8 cells)                 | Yes — notebook with 8 cells                         |
-| `c3fc77f` | docs: complete plan 15-02 documentation                          | Yes                                                 |
+| `3716ad1` | feat: dark_current_vs_fluence() + plot_dark_current_vs_fluence() | Yes — 282 lines added to src/dark_current.py        |
+| `89b2818` | test: TestDarkCurrentVsFluence (6 integration tests)             | Yes — TestDarkCurrentVsFluence class with 6 methods |
+| `8df0e06` | feat: 05_dark_current_vs_fluence.ipynb (8 cells)                 | Yes — notebook with 8 cells                         |
+| `6989712` | docs: complete plan 15-02 documentation                          | Yes                                                 |
 
 ---
 

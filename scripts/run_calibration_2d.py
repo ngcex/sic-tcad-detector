@@ -10,12 +10,16 @@ This is the single entry point that ties together the Phase 26 calibration:
      H2 -> abort (exit code 2) because the root cause is mesh / boundary-condition
      / lateral-mesh, not the doping profile, so a profile refit would be wasted
      effort.
-  3. Runs :func:`src.device2d.calibrate_graded_doping_2d` on the 100 um SV.
+  3. Runs :func:`etna.core.device2d.calibrate_graded_doping_2d` on the 100 um SV.
   4. Writes the optimised parameters + per-voltage W + final cost to
-     ``26-CALIBRATION-RESULT.md`` (frozen record).
-  5. Patches the three ``_N_D_*_DEFAULT`` constants in ``src/device2d.py``
-     in-place (line-anchored regex -> idempotent), tagging them
-     ``# calibrated Plan 26-03``.
+     ``26-CALIBRATION-RERUN.md`` next to the frozen Phase-26 record
+     (``26-CALIBRATION-RESULT.md`` is never overwritten).
+
+Historical tool (v3.0, Phase 26). It no longer patches ``etna/core/device2d.py``:
+since 2026-10-18 the 1D and 2D doping defaults are single-sourced in
+``DEFAULT_STACK`` (fitted on the measured C-V of the device), and the 1D-twin W
+targets below are the v3.0 ones. A rerun result is a record to compare, not a
+new default.
 
 Run (default maxiter=80; ~25-50 min):
     uv run python scripts/run_calibration_2d.py
@@ -23,7 +27,6 @@ Run (default maxiter=80; ~25-50 min):
 Options:
     --maxiter N        Nelder-Mead iteration cap (default 80).
     --half_width_um F  SV half-width in um (default 50.0 -> 100 um SV).
-    --skip-patch       Run + write result MD but do NOT edit src/device2d.py.
 """
 
 import argparse
@@ -32,7 +35,7 @@ import pathlib
 import re
 import sys
 
-# Allow `uv run python scripts/run_calibration_2d.py` to find the `src`
+# Allow `uv run python scripts/run_calibration_2d.py` to find the `etna`
 # package: when run as a script, sys.path[0] is the scripts/ dir, not the
 # project root. Prepend the project root so `import etna.core.*` resolves without
 # requiring PYTHONPATH to be set externally.
@@ -41,14 +44,14 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from etna.core.device2d import calibrate_graded_doping_2d  # noqa: E402
+from etna.core.devsim_lock import set_devsim_quiet  # noqa: E402
 
 DIAGNOSIS_PATH = pathlib.Path(
     ".planning/phases/26-graded-doping-2d-calibration/26-DIAGNOSIS.md"
 )
 RESULT_PATH = pathlib.Path(
-    ".planning/phases/26-graded-doping-2d-calibration/26-CALIBRATION-RESULT.md"
+    ".planning/phases/26-graded-doping-2d-calibration/26-CALIBRATION-RERUN.md"
 )
-DEVICE2D_PATH = pathlib.Path("etna/core/device2d.py")
 
 # v3.0 starting values (for the result-MD comparison columns).
 _V30_N_D_JUNCTION = 2.9e15
@@ -172,62 +175,22 @@ def write_result_md(result):
         "\n"
         "## Consumed by\n"
         "\n"
-        "- `src/device2d.py` `_N_D_JUNCTION_DEFAULT` / `_N_D_BULK_DEFAULT` / "
-        "`_L_TRANSITION_DEFAULT` constants (patched by this script).\n"
-        "- `tests/test_device2d.py::TestReverseBiasConvergence` + "
-        "`TestCalibrationCV` (Plan 03 Task 3).\n"
-        "- `tests/test_v3_baseline_regression.py` (Plan 04 — v3.0 low-bias "
-        "regression guard).\n"
+        "- Nothing: a rerun record. The defaults are DEFAULT_STACK (fitted on the\n"
+        "  measured C-V since 2026-10-18); the frozen Phase-26 record is\n"
+        "  26-CALIBRATION-RESULT.md.\n"
     )
 
     RESULT_PATH.write_text(frontmatter + body)
     print(f"[result] wrote {RESULT_PATH}")
 
 
-def patch_device2d_defaults(result):
-    """Patch the three _N_D_*_DEFAULT constants in src/device2d.py in-place."""
-    text = DEVICE2D_PATH.read_text()
-
-    replacements = [
-        (
-            r"^_N_D_JUNCTION_DEFAULT\s*=\s*[0-9.eE+\-]+.*$",
-            f"_N_D_JUNCTION_DEFAULT = {result['N_D_junction']:.6e}  "
-            "# cm^-3, calibrated Plan 26-03",
-            "_N_D_JUNCTION_DEFAULT",
-        ),
-        (
-            r"^_N_D_BULK_DEFAULT\s*=\s*[0-9.eE+\-]+.*$",
-            f"_N_D_BULK_DEFAULT = {result['N_D_bulk']:.6e}  "
-            "# cm^-3, calibrated Plan 26-03",
-            "_N_D_BULK_DEFAULT",
-        ),
-        (
-            r"^_L_TRANSITION_DEFAULT\s*=\s*[0-9.eE+\-]+.*$",
-            f"_L_TRANSITION_DEFAULT = {result['L_transition']:.6e}  "
-            "# cm, calibrated Plan 26-03",
-            "_L_TRANSITION_DEFAULT",
-        ),
-    ]
-
-    for pattern, replacement, name in replacements:
-        text, count = re.subn(pattern, replacement, text, count=1, flags=re.MULTILINE)
-        if count != 1:
-            raise SystemExit(
-                f"ERROR: failed to patch constant {name} in {DEVICE2D_PATH} "
-                f"(matched {count} times, expected 1)."
-            )
-
-    DEVICE2D_PATH.write_text(text)
-    print(f"[patch] updated {DEVICE2D_PATH} constants with calibrated values")
-
-
 def main():
+    set_devsim_quiet(True)  # devsim Newton log off; ETNA_DEVSIM_VERBOSE=1 shows it
     parser = argparse.ArgumentParser(
         description="Run the Phase 26 graded-doping 2D calibration end-to-end."
     )
     parser.add_argument("--maxiter", type=int, default=80)
     parser.add_argument("--half_width_um", type=float, default=50.0)
-    parser.add_argument("--skip-patch", action="store_true", default=False)
     args = parser.parse_args()
 
     h = read_hypothesis()
@@ -235,9 +198,6 @@ def main():
 
     result = run_calibration(args.maxiter, args.half_width_um)
     write_result_md(result)
-
-    if not args.skip_patch:
-        patch_device2d_defaults(result)
 
     print(
         "[done] calibration complete: "

@@ -1,7 +1,8 @@
 """Tests for Hurkx TAT dark current model and surface recombination.
 
 Validates field-enhancement physics, component decomposition, and
-calibration against the experimental 18 pA target at -30V.
+calibration against the experimental upper bound "< 18 pA up to -60 V" (N_t is fitted
+so the model equals it at -60 V, 4 mm2, 300 K: a fit, not a validation).
 """
 
 import numpy as np
@@ -14,13 +15,14 @@ from etna.core.dark_current import (
     dark_current_vs_fluence,
     extract_dark_current_components,
     dark_current_sweep,
-    setup_tat_model,
-    setup_surface_recombination,
     nt_temperature_scale,
     _compute_node_efield,
     _compute_gamma_factors,
 )
-from etna.core.drift_diffusion import create_dd_device, ramp_bias, extract_contact_current
+from etna.core.drift_diffusion import (
+    create_dd_device,
+    ramp_bias,
+)
 from etna.core.sic_material import SiC4H_Parameters, intrinsic_concentration
 
 
@@ -156,13 +158,18 @@ class TestTATGeneration:
         """TAT device dark current should be >> SRH-only at -30V."""
         srh_dev = srh_only_device
         ramp_bias(srh_dev, V_target=-30.0, contact="anode", V_step=1.0)
-        I_srh = abs(extract_contact_current(srh_dev, contact="cathode"))
+        # Balanced steady-state current: the default devices carry the stack's n+ layer
+        # (builder default since 2026-10-17), where the direct cathode current is the
+        # 1e19 majority term, round-off ~1e-8 A/cm^2 (it made both currents equal here).
+        from etna.core.dark_current import _refresh_and_resolve
+        from etna.core.drift_diffusion import extract_steady_state_current
+
+        I_srh = abs(extract_steady_state_current(srh_dev, contact="cathode"))
 
         tat_dev = create_dark_current_device(device_name=_unique_name("tat_cmp"))
         ramp_bias(tat_dev, V_target=-30.0, contact="anode", V_step=1.0)
-        _compute_node_efield(tat_dev["device_name"], tat_dev["region_name"])
-        _compute_gamma_factors(tat_dev["device_name"], tat_dev["region_name"])
-        I_tat = abs(extract_contact_current(tat_dev, contact="cathode"))
+        _refresh_and_resolve(tat_dev["device_name"], tat_dev["region_name"])
+        I_tat = abs(extract_steady_state_current(tat_dev, contact="cathode"))
 
         # TAT current should dominate SRH by a large factor
         assert (
@@ -227,41 +234,88 @@ class TestSurfaceRecombination:
 class TestDarkCurrentCalibration:
     """Test dark current calibration against experimental target."""
 
-    def test_dark_current_order_of_magnitude(self):
-        """Simulated dark current at -30V should be within order of magnitude of 18 pA.
+    def test_dark_current_matches_calibration_target(self):
+        """Leakage on the field-refreshed path matches the calibration target.
 
-        Target range: 1.8 pA to 180 pA (0.1x to 10x of 18 pA).
-        Uses default parameters: N_t=2.2e13 cm^-3/s, S_n=S_p=1e3 cm/s.
-        N_t was calibrated to produce ~18 pA at -30V with the E-field-weighted
-        effective generation model.
+        N_t is fitted so that I(300 K, -60 V, 4 mm2) equals the experimental upper
+        bound of 18 pA (Photons paper); the model therefore sits AT the bound by
+        construction, this is a regression guard on the fit, not a validation.
+        The old version of this test refreshed the TAT field after ramp_bias with
+        no re-solve (stale path, audit B-01) and accepted anything in 1.8-180 pA.
         """
         dev = create_dark_current_device(device_name=_unique_name("calib"))
-        ramp_bias(dev, V_target=-30.0, contact="anode", V_step=1.0)
-        _compute_node_efield(dev["device_name"], dev["region_name"])
-        _compute_gamma_factors(dev["device_name"], dev["region_name"])
+        try:
+            res = dark_current_sweep(dev, [-30.0, -60.0], area=0.04, V_step=0.5)
+        finally:
+            devsim.delete_device(device=dev["device_name"])
+        I_60 = abs(res["I_total"][-1])
+        assert I_60 == pytest.approx(
+            18e-12, rel=0.1
+        ), f"I(-60 V, 0.04 cm2) = {I_60:.3e} A"
+        # Bias shape is the f_depl = min(E/3.5e4, 1) heuristic, not saturation at full
+        # depletion: -30 V is lower than -60 V but the same order.
+        assert 0.3 * I_60 < abs(res["I_total"][0]) < I_60
 
-        components = extract_dark_current_components(dev, area=0.05)
-        I_dark = abs(components["I_total"])
+    def test_calibration_point_unchanged_by_lag_fix(self):
+        """The fitted point (300 K, -60 V, 4 mm2) stays at 17.96 pA within 1 %."""
+        dev = create_dark_current_device(device_name=_unique_name("calib_pt"))
+        try:
+            res = dark_current_sweep(dev, [-60.0], area=0.04, V_step=0.5)
+        finally:
+            devsim.delete_device(device=dev["device_name"])
+        assert abs(res["I_total"][0]) == pytest.approx(17.96e-12, rel=0.01)
 
-        assert 1.8e-12 <= I_dark <= 180e-12, (
-            f"Dark current at -30V = {I_dark:.2e} A ({I_dark*1e12:.2f} pA), "
-            f"should be between 1.8 pA and 180 pA"
-        )
 
-    def test_dark_current_sweep_monotonic(self):
-        """Dark current magnitude should increase monotonically with reverse voltage."""
-        dev = create_dark_current_device(device_name=_unique_name("mono"))
+class TestDarkCurrentSweepConsistency:
+    """dark_current_sweep must not extract currents on a stale (one-step-lagged) field.
 
-        V_range = [0.0, -5.0, -10.0, -20.0, -30.0]
-        result = dark_current_sweep(dev, V_range, area=0.05, V_step=1.0)
+    E_field_node/Gamma are frozen node values; the sweep used to refresh them after the
+    last solve and extract without re-solving, so J_total came from the previous step's
+    f_depl while the U_TAT integral used the new one (4.2 % apart at -10 V).
+    """
 
-        I_mag = np.abs(result["I_total"])
-        for i in range(1, len(I_mag)):
-            if I_mag[i - 1] > 1e-20:
-                assert I_mag[i] >= I_mag[i - 1] * 0.9, (
-                    f"|I| at V={result['voltages'][i]:.0f}V ({I_mag[i]:.2e}) "
-                    f"decreased from V={result['voltages'][i-1]:.0f}V ({I_mag[i-1]:.2e})"
-                )
+    @pytest.fixture(scope="class")
+    @classmethod
+    def swept(cls):
+        from etna.core.dark_current import _refresh_and_resolve
+        from etna.core.devsim_reset import reset_devsim_fully
+
+        # devsim.solve solves every live device; earlier tests in this file leave theirs.
+        reset_devsim_fully(preserve_solver=True)
+        dev = create_dark_current_device(device_name=_unique_name("lag"))
+        out = {}
+        try:
+            for V in (-10.0, -60.0):
+                res = dark_current_sweep(dev, [V], area=0.04, V_step=0.5)
+                # One more refresh + re-solve must not move the current any more.
+                _refresh_and_resolve(dev["device_name"], dev["region_name"])
+                again = extract_dark_current_components(dev, area=0.04)
+                out[V] = (res, again)
+        finally:
+            devsim.delete_device(device=dev["device_name"])
+        return out
+
+    @pytest.mark.parametrize("V", [-10.0, -60.0])
+    def test_self_consistent(self, swept, V):
+        res, again = swept[V]
+        assert again["I_total"] == pytest.approx(res["I_total"][0], rel=1e-6)
+
+    def test_components_close_total_at_full_depletion(self, swept):
+        res, _ = swept[-60.0]
+        # signed (audit D-03): the components carry the sign of I_total
+        vol_sum = res["I_SRH"][0] + res["I_TAT"][0] + res["I_SRV"][0]
+        assert res["I_total"][0] > 0 and res["I_TAT"][0] > 0
+        assert vol_sum == pytest.approx(res["I_total"][0], rel=0.005)
+
+    def test_components_close_total_below_full_depletion(self, swept):
+        """At -10 V (below V_fd ~10.5 V) the volume integral exceeds the terminal current
+        by ~0.9 %: carriers generated in the undepleted n- next to the ohmic cathode (no n+
+        substrate) and in the p+ (f_depl floor 1e3/3.5e4) leave through the nearest contact.
+        That is a property of the model, not solver lag (which made it 4.2 %)."""
+        res, _ = swept[-10.0]
+        vol_sum = res["I_SRH"][0] + res["I_TAT"][0] + res["I_SRV"][0]
+        assert res["I_TAT"][0] > 0
+        assert vol_sum == pytest.approx(res["I_total"][0], rel=0.015)
 
 
 # ---------------------------------------------------------------------------
@@ -278,7 +332,7 @@ class TestNtTemperatureScaling:
     """
 
     def test_scale_is_unity_at_300K(self):
-        """At 300K the scale factor must be exactly 1 (preserves 18 pA calibration)."""
+        """At 300K the scale factor must be exactly 1 (keeps the 300 K N_t fit)."""
         assert nt_temperature_scale(300.0) == pytest.approx(1.0, rel=1e-12)
 
     def test_scale_matches_ni_ratio(self):
@@ -364,7 +418,7 @@ class TestDarkCurrentVsFluence:
     def test_pristine_baseline_matches_calibration(self):
         """At fluence=0, dark current should match v1.1 calibrated pristine.
 
-        Expecting ~18.5 pA at -30V with area=0.04 cm^2.  Accept 5-100 pA.
+        Model gives 15.76 pA at -30 V, 0.04 cm^2 on the default stack (2026-10-18). Accept 5-200 pA.
         """
         result = dark_current_vs_fluence(
             fluence_range=np.array([0.0]),
@@ -397,7 +451,14 @@ class TestDarkCurrentVsFluence:
         )
 
     def test_monotonic_increase_moderate_fluence(self):
-        """Dark current should increase monotonically over moderate fluence range."""
+        """Dark current does not decrease over a moderate fluence range (to 0.1 %).
+
+        The effective generation G_eff = N_t * f_depl does not depend on the defect
+        densities, so fluence only enters through carrier removal (field shape) and the
+        negligible SRH term: I(1e10..1e13) changes by < 1 %. After the f_depl lag fix
+        (dark_current._refresh_and_resolve) the 1e10 -> 1e11 step is -0.06 %, flat within
+        model noise, so strict monotonicity is not a meaningful requirement.
+        """
         result = dark_current_vs_fluence(
             fluence_range=np.geomspace(1e10, 1e13, 4),
             V_bias=-30.0,
@@ -409,8 +470,9 @@ class TestDarkCurrentVsFluence:
         I_valid = I_mag[valid]
         if len(I_valid) > 1:
             assert np.all(
-                np.diff(I_valid) > 0
-            ), f"Dark current should increase monotonically: {I_valid}"
+                np.diff(I_valid) > -1e-3 * I_valid[:-1]
+            ), f"Dark current should not decrease: {I_valid}"
+            assert I_valid[-1] > I_valid[0]
 
     def test_component_decomposition_present(self):
         """Result should contain all component arrays of correct length."""
@@ -556,3 +618,54 @@ class TestDarkCurrentPostAnneal:
             f"Zero-fluence post-anneal ({I_annealed:.3e} A) should match "
             f"pristine ({I_pristine:.3e} A)"
         )
+
+
+def test_sweep_reports_truncation(monkeypatch):
+    """A sweep cut short says so: requested vs reached range and truncated=True."""
+    import etna.core.dark_current as dc
+
+    info = create_dark_current_device(device_name=_unique_name("trunc"))
+    try:
+        full = dark_current_sweep(info, np.array([-0.5]), area=0.04)
+        assert full["truncated"] is False and full["reached_v_stop"] == -0.5
+        real = dc._resolve_self_consistent
+        calls = {"n": 0}
+
+        def fail_second(device, region):
+            calls["n"] += 1
+            if calls["n"] == 2:
+                raise devsim.error("synthetic non-convergence")
+            return real(device, region)
+
+        monkeypatch.setattr(dc, "_resolve_self_consistent", fail_second)
+        cut = dark_current_sweep(info, np.array([-1.0, -1.5, -2.0]), area=0.04)
+    finally:
+        devsim.delete_device(device=info["device_name"])
+    assert cut["truncated"] is True
+    assert (cut["requested_v_start"], cut["requested_v_stop"]) == (-1.0, -2.0)
+    assert cut["reached_v_stop"] == -1.0 and list(cut["voltages"]) == [-1.0]
+
+
+def test_run_dark_current_carries_the_truncation_record(monkeypatch):
+    import etna.api.simulation as sim
+    from etna.api.device import DeviceConfig
+
+    def fake_sweep(device_info, V_range, area):
+        return {
+            "voltages": np.array([0.0, -10.0]),
+            "I_total": np.array([1e-12, 2e-12]),
+            "I_SRH": np.zeros(2),
+            "I_TAT": np.zeros(2),
+            "I_SRV": np.zeros(2),
+            "truncated": True,
+            "requested_v_start": 0.0,
+            "requested_v_stop": -100.0,
+            "reached_v_stop": -10.0,
+        }
+
+    monkeypatch.setattr(sim, "dark_current_sweep", fake_sweep)
+    # the devsim path (the engine never truncates; it is the default inside its box)
+    r = sim.run_dark_current(DeviceConfig(), 0.0, -100.0, 3, solver="devsim")
+    md = r.metadata
+    assert md["truncated"] is True and md["reached_v_stop"] == -10.0
+    assert (md["requested_v_start"], md["requested_v_stop"]) == (0.0, -100.0)

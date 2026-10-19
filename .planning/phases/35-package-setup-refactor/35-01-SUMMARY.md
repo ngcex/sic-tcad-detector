@@ -77,7 +77,7 @@ completed: 2026-07-01
 
 Each task was committed atomically:
 
-1. **Task 1: Create pyproject.toml and etna package scaffold** - `b426987` (feat)
+1. **Task 1: Create pyproject.toml and etna package scaffold** - `33f1ce0` (feat)
 
 **Plan metadata:** (this commit, to follow)
 
@@ -122,7 +122,7 @@ None - no external service configuration required. `uv pip install -e ".[dev]"` 
 - FOUND: `/Users/ngcex/projects/physics/etna/etna/_version.py`
 - MISSING (expected, by design): `/Users/ngcex/projects/physics/etna/etna/core/` — deliberately deferred to Plan 02
 - MISSING (expected, by design): `/Users/ngcex/projects/physics/etna/requirements.txt` — removed per PKG-01
-- FOUND commit: `b426987` (feat(35-01): scaffold installable etna package with hatchling)
+- FOUND commit: `33f1ce0` (feat(35-01): scaffold installable etna package with hatchling)
 - Verified: `from etna import DeviceConfig` exits 0
 - Verified: `etna.__version__` == "5.0.0"
 - Verified: `grep 'packages.*etna' pyproject.toml` matches

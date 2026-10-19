@@ -76,8 +76,8 @@ completed: 2026-03-31
 
 Each task was committed atomically:
 
-1. **Task 1: Create notebook 17 with MC coupling pipeline demonstration** - `636df24` (feat)
-2. **Task 1-rev: Revise notebook 17 per checkpoint feedback** - `3cffeb2` (fix)
+1. **Task 1: Create notebook 17 with MC coupling pipeline demonstration** - `c996229` (feat)
+2. **Task 1-rev: Revise notebook 17 per checkpoint feedback** - `8940d78` (fix)
 3. **Task 2: Human verification of notebook 17** - checkpoint approved, no commit
 
 **Plan metadata:** (this commit)
@@ -104,7 +104,7 @@ Each task was committed atomically:
 - **Fix:** Added a demo partial-depletion CCE curve (Gaussian dip at LET=5 keV/um, min CCE ~0.85) and a 4th figure comparing real vs demo CCE results
 - **Files modified:** scripts/create_notebook_17.py, notebooks/17_mc_coupling.ipynb
 - **Verification:** 554 events show CCE < 0.95 with demo curve, mean CCE 0.9350
-- **Committed in:** 3cffeb2
+- **Committed in:** 8940d78
 
 ---
 
@@ -138,5 +138,5 @@ All files and commits verified:
 - scripts/create_notebook_17.py: FOUND
 - notebooks/17_mc_coupling.ipynb: FOUND
 - data/synthetic_mc_events.csv: FOUND
-- Commit 636df24: FOUND
-- Commit 3cffeb2: FOUND
+- Commit c996229: FOUND
+- Commit 8940d78: FOUND

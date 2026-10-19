@@ -13,8 +13,10 @@ import devsim
 import numpy as np
 import pytest
 
-from etna.core.drift_diffusion import create_dd_device, ramp_bias, extract_contact_current
-from etna.core.charge_collection import add_generation_to_dd
+from etna.core.drift_diffusion import (
+    create_dd_device,
+    ramp_bias,
+)
 from etna.core.flash_recombination import add_auger_recombination, cce_vs_dose_rate
 from etna.core.generation_profiles import proton_generation_profile
 from etna.core.transient import (
@@ -22,6 +24,8 @@ from etna.core.transient import (
     pulse_envelope,
     adaptive_dt,
     generated_charge_trapezoidal_pulse,
+    pulse_time_step,
+    simulate_pulse_train,
 )
 
 
@@ -133,6 +137,51 @@ def test_adaptive_dt_bounds():
         dt = adaptive_dt(t, t_rise, t_duration, t_fall, dt_min, dt_max)
         assert dt >= dt_min, f"dt={dt} < dt_min={dt_min} at t={t}"
         assert dt <= dt_max, f"dt={dt} > dt_max={dt_max} at t={t}"
+
+
+def _replica(t_rise, t_duration, t_fall, t_post=None, dt_min=1e-8, dt_max=1e-4):
+    """The simulate_pulse stepping loop without devsim: (t_next, dt, env) per step."""
+    t_post = 5 * t_fall if t_post is None else t_post
+    t_end = t_rise + t_duration + t_fall + t_post
+    t, steps = 0.0, []
+    while t < t_end:
+        dt, t_next = pulse_time_step(
+            t, t_rise, t_duration, t_fall, t_end, dt_min, dt_max
+        )
+        steps.append((t_next, dt, pulse_envelope(t_next, t_rise, t_duration, t_fall)))
+        t = t_next
+    return steps, t_end
+
+
+@pytest.mark.parametrize(
+    "t_rise, t_duration, t_fall",
+    [
+        (1e-6, 1e-3, 1e-6),
+        (1e-6, 0.55e-3, 1e-6),
+        (1e-6, 50e-6, 1e-6),
+        (2e-6, 0.33e-3, 2e-6),
+    ],
+)
+def test_stepper_lands_on_every_phase_edge(t_rise, t_duration, t_fall):
+    """A-04: steps never cross a breakpoint, the fall ramp is resolved, the applied
+    generation equals the analytic trapezoid area (t_rise == t_fall).
+
+    Before the clip, (1e-6, 0.55e-3, 1e-6) applied 5.5645e-4 s of generation for an
+    area of 5.51e-4 (+1.0 %) with 0 steps in the fall ramp; (1e-6, 50e-6, 1e-6) +10.7 %.
+    """
+    steps, t_end = _replica(t_rise, t_duration, t_fall)
+    ends = np.array([s[0] for s in steps])
+    starts = ends - np.array([s[1] for s in steps])
+    for b in (t_rise, t_rise + t_duration, t_rise + t_duration + t_fall, t_end):
+        assert b in ends  # lands exactly on the edge
+        assert not np.any((starts < b - 1e-18) & (ends > b + 1e-18))  # never crosses
+    t_pl = t_rise + t_duration
+    in_fall = (ends > t_pl) & (ends <= t_pl + t_fall)
+    assert in_fall.sum() >= 10
+    applied = sum(dt * env for _, dt, env in steps)
+    area = 0.5 * t_rise + t_duration + 0.5 * t_fall
+    assert applied == pytest.approx(area, rel=1e-9)
+    assert ends[-1] == t_end
 
 
 # ---------------------------------------------------------------------------
@@ -320,3 +369,116 @@ def test_transient_cce_matches_steady_state():
         f"Transient CCE ({transient_cce:.4f}) differs from steady-state "
         f"({steady_state_cce:.4f}) by {deviation:.4f} (> 0.2 tolerance)"
     )
+
+
+def _default_stack_pulse(dose, t_duration, n_pulses=None):
+    """Default-stack device at -30 V (as transient_cce_vs_dose_rate) and one pulse."""
+    from etna.core.device import DEFAULT_STACK as S
+    from etna.core.generation_profiles import confine_generation_to_epi
+
+    info = create_dd_device(
+        device_name=f"trstk_{uuid.uuid4().hex[:8]}",
+        doping_profile="graded",
+        N_D_junction=S["N_D_junction"],
+        N_D_bulk=S["N_D_bulk"],
+        L_transition=S["L_transition"],
+    )
+    add_auger_recombination(info)
+    ramp_bias(info, -30.0, contact="anode")
+    x = np.array(
+        devsim.get_node_model_values(device=info["device_name"], region="sic", name="x")
+    )
+    G = proton_generation_profile(x, E_MeV=62, dose_rate_Gy_s=dose)
+    G[x < info["junction_pos"]] = 0.0
+    G = confine_generation_to_epi(info, x, G)
+    return info, x, G
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("t_duration", [1e-3, 50e-6])
+def test_transient_cce_commensurate_or_not(t_duration):
+    """A-04 end to end: a 50 us plateau (not a multiple of dt_max) gives the same CCE as
+    the 1 ms default. Before: 0.0098 at 50 us (the whole pulse in one stamped step),
+    0.9998030 at 1 ms (230 Gy/s: 0.9998030 -> 0.9998030 after the fix)."""
+    info, x, G = _default_stack_pulse(100.0, t_duration)
+    try:
+        solver = TransientSolver(info)
+        solver.initialize()
+        res = solver.simulate_pulse(G, t_rise=1e-6, t_duration=t_duration, t_fall=1e-6)
+        assert res["times"][0] == pytest.approx(1e-7, rel=1e-9)  # step END stamp
+        assert res["generation_integral"] == pytest.approx(1e-6 + t_duration, rel=1e-9)
+        cce = solver.compute_transient_cce(res, G, x)
+    finally:
+        devsim.delete_device(device=info["device_name"])
+    assert 0.9995 < cce <= 1.0
+
+
+@pytest.mark.slow
+def test_pulse_train_keeps_the_dark_baseline():
+    """A-05: pulses after the first reuse the dark current measured before the train
+    (skip_init), not the decaying tail of the previous pulse."""
+    info, x, G = _default_stack_pulse(100.0, 50e-6)
+    try:
+        r = simulate_pulse_train(
+            info, G, n_pulses=2, t_rise=1e-6, t_duration=50e-6, t_fall=1e-6, t_gap=2e-7
+        )
+    finally:
+        devsim.delete_device(device=info["device_name"])
+    p0, p1 = r["pulse_times"]
+    assert p0["I_dark"] == p1["I_dark"] == r["I_dark"]
+    # At -30 V the 10 um epi is fully depleted and the carriers are swept out in ns:
+    # 0.2 us after the fall the tail is back to dark to 4e-11 relative, so on this
+    # device the old per-pulse re-measurement was harmless; it is not on slow or
+    # partially depleted devices (the flag was simply ignored before).
+    assert p0["currents"][-1] == pytest.approx(r["I_dark"], rel=1e-9)
+
+
+@pytest.mark.slow
+def test_dose_rate_sweep_builds_one_device_and_restores_the_dark_state(monkeypatch):
+    """transient_cce_vs_dose_rate builds ONE device for the sweep and deletes it once;
+    restoring the dark state per dose rate makes each point independent of the points
+    before it (bit-identical to a sweep of that rate alone, i.e. to a fresh build)."""
+    import etna.core.transient as tr
+
+    built, deleted = [], []
+    real_build, real_delete = tr.create_dd_device, tr.devsim.delete_device
+
+    def build(**kw):
+        info = real_build(**kw)
+        built.append(info["device_name"])
+        return info
+
+    def delete(device):
+        deleted.append(device)
+        real_delete(device=device)
+
+    monkeypatch.setattr(tr, "create_dd_device", build)
+    monkeypatch.setattr(tr.devsim, "delete_device", delete)
+    kw = dict(t_duration=20e-6)  # short plateau: same code path, fewer steps
+    both = tr.transient_cce_vs_dose_rate(-30.0, [230.0, 20.0], **kw)
+    alone = tr.transient_cce_vs_dose_rate(-30.0, [20.0], **kw)
+    assert len(built) == 2 and deleted == built  # one build + one delete per call
+    assert both["transient_cce"].iloc[1] == alone["transient_cce"].iloc[0]
+    assert both["transient_cce_raw"].iloc[1] == alone["transient_cce_raw"].iloc[0]
+    # the reported value is the raw ratio clipped to [0, 1]
+    np.testing.assert_array_equal(
+        both["transient_cce"], np.clip(both["transient_cce_raw"], 0.0, 1.0)
+    )
+
+
+def test_compute_transient_cce_reports_the_unclipped_ratio():
+    """return_raw exposes Q_collected / Q_generated, so a clipped 1.0 is visible."""
+    solver = TransientSolver({"nplus_thickness_cm": None})
+    x = np.linspace(0.0, 1e-3, 11)
+    G = np.full_like(x, 1e20)
+    Q_gen_per_s = 1.602e-19 * np.trapezoid(G, x)
+    res = {
+        "times": np.array([1e-6]),
+        "currents": np.array([1.002 * Q_gen_per_s]),  # 0.2 % more than generated
+        "I_dark": 0.0,
+        "generation_integral": 1e-6,
+        "t_duration": 1e-6,
+    }
+    cce, raw = solver.compute_transient_cce(res, G, x, return_raw=True)
+    assert cce == 1.0 and raw == pytest.approx(1.002, rel=1e-12)
+    assert solver.compute_transient_cce(res, G, x) == 1.0

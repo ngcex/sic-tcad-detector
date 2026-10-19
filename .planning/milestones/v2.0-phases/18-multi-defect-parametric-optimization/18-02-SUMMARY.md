@@ -66,8 +66,8 @@ completed: 2026-03-26
 
 Each task was committed atomically:
 
-1. **Task 1: Multi-defect comparison and uncertainty bands notebook** - `558ddd9` (feat)
-2. **Task 2: Parametric radiation hardness optimization notebook** - `e544d68` (feat)
+1. **Task 1: Multi-defect comparison and uncertainty bands notebook** - `f1e79c2` (feat)
+2. **Task 2: Parametric radiation hardness optimization notebook** - `b1d0e07` (feat)
 
 ## Files Created/Modified
 

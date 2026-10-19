@@ -1,6 +1,8 @@
 """Tests for plotting utilities.
 
-Smoke tests for all 5 public functions in src/plotting.py.
+Smoke tests for plot_electric_field, plot_depletion_width_vs_bias, plot_doping_profile and
+save_figure in etna/core/plotting.py; the other helpers there (I-V / C-V / CCE / parametric
+plots, used by the notebooks) have no dedicated test in this file.
 Uses synthetic data only -- no devsim dependency needed.
 """
 
@@ -12,11 +14,9 @@ matplotlib.use("Agg")  # Non-interactive backend, must be before pyplot import
 
 import matplotlib.pyplot as plt
 import numpy as np
-import pytest
 
 from etna.core.plotting import (
     plot_electric_field,
-    plot_electric_field_multi,
     plot_depletion_width_vs_bias,
     plot_doping_profile,
     save_figure,
@@ -54,32 +54,6 @@ class TestPlotElectricField:
         ax = plot_electric_field(x, E)
         assert ax.get_xlabel() != ""
         assert ax.get_ylabel() != ""
-
-
-class TestPlotElectricFieldMulti:
-    """Test plot_electric_field_multi function."""
-
-    def teardown_method(self):
-        plt.close("all")
-
-    def _make_results_dict(self):
-        voltages = [0, -5, -10, -20, -30]
-        E_fields = []
-        for V in voltages:
-            x = np.linspace(0, 10e-4, 100)
-            E = np.linspace(5e4 * (1 + abs(V) / 10), 0, 100)
-            E_fields.append((x, E))
-        return {"voltages": voltages, "E_fields": E_fields}
-
-    def test_returns_axes(self):
-        results = self._make_results_dict()
-        ax = plot_electric_field_multi(results)
-        assert isinstance(ax, matplotlib.axes.Axes)
-
-    def test_plots_multiple_curves(self):
-        results = self._make_results_dict()
-        ax = plot_electric_field_multi(results)
-        assert len(ax.get_lines()) > 1
 
 
 class TestPlotDepletionWidthVsBias:
@@ -146,25 +120,32 @@ class TestSaveFigure:
     def teardown_method(self):
         plt.close("all")
 
-    def test_creates_png_and_pdf(self, tmp_path, monkeypatch):
-        """save_figure should create both .png and .pdf files."""
+    def test_creates_png_and_pdf_in_cwd_figures(self, tmp_path, monkeypatch):
+        """Default: ./figures relative to the CWD (not the package directory)."""
         import etna.core.plotting as plotting_mod
 
-        # Monkeypatch os.path.dirname to redirect figures directory
-        original_dirname = os.path.dirname
-
-        def patched_dirname(path):
-            if path == plotting_mod.__file__:
-                # Return tmp_path so fig_dir = tmp_path / "figures"
-                return str(tmp_path / "src")
-            return original_dirname(path)
-
-        monkeypatch.setattr(os.path, "dirname", patched_dirname)
-
+        monkeypatch.delenv("ETNA_FIGURE_DIR", raising=False)
+        monkeypatch.chdir(tmp_path)
         fig, ax = plt.subplots()
         ax.plot([1, 2, 3], [1, 4, 9])
-        save_figure(fig, "test_output")
+        paths = save_figure(fig, "test_output")
 
         fig_dir = tmp_path / "figures"
         assert (fig_dir / "test_output.png").exists()
         assert (fig_dir / "test_output.pdf").exists()
+        assert paths == [
+            str(fig_dir / "test_output.png"),
+            str(fig_dir / "test_output.pdf"),
+        ]
+        pkg_dir = os.path.dirname(os.path.dirname(plotting_mod.__file__))
+        assert not os.path.exists(os.path.join(pkg_dir, "figures", "test_output.png"))
+
+    def test_env_var_overrides_the_directory(self, tmp_path, monkeypatch):
+        """ETNA_FIGURE_DIR, read at call time, wins over ./figures."""
+        target = tmp_path / "elsewhere"
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("ETNA_FIGURE_DIR", str(target))
+        fig, _ = plt.subplots()
+        save_figure(fig, "env_output")
+        assert (target / "env_output.png").exists()
+        assert not (tmp_path / "figures").exists()

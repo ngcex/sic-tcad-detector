@@ -67,10 +67,10 @@ completed: 2026-03-21
 
 Each task was committed atomically:
 
-1. **Task 1: CCE vs epi thickness sweep, plotting functions, and validation notebook** - `4574cf4` (feat)
-   - Bug fix: `7caeadf` - replace np.trapz with np.trapezoid for NumPy 2.0+
-   - Bug fix: `03cd9b9` - adaptive mesh points for variable epi thickness
-   - Bug fix: `47c04d8` - correct epi thickness sweep bias and physics description
+1. **Task 1: CCE vs epi thickness sweep, plotting functions, and validation notebook** - `3d3c4b6` (feat)
+   - Bug fix: `8312ec2` - replace np.trapz with np.trapezoid for NumPy 2.0+
+   - Bug fix: `182b521` - adaptive mesh points for variable epi thickness
+   - Bug fix: `33b2ddc` - correct epi thickness sweep bias and physics description
 2. **Task 2: Verify Phase 3 CCE results in notebook** - checkpoint:human-verify (approved)
 
 ## Files Created/Modified
@@ -98,7 +98,7 @@ Each task was committed atomically:
 - **Issue:** np.trapz removed in NumPy 2.0, causing AttributeError
 - **Fix:** Replaced with np.trapezoid throughout charge_collection.py
 - **Files modified:** src/charge_collection.py
-- **Committed in:** 7caeadf
+- **Committed in:** 8312ec2
 
 **2. [Rule 1 - Bug] Solver divergence on thin epi layers**
 
@@ -106,7 +106,7 @@ Each task was committed atomically:
 - **Issue:** Fixed mesh points caused solver instability for thin (5um) epi layers
 - **Fix:** Adaptive mesh point calculation based on epi thickness
 - **Files modified:** src/device.py
-- **Committed in:** 03cd9b9
+- **Committed in:** 182b521
 
 **3. [Rule 1 - Bug] Incorrect epi thickness sweep bias and physics description**
 
@@ -114,7 +114,7 @@ Each task was committed atomically:
 - **Issue:** Sweep used wrong bias convention and physics description was misleading
 - **Fix:** Corrected bias sign and updated physics description
 - **Files modified:** src/charge_collection.py, notebooks/03_charge_collection.ipynb
-- **Committed in:** 47c04d8
+- **Committed in:** 33b2ddc
 
 ---
 

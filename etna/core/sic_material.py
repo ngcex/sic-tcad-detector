@@ -33,9 +33,11 @@ class SiC4H_Parameters:
     # --- Effective masses (density of states) ---
     m_e_dos: float = 0.77  # m0, electron DOS effective mass (Ioffe NSM)
     m_h_dos: float = 1.0  # m0, hole DOS effective mass (Ioffe NSM, approx)
-    M_c: int = 3  # equivalent conduction band minima (4H-SiC)
+    M_c: int = 3  # equivalent conduction band minima (4H-SiC); informational: already
+    # folded into m_e_dos (see compute_ni), not read by any solver
 
-    # --- Effective density of states at 300K ---
+    # --- Effective density of states at 300K (literature values; the solvers use
+    # compute_ni(T); tests/test_material.py pins compute_ni(300) to these within 1 %) ---
     NC_300: float = 1.69e19  # cm^-3, computed: 2*Mc*(2pi*m_e*kT/h^2)^1.5
     NV_300: float = 2.49e19  # cm^-3, computed: 2*(2pi*m_h*kT/h^2)^1.5
 
@@ -63,9 +65,29 @@ class SiC4H_Parameters:
     tau_p: float = 6.0e-7  # s, hole lifetime in n-type (Ioffe NSM)
 
     # --- Z1/2 center trap parameters (for Hurkx TAT dark current) ---
-    E_t: float = 0.65  # eV, trap level below Ec (Z1/2 center)
+    # eV, trap level below Ec: Z1/2 level of radiation_damage (Burin et al. Table I).
+    # 0.65 before the n+ default flip (LEGACY_STACK in etna/core/device.py).
+    E_t: float = 0.67
     m_t: float = 0.25  # m0, tunneling effective mass
-    N_t: float = 2.2e13  # cm^-3/s, eff. generation rate (calibrated ~18 pA at -30V)
+    # cm^-3/s, eff. generation rate. CALIBRATION INPUT, not a prediction: fitted so that
+    # the model leakage at 300 K, -60 V, 4 mm2 equals the experimental UPPER BOUND
+    # "< 18 pA up to -60 V" (conservative: bound used as equality). The bias
+    # shape is the f_depl = min(E/3.5e4, 1) heuristic (dark_current.py), not saturation
+    # past full depletion; "TAT" is an effective field-weighted generation (Hurkx Gamma
+    # = 1 below ~4.5 MV/cm); the SRH/TAT/SRV split is not physically meaningful; and
+    # N_t(T) ∝ n_i(T) is an assumption (dark_current.nt_temperature_scale).
+    # (The earlier 2.2e13 was fitted on a path with a stale TAT field, B-01; leakage is
+    # linear in N_t, 2.2e13 gave 141 pA on the corrected path.)
+    # Refitted on the default stack (p+ 0.3 um / graded epi / n+, NPLUS calibration):
+    # I(300 K, -60 V, 4 mm2) = 18.000 pA. 2.8e12 before the n+ flip (17.957 pA on the
+    # legacy no-n+ model; LEGACY_STACK in etna/core/device.py). 2026-10-17: 2.805349e12 ->
+    # 2.805336e12 after the C-V recalibration on the small-signal C (new epi doping:
+    # 17.99992 -> 18.00000 pA; lab/solver2d/bench/nplus_calibrate.py cal-c).
+    # 2026-10-18: 2.805336e12 -> 2.849024e12 with the default flip to the measured-C-V
+    # profile (graded n-/n+ transition; DEFAULT_STACK in etna/core/device.py): the old value
+    # gives 17.724 pA there, the linear rescale 18.000 pA (lab/buffer_profile/bench/
+    # nt_refit.py). 2.805336e12 stays with the previous default (NPLUS_CALIBRATION).
+    N_t: float = 2.849024e12
     S_n: float = 1e3  # cm/s, electron surface recombination velocity
     S_p: float = 1e3  # cm/s, hole surface recombination velocity
 
@@ -74,13 +96,15 @@ class SiC4H_Parameters:
     C_p: float = 2.0e-31  # cm^6/s, hole Auger (Ioffe NSM)
 
     # --- Radiative recombination ---
-    B: float = 1.5e-12  # cm^3/s, radiative coefficient (estimation)
+    B: float = 1.5e-12  # cm^3/s, radiative coefficient (estimation); informational:
+    # radiative recombination is negligible in 4H-SiC and not modelled
 
     # --- Al acceptor incomplete ionization ---
     E_A: float = 0.220  # eV, Al acceptor ionization energy (TU Wien)
     g_A: int = 4  # degeneracy factor for Al in SiC
 
-    # --- N donor ionization energies ---
+    # --- N donor ionization energies (informational: donors are taken fully ionized,
+    # the incomplete-ionization model covers the Al acceptor only) ---
     E_D_hex: float = 0.050  # eV, nitrogen on hexagonal site (TU Wien)
     E_D_cub: float = 0.092  # eV, nitrogen on cubic site (TU Wien)
 
@@ -101,9 +125,9 @@ def compute_ni(T=300):
 
     Uses Varshni bandgap model and Boltzmann statistics for NC, NV.
 
-    Note: Not used in the v1.0 pipeline, which uses the fixed
-    n_i_300 = 5e-9 cm^-3 from SiC4H_Parameters. Temperature-dependent
-    n_i will be wired into the pipeline in v2 (ADV-02).
+    Used by intrinsic_concentration(T, params), which scales n_i(T) for every
+    device build (etna.core.device), and pinned at 300 K against the tabulated
+    N_C/N_V by tests/test_material.py.
 
     Parameters
     ----------
@@ -155,6 +179,10 @@ def compute_ni(T=300):
 
 def mobility_caughey_thomas(N_total, carrier="electron"):
     """Doping-dependent mobility using Caughey-Thomas model.
+
+    Kept as the independent 300 K closed-form reference (TU Wien table) that pins
+    ``mobility_caughey_thomas_T(N, 300)`` in tests/test_material.py; the solvers call
+    the T-dependent form.
 
     mu(N) = mu_min + (mu_max - mu_min) / (1 + (N/N_ref)^alpha)
 
@@ -307,6 +335,9 @@ def mobility_caughey_thomas_T(N_total, T, carrier="electron", params=None):
 
 def effective_dos(T, params=None):
     """Temperature-dependent effective density of states.
+
+    Kept as public material API (no internal caller yet): N_V(T) is the input of the
+    low-doping incomplete-ionization fix proposed in audit-v7 A-02 (open).
 
     Wraps compute_ni() to extract NC(T) and NV(T), which scale as T^(3/2).
 

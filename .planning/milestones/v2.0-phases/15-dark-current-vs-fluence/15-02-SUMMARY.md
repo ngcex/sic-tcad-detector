@@ -72,7 +72,7 @@ completed: 2026-03-25
 
 Each task was committed atomically:
 
-1. **Task 1: Create dark current vs fluence publication notebook** - `c3ad5fc` (feat)
+1. **Task 1: Create dark current vs fluence publication notebook** - `8df0e06` (feat)
 
 ## Files Created/Modified
 

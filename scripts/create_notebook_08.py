@@ -42,6 +42,9 @@ nb.cells.append(
     nbformat.v4.new_code_cell(
         "import sys, os\n"
         "sys.path.insert(0, os.path.join(os.getcwd(), '..'))\n"
+        "import os\n"
+        "FIG_DIR = os.environ.get(\"ETNA_FIGURE_DIR\", \"figures\")  # as save_figure: notebooks/figures/ (untracked) from notebooks/\n"
+        "os.makedirs(FIG_DIR, exist_ok=True)\n"
         "\n"
         "import numpy as np\n"
         "import matplotlib\n"
@@ -50,6 +53,8 @@ nb.cells.append(
         "import pandas as pd\n"
         "import time\n"
         "\n"
+        "from etna.core.devsim_lock import set_devsim_quiet\n"
+        "set_devsim_quiet(True)  # drop devsim's Newton log from direct core calls; ETNA_DEVSIM_VERBOSE=1 shows it\n"
         "from etna.core.transient import (\n"
         "    TransientSolver, simulate_pulse_train, transient_cce_vs_dose_rate,\n"
         "    pulse_envelope\n"
@@ -69,12 +74,10 @@ nb.cells.append(
         "    'font.size': 10,\n"
         "    'figure.dpi': 300,\n"
         "    'savefig.dpi': 300,\n"
-        "    'savefig.bbox_inches': 'tight',\n"
         "    'axes.linewidth': 0.8,\n"
         "    'lines.linewidth': 1.2,\n"
         "})\n"
         "\n"
-        "os.makedirs('../figures', exist_ok=True)\n"
         "print('All imports successful')"
     )
 )
@@ -116,7 +119,7 @@ nb.cells.append(
         "ax2.legend()\n"
         "\n"
         "plt.tight_layout()\n"
-        "plt.savefig('../figures/08_pulse_envelope.pdf')\n"
+        "plt.savefig(os.path.join(FIG_DIR, '08_pulse_envelope.pdf'))\n"
         "plt.show()\n"
         "print('Saved: figures/08_pulse_envelope.pdf')"
     )
@@ -212,7 +215,7 @@ nb.cells.append(
         "    ax2.legend()\n"
         "\n"
         "plt.tight_layout()\n"
-        "plt.savefig('../figures/08_single_pulse_current.pdf')\n"
+        "plt.savefig(os.path.join(FIG_DIR, '08_single_pulse_current.pdf'))\n"
         "plt.show()\n"
         "print('Saved: figures/08_single_pulse_current.pdf')"
     )
@@ -343,7 +346,7 @@ nb.cells.append(
         "ax.legend()\n"
         "\n"
         "plt.tight_layout()\n"
-        "plt.savefig('../figures/08_multi_pulse_train.pdf')\n"
+        "plt.savefig(os.path.join(FIG_DIR, '08_multi_pulse_train.pdf'))\n"
         "plt.show()\n"
         "\n"
         "# Peak current analysis\n"
@@ -425,7 +428,7 @@ nb.cells.append(
         "ax.grid(True, alpha=0.3)\n"
         "\n"
         "plt.tight_layout()\n"
-        "plt.savefig('../figures/08_transient_vs_steadystate_cce.pdf')\n"
+        "plt.savefig(os.path.join(FIG_DIR, '08_transient_vs_steadystate_cce.pdf'))\n"
         "plt.show()\n"
         "print('Saved: figures/08_transient_vs_steadystate_cce.pdf')"
     )

@@ -75,8 +75,8 @@ completed: 2026-03-24
 
 Each task was committed atomically:
 
-1. **Task 1: Implement TransientSolver with pulse envelope and adaptive time-stepping** - `eea5950` (feat)
-2. **Task 2: Write unit and integration tests for transient solver** - `28368c4` (test)
+1. **Task 1: Implement TransientSolver with pulse envelope and adaptive time-stepping** - `bd92623` (feat)
+2. **Task 2: Write unit and integration tests for transient solver** - `5e73888` (test)
 
 ## Files Created/Modified
 
@@ -101,7 +101,7 @@ Each task was committed atomically:
 - **Fix:** Set charge_error=1e10 to effectively disable auto-rejection; adaptive_dt already manages time steps appropriately based on pulse phase
 - **Files modified:** src/transient.py
 - **Verification:** Integration tests pass; CCE matches steady-state
-- **Committed in:** 28368c4 (Task 2 commit includes the fix to src/transient.py)
+- **Committed in:** 5e73888 (Task 2 commit includes the fix to src/transient.py)
 
 ---
 

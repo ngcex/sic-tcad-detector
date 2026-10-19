@@ -72,8 +72,8 @@ completed: 2026-03-31
 
 Each task was committed atomically:
 
-1. **Task 1: Create notebook 16 with single-particle CCE analysis** - `b516a54` (feat)
-   - Fix commits: `6133c6c` (fix: exclude injection step from Q_collected, clip CCE), `1d53bd4` (fix: regenerate notebook with CCE fix)
+1. **Task 1: Create notebook 16 with single-particle CCE analysis** - `fd72d4a` (feat)
+   - Fix commits: `2235e53` (fix: exclude injection step from Q_collected, clip CCE), `e8003d3` (fix: regenerate notebook with CCE fix)
 2. **Task 2: Human verification of notebook 16 figures and science** - APPROVED
 
 ## Files Created/Modified
@@ -99,7 +99,7 @@ Each task was committed atomically:
 - **Fix:** Reduced n_let_points from 15 to 10 for the 300um sweep. Updated markdown description to note the larger mesh cost. Increased nbconvert timeout to 7200s.
 - **Files modified:** scripts/create_notebook_16.py
 - **Verification:** Notebook completed successfully with 10 points in ~150 min
-- **Committed in:** b516a54 (part of Task 1 commit)
+- **Committed in:** fd72d4a (part of Task 1 commit)
 
 ---
 
@@ -128,7 +128,7 @@ All artifacts verified:
 - FOUND: scripts/create_notebook_16.py
 - FOUND: data/cce_let_table_100um.json
 - FOUND: data/cce_let_table_300um.json
-- FOUND: commit b516a54
+- FOUND: commit fd72d4a
 
 ---
 

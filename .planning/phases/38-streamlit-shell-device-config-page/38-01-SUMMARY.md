@@ -76,9 +76,9 @@ completed: 2026-07-10
 
 Each task was committed atomically:
 
-1. **Task 1: Add pytest pythonpath config + app package scaffold** - `0c821e1` (chore)
-2. **Task 2: Stub assemble_config + write failing unit tests (RED)** - `e69bcf9` (test)
-3. **Task 3: Implement assemble_config + render_device_sidebar (GREEN)** - `f51c162` (feat)
+1. **Task 1: Add pytest pythonpath config + app package scaffold** - `7e3256d` (chore)
+2. **Task 2: Stub assemble_config + write failing unit tests (RED)** - `2427769` (test)
+3. **Task 3: Implement assemble_config + render_device_sidebar (GREEN)** - `918b630` (feat)
 
 _TDD plan: RED (Task 2) -> GREEN (Task 3), no REFACTOR commit needed — GREEN implementation required no cleanup pass._
 
@@ -105,7 +105,7 @@ _TDD plan: RED (Task 2) -> GREEN (Task 3), no REFACTOR commit needed — GREEN i
 - **Fix:** Reworded the comments/docstrings to describe the same fact ("not wrapped in a submit-gated container") without using the literal string `st.form`.
 - **Files modified:** app/components/device_sidebar.py
 - **Verification:** `grep -c "st.form" app/components/device_sidebar.py` now returns 0; tests still pass (4/4).
-- **Committed in:** f51c162 (Task 3 commit)
+- **Committed in:** 918b630 (Task 3 commit)
 
 ---
 
@@ -129,4 +129,4 @@ _Completed: 2026-07-10_
 
 ## Self-Check: PASSED
 
-All created files verified present on disk: `app/__init__.py`, `app/components/__init__.py`, `app/components/device_sidebar.py`, `tests/test_app_device_sidebar.py`, `tests/test_app_session.py`. All commit hashes verified present in `git log --oneline --all`: `0c821e1`, `e69bcf9`, `f51c162`, `554ad48`.
+All created files verified present on disk: `app/__init__.py`, `app/components/__init__.py`, `app/components/device_sidebar.py`, `tests/test_app_device_sidebar.py`, `tests/test_app_session.py`. All commit hashes verified present in `git log --oneline --all`: `7e3256d`, `2427769`, `918b630`, `9e0639e`.

@@ -23,7 +23,7 @@ calibrated graded-doping defaults were baked into `src/device2d.py` (Plan 03).
   - #13 reproduces `Timeout waiting for execute reply` even standalone at a 300 s
     cell limit; #14 runs CCE-vs-bias (10 pts) + dark-current (13 fluences) sweeps;
     #12/#16/#20 raise `CellTimeoutError` directly.
-  - Notebooks 13/14 are unchanged since before Phase 26 (commit 209e91d) and use
+  - Notebooks 13/14 are unchanged since before Phase 26 (commit 7096804) and use
     EXPLICIT doping grids, not the calibrated module default — so the calibration
     cannot have changed their behavior. They are slow, not broken.
 - Primary guard (layer-1): the unit-level v3 baseline regression

@@ -28,7 +28,6 @@ class TestRunFieldIntegration1D:
         assert result.sim_type == "field"
 
         # mesh is a populated MeshData
-        assert result.mesh is not None
         mesh = result.mesh
         assert isinstance(mesh, MeshData)
 
@@ -76,8 +75,8 @@ class TestRunFieldIntegration2D:
         result = run_field(DeviceConfig(half_width_um=50.0), bias_V=-10)
 
         mesh = result.mesh
-        assert mesh is not None
-        assert mesh.y_coords is not None
+        assert isinstance(mesh, MeshData)
+        assert len(mesh.y_coords) > 0
         assert len(mesh.y_coords) == len(mesh.x_coords)
 
         E = mesh.node_values["ElectricField"]

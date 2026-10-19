@@ -65,8 +65,8 @@ completed: 2026-03-21
 
 Each task was committed atomically:
 
-1. **Task 1: Parametrize cce_vs_dose_rate and create parametric_cce_sweep** - `f16cb45` (feat)
-2. **Task 2: Add tests for parametric sweep and doping parametrization** - `5756151` (test)
+1. **Task 1: Parametrize cce_vs_dose_rate and create parametric_cce_sweep** - `6de81da` (feat)
+2. **Task 2: Add tests for parametric sweep and doping parametrization** - `6aebd1f` (test)
 
 ## Files Created/Modified
 

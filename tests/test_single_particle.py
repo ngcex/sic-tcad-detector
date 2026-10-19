@@ -5,8 +5,9 @@ Validates:
 - Current pulse analysis with synthetic data (unit test, no devsim)
 - CCE(LET) table save/load round-trip with interpolation (unit test, no devsim)
 - Ion track generation integral matches expected Q_generated (physics, slow)
-- Single-particle charge conservation within 1% (physics, slow)
-- CCE increases with bias voltage (physics, slow)
+- Backward-Euler estimator and convergence stop (unit, no devsim)
+- Default stack: raw CCE <= 1 and monotone in bias (physics, slow)
+  (legacy-model checks: tests/test_single_particle_legacy.py)
 """
 
 import json
@@ -171,6 +172,103 @@ class TestSaveLoadCCETable:
             Path(filepath).unlink(missing_ok=True)
 
 
+class TestCurrentContact:
+    """The integrated contact: anode with an n+ cathode, cathode without (no devsim)."""
+
+    @staticmethod
+    def _run(monkeypatch, device_info, **kw):
+        import etna.core.single_particle as sp
+
+        seen = []
+
+        def fake_current(info, contact):
+            seen.append(contact)
+            return 0.0
+
+        monkeypatch.setattr(sp.devsim, "solve", lambda **k: None)
+        monkeypatch.setattr(sp, "add_generation_to_dd", lambda info, g: None)
+        monkeypatch.setattr(sp, "extract_contact_current", fake_current)
+        r = sp.simulate_single_particle(device_info, np.zeros(3), t_collect=3e-12, **kw)
+        return r["current_contact"], set(seen)
+
+    def test_auto_contact(self, monkeypatch):
+        from etna.core.device import DEFAULT_STACK, LEGACY_STACK
+
+        info = {"device_name": "x", "region_name": "sic"}
+        for stack, expected in ((DEFAULT_STACK, "anode"), (LEGACY_STACK, "cathode")):
+            dev = {**info, "nplus_thickness_cm": stack["nplus_thickness_cm"]}
+            assert self._run(monkeypatch, dev) == (expected, {expected})
+        # explicit argument wins; unknown contact rejected
+        dev = {**info, "nplus_thickness_cm": 1e-4}
+        assert self._run(monkeypatch, dev, contact="cathode") == (
+            "cathode",
+            {"cathode"},
+        )
+        with pytest.raises(ValueError):
+            self._run(monkeypatch, dev, contact="bulk")
+
+
+class TestBackwardEulerEstimator:
+    """Q_collected is the right-endpoint sum over every BDF1 step, the injection
+    step included, and the run stops on charge convergence (no devsim)."""
+
+    def test_collected_charge_is_right_endpoint_sum(self):
+        from etna.core.single_particle import collected_charge
+
+        times = np.array([1e-12, 3e-12, 7e-12])
+        currents = np.array([-2.0, -1.0, -0.5])  # sign ignored, |I| integrated
+        expected = 2.0 * 1e-12 + 1.0 * 2e-12 + 0.5 * 4e-12
+        assert collected_charge(times, currents, 0.0) == pytest.approx(
+            expected, rel=1e-12
+        )
+        # dark current subtracted per unit time
+        assert collected_charge(times, currents - 0.1, -0.1) == pytest.approx(
+            expected, rel=1e-12
+        )
+        assert collected_charge([], [], 0.0) == 0.0
+
+    @staticmethod
+    def _run_decay(monkeypatch, tau, **kw):
+        """Fake device whose BDF1 step returns I = exp(-t_end / tau) (A/cm)."""
+        import etna.core.single_particle as sp
+
+        state = {"t": 0.0, "dt": 0.0}
+
+        def fake_solve(**k):
+            if k.get("type") == "transient_bdf1":
+                state["t"] += k["tdelta"]
+
+        monkeypatch.setattr(sp.devsim, "solve", fake_solve)
+        monkeypatch.setattr(sp, "add_generation_to_dd", lambda info, g: None)
+        monkeypatch.setattr(
+            sp,
+            "extract_contact_current",
+            lambda info, c: 0.0 if state["t"] == 0.0 else np.exp(-state["t"] / tau),
+        )
+        info = {"device_name": "x", "region_name": "sic", "nplus_thickness_cm": None}
+        return sp.simulate_single_particle(info, np.zeros(3), **kw)
+
+    def test_injection_step_counted_and_stop_converges(self, monkeypatch):
+        from etna.core.single_particle import analyze_current_pulse, collected_charge
+
+        tau = 1e-9
+        r = self._run_decay(monkeypatch, tau)
+        assert r["converged"] and r["times"][-1] < 200e-9
+        assert r["times"][0] == pytest.approx(1e-12, rel=1e-9)  # the injection step
+        assert r["Q_collected"] == pytest.approx(
+            collected_charge(r["times"], r["currents"], 0.0), rel=1e-12
+        )
+        # the stop does not truncate: same as running to t_collect without a stop
+        full = self._run_decay(monkeypatch, tau, rtol_converged=0.0)
+        assert not full["converged"]
+        assert r["Q_collected"] == pytest.approx(full["Q_collected"], rel=1e-6)
+        # and the time-discrete sum is close to the exact integral tau
+        assert r["Q_collected"] == pytest.approx(tau, rel=0.1)
+        # analyze_current_pulse uses the same estimator
+        pulse = analyze_current_pulse(r["times"], r["currents"], 0.0)
+        assert pulse["Q_collected"] == pytest.approx(r["Q_collected"], rel=1e-12)
+
+
 class TestLETConversion:
     """Test LET to pairs/cm conversion."""
 
@@ -212,7 +310,10 @@ class TestIonTrackGeneration:
         device_info = None
         try:
             device_info = create_2d_dd_device(
-                half_width_um=50.0, V_bias=50.0, device_name="test_gen_integral"
+                # hw 25 (was 50): the 1 um Gaussian track lies well inside
+                half_width_um=25.0,
+                V_bias=50.0,
+                device_name="test_gen_integral",
             )
 
             LET = 10.0  # keV/um
@@ -252,59 +353,19 @@ class TestIonTrackGeneration:
 
 
 @pytest.mark.slow
-class TestChargeConservation:
-    """Validate charge conservation: integral(I(t)dt) = CCE * Q_generated."""
-
-    def test_single_particle_charge_conservation(self):
-        """Q_collected / Q_generated should give a CCE between 0.5 and 1.0."""
-        import devsim
-        from etna.core.charge_collection_2d import create_2d_dd_device
-        from etna.core.single_particle import (
-            ion_track_generation_2d,
-            simulate_single_particle,
-        )
-
-        device_info = None
-        try:
-            device_info = create_2d_dd_device(
-                half_width_um=50.0, V_bias=50.0, device_name="test_conservation"
-            )
-
-            generation, Q_gen = ion_track_generation_2d(
-                device_info, LET_keV_um=10.0, x_ion_cm=0.0
-            )
-
-            result = simulate_single_particle(device_info, generation)
-
-            Q_col = result["Q_collected"]
-            cce = Q_col / Q_gen
-
-            # CCE should be physically reasonable: 0.5 to ~1.0 for SiC at 50V
-            # Allow up to 1.02 for residual displacement current artifact
-            # in early post-injection BDF1 steps.
-            assert (
-                0.5 <= cce <= 1.02
-            ), f"CCE={cce:.4f} out of expected range [0.5, 1.02]"
-
-            # Charge conservation: the CCE ratio should be self-consistent
-            # (this is really testing that the integral is done correctly)
-            assert Q_col > 0, "Q_collected must be positive"
-            assert Q_gen > 0, "Q_generated must be positive"
-
-        finally:
-            if device_info is not None:
-                try:
-                    devsim.delete_device(device=device_info["device_name"])
-                except Exception:
-                    pass
-
-
-@pytest.mark.slow
 class TestCCEVsBias:
-    """Validate CCE increases with bias voltage."""
+    """Default stack (p+ / graded epi / n+, anode current): raw single-particle CCE
+    <= 1 and monotone in bias, and the run converges before t_collect.
 
-    def test_cce_increases_with_bias(self):
-        """CCE at 50V should be >= CCE at 10V for same LET."""
+    Folds in the former TestChargeConservation (0.5 <= CCE, Q > 0 at 50 V). The
+    legacy (no n+) pin with old doping that lived here is gone: the legacy physics
+    checks are in tests/test_single_particle_legacy.py. Asserts on the RAW
+    Q_collected / Q_generated, not the table value (clipped to 1, so <= 1 there would
+    be vacuous). Before the backward-Euler estimator this read 0.9824 / 0.9772 at
+    10 / 50 V (non-monotone, hw 50); now 0.99978 / 0.99997 (hw 25).
+    """
+
+    def test_cce_le_one_and_monotone_in_bias(self):
         import devsim
         from etna.core.charge_collection_2d import create_2d_dd_device
         from etna.core.single_particle import (
@@ -317,19 +378,19 @@ class TestCCEVsBias:
             device_info = None
             try:
                 device_info = create_2d_dd_device(
-                    half_width_um=50.0,
+                    # hw 25: centred 1 um track on a laterally uniform device
+                    half_width_um=25.0,
                     V_bias=V_bias,
                     device_name=f"test_bias_{int(V_bias)}",
                 )
-
                 generation, Q_gen = ion_track_generation_2d(
                     device_info, LET_keV_um=10.0, x_ion_cm=0.0
                 )
-
                 result = simulate_single_particle(device_info, generation)
-
-                cce = result["Q_collected"] / Q_gen
-                cce_results[V_bias] = cce
+                assert result["current_contact"] == "anode"
+                assert result["converged"], f"not converged at {V_bias} V"
+                assert result["Q_collected"] > 0 and Q_gen > 0
+                cce_results[V_bias] = result["Q_collected"] / Q_gen
             finally:
                 if device_info is not None:
                     try:
@@ -337,6 +398,89 @@ class TestCCEVsBias:
                     except Exception:
                         pass
 
-        assert cce_results[50.0] >= cce_results[10.0], (
-            f"CCE(50V)={cce_results[50.0]:.4f} < " f"CCE(10V)={cce_results[10.0]:.4f}"
+        for V, cce in cce_results.items():
+            # <= 1 up to round-off; a fully depleted 10 um SiC epi collects ~all
+            assert 0.5 <= cce <= 1.0 + 1e-6, f"CCE({V} V)={cce:.6f}"
+        assert (
+            cce_results[50.0] >= cce_results[10.0]
+        ), f"CCE(50V)={cce_results[50.0]:.6f} < CCE(10V)={cce_results[10.0]:.6f}"
+
+
+class TestLinearSynthesis:
+    """synthesize_linear_response reproduces simulate_single_particle's estimator and
+    stop on a scaled series (no devsim)."""
+
+    def test_scale_one_reproduces_the_stopped_run(self, monkeypatch):
+        from etna.core.single_particle import synthesize_linear_response
+
+        run = TestBackwardEulerEstimator._run_decay
+        stopped = run(monkeypatch, 1e-9)
+        long = run(monkeypatch, 1e-9, rtol_converged=1e-12)
+        assert len(long["times"]) > len(stopped["times"])
+        Q, t, I = synthesize_linear_response(long["times"], long["currents"], 0.0, 1.0)
+        assert len(t) == len(stopped["times"])
+        assert Q == stopped["Q_collected"]
+
+    def test_linear_scaling_and_short_series(self, monkeypatch):
+        from etna.core.single_particle import synthesize_linear_response
+
+        run = TestBackwardEulerEstimator._run_decay
+        long = run(monkeypatch, 1e-9, rtol_converged=1e-12)
+        Q1, t1, _ = synthesize_linear_response(
+            long["times"], long["currents"], 0.0, 1.0
         )
+        Q3, t3, _ = synthesize_linear_response(
+            long["times"], long["currents"], 0.0, 3.0
+        )
+        assert len(t3) == len(t1) and Q3 == pytest.approx(3.0 * Q1, rel=1e-12)
+        # a series too short for the stop gives None
+        assert (
+            synthesize_linear_response(
+                long["times"][:5], long["currents"][:5], 0.0, 1.0
+            )
+            is None
+        )
+
+    def test_unknown_method_rejected(self):
+        from etna.core.single_particle import build_cce_let_table
+
+        with pytest.raises(ValueError):
+            build_cce_let_table(method="affine", half_width_um=2.0, n_let_points=4)
+
+
+@pytest.mark.slow
+class TestBuildCCELetTableSmallMesh:
+    """build_cce_let_table on a small mesh (hw 2 um, 5 mesh columns): the shared-device
+    table equals a fresh device per LET, and method="linear" equals method="full"
+    within the table tolerance (1e-6)."""
+
+    def test_build_once_and_linear_parity(self):
+        from etna.core.charge_collection_2d import create_2d_dd_device
+        from etna.core.devsim_reset import delete_device_and_mesh
+        from etna.core.single_particle import (
+            build_cce_let_table,
+            ion_track_generation_2d,
+            simulate_single_particle,
+        )
+
+        kw = dict(
+            half_width_um=2.0, V_bias=50.0, n_let_points=5, let_min=0.5, let_max=500.0
+        )
+        full = build_cce_let_table(method="full", **kw)
+        lin = build_cce_let_table(method="linear", **kw)
+        assert full["converged"].all() and full["simulated"].all()
+        assert lin["simulated"].iloc[-1] and not lin["simulated"].all()
+        d = (lin["CCE_raw"] - full["CCE_raw"]).abs()
+        assert d.max() < 1e-6, d.tolist()
+        # simulated rows are the full-table rows (let_max: same series prefix)
+        assert d[lin["simulated"]].max() < 1e-12
+        assert (lin["t_collection_ns"] - full["t_collection_ns"]).abs().max() < 1e-12
+
+        # build-once parity: a fresh device gives the full-table row
+        info = create_2d_dd_device(half_width_um=2.0, V_bias=50.0)
+        try:
+            gen, q_gen = ion_track_generation_2d(info, full["LET_keV_um"][1])
+            fresh = simulate_single_particle(info, gen)["Q_collected"] / q_gen
+        finally:
+            delete_device_and_mesh(info["device_name"])
+        assert abs(fresh - full["CCE_raw"][1]) < 1e-12

@@ -27,7 +27,7 @@ Truths derived from ROADMAP.md success criteria and combined PLAN must_haves (Pl
 | 2   | User can overlay CCE vs fluence curves at multiple bias voltages on one plot                                   | VERIFIED | `figures/10_cce_vs_fluence_multibias.png` exists (58 KB); notebook cell 5 runs 5 biases and overlays                                                                    |
 | 3   | User can plot CCE vs bias at fixed fluence levels (CCE recovery with higher bias)                              | VERIFIED | `cce_vs_bias_at_fluence()` at line 770; notebook cell 6; test `test_cce_vs_bias_at_fluence_recovery`                                                                    |
 | 4   | User can generate a publication-quality notebook comparing linear vs logarithmic models with uncertainty bands | VERIFIED | `notebooks/10_cce_vs_fluence.ipynb` (9 cells, 341 lines); cell 7 has two-panel sensitivity; `figures/10_cce_sensitivity.png` (63 KB)                                    |
-| 5   | Zero fluence returns identical CCE to pristine cce_vs_bias (regression safety)                                 | VERIFIED | `test_cce_vs_fluence_zero_fluence_matches_pristine` asserts within 1e-6; committed in 36ac7d7                                                                           |
+| 5   | Zero fluence returns identical CCE to pristine cce_vs_bias (regression safety)                                 | VERIFIED | `test_cce_vs_fluence_zero_fluence_matches_pristine` asserts within 1e-6; committed in b099efd                                                                           |
 | 6   | CCE degrades monotonically with increasing fluence                                                             | VERIFIED | `test_cce_vs_fluence_monotonic_degradation` checks each successive value <= previous + 1e-6                                                                             |
 | 7   | User can compare linear vs logarithmic lifetime models side-by-side                                            | VERIFIED | Notebook cell 7 uses `lifetime_model="linear"` and `lifetime_model="logarithmic"` in two-panel figure                                                                   |
 | 8   | User can see uncertainty bands from 2x damage constant scatter                                                 | VERIFIED | `scaled_damage_params()` in cell 7 scales all eta values by 0.5x, 1.0x, 2.0x; `fill_between` for envelope; `RadiationDamageParams` imported from `src.radiation_damage` |
@@ -105,9 +105,9 @@ No TODO/FIXME/placeholder comments, no empty implementations, no stub returns in
 
 All three documented commit hashes confirmed present in repository history:
 
-- `9baf62f` — `feat(14-01): add fluence sweep infrastructure for CCE vs radiation damage`
-- `36ac7d7` — `test(14-01): add fluence sweep integration tests`
-- `3ffb1a1` — `feat(14-02): add CCE vs fluence publication notebook with sensitivity analysis`
+- `5af674c` — `feat(14-01): add fluence sweep infrastructure for CCE vs radiation damage`
+- `b099efd` — `test(14-01): add fluence sweep integration tests`
+- `b4356a0` — `feat(14-02): add CCE vs fluence publication notebook with sensitivity analysis`
 
 ---
 

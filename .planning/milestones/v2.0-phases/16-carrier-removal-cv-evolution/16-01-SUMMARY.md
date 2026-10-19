@@ -67,8 +67,8 @@ completed: 2026-03-25
 
 Each task was committed atomically:
 
-1. **Task 1: Add compute_phi_crit, cv_at_fluence, plot_cv_evolution** - `0deb473` (feat)
-2. **Task 2: Integration tests for compute_phi_crit and cv_at_fluence** - `5ddcf80` (test)
+1. **Task 1: Add compute_phi_crit, cv_at_fluence, plot_cv_evolution** - `def4f66` (feat)
+2. **Task 2: Integration tests for compute_phi_crit and cv_at_fluence** - `5609e57` (test)
 
 ## Files Created/Modified
 

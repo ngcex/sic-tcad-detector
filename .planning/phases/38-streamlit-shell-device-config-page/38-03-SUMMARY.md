@@ -74,8 +74,8 @@ completed: 2026-07-10
 
 ## Task Commits
 
-1. **Task 1: Write failing first-rerun persistence + magic-pages guard tests (RED)** - `82ccfc7` (test)
-2. **Task 2: Rename app/pages→app/workflows, fix imports, add 12 explicit sidebar keys (GREEN)** - `f7c76e9` (feat)
+1. **Task 1: Write failing first-rerun persistence + magic-pages guard tests (RED)** - `1907303` (test)
+2. **Task 2: Rename app/pages→app/workflows, fix imports, add 12 explicit sidebar keys (GREEN)** - `ed74441` (feat)
 3. **Task 3: Human-verify first-edit persistence across navigation in a real browser** - checkpoint, verified via Playwright (see below)
 
 **Plan metadata:** this commit (docs: complete plan)
@@ -94,7 +94,7 @@ completed: 2026-07-10
 
 ## Deviations from Plan
 
-None — plan executed exactly as written. The plan itself was revised once before execution (see `3249f5f`, applied to `38-03-PLAN.md` prior to this SUMMARY) to fix a self-contradicting RED-gate grep command found by `gsd-plan-checker`; no deviation occurred during execution of the corrected plan.
+None — plan executed exactly as written. The plan itself was revised once before execution (see `d87b651`, applied to `38-03-PLAN.md` prior to this SUMMARY) to fix a self-contradicting RED-gate grep command found by `gsd-plan-checker`; no deviation occurred during execution of the corrected plan.
 
 ## Issues Encountered
 

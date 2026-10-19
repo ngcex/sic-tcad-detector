@@ -90,11 +90,11 @@ All 5 commits documented in SUMMARY files verified present in git log:
 
 | Commit    | Description                                                                 |
 | --------- | --------------------------------------------------------------------------- |
-| `f16cb45` | feat(05-01): parametrize cce_vs_dose_rate and add parametric_cce_sweep      |
-| `5756151` | test(05-01): add tests for parametric sweep and doping parametrization      |
-| `8b07b0a` | feat(05-02): add parametric multi-panel plot functions to plotting.py       |
-| `ae5ba2a` | feat(05-02): create parametric studies notebook with minimal cached results |
-| `d9df125` | fix(05-02): include reference doping 8.5e13 in N_D_BULK_VALUES sweep list   |
+| `6de81da` | feat(05-01): parametrize cce_vs_dose_rate and add parametric_cce_sweep      |
+| `6aebd1f` | test(05-01): add tests for parametric sweep and doping parametrization      |
+| `82b9b72` | feat(05-02): add parametric multi-panel plot functions to plotting.py       |
+| `fd9b12a` | feat(05-02): create parametric studies notebook with minimal cached results |
+| `a997175` | fix(05-02): include reference doping 8.5e13 in N_D_BULK_VALUES sweep list   |
 
 ---
 

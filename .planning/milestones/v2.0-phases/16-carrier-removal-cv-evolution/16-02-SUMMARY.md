@@ -80,7 +80,7 @@ completed: 2026-03-25
 
 Each task was committed atomically:
 
-1. **Task 1: Create combined dark current + C-V evolution notebook** - `3e5c79a` (feat)
+1. **Task 1: Create combined dark current + C-V evolution notebook** - `95c5c83` (feat)
 2. **Task 2: Visual verification of publication notebook** - human-approved checkpoint
 
 ## Files Created/Modified

@@ -19,8 +19,6 @@ from etna.core.charge_collection import (
     cce_vs_bias_at_fluence,
     cce_vs_fluence,
     compare_cce_hecht_vs_dd,
-    compute_cce_from_current,
-    compute_cce_from_dd,
     hecht_cce,
     hecht_cce_partial_depletion,
 )
@@ -89,42 +87,6 @@ class TestHechtEquation:
         cce = hecht_cce(V, d=10e-4)
         assert np.all(cce >= 0.0)
         assert np.all(cce <= 1.0)
-
-
-class TestCCEFromCurrent:
-    """Tests for compute_cce_from_current."""
-
-    def test_cce_from_current_ratio(self):
-        """Simple ratio: I_collected / I_generated."""
-        cce = compute_cce_from_current(0.5, 1.0)
-        assert abs(cce - 0.5) < 1e-15
-
-    def test_cce_from_current_full_collection(self):
-        """Full collection: CCE = 1.0."""
-        cce = compute_cce_from_current(1.0, 1.0)
-        assert abs(cce - 1.0) < 1e-15
-
-    def test_cce_from_current_zero_generated(self):
-        """Zero generated current should give CCE = 0."""
-        cce = compute_cce_from_current(0.5, 0.0)
-        assert cce == 0.0
-
-    def test_cce_from_current_clipped(self):
-        """CCE should be clipped to [0, 1]."""
-        cce = compute_cce_from_current(2.0, 1.0)
-        assert cce == 1.0
-
-    def test_cce_from_current_negative_collected(self):
-        """Should use absolute value of collected current."""
-        cce = compute_cce_from_current(-0.7, 1.0)
-        assert abs(cce - 0.7) < 1e-15
-
-    def test_cce_from_current_vectorized(self):
-        """Should work with array inputs."""
-        I_c = np.array([0.0, 0.5, 1.0])
-        I_g = np.array([1.0, 1.0, 1.0])
-        cce = compute_cce_from_current(I_c, I_g)
-        np.testing.assert_allclose(cce, [0.0, 0.5, 1.0])
 
 
 class TestHechtPartialDepletion:
@@ -293,7 +255,8 @@ class TestCCEVsBias:
     """Integration tests for CCE vs bias sweep."""
 
     @pytest.fixture(scope="class")
-    def cce_sweep_result(self):
+    @classmethod
+    def cce_sweep_result(cls):
         """Run CCE sweep once for all tests in this class."""
         V = np.array([0.0, -5.0, -10.0, -20.0, -40.0, -60.0])
         result = cce_vs_bias(V, epi_thickness_cm=10e-4)
@@ -347,7 +310,9 @@ class TestCCEDDvsHecht:
         """At high bias where Hecht assumptions are valid,
         DD and Hecht CCE agree within 10%."""
         V = np.array([-30.0, -40.0, -60.0])
-        result = compare_cce_hecht_vs_dd(V, epi_thickness_cm=10e-4)
+        stack = dict(substrate_thickness_cm=0.3e-4, nplus_thickness_cm=1e-4)
+        result = compare_cce_hecht_vs_dd(V, epi_thickness_cm=10e-4, device_kwargs=stack)
+        assert not result["truncated"]
 
         cce_dd = result["cce_dd"]
         cce_hecht = result["cce_hecht"]
@@ -364,6 +329,26 @@ class TestCCEDDvsHecht:
                 )
 
 
+def test_compare_hecht_uses_only_the_reached_biases(monkeypatch):
+    """A truncated DD sweep is compared on the biases it reached (no zero-filled tail)."""
+    import etna.core.charge_collection as cc
+
+    def truncated_sweep(V_range, epi_thickness_cm=10e-4, **kw):
+        return {
+            "voltages": np.array([-10.0, -20.0]),
+            "cce_values": np.array([0.98, 0.99]),
+            "truncated": True,
+        }
+
+    monkeypatch.setattr(cc, "cce_vs_bias", truncated_sweep)
+    r = cc.compare_cce_hecht_vs_dd(np.array([-10.0, -20.0, -30.0, -40.0]))
+    assert r["truncated"] is True
+    np.testing.assert_array_equal(r["voltages"], [-10.0, -20.0])
+    assert len(r["cce_dd"]) == len(r["cce_hecht"]) == len(r["cce_hecht_partial"]) == 2
+    expected = np.max(np.abs(r["cce_dd"] - cc.hecht_cce(r["voltages"], d=10e-4)))
+    assert r["max_deviation"] == pytest.approx(expected, rel=1e-12)
+
+
 # ===================================================================
 # Regression tests: T=300K parity (Phase 10, Plan 02)
 # ===================================================================
@@ -373,23 +358,30 @@ class TestHechtCCE300KRegression:
     """Verify hecht_cce at T=300K produces identical results to v1.0."""
 
     def test_hecht_cce_300k_regression(self):
-        """hecht_cce(V=30, d=9.5e-4, T=300) must match the v1.0 result
-        computed with explicit 300K default parameter values."""
-        from etna.core.sic_material import SiC4H_Parameters
+        """hecht_cce(V=30, d=9.5e-4, T=300) defaults = Caughey-Thomas at the DD epi
+        doping (mobility_doping: default stack N_D_bulk) and the 300 K lifetimes.
+
+        Before 2026-10-18 the defaults were the undoped limits mu_max (950 / 125
+        cm2/Vs): 0.9946968964068645; now 0.9946708773626582 (-2.6e-5).
+        """
+        from etna.core.device import mobility_doping
+        from etna.core.sic_material import SiC4H_Parameters, mobility_caughey_thomas_T
 
         params = SiC4H_Parameters()
-        # v1.0 call: hecht_cce(30, 9.5e-4) used _params defaults
+        nd = mobility_doping(None, "graded", None)
         cce_explicit = hecht_cce(
             30,
             9.5e-4,
-            mu_e=params.mu_n_max,
+            mu_e=mobility_caughey_thomas_T(nd, 300, "electron", params),
             tau_e=params.tau_n,
-            mu_p=params.mu_p_max,
+            mu_p=mobility_caughey_thomas_T(nd, 300, "hole", params),
             tau_p=params.tau_p,
         )
-        # New call with T=300 (should resolve to same defaults)
         cce_T300 = hecht_cce(30, 9.5e-4, T=300)
-        assert cce_T300 == pytest.approx(float(cce_explicit), rel=1e-10)
+        assert cce_T300 == pytest.approx(float(cce_explicit), rel=1e-12)
+        assert float(cce_T300) == pytest.approx(0.9946708773626582, rel=1e-12)
+        # an explicit doping is honoured (uniform 1e15 epi: lower mobility, lower CCE)
+        assert float(hecht_cce(1, 10e-4, N_D_mobility=1e15)) < float(hecht_cce(1, 10e-4))
 
     def test_hecht_cce_explicit_params_unchanged(self):
         """Passing explicit mu_e, tau_e etc. bypasses T-dependent defaults."""
@@ -694,3 +686,53 @@ class TestParametricFunctions:
         # Sorted by CCE_retention descending
         retentions = df["CCE_retention"].values
         assert retentions[0] >= retentions[1] or np.isnan(retentions[1])
+
+
+class TestFullCompensationGuard:
+    """Beyond full donor removal (eta_removal * Phi_neq >= min N_D of the epi) the
+    doping-based model is ill-posed: CCE / dark current are NaN with a reason, not solved.
+
+    62 MeV: kappa 0.35, eta_removal 5, N_D_bulk 8.5e13 -> Phi_p,crit ~ 4.86e13 cm^-2.
+    """
+
+    def test_reason_helper(self):
+        from etna.core.charge_collection import full_compensation_reason
+
+        assert full_compensation_reason({"N_D_profile": np.array([2.9e15, 1e13])}) == ""
+        r = full_compensation_reason(
+            {"N_D_profile": np.array([2.9e15, 0.0]), "fluence_neq": 2e13}
+        )
+        assert "full donor compensation" in r
+
+    def test_cce_vs_fluence_nan_beyond_threshold(self):
+        result = cce_vs_fluence(np.array([5e13, 7e13, 1e14]), V_bias=-40.0)
+        assert np.all(np.isnan(result["cce_values"]))
+        assert not np.any(result["valid"])
+        assert all("full donor compensation" in r for r in result["reason"])
+
+    def test_cce_vs_bias_at_fluence_nan_beyond_threshold(self):
+        result = cce_vs_bias_at_fluence(np.array([-10.0, -40.0]), fluence=7e13)
+        assert np.all(np.isnan(result["cce_values"])) and not np.any(result["valid"])
+        assert "full donor compensation" in result["reason"][0]
+
+    def test_cce_post_anneal_nan_beyond_threshold(self):
+        # 600 C anneal leaves Z1/2 (and carrier removal) almost untouched
+        result = cce_post_anneal(fluence=1e14, T_anneal=873.15, t_anneal=3600.0)
+        assert np.isnan(result["cce"]) and result["valid"] is False
+        assert "full donor compensation" in result["reason"]
+
+    def test_dark_current_vs_fluence_nan_beyond_threshold(self):
+        from etna.core.dark_current import dark_current_vs_fluence
+
+        result = dark_current_vs_fluence(np.array([7e13]), V_bias=-30.0)
+        assert np.isnan(result["I_total"][0]) and not result["valid"][0]
+        assert "full donor compensation" in result["reason"][0]
+
+    def test_dark_current_post_anneal_nan_beyond_threshold(self):
+        from etna.core.dark_current import dark_current_post_anneal
+
+        result = dark_current_post_anneal(
+            fluence=1e14, T_anneal=873.15, t_anneal=3600.0
+        )
+        assert np.isnan(result["I_total"]) and result["valid"] is False
+        assert "full donor compensation" in result["reason"]

@@ -85,7 +85,7 @@ The graded doping profile parameters are not calibrated to produce the correct e
 
 Each task was committed atomically:
 
-1. **Task 1: Phase 2 validation notebook** - `b6e0c13` (feat)
+1. **Task 1: Phase 2 validation notebook** - `24eabbb` (feat)
 2. **Task 2: Human verification checkpoint** - No commit (checkpoint reviewed, issues found)
 
 ## Files Created/Modified
@@ -135,7 +135,7 @@ None - no external service configuration required.
 - FOUND: figures/phase2_cv_comparison.png
 - FOUND: figures/phase2_doping_profile.png
 - FOUND: 02-03-SUMMARY.md
-- FOUND: commit b6e0c13
+- FOUND: commit 24eabbb
 
 ---
 

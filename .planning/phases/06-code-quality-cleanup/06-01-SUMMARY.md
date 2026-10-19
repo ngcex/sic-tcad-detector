@@ -66,8 +66,8 @@ completed: 2026-03-21
 
 Each task was committed atomically:
 
-1. **Task 1: Remove dead import and add material constants to SiC4H_Parameters** - `0ec9bf7` (chore)
-2. **Task 2: Centralize constants in generation_profiles.py and charge_collection.py** - `8b060da` (refactor)
+1. **Task 1: Remove dead import and add material constants to SiC4H_Parameters** - `708c1b3` (chore)
+2. **Task 2: Centralize constants in generation_profiles.py and charge_collection.py** - `14efe13` (refactor)
 
 ## Files Created/Modified
 
@@ -105,4 +105,4 @@ _Completed: 2026-03-21_
 ## Self-Check: PASSED
 
 - All 4 modified files exist
-- Commits 0ec9bf7 and 8b060da verified in git log
+- Commits 708c1b3 and 14efe13 verified in git log

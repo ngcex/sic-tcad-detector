@@ -408,6 +408,10 @@ def get_hardness_factor(energy_MeV: float, niel_table: dict | None = None) -> fl
     """Get NIEL hardness factor for a given proton energy.
 
     Uses linear interpolation between table entries for intermediate energies.
+    Outside the table (30-150 MeV for the default) np.interp returns the edge value:
+    the result is kappa(30 MeV) below 30 MeV and kappa(150 MeV) above. That is NOT an
+    extrapolation (proton NIEL in SiC rises steeply below ~30 MeV); a warning is
+    logged once per energy (audit-v7 B-07, open: the API default 5.6 MeV lies there).
 
     Parameters
     ----------
@@ -426,7 +430,25 @@ def get_hardness_factor(energy_MeV: float, niel_table: dict | None = None) -> fl
         niel_table = NIEL_HARDNESS_PROTON_SIC
     energies = sorted(niel_table.keys())
     factors = [niel_table[e] for e in energies]
+    if not (energies[0] <= energy_MeV <= energies[-1]):
+        key = (float(energy_MeV), energies[0], energies[-1])
+        if key not in _WARNED_OUT_OF_TABLE:
+            _WARNED_OUT_OF_TABLE.add(key)
+            edge = energies[0] if energy_MeV < energies[0] else energies[-1]
+            logger.warning(
+                "get_hardness_factor: %g MeV is outside the NIEL table [%g, %g] MeV; "
+                "using kappa(%g MeV) = %g (edge value, not an extrapolation)",
+                energy_MeV,
+                energies[0],
+                energies[-1],
+                edge,
+                niel_table[edge],
+            )
     return float(np.interp(energy_MeV, energies, factors))
+
+
+# (energy, table min, table max) already warned about by get_hardness_factor
+_WARNED_OUT_OF_TABLE: set = set()
 
 
 def scale_to_proton_energy(
@@ -966,25 +988,17 @@ def cce_uncertainty_envelope(
     """
     import itertools
 
-    from etna.core.charge_collection import cce_vs_fluence
+    from etna.core.charge_collection import _cce_vs_fluence_multi
 
     if damage_params is None:
         damage_params = RadiationDamageParams()
 
     fluence_range = np.asarray(fluence_range, dtype=float)
 
-    # Nominal CCE (unscaled)
-    nominal_result = cce_vs_fluence(
-        fluence_range,
-        V_bias=V_bias,
-        epi_thickness_cm=epi_thickness_cm,
-        energy_MeV=energy_MeV,
-        damage_params=damage_params,
-    )
-    cce_nominal = nominal_result["cce_values"]
-
-    # All 8 combinations of low/high scaling for 3 defects
-    all_cce = [cce_nominal]
+    # Nominal (unscaled) set first, then all 8 low/high combinations for the 3
+    # defects; all 9 * len(fluence_range) points go through one cce_vs_fluence
+    # batch (one reference device, one batched engine solve).
+    param_sets = [damage_params]
     for scales in itertools.product([scale_low, scale_high], repeat=3):
         s_Z12, s_EH67, s_EH4 = scales
         scaled_params = RadiationDamageParams(
@@ -1003,16 +1017,17 @@ def cce_uncertainty_envelope(
             # Carrier removal tracks Z1/2
             eta_removal=damage_params.eta_removal * s_Z12,
         )
-        result = cce_vs_fluence(
-            fluence_range,
-            V_bias=V_bias,
-            epi_thickness_cm=epi_thickness_cm,
-            energy_MeV=energy_MeV,
-            damage_params=scaled_params,
-        )
-        all_cce.append(result["cce_values"])
+        param_sets.append(scaled_params)
 
-    all_cce = np.array(all_cce)
+    results = _cce_vs_fluence_multi(
+        fluence_range,
+        param_sets,
+        V_bias=V_bias,
+        epi_thickness_cm=epi_thickness_cm,
+        energy_MeV=energy_MeV,
+    )
+    all_cce = np.array([r["cce_values"] for r in results])
+    cce_nominal = all_cce[0]
 
     return {
         "cce_min": np.min(all_cce, axis=0),
@@ -1058,7 +1073,6 @@ def radiation_hardness_sweep(
         CCE_retention. Sorted by CCE_retention descending.
     """
     import itertools
-    import warnings
 
     import pandas as pd
 

@@ -24,7 +24,7 @@ from etna.core.flash_recombination import (
     save_parametric_results,
     solve_with_continuation,
 )
-from etna.core.generation_profiles import dose_rate_to_generation, proton_generation_profile
+from etna.core.generation_profiles import proton_generation_profile
 from etna.core.sic_material import SiC4H_Parameters
 
 
@@ -380,6 +380,11 @@ class TestTransientCapabilityPreserved:
                 tdelta=1e-9,
                 maximum_iterations=100,
             )
+            for m in ("Electrons", "Holes"):
+                v = np.array(
+                    devsim.get_node_model_values(device=device, region=region, name=m)
+                )
+                assert np.all(np.isfinite(v)) and np.all(v > 0), m
 
         finally:
             try:
@@ -405,6 +410,6 @@ class TestParametricCceSweepStructure:
         key = (10e-4, 8.50e13, -30.0)
         assert key in result
         value = result[key]
-        assert value is not None
+        assert isinstance(value, dict)
         assert "dose_rates" in value
         assert "cce_values" in value

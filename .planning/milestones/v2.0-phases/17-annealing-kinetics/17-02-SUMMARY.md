@@ -73,8 +73,8 @@ completed: 2026-03-25
 
 Each task was committed atomically:
 
-1. **Task 1: Add cce_post_anneal and dark_current_post_anneal functions** - `daeacbe` (feat)
-2. **Task 2: Add integration tests for post-anneal CCE and dark current** - `46b633f` (test)
+1. **Task 1: Add cce_post_anneal and dark_current_post_anneal functions** - `c6c4488` (feat)
+2. **Task 2: Add integration tests for post-anneal CCE and dark current** - `4ab2e7e` (test)
 
 ## Files Created/Modified
 
@@ -98,7 +98,7 @@ Each task was committed atomically:
 - **Fix:** Changed test to validate I_SRH component decrease instead of I_total decrease
 - **Files modified:** tests/test_dark_current.py
 - **Verification:** Test passes, SRH component correctly decreases after annealing
-- **Committed in:** 46b633f (Task 2 commit)
+- **Committed in:** 4ab2e7e (Task 2 commit)
 
 ---
 

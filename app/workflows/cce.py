@@ -5,8 +5,7 @@ so this module can be imported for st.Page registration (app/main.py) and
 exercised headlessly via AppTest.from_function(render) in tests
 (tests/test_app_cce_page.py). etna.run_cce is referenced as a MODULE
 ATTRIBUTE (not `from etna import run_cce`) so tests can intercept it via
-monkeypatch.setattr(etna, "run_cce", fake) -- the seam proven in
-tests/test_app_run_mockability.py (39-01).
+monkeypatch.setattr(etna, "run_cce", fake).
 """
 
 from __future__ import annotations
@@ -14,61 +13,87 @@ from __future__ import annotations
 import streamlit as st
 
 import etna
+from app.components.page_utils import (
+    require_config,
+    show_error,
+    show_result_notes,
+    show_stale_warning,
+)
 from app.components.results import build_cce_figure, to_csv_bytes
+
+FORWARD_BIAS_ERROR = (
+    "CCE is defined here for reverse bias only: both V_start and V_stop must be "
+    "≤ 0 V (negative = reverse bias)."
+)
 
 
 def render() -> None:
     st.title("Charge Collection (CCE)")
 
-    cfg = st.session_state.get("device_config")
-    if cfg is None:
-        st.info("Configure a device in the sidebar to begin.")
-        st.stop()
+    cfg = require_config()
 
     if cfg.half_width_um is not None:
         st.warning(
-            "These workflows are 1D-only. 2D field visualization arrives in "
-            "Phase 40 (geometry viewer). Set Dimensionality to 1D in the "
-            "sidebar."
+            "This workflow is 1D-only (2D devices are shown on the Field Map "
+            "page). Set Dimensionality to 1D in the sidebar."
         )
         st.stop()
 
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     with col1:
         v_start = st.number_input(
-            "Min bias V_start (V)",
+            "Start bias V_start (V)",
             value=-10.0,
             key="cce_v_start",
         )
     with col2:
         v_stop = st.number_input(
-            "Max bias V_stop (V)",
+            "End bias V_stop (V)",
             value=-40.0,
             key="cce_v_stop",
         )
+    with col3:
+        n_points = st.number_input(
+            "Number of bias points",
+            value=30,
+            min_value=2,
+            max_value=400,
+            step=1,
+            key="cce_n_points",
+        )
+    st.caption("Reverse bias is negative (e.g. −40 V means 40 V reverse bias).")
 
+    inputs = {
+        "V_start": float(v_start),
+        "V_stop": float(v_stop),
+        "number of points": int(n_points),
+    }
     if st.button("Run simulation"):
-        try:
-            st.session_state["cce_result"] = etna.run_cce(
-                cfg, v_start=v_start, v_stop=v_stop
-            )
-        except RuntimeError as e:
-            st.error(
-                f"Simulation failed to converge: {e}\n\n"
-                "Try adjusting device parameters (e.g. epi thickness, doping) "
-                "in the sidebar and running again."
-            )
+        if v_start > 0 or v_stop > 0:
+            st.error(FORWARD_BIAS_ERROR)
+        else:
+            try:
+                with st.spinner("Running CCE sweep..."):
+                    st.session_state["cce_result"] = etna.run_cce(
+                        cfg,
+                        v_start=float(v_start),
+                        v_stop=float(v_stop),
+                        n_points=int(n_points),
+                    )
+                st.session_state["cce_inputs"] = inputs
+            except Exception as e:  # incl. devsim.error (not a RuntimeError)
+                show_error(
+                    e,
+                    "Try a smaller reverse bias or adjust epi thickness / doping "
+                    "in the sidebar.",
+                )
 
     result = st.session_state.get("cce_result")
     if result is not None:
-        if result.metadata.get("truncated"):
-            st.warning(
-                f"Sweep stopped at {result.x.min():.1f} V (requested down to "
-                f"{result.metadata['requested_v_stop']:.1f} V) — the solver "
-                "reached full depletion / punch-through of the epi layer, "
-                "which is a physical sweep endpoint, not an error. Results "
-                "below reflect only the converged portion."
-            )
+        show_stale_warning(
+            result.config, cfg, st.session_state.get("cce_inputs"), inputs
+        )
+        show_result_notes(result)
         st.plotly_chart(build_cce_figure(result))
         st.download_button(
             "Download CSV",
@@ -76,8 +101,7 @@ def render() -> None:
             file_name="cce_result.csv",
             mime="text/csv",
         )
-
         st.caption(
-            f"I_collected: {result.metadata['I_collected']} A/cm² | "
-            f"I_generated: {result.metadata['I_generated']} A/cm²"
+            "Generated current (alpha-like profile, 15 µm range): "
+            f"{float(result.metadata.get('I_generated', float('nan'))):.3e} A/cm²"
         )

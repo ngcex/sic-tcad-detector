@@ -24,6 +24,15 @@ ALL_FIELDS_VALUES = {
     "L_transition_um": 1.5,
     "T": 310.0,
     "area_cm2": 2e-4,
+    "nplus_thickness_um": 2.0,  # added with the n+ layer DeviceConfig fields
+    "N_D_nplus": 5e18,
+    "N_t": 3e12,  # dark-current fit fields, added with the n+ default flip
+    "E_t": 0.66,
+    "buffer_thickness_um": 1.0,  # graded n-/n+ transition (opt-in measured-C-V preset)
+    "buffer_end_doping": 1e17,
+    # opt-in tabulated profile: None here (a table needs the graded profile and excludes
+    # the transition above; its round trip is tests/test_measured_cv_tabulated.py)
+    "donor_table": None,
 }
 
 
@@ -76,3 +85,58 @@ def test_dimensionality_mapping():
 
     result_2d = assemble_config(values_2d)
     assert result_2d.half_width_um == 50.0
+
+
+def test_historical_model_checkbox_applies_the_legacy_preset():
+    """The sidebar's 'historical model' checkbox merges LEGACY_PRESET into the values."""
+    from etna import LEGACY_PRESET, legacy_config
+
+    values = dict(ALL_FIELDS_VALUES, doping_profile="graded", N_D=None)
+    values.update(LEGACY_PRESET)
+    cfg = assemble_config(values)
+    ref = legacy_config(
+        epi_thickness_um=5.0, half_width_um=50.0, N_A=2e19, T=310.0, area_cm2=2e-4
+    )
+    assert cfg == ref
+    assert cfg.nplus_thickness_um is None and (cfg.N_t, cfg.E_t) == (2.8e12, 0.65)
+
+
+def test_sidebar_default_is_the_nplus_stack():
+    from app.components.device_sidebar import render_device_sidebar  # noqa: F401
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_file("app/main.py", default_timeout=120)
+    at.run()
+    # the sidebar models the 4 mm2 dosimeter == DeviceConfig's default area (2026-10-18;
+    # before, the sidebar overrode DeviceConfig's 1e-4 cm2 with 0.04)
+    import dataclasses
+
+    assert at.session_state["device_config"] == DeviceConfig()
+    assert not at.sidebar.checkbox(key="cfg_legacy_on").value
+    texts = " ".join(c.value for c in at.sidebar.caption)
+    assert "Inside the 1D engine/devsim cross-check domain" in texts
+    at.sidebar.checkbox(key="cfg_legacy_on").check()
+    at.run()
+    from etna import legacy_config, measured_cv_config, nplus_calibrated_config
+
+    assert at.session_state["device_config"] == legacy_config()
+    # the default IS the measured-C-V profile (2026-10-18); the previous calibrated model
+    # (abrupt n+, no transition) is the opt-in checkbox now
+    at.sidebar.checkbox(key="cfg_legacy_on").uncheck()
+    at.run()
+    assert at.session_state["device_config"] == measured_cv_config()
+    assert not at.sidebar.checkbox(key="cfg_nplus_cal_on").value
+    at.sidebar.checkbox(key="cfg_nplus_cal_on").check()
+    at.run()
+    assert at.session_state["device_config"] == nplus_calibrated_config()
+    infos = " ".join(c.value for c in at.sidebar.info)
+    assert "Previous calibrated model" in infos and "no graded transition" in infos
+    texts = " ".join(c.value for c in at.sidebar.caption)
+    assert "Inside the 1D engine/devsim cross-check domain" in texts
+    # the transition checkbox off = abrupt epi end with the default doping
+    at.sidebar.checkbox(key="cfg_nplus_cal_on").uncheck()
+    at.sidebar.checkbox(key="cfg_buffer_on").uncheck()
+    at.run()
+    assert at.session_state["device_config"] == dataclasses.replace(
+        DeviceConfig(), buffer_thickness_um=None, buffer_end_doping=None
+    )

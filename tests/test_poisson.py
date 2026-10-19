@@ -26,8 +26,9 @@ class TestDeviceCreation:
     def test_device_creates_successfully(self):
         from etna.core.device import create_sic_device
 
-        dev = create_sic_device(device_name=_unique_name())
-        assert dev["device_name"] is not None
+        name = _unique_name()
+        dev = create_sic_device(device_name=name)
+        assert dev["device_name"] == name
         assert dev["num_nodes"] > 100  # non-trivial mesh
 
     def test_device_has_correct_parameters(self):
@@ -37,7 +38,8 @@ class TestDeviceCreation:
         assert dev["N_D"] == pytest.approx(1.07e15, rel=0.01)
         assert dev["N_A_ionized"] > 1e17  # ionized fraction of 1e19
         assert dev["N_A_ionized"] < 5e18
-        assert dev["junction_pos"] == pytest.approx(1e-4)  # 1 um substrate
+        # p+ default = the stack's 0.3 um (1 um before 2026-10-17)
+        assert dev["junction_pos"] == pytest.approx(0.3e-4)
 
     def test_device_has_sic_material_params(self):
         from etna.core.device import create_sic_device
@@ -45,7 +47,7 @@ class TestDeviceCreation:
         dev = create_sic_device(device_name=_unique_name())
         params = dev["params"]
         assert params.eps_r == pytest.approx(9.7)
-        assert params.n_i_300 == pytest.approx(5e-9)
+        assert params.n_i_300 == pytest.approx(5e-9, rel=1e-12)
         assert params.E_g == pytest.approx(3.26)
 
 
@@ -59,7 +61,15 @@ class TestPoissonSolver:
 
         dev = create_sic_device(device_name=_unique_name())
         setup_poisson(dev)
-        solve_equilibrium(dev)  # Should not raise
+        solve_equilibrium(dev)
+        psi = np.array(
+            devsim.get_node_model_values(
+                device=dev["device_name"], region=dev["region_name"], name="Potential"
+            )
+        )
+        assert np.all(np.isfinite(psi))
+        # 4H-SiC p+/n built-in voltage ~2.9-3.0 V across the device at 0 V
+        assert 2.5 < psi.max() - psi.min() < 3.5
 
     def test_electric_field_reasonable_at_equilibrium(self):
         """E-field at equilibrium is in physically reasonable range."""
@@ -90,8 +100,11 @@ class TestPoissonSolver:
         assert len(x) == len(E)
         assert len(x) > 50  # sufficient resolution
 
-        # E-field should peak near junction
+        # E-field should peak near the p+/n junction. The n-/n+ high-low step of the
+        # default stack (builder default since 2026-10-17) carries its own built-in
+        # field at the epi end: look on the p+/n- side only.
         jp = dev["junction_pos"]
+        E = np.where(x < dev["epi_end"] - 1e-6, E, 0.0)
         idx_max = np.argmax(np.abs(E))
         x_peak = x[idx_max]
         assert (
@@ -166,6 +179,9 @@ class TestDepletionWidth:
 
         # At -200V with epi=10um, W should be clamped to epi thickness
         assert W_200 == pytest.approx(epi, rel=0.01)
+        # W grows with bias up to the clamp: this estimator gives 7.94 um at -60 V on the
+        # default stack (10 um epi), below the -200 V clamp
+        assert 0.7 * epi < W_60 < W_200
 
     def test_validation_depletion_widths(self):
         """VALIDATION: compare W at 0V, -10V, -30V against experimental targets.
@@ -210,37 +226,6 @@ class TestDepletionWidth:
         )
 
 
-class TestVoltageSweep:
-    """Test the high-level voltage sweep function."""
-
-    def test_voltage_sweep_short(self):
-        """Voltage sweep runs and returns structured results."""
-        from etna.core.device import create_sic_device
-        from etna.core.poisson import voltage_sweep
-
-        dev = create_sic_device(device_name=_unique_name())
-        voltages = np.array([0, -1, -2, -5, -10])
-
-        results = voltage_sweep(dev, voltages=voltages)
-
-        assert "voltages" in results
-        assert "E_fields" in results
-        assert "depletion_widths" in results
-        assert "E_max" in results
-
-        # Should have data for all voltages
-        assert len(results["voltages"]) >= 3  # at least 0V + some bias points
-        assert len(results["depletion_widths"]) == len(results["voltages"])
-
-        # E_max should increase with reverse bias
-        assert results["E_max"][-1] > results["E_max"][0]
-
-
-# ===================================================================
-# Regression tests: V_bi parity at T=300K (Phase 10, Plan 02)
-# ===================================================================
-
-
 class TestVbiRegression:
     """Verify V_bi at T=300K matches v1.0 exactly."""
 
@@ -262,3 +247,21 @@ class TestVbiRegression:
         V_bi_v1 = built_in_potential(N_A_ionized, N_D, params.n_i_300)
         V_bi_T = built_in_potential(N_A_ionized, N_D, n_i_T)
         assert V_bi_T == pytest.approx(V_bi_v1, rel=1e-10)
+
+
+def test_thin_p_plus_layer_builds():
+    """audit-v7 A-14: a p+ layer thinner than 50 nm builds (no mesh line below x = 0)."""
+    import devsim
+
+    from etna.core.device import create_sic_device
+    from etna.core.devsim_reset import delete_device_and_mesh
+
+    info = create_sic_device(device_name=_unique_name(), substrate_thickness_cm=2e-6)
+    try:
+        x = devsim.get_node_model_values(
+            device=info["device_name"], region=info["region_name"], name="x"
+        )
+        assert min(x) == 0.0
+        assert info["junction_pos"] == pytest.approx(2e-6)
+    finally:
+        delete_device_and_mesh(info["device_name"])

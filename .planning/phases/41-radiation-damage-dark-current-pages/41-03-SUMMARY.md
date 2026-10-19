@@ -73,8 +73,8 @@ completed: 2026-07-14
 
 Each task was committed atomically:
 
-1. **Task 1: Implement app/workflows/dark_current.py render() with ParametricSweep(param="T") + aggregation** - `6167219` (feat)
-2. **Task 2: AppTest coverage for the dark current page's ParametricSweep-based temperature sweep** - `dd12e65` (test)
+1. **Task 1: Implement app/workflows/dark_current.py render() with ParametricSweep(param="T") + aggregation** - `783b505` (feat)
+2. **Task 2: AppTest coverage for the dark current page's ParametricSweep-based temperature sweep** - `cfd4b5f` (test)
 
 **Plan metadata:** (this commit)
 
@@ -100,7 +100,7 @@ Each task was committed atomically:
 - **Fix:** `git reset --soft HEAD~1` to undo the commit while preserving all staged/working-tree content, `git restore --staged app/workflows/radiation_damage.py` to unstage only the sibling's file (leaving its content and the untracked `tests/test_app_radiation_damage_page.py` exactly as found, uncommitted, for the 41-02 agent to commit itself), then re-committed only `tests/test_app_dark_current_page.py`.
 - **Files modified:** none beyond the git index/history correction — no source content was altered
 - **Verification:** `git show --stat HEAD` after the fix shows exactly one file (`tests/test_app_dark_current_page.py`, 159 insertions); `git status --short` afterward shows `radiation_damage.py` back to its prior modified/untracked state
-- **Committed in:** `dd12e65` (corrected Task 2 commit, superseding the accidental one which was reset, not pushed)
+- **Committed in:** `cfd4b5f` (corrected Task 2 commit, superseding the accidental one which was reset, not pushed)
 
 **2. [Rule 1 - Bug] Removed a stray string-concatenation artifact from formatter output**
 
@@ -109,7 +109,7 @@ Each task was committed atomically:
 - **Fix:** Merged back into a single string literal matching the UI-SPEC text exactly.
 - **Files modified:** `app/workflows/dark_current.py`
 - **Verification:** `python -c "import ast; ast.parse(...)"` succeeds; UI-SPEC copy match confirmed by inspection
-- **Committed in:** `6167219` (part of Task 1 commit)
+- **Committed in:** `783b505` (part of Task 1 commit)
 
 **3. [Rule 3 - Blocking] Removed literal "ParametricSweep" string from the test file's docstrings**
 
@@ -118,7 +118,7 @@ Each task was committed atomically:
 - **Fix:** Reworded the module docstring to refer to the sweep orchestration class generically ("the sweep utility", "etna/api/sweep.py") instead of by its literal class name, preserving the same explanatory content without tripping the grep.
 - **Files modified:** `tests/test_app_dark_current_page.py`
 - **Verification:** `grep -c "ParametricSweep" tests/test_app_dark_current_page.py` returns `0`; all 5 tests still pass after the docstring edit
-- **Committed in:** `dd12e65` (part of Task 2 commit)
+- **Committed in:** `cfd4b5f` (part of Task 2 commit)
 
 ---
 
@@ -149,9 +149,9 @@ _Completed: 2026-07-14_
 - FOUND: `app/workflows/dark_current.py`
 - FOUND: `tests/test_app_dark_current_page.py`
 - FOUND: `.planning/phases/41-radiation-damage-dark-current-pages/41-03-SUMMARY.md`
-- FOUND commit `6167219` (Task 1: feat)
-- FOUND commit `dd12e65` (Task 2: test, corrected after the accidental-inclusion fix)
+- FOUND commit `783b505` (Task 1: feat)
+- FOUND commit `cfd4b5f` (Task 2: test, corrected after the accidental-inclusion fix)
 - `uv run pytest tests/test_app_dark_current_page.py -q` → 5 passed
 - `uv run pytest tests/test_app_csv_export.py -q` → 7 passed (regression check)
 - All plan `<acceptance_criteria>` re-verified via grep/ast checks: PASS
-- `git show --stat 6167219` and `git show --stat dd12e65` each touch exactly one file in this plan's scope (`app/workflows/dark_current.py`, `tests/test_app_dark_current_page.py` respectively) — confirmed no cross-contamination with the concurrent 41-02 agent's `app/workflows/radiation_damage.py` / `tests/test_app_radiation_damage_page.py`
+- `git show --stat 783b505` and `git show --stat cfd4b5f` each touch exactly one file in this plan's scope (`app/workflows/dark_current.py`, `tests/test_app_dark_current_page.py` respectively) — confirmed no cross-contamination with the concurrent 41-02 agent's `app/workflows/radiation_damage.py` / `tests/test_app_radiation_damage_page.py`

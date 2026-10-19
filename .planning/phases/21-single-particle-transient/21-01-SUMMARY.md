@@ -66,9 +66,9 @@ completed: 2026-03-30
 
 ## Task Commits
 
-1. **Task 1: Create single_particle.py** - `fa36190` (feat)
-2. **Fix: charge_error + robust transient_dc** - `b91e71f` (fix)
-3. **Task 2: Create test_single_particle.py** - `efb8165` (test)
+1. **Task 1: Create single_particle.py** - `3a3b2d6` (feat)
+2. **Fix: charge_error + robust transient_dc** - `12a17e1` (fix)
+3. **Task 2: Create test_single_particle.py** - `948c607` (test)
 
 ## Files Created/Modified
 
@@ -92,7 +92,7 @@ completed: 2026-03-30
 - **Fix:** Added charge_error=1e10 to all devsim.solve(type="transient_bdf1") calls, matching existing TransientSolver pattern
 - **Files modified:** src/single_particle.py
 - **Verification:** All transient simulations complete, 12 tests pass
-- **Committed in:** b91e71f
+- **Committed in:** 12a17e1
 
 **2. [Rule 1 - Bug] transient_dc convergence failure on 2D devices**
 
@@ -101,7 +101,7 @@ completed: 2026-03-30
 - **Fix:** Added try/except with fallback to relaxed tolerances (rel_error=1e-8, max_iter=100)
 - **Files modified:** src/single_particle.py
 - **Verification:** transient_dc init succeeds for all test devices
-- **Committed in:** b91e71f
+- **Committed in:** 12a17e1
 
 ---
 

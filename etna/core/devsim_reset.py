@@ -1,28 +1,27 @@
 """Single-responsibility full reset of devsim global state.
 
-devsim's own ``reset_devsim()`` deletes devices but does NOT unset the
-process-global parameters that some constructors install. In particular,
-``src/alternative_structures.py:573-598`` (``_activate_cylindrical_coords``)
-switches devsim into cylindrical (r, z) integration by setting seven global
-parameters (``raxis_zero``, ``raxis_variable`` and the five assembly-model
-names). These persist into the next *planar* device build and silently corrupt
-its Poisson assembly weights — PITFALLS P03 / P30 (severity HIGH).
+``etna.core.alternative_structures._activate_cylindrical_coords`` switches devsim
+into cylindrical (r, z) integration by setting seven process-global parameters
+(``raxis_zero``, ``raxis_variable`` and the five assembly-model names); a planar
+build after it must not inherit them (PITFALLS P03 / P30). The original premise
+of this module, that ``devsim.reset_devsim()`` does NOT unset them, is false on
+the pinned devsim 2.10: ``reset_devsim()`` removes ``raxis_*`` and restores the
+Cartesian assembly models (audit-v7 A-08; tests/test_devsim_reset.py pins it). The
+former step "set the Cartesian defaults before reset_devsim()" was therefore dead:
+its values were overwritten by the reset, and the two ``raxis_*`` writes (empty
+string) were refused by devsim and swallowed. Removed 2026-10-18. What the wrapper
+adds is (2) enumerating-and-deleting every device (never hardcoding names, PITFALLS
+P20) and (1)/(4) preserving ``direct_solver`` and ``solver_callback``, which
+``reset_devsim()`` clears.
 
-``reset_devsim_fully`` closes that leak by, in order: (1) snapshotting the
-solver parameters, (2) enumerating-and-deleting every device (never hardcoding
-names — PITFALLS P20), (3) restoring the Cartesian defaults for every leaking
-global, (4) calling ``devsim.reset_devsim()``, and (5) restoring the saved
-solver parameters.
+Order: (1) snapshot the solver parameters, (2) delete every device,
+(3) ``devsim.reset_devsim()``, (4) restore the saved solver parameters.
 
 Consumers:
-    - ``src/optimization.py`` — between microdosimetric-sweep trials, replacing
-      the former inline ``devsim.reset_devsim()`` block.
+    - ``etna/core/optimization.py`` — between microdosimetric-sweep trials.
     - The cylindrical-leak regression canary
       (``tests/test_device2d.py::TestResetStateLeak``).
-    - The Phase 26 graded-doping 2D calibration loop (~50 device builds).
-    - The Phase 31 tensor-mobility extension (will add its own globals here).
-
-Leak source verified by Read of ``src/alternative_structures.py:573-620``.
+    - ``etna.core.device2d.calibrate_graded_doping_2d`` (Phase 26 calibration loop).
 """
 
 import logging
@@ -32,8 +31,9 @@ import devsim
 logger = logging.getLogger(__name__)
 
 # The seven devsim process-globals set by
-# src/alternative_structures.py:_activate_cylindrical_coords (lines 573-598).
-# These leak across devices because they are global, not per-device.
+# etna/core/alternative_structures.py:_activate_cylindrical_coords.
+# These leak across devices because they are global, not per-device; the reset
+# regression test (tests/test_devsim_reset.py) checks every one of them is undone.
 _CYLINDRICAL_GLOBALS = (
     "raxis_zero",
     "raxis_variable",
@@ -44,16 +44,19 @@ _CYLINDRICAL_GLOBALS = (
     "element_node1_volume_model",
 )
 
-# Cartesian defaults to restore for the five assembly-model globals, per
-# src/alternative_structures.py:restore_cartesian_coords (lines 601-620).
-# raxis_zero and raxis_variable have no Cartesian counterpart and are cleared
-# to the empty string.
+# devsim 2.10's own Cartesian values of the five assembly-model globals (a fresh
+# process and devsim.reset_devsim() both give exactly these; tests/test_devsim_reset.py).
+# Used by calibrate_graded_doping_2d to go planar without deleting devices. Until
+# 2026-10-18 the element node-volume entries were "ElementNodeVolume@en0/@en1" (copied
+# from alternative_structures.restore_cartesian_coords); inert in etna, whose equations
+# assemble no element_node_model terms. raxis_zero / raxis_variable have no Cartesian
+# value (devsim refuses an empty one); only the cylindrical models read them.
 _CARTESIAN_DEFAULTS = {
     "node_volume_model": "NodeVolume",
     "edge_couple_model": "EdgeCouple",
     "element_edge_couple_model": "ElementEdgeCouple",
-    "element_node0_volume_model": "ElementNodeVolume@en0",
-    "element_node1_volume_model": "ElementNodeVolume@en1",
+    "element_node0_volume_model": "ElementNodeVolume",
+    "element_node1_volume_model": "ElementNodeVolume",
 }
 
 
@@ -61,18 +64,17 @@ def reset_devsim_fully(preserve_solver=True):
     """Clear ALL devsim global state, including cylindrical-axis parameters.
 
     Replaces the inline ``devsim.reset_devsim()`` block formerly in
-    ``src/optimization.py``. Use after any cylindrical run (e.g. a 3D-electrode
-    device from ``src/alternative_structures.py``) before building a planar
+    ``etna/core/optimization.py``. Use after any cylindrical run (e.g. a 3D-electrode
+    device from ``etna/core/alternative_structures.py``) before building a planar
     device, and between calibration trials, to guarantee a clean session.
 
-    The five-step workflow:
+    The four-step workflow:
 
     1. (preserve_solver only) Snapshot ``direct_solver`` and ``solver_callback``.
     2. Enumerate and delete every device (PITFALLS P20 — never hardcode names).
-    3. Restore the Cartesian default for each cylindrical global; clear the two
-       ``raxis_*`` globals to the empty string.
-    4. Call ``devsim.reset_devsim()``.
-    5. (preserve_solver only) Restore the snapshotted solver parameters.
+    3. Call ``devsim.reset_devsim()`` (also restores the Cartesian assembly models and
+       removes the ``raxis_*`` globals).
+    4. (preserve_solver only) Restore the snapshotted solver parameters.
 
     The function is idempotent — safe to call on an empty session with no
     devices and no cylindrical state.
@@ -108,15 +110,8 @@ def reset_devsim_fully(preserve_solver=True):
         except Exception:
             logger.debug("reset_devsim_fully: failed to delete device %r", dev)
 
-    # Step 3: restore Cartesian defaults / clear raxis globals (P03, P30).
-    for name in _CYLINDRICAL_GLOBALS:
-        value = _CARTESIAN_DEFAULTS.get(name, "")
-        try:
-            devsim.set_parameter(name=name, value=value)
-        except Exception:
-            pass
-
-    # Step 4: devsim's own reset.
+    # Step 3: devsim's own reset (Cartesian assembly models back, raxis_* removed:
+    # P03 / P30).
     try:
         devsim.reset_devsim()
     except Exception:
@@ -124,7 +119,7 @@ def reset_devsim_fully(preserve_solver=True):
             "reset_devsim_fully: devsim.reset_devsim() raised", exc_info=True
         )
 
-    # Step 5: restore solver settings.
+    # Step 4: restore solver settings.
     if preserve_solver:
         if saved_solver is not None:
             try:
@@ -136,3 +131,21 @@ def reset_devsim_fully(preserve_solver=True):
                 devsim.set_parameter(name="solver_callback", value=saved_callback)
             except Exception:
                 pass
+
+
+def delete_device_and_mesh(device_name):
+    """Delete a devsim device and the mesh it was built from.
+
+    ``devsim.delete_device`` leaves the mesh alive (a new device can still be created
+    from it), so per-call devices leaked one mesh each in long fluence / dose-rate
+    loops (audit-v7 A-09). Every ETNA builder (create_sic_device, create_sic_device_2d,
+    alternative_structures, the batched and engine2d probes) creates one device per
+    mesh named ``f"{device_name}_mesh"``; this deletes both. The device deletion
+    raises ``devsim.error`` exactly like ``devsim.delete_device`` (callers keep their
+    own handling); a missing mesh (device built some other way) is not an error.
+    """
+    devsim.delete_device(device=device_name)
+    try:
+        devsim.delete_mesh(mesh=f"{device_name}_mesh")
+    except devsim.error:
+        logger.debug("delete_device_and_mesh: no mesh %r_mesh", device_name)

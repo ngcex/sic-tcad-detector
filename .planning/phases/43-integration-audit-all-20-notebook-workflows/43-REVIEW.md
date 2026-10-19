@@ -25,7 +25,7 @@ status: issues_found
 
 ## Summary
 
-Phase 43 is documentation-only, as expected: `git diff --stat fbd4e30..HEAD -- . ':!.planning'` is empty — zero non-`.planning` files were touched. The phase produced an audit deliverable (`v5.0-MILESTONE-AUDIT.md`), corrected six stale checkboxes plus FEAT-05 in `REQUIREMENTS.md`, and two SUMMARY.md files.
+Phase 43 is documentation-only, as expected: `git diff --stat 97887ad..HEAD -- . ':!.planning'` is empty — zero non-`.planning` files were touched. The phase produced an audit deliverable (`v5.0-MILESTONE-AUDIT.md`), corrected six stale checkboxes plus FEAT-05 in `REQUIREMENTS.md`, and two SUMMARY.md files.
 
 Verification performed:
 

@@ -84,9 +84,9 @@ completed: 2026-07-10
 
 Each task was committed atomically:
 
-1. **Task 1: Theme config.toml + Home page + 7 placeholder pages with empty-state guard** - `66b9388` (feat)
-2. **Task 2: st.navigation entry script (app/main.py) wiring sidebar + all 8 pages** - `bab05f0` (feat)
-3. **Task 3: UI-01 empty-state guard test + AppTest nav/sidebar smoke** - `8e1821d` (test)
+1. **Task 1: Theme config.toml + Home page + 7 placeholder pages with empty-state guard** - `b28b0ac` (feat)
+2. **Task 2: st.navigation entry script (app/main.py) wiring sidebar + all 8 pages** - `bfc1340` (feat)
+3. **Task 3: UI-01 empty-state guard test + AppTest nav/sidebar smoke** - `cede01c` (test)
 
 ## Files Created/Modified
 
@@ -114,7 +114,7 @@ Each task was committed atomically:
 - **Fix:** Added an explicit, distinct `url_path=` string to each of the 8 `st.Page(...)` calls in `app/main.py` (e.g. `"home"`, `"cv"`, `"field-map"`, `"radiation-damage"`).
 - **Files modified:** `app/main.py`
 - **Verification:** `AppTest.from_file("app/main.py").run()` now completes with no exception; `device_config` is set in `session_state` after boot.
-- **Committed in:** `bab05f0` (Task 2 commit)
+- **Committed in:** `bfc1340` (Task 2 commit)
 
 **2. [Rule 3 - Blocking issue] Wrapped the page render call for `AppTest.from_function` instead of passing the bare callable**
 
@@ -123,7 +123,7 @@ Each task was committed atomically:
 - **Fix:** Defined a small local wrapper function (`def _run_cv_page(): from app.pages.cv import render; render()`) and passed the wrapper to `AppTest.from_function`. This satisfies the "self-contained" requirement while still exercising the real, shipped `app.pages.cv.render` guard logic (no duplicated assertion text).
 - **Files modified:** `tests/test_app_pages.py`
 - **Verification:** `test_empty_state_guard` passes; `at.exception == []` and the guard's `st.info` text is present.
-- **Committed in:** `8e1821d` (Task 3 commit)
+- **Committed in:** `cede01c` (Task 3 commit)
 
 ---
 
@@ -149,4 +149,4 @@ _Completed: 2026-07-10_
 
 ## Self-Check: PASSED
 
-All created files verified present on disk: `app/main.py`, `app/pages/__init__.py`, `app/pages/home.py`, `app/pages/cv.py`, `app/pages/cce.py`, `app/pages/field_map.py`, `app/pages/radiation_damage.py`, `app/pages/dark_current.py`, `app/pages/microdosimetry.py`, `app/pages/batch_sweep.py`, `.streamlit/config.toml`, `tests/test_app_pages.py`. All commit hashes verified present in `git log --oneline`: `66b9388`, `bab05f0`, `8e1821d`.
+All created files verified present on disk: `app/main.py`, `app/pages/__init__.py`, `app/pages/home.py`, `app/pages/cv.py`, `app/pages/cce.py`, `app/pages/field_map.py`, `app/pages/radiation_damage.py`, `app/pages/dark_current.py`, `app/pages/microdosimetry.py`, `app/pages/batch_sweep.py`, `.streamlit/config.toml`, `tests/test_app_pages.py`. All commit hashes verified present in `git log --oneline`: `b28b0ac`, `bfc1340`, `cede01c`.

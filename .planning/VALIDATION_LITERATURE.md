@@ -70,16 +70,16 @@ DeviceConfig(doping_profile="uniform", N_D=2.46e15, epi_thickness_um=30.0,
 
 | Check               | ETNA (p-n junction) | Bruzzi & Verroi 2023 (Schottky) | Note                                                                              |
 | ------------------- | ------------------- | ------------------------------- | --------------------------------------------------------------------------------- |
-| W at 0 V            | 1.117 µm            | 0.7 µm                          | Offset — see caveat above (expected: p-n V_bi ≫ Schottky V_bi)                    |
-| W at −40 V          | 4.284 µm            | 4.2 µm                          | 2.0% deviation from the paper's reported endpoint                                 |
-| N_D from 1/C² slope | 2.473×10¹⁵ cm⁻³     | 2.460×10¹⁵ cm⁻³ (input to sim)  | Solver self-consistency round-trip, see caveat below — not a comparison to Bruzzi |
+| W at 0 V            | 1.127 µm            | 0.7 µm                          | Offset — see caveat above (expected: p-n V_bi ≫ Schottky V_bi)                    |
+| W at −40 V          | 4.330 µm            | 4.2 µm                          | +3.1 % deviation from the paper's reported endpoint (W = ε·A/C, as measured)       |
+| N_D from 1/C² slope | 2.455×10¹⁵ cm⁻³     | 2.460×10¹⁵ cm⁻³ (input to sim)  | Solver self-consistency round-trip, see caveat below — not a comparison to Bruzzi |
 
 ![C-V validation vs Bruzzi & Verroi 2023](../figures/cv_validation_bruzzi2023.png)
 
 **Second caveat — what the N_D-recovery check actually shows.** `N_D=2.46e15`
 was an _input_ to the simulation (fed in via `DeviceConfig(N_D=2.46e15, ...)`
 to match the paper's device), not something extracted from Bruzzi's raw data.
-The 1/C² slope inverting back to 2.473×10¹⁵ is therefore an input→output
+The 1/C² slope inverting back to 2.455×10¹⁵ is therefore an input→output
 round-trip through the solver's own electrostatics — it confirms ETNA's DD
 solver reproduces the analytic abrupt-junction Mott-Schottky relation to high
 precision, which it should. **This is a solver self-consistency check, not an
@@ -87,18 +87,25 @@ independent validation against Bruzzi & Verroi** (their paper does not
 supply raw C(V) points, only the same derived quantities — W-range, N_D,
 V_bi — extracted using the same textbook depletion model ETNA implements).
 
-**Verdict:** the high-bias depletion width (4.284 µm vs the paper's reported
-4.2 µm endpoint, 2% deviation) confirms ETNA produces a C-V curve of the
-correct **absolute magnitude and shape** for a real, independently-fabricated
-device of known geometry and doping that the simulator was never calibrated
-to. The low-bias offset is the correctly predicted consequence of comparing a
-p-n junction to a Schottky diode, not a discrepancy. This is a genuine,
-non-circular absolute-scale sanity check on the drift-diffusion C-V solver —
-narrower than a full independent validation, since it rests on the paper's
-derived endpoints rather than raw measured C(V) data. A stronger check would
-require either Bruzzi's raw measured points (not published) or institutional
-access to JINST C05023's I-V/angular-response data (see below — independent
-of the existing calibration).
+**Observable and grid (2026-10-17).** ETNA's W here is ε·A/C of the small-signal
+capacitance C = dQ/dV, the same quantity Bruzzi & Verroi derive from their 1 kHz LCR
+measurement (not the simulated depletion edge, 4.311 µm at −40 V). The comparison is
+read at a solved −40 V point (1 V grid). The previous table (4.284 µm, 2.0 %) predates
+the small-signal C (C = dQ/dV since 2026-10-17); an intermediate +2.8 % was read at
+−39.74 V, the nearest point of the default `linspace(0, -50, 40)` grid.
+
+**Verdict (corrected 2026-10-18):** this is a SOLVER-SCALE check on a DIFFERENT device, not a
+validation of the ETNA dosimeter. Bruzzi & Verroi measured a Schottky diode on a 30 um epi at
+N = 2.46e15 (V_bi = 1.2 V held in their fit); the +3.1 % at -40 V (4.330 um vs 4.2 um) is exactly
+the Schottky-vs-pn built-in-voltage difference (abrupt estimate 4.24 um with V_bi 1.2 V vs
+4.33 um with 2.9 V): with V_bi matched the solver's absolute scale agrees to about 1 %
+(+1.0 % against the paper's two-digit value). It places no constraint on this device's N_D_bulk (30x the doping). The only dataset that tests THIS device is
+the measured C-V of Photons Fig. 4b (digitised in lab/cv_gap/): it puts the depletion-width knee
+at -1...-4 V (W(-2 V) = 7.18 um, W(-5 V) = 9.27 um) whereas the previous 3-point-calibrated
+model (now etna.nplus_calibrated_config()) had W(-2 V) = 2.99 um and W(-5 V) = 5.93 um. Since
+2026-10-18 the default doping is FITTED on that digitised curve (W(-2 V) 6.94, W(-5 V) 9.25 um;
+plateau rms 0.013 um, knee rms 0.24 um), so it is a calibration input of the default, no longer
+an independent test; see .issues/perf/PERF-05-default-stack-followups.md.
 
 ---
 
@@ -133,7 +140,8 @@ from this document.
   "100% CCE above 20 V for alpha particles" in unrelated 4H-SiC detectors —
   not a tabulated CCE-vs-bias curve from a device with matching geometry/
   doping. This is _consistent_ with ETNA's simulated full-depletion onset
-  (~8–15 V for the default device — see the CCE bias-range UI enhancement
+  (~8–15 V for the default device of that time; ~3 V on the measured-C-V default since
+  2026-10-18 — see the CCE bias-range UI enhancement
   added after the v5.0 audit) but is a qualitative sanity check, not a
   matched plot-to-plot validation. Revisit if a specific tabulated CCE(V)
   dataset with stated device geometry becomes available.
@@ -158,7 +166,7 @@ from this document.
 
 | Observable                        | Status                                     | Confidence                    |
 | --------------------------------- | ------------------------------------------ | ----------------------------- |
-| C-V depletion width (high-bias)   | **Validated — absolute-scale sanity check** | 2% deviation from paper's endpoint |
+| C-V depletion width (high-bias)   | **Validated — absolute-scale sanity check** | +3.1 % deviation from paper's endpoint (−40 V) |
 | Doping recovery from 1/C² slope   | Solver self-consistency round-trip (N_D was a sim input) | Not independent validation |
 | C-V depletion width (low-bias)    | Structural offset, explained               | N/A (not a discrepancy)       |
 | CCE-vs-bias (matched device)      | Not validatable — no matched dataset found | —                             |

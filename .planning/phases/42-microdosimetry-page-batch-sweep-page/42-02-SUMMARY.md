@@ -75,8 +75,8 @@ completed: 2026-07-14
 
 Each task was committed atomically:
 
-1. **Task 1: Implement the microdosimetry page** - `dc29016` (feat)
-2. **Task 2: AppTest coverage for the microdosimetry page** - `1bde76f` (test)
+1. **Task 1: Implement the microdosimetry page** - `c151ab7` (feat)
+2. **Task 2: AppTest coverage for the microdosimetry page** - `f49645e` (test)
 
 **Plan metadata:** (final docs commit — see below)
 
@@ -100,7 +100,7 @@ _Task 2 is a `tdd="true"` task, but by plan design Task 1 builds the page first,
 **1. [Rule 3 - Blocking] Merged main to obtain the declared 42-01 dependency**
 
 - **Found during:** Task 1 (page import verification)
-- **Issue:** The orchestrator cut this worktree from a stale base (`5e0b686`) that predated the 42-01 merge on `main` (`1a3051b`). `app/components/results.py` in the worktree lacked `build_microdosimetry_figure`, so the page's import failed. The plan's frontmatter declares `depends_on: [42-01]` and the orchestrator confirmed 42-01 was merged to main.
+- **Issue:** The orchestrator cut this worktree from a stale base (`4a7cebe`) that predated the 42-01 merge on `main` (`2c6f7f2`). `app/components/results.py` in the worktree lacked `build_microdosimetry_figure`, so the page's import failed. The plan's frontmatter declares `depends_on: [42-01]` and the orchestrator confirmed 42-01 was merged to main.
 - **Fix:** Fast-forwarded the worktree-agent branch with `git merge main` (main HEAD was a strict descendant of the merge-base; main touches `results.py`/`test_app_csv_export.py`/docs but NOT `app/workflows/microdosimetry.py`, so the uncommitted Task-1 change was preserved and HEAD stayed on the worktree-agent branch). No rebase (would rewrite history / trip branch guards).
 - **Files modified:** none of the task files (merge only pulled in 42-01 + prior phases' already-merged work)
 - **Verification:** Task 1 inline verify prints OK; full test suite green post-merge.
@@ -141,7 +141,7 @@ None — the file-upload surface introduced here is exactly the surface the plan
 ## Self-Check: PASSED
 
 - Files exist: app/workflows/microdosimetry.py, tests/test_app_microdosimetry_page.py — both FOUND
-- Commits exist: dc29016 (feat), 1bde76f (test) — both FOUND
+- Commits exist: c151ab7 (feat), f49645e (test) — both FOUND
 - `uv run --extra dev pytest tests/test_app_microdosimetry_page.py tests/test_api_microdosimetry.py tests/test_app_csv_export.py -q` -> 14 passed
 - Inline page verify prints OK (no st.metric, os.remove+finally present, module-attribute seam, no half_width_um guard)
 

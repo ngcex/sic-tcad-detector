@@ -71,9 +71,9 @@ completed: 2026-03-21
 
 Each task was committed atomically:
 
-1. **Task 1: CCE vs dose-rate sweep function and plotting** - `91b0214` (feat)
-2. **Task 2: Phase 4 validation notebook with FLASH results** - `464efd7` (feat)
-3. **Task 3: Verify FLASH simulation results** - `b84e611` (fix -- stale print strings corrected after checkpoint approval)
+1. **Task 1: CCE vs dose-rate sweep function and plotting** - `c2ad1c1` (feat)
+2. **Task 2: Phase 4 validation notebook with FLASH results** - `a74049e` (feat)
+3. **Task 3: Verify FLASH simulation results** - `7c0a5df` (fix -- stale print strings corrected after checkpoint approval)
 
 ## Files Created/Modified
 
@@ -101,7 +101,7 @@ Each task was committed atomically:
 - **Fix:** Replaced hardcoded strings with computed f-string expressions
 - **Files modified:** scripts/create_notebook_04.py, notebooks/04_flash_recombination.ipynb
 - **Verification:** Notebook re-executed with correct computed values
-- **Committed in:** b84e611
+- **Committed in:** 7c0a5df
 
 ---
 
@@ -130,4 +130,4 @@ _Completed: 2026-03-21_
 
 ## Self-Check: PASSED
 
-All 7 files verified present. All 3 commits (91b0214, 464efd7, b84e611) verified in git log.
+All 7 files verified present. All 3 commits (c2ad1c1, a74049e, 7c0a5df) verified in git log.

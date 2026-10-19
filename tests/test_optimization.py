@@ -50,19 +50,51 @@ class TestSweepValidityGate:
         assert ranked.iloc[0]["center_cce"] == 0.99
         assert not ranked.iloc[1]["is_valid"]
 
-    def test_valid_configs_ordered_by_uniformity(self):
-        """Within the valid group, higher edge_center_ratio ranks first."""
+    def test_valid_configs_ranked_by_operating_point_not_ratio(self):
+        """Valid rows are ordered by lowest V_bias, then largest margin V_bias - V_fd.
+
+        edge_center_ratio is no longer a key: for the laterally uniform model it is 1 up to
+        solver noise, and ordering by it ordered noise (devsim and the 2D engine disagreed).
+        """
         df = pd.DataFrame(
             [
-                {"edge_center_ratio": 0.93, "is_valid": True},
-                {"edge_center_ratio": 0.98, "is_valid": True},
-                {"edge_center_ratio": 0.50, "is_valid": False},
+                {"half_width_um": 50, "V_bias": 50, "V_fd": 10.5, "edge_center_ratio": 1.0000002, "is_valid": True},
+                {"half_width_um": 50, "V_bias": 20, "V_fd": 10.5, "edge_center_ratio": 0.9999990, "is_valid": True},
+                {"half_width_um": 25, "V_bias": 20, "V_fd": 10.5, "edge_center_ratio": 1.0000010, "is_valid": True},
+                {"half_width_um": 50, "V_bias": 20, "V_fd": 12.0, "edge_center_ratio": 1.0000005, "is_valid": True},
+                {"half_width_um": 50, "V_bias": 5, "V_fd": 10.5, "edge_center_ratio": 1.0, "is_valid": False},
             ]
         )
         ranked = _rank_sweep_results(df)
-        assert ranked.iloc[0]["edge_center_ratio"] == 0.98
-        assert ranked.iloc[1]["edge_center_ratio"] == 0.93
-        assert not ranked.iloc[2]["is_valid"]
+        order = list(zip(ranked["V_bias"], ranked["V_fd"], ranked["half_width_um"]))
+        assert order == [(20, 10.5, 25), (20, 10.5, 50), (20, 12.0, 50), (50, 10.5, 50), (5, 10.5, 50)]
+
+    def test_failure_reason_column_is_tolerated(self):
+        """A string failure_reason column (with NaN rows) ranks and is carried through."""
+        df = pd.DataFrame(
+            [
+                {"half_width_um": 25, "V_bias": 80, "V_fd": np.nan, "is_valid": False,
+                 "center_cce": np.nan, "failure_reason": "outside model validity: ..."},
+                {"half_width_um": 25, "V_bias": 20, "V_fd": 10.5, "is_valid": True,
+                 "center_cce": 0.99, "failure_reason": ""},
+            ]
+        )
+        ranked = _rank_sweep_results(df)
+        assert list(ranked["failure_reason"]) == ["", "outside model validity: ..."]
+        assert ranked.iloc[0]["is_valid"]
+
+    def test_ranking_ignores_ratio_noise(self):
+        """Shuffling the 1e-6 noise of the ratio must not change the order."""
+        rows = [
+            {"half_width_um": hw, "V_bias": vb, "V_fd": 10.5, "is_valid": True}
+            for hw in (25, 50, 100)
+            for vb in (20, 50)
+        ]
+        base = pd.DataFrame(rows)
+        a = base.assign(edge_center_ratio=np.linspace(0.999999, 1.000002, len(base)))
+        b = base.assign(edge_center_ratio=np.linspace(1.000002, 0.999999, len(base)))
+        key = ["half_width_um", "V_bias"]
+        assert _rank_sweep_results(a)[key].values.tolist() == _rank_sweep_results(b)[key].values.tolist()
 
 
 # ---------------------------------------------------------------------------
@@ -246,3 +278,83 @@ class TestScoreStructures:
         assert (
             set(df.columns) == expected_cols
         ), f"Missing columns: {expected_cols - set(df.columns)}"
+
+
+class TestMicrodosimetricSweepEndToEnd:
+    """B-03: the sweep must resolve default junction doping instead of failing every row."""
+
+    @pytest.mark.slow
+    def test_one_config_is_not_nan(self):
+        from etna.core.optimization import microdosimetric_sweep
+
+        df = microdosimetric_sweep(
+            half_widths_um=(25,),
+            epi_thicknesses_cm=(10e-4,),
+            N_D_bulks=(5e14,),
+            V_biases=(60,),
+            n_lateral_points=3,
+        )
+        row = df.iloc[0]
+        assert np.isfinite(row["V_fd"]), "V_fd is NaN: the Mj-3 gate raised and the row was dropped"
+        assert np.isfinite(row["center_cce"])
+        assert bool(row["is_fully_depleted"])
+
+    @pytest.mark.slow
+    def test_parallel_matches_serial_including_a_failing_config(self):
+        """n_jobs>1 gives the same table as the serial loop (fresh builds, per-process devsim)."""
+        from etna.core.optimization import microdosimetric_sweep
+
+        kw = dict(
+            half_widths_um=(25,),
+            epi_thicknesses_cm=(10e-4,),
+            N_D_bulks=(5e13, 5e14),
+            V_biases=(20, 80),  # (5e13, 80) fails to converge on the legacy device
+            n_lateral_points=3,
+            nplus_thickness_cm=None,  # legacy: cathode on the n- epi (the wall)
+            substrate_thickness_cm=1e-4,
+            # no graded transition, previous junction doping (the builders' fallbacks are
+            # the measured-C-V stack since 2026-10-18; the wall was measured on this one)
+            buffer_thickness_cm=None,
+            buffer_end_doping=None,
+            N_D_junction=2.958237e15,
+            L_transition=0.987e-4,
+        )
+        serial = microdosimetric_sweep(**kw, n_jobs=1)
+        parallel = microdosimetric_sweep(**kw, n_jobs=4)
+        assert len(serial) == 4 and serial["center_cce"].isna().sum() >= 1
+        pd.testing.assert_frame_equal(serial, parallel, rtol=1e-6, atol=1e-9)
+
+
+class TestDarkCurrent2DMatches1DTwin:
+    """The 2D domain is the half device: total current must equal J(1D twin) x full SV area."""
+
+    @pytest.mark.slow
+    def test_total_current_is_j_times_sv_area(self):
+        import uuid
+
+        import devsim
+
+        from etna.core.dark_current import create_dark_current_device, dark_current_sweep
+        from etna.core.device2d import _L_TRANSITION_DEFAULT, _N_D_JUNCTION_DEFAULT
+        from etna.core.devsim_reset import reset_devsim_fully
+        from etna.core.optimization import get_dark_current_2d
+
+        hw = 25.0
+        reset_devsim_fully()
+        I2 = get_dark_current_2d(half_width_um=hw, V_bias=50.0, epi_thickness_cm=10e-4, N_D_bulk=8.5e13)
+        reset_devsim_fully()
+        name = f"dc_twin_{uuid.uuid4().hex[:6]}"
+        dev = create_dark_current_device(
+            device_name=name,
+            doping_profile="graded",
+            N_D_junction=_N_D_JUNCTION_DEFAULT,
+            N_D_bulk=8.5e13,
+            L_transition=_L_TRANSITION_DEFAULT,
+            epi_thickness_cm=10e-4,
+        )
+        try:
+            J = abs(dark_current_sweep(dev, [-50.0], area=1.0, V_step=0.5)["J_total"][-1])
+        finally:
+            devsim.delete_device(device=name)
+        # abs=0: the default 1e-12 absolute tolerance would swallow currents of ~1e-14 A
+        assert I2 == pytest.approx(J * (2 * hw * 1e-4) ** 2, rel=0.03, abs=0)

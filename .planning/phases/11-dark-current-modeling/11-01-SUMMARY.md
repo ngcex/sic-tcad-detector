@@ -78,8 +78,8 @@ completed: 2026-03-23
 
 ## Task Commits
 
-1. **Task 1: Add Z1/2 trap parameters and create dark_current.py** - `7d7ee36` (feat)
-2. **Task 2: Add tests for dark current physics and calibration** - `4086022` (test)
+1. **Task 1: Add Z1/2 trap parameters and create dark_current.py** - `c2e7284` (feat)
+2. **Task 2: Add tests for dark current physics and calibration** - `4acdf34` (test)
 
 ## Files Created/Modified
 
@@ -108,7 +108,7 @@ completed: 2026-03-23
 - **Fix:** Reformulated N_t as effective volumetric generation rate (cm^-3/s) with E-field-weighted depletion region localization. Calibrated N_t=2.2e13 to match 18 pA target. Retained Hurkx Gamma framework for physical field-enhancement scaling.
 - **Files modified:** src/dark_current.py, src/sic_material.py
 - **Verification:** Calibration test confirms 18.5 pA at -30V, all 10 dark current tests pass
-- **Committed in:** 7d7ee36 (Task 1 commit)
+- **Committed in:** c2e7284 (Task 1 commit)
 
 **2. [Rule 1 - Bug] Adjusted test expectations for SiC physics**
 
@@ -117,7 +117,7 @@ completed: 2026-03-23
 - **Fix:** Replaced with tests that verify Gamma=1 at moderate fields (correct physics) and Gamma>1 at extreme fields (formula validation). Added test_tat_components_exist instead of sum-to-total check.
 - **Files modified:** tests/test_dark_current.py
 - **Verification:** All 10 tests pass
-- **Committed in:** 4086022 (Task 2 commit)
+- **Committed in:** 4acdf34 (Task 2 commit)
 
 ---
 
