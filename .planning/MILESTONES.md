@@ -74,9 +74,16 @@
 
 ---
 
-## v4.0 Scientific Validation & Extended Physics (Partially executed; superseded)
+## v4.0 Scientific Validation & Extended Physics (Partially executed)
 
-Phase 26 (graded doping 2D calibration) shipped 2026-06-16. Phases 27-34 were never run as GSD phases: the open physics items moved to the audits (`PHYSICS_AUDIT_v4.md`, `_v5.md`, `PHYSICS_REVIEW_v6.md`, `.issues/audit-v7/`) and the tech-debt inventory. kappa(E) remains data-blocked.
+Evidence from git history and code (2026-10-19), phase by phase:
+
+- **26 Graded Doping 2D Calibration:** complete (2026-06-16).
+- **27 PSTAR+SRIM Stopping Power & Real kappa:** partial. Machinery on main (commit `18e4005`): Bragg-additivity SiC stopping power, `compute_kappa_table`, kinetic-energy kappa lookup. The real PSTAR/SRIM CSVs in `data/srim/` are still placeholders (data-blocked). The GSD phase itself was not formally executed.
+- **28 Geant4 ROOT Integration:** partial. `mc_coupling.py` reads ROOT files through a lazily imported `uproot`; no `RootSchemaMap` or golden fixture was found.
+- **29-34 (noise, build-up, anisotropic mobility, angular sweep, full 3D, milestone audit):** not started; no corresponding code found. The "v4.0 partial: 22 plans" figure in the old STATE.md metrics could not be traced to individual plans.
+
+The open physics items of these phases are also tracked in the audits (`PHYSICS_AUDIT_v4.md`, `_v5.md`, `PHYSICS_REVIEW_v6.md`, `.issues/audit-v7/`). kappa(E) remains data-blocked.
 
 ---
 

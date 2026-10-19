@@ -7,10 +7,10 @@ stopped_at: PR #1 merged to main (357e201), 2026-10-19
 last_updated: 2026-10-19T12:00:00.000Z
 last_activity: 2026-10-19 -- PR #1 merged; GSD documents aligned
 progress:
-  total_phases: 0
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_phases: 25
+  completed_phases: 16
+  total_plans: 43
+  completed_plans: 70
   percent: 100
 ---
 
@@ -25,7 +25,7 @@ Since then the project moved on (v6.0, shipped 2026-10-19 as PR #1, merge commit
   (debt inventory, final state), `.issues/perf/PERF-0*.md`, `lab/*/notes/LOG.md`,
   `deliverables/DIMENSIONS-provenance.md`.
 - The physics audits v4-v7 and review v6 (`PHYSICS_AUDIT_v4.md`, `_v5.md`, `PHYSICS_REVIEW_v6.md`,
-  `.issues/audit-v7/`) superseded v4.0 Phases 27-34; see MILESTONES.md.
+  `.issues/audit-v7/`) now track the open physics items of v4.0 Phases 27-34 (27-28 partial, 29-34 not started); see MILESTONES.md.
 - Git history was rewritten on 2026-10-19 (copyrighted `papers/` PDFs removed); commit SHAs cited
   in older documents were remapped with `docs/history-rewrite-commit-map.txt`.
 - Open items need the user: Auger term in the FLASH sweep, CCE(LET) table regeneration, C-12
