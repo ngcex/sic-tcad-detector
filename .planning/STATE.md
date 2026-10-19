@@ -1,34 +1,50 @@
 ---
 gsd_state_version: 1.0
-milestone: v5.0
-milestone_name: Simulator Library & Streamlit UI
+milestone: v6.0
+milestone_name: Audit-v7 Hardening & Performance Engines
 status: milestone_complete
-stopped_at: Milestone complete (Phase 43 was final phase)
-last_updated: 2026-07-15T09:08:06.049Z
-last_activity: 2026-07-15 -- Phase 43 execution started
+stopped_at: PR #1 merged to main (357e201), 2026-10-19
+last_updated: 2026-10-19T12:00:00.000Z
+last_activity: 2026-10-19 -- PR #1 merged; GSD documents aligned
 progress:
   total_phases: 25
   completed_phases: 16
   total_plans: 43
   completed_plans: 70
-  percent: 64
+  percent: 100
 ---
 
 # Project State
 
+## Current status (2026-10-19) - read this first
+
+The sections below are the v5.0 history (July 2026) and are kept for context only.
+Since then the project moved on (v6.0, shipped 2026-10-19 as PR #1, merge commit `357e201`):
+
+- Authoritative documents: `docs/USAGE.md` (single usage doc), `.issues/TECH-DEBT-2026-10-18.md`
+  (debt inventory, final state), `.issues/perf/PERF-0*.md`, `lab/*/notes/LOG.md`,
+  `deliverables/DIMENSIONS-provenance.md`.
+- The physics audits v4-v7 and review v6 (`PHYSICS_AUDIT_v4.md`, `_v5.md`, `PHYSICS_REVIEW_v6.md`,
+  `.issues/audit-v7/`) now track the open physics items of v4.0 Phases 27-34 (27-28 partial, 29-34 not started); see MILESTONES.md.
+- Git history was rewritten on 2026-10-19 (copyrighted `papers/` PDFs removed); commit SHAs cited
+  in older documents were remapped with `docs/history-rewrite-commit-map.txt`.
+- Open items need the user: Auger term in the FLASH sweep, CCE(LET) table regeneration, C-12
+  `doping_profile` contract, validation data (C-V to -100..-200 V / SIMS, mask dims, I(T)), physics
+  A-02, B-07, B-08, B-10, B-11, microdosimeter CCE shape.
+
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-06-26)
+See: .planning/PROJECT.md (updated 2026-10-19)
 
 **Core value:** Installable Python library + Streamlit UI that makes the SiC TCAD simulator usable by the Petringa group without reading source code
-**Current focus:** Milestone complete
+**Current focus:** v6.0 shipped (work tracked outside GSD phases: `.issues/`, `docs/USAGE.md`, PR #1). Next: the needs-user list in PR #1.
 
 ## Current Position
 
-Phase: 43
-Plan: Not started
+Phase: none (v6.0 was run as an audit/perf campaign, not as numbered GSD phases)
+Plan: n/a
 Status: Milestone complete
-Last activity: 2026-07-15
+Last activity: 2026-10-19
 
 Progress: [██████████] 100%
 
@@ -131,6 +147,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-07-14T16:00:00.000Z
-Stopped at: Phase 42 executed (3/3 plans complete, 2 waves) — ready for /gsd:execute-phase 43
+Last session: 2026-10-19
+Stopped at: v6.0 shipped (PR #1 merged)
 Resume file: None

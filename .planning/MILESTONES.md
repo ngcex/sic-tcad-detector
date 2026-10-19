@@ -65,3 +65,39 @@
 - 6 publication-quality Jupyter notebooks (09: damage overview, 10: CCE vs fluence, 11: dark current + C-V, 12: multi-defect comparison, 13: parametric optimization, 14: literature validation)
 
 ---
+
+---
+
+## v5.0 Simulator Library & Streamlit UI (Shipped: 2026-07-15)
+
+**Phases completed:** 9 phases (35-43). Installable `etna` package (`etna/core`, `etna/api`), Streamlit multi-page app, geometry viewer, all notebook workflows reproducible from the UI. Audit: `milestones/v5.0-MILESTONE-AUDIT.md`.
+
+---
+
+## v4.0 Scientific Validation & Extended Physics (Partially executed)
+
+Evidence from git history and code (2026-10-19), phase by phase:
+
+- **26 Graded Doping 2D Calibration:** complete (2026-06-16).
+- **27 PSTAR+SRIM Stopping Power & Real kappa:** partial. Machinery on main (commit `18e4005`): Bragg-additivity SiC stopping power, `compute_kappa_table`, kinetic-energy kappa lookup. The real PSTAR/SRIM CSVs in `data/srim/` are still placeholders (data-blocked). The GSD phase itself was not formally executed.
+- **28 Geant4 ROOT Integration:** partial. `mc_coupling.py` reads ROOT files through a lazily imported `uproot`; no `RootSchemaMap` or golden fixture was found.
+- **29-34 (noise, build-up, anisotropic mobility, angular sweep, full 3D, milestone audit):** not started; no corresponding code found. The "v4.0 partial: 22 plans" figure in the old STATE.md metrics could not be traced to individual plans.
+
+The open physics items of these phases are also tracked in the audits (`PHYSICS_AUDIT_v4.md`, `_v5.md`, `PHYSICS_REVIEW_v6.md`, `.issues/audit-v7/`). kappa(E) remains data-blocked.
+
+---
+
+## v6.0 Audit-v7 Hardening & Performance Engines (Shipped: 2026-10-19)
+
+**Delivery:** PR #1 into `main` (merge commit `357e201`); run as an audit/performance campaign rather than numbered phases. Local gate: `uv run pytest -n auto -q` = 1085 passed (~5 min), ruff clean, generators in sync, all 21 notebooks execute, 10 app pages walked headless.
+
+**Key accomplishments:**
+
+- Batched numba float64 1D engine (C-V, CCE, dark current incl. TAT/SRH, FLASH incl. Auger) and laterally-uniform 2D engine, 100-2900x faster than devsim with parity 1e-6..1e-12; devsim kept as fallback outside the validated box.
+- New default stack (p+ 0.3 um / graded n-epi / n+) with fitted n-/n+ transition; presets `measured_cv_tabulated_config`, `nplus_calibrated_config`, `legacy_config`, `microdosimeter_config`; C = dQ/dV; balanced steady-state current extraction; honest truncation and validity reporting.
+- `etna.run_all` + Run All and Export pages (spec sheet, cross-section, mesh CSV/VTK, labelled GDS schematic, Manim visuals); single usage document `docs/USAGE.md`.
+- Tech-debt inventory closed (`.issues/TECH-DEBT-2026-10-18.md`); CCE(LET) table rebuild ~70 -> ~40 min; test suite ~8 -> ~5 min with an xdist scheduler and devsim leak guard; CI only on main/PR/nightly.
+- Public git history cleaned of copyrighted PDFs (rewrite), commit map in `docs/history-rewrite-commit-map.txt`.
+
+**Open (needs the user):** see STATE.md "Current status".
+

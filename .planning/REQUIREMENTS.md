@@ -3,6 +3,8 @@
 **Defined:** 2026-03-27
 **Core Value:** Installable Python library + Streamlit UI that makes the SiC TCAD simulator usable by the Petringa group without reading source code.
 
+> **Status (2026-10-19):** all v5.0 requirements below are satisfied (milestone audit: `milestones/v5.0-MILESTONE-AUDIT.md`). v6.0 had no GSD requirement set; its scope and exit criteria are in `MILESTONES.md`, `.issues/TECH-DEBT-2026-10-18.md` and PR #1.
+
 ## v5.0 Requirements
 
 Requirements for Simulator Library & Streamlit UI milestone. Phases 35+.

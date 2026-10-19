@@ -6,8 +6,9 @@
 - ✅ **v1.1 Realistic Device Physics** — Phases 10-12 (shipped 2026-03-24)
 - ✅ **v2.0 Radiation Damage Modeling** — Phases 13-18 (shipped 2026-03-26)
 - ✅ **v3.0 SiC Microdosimeter Design Study** — Phases 19-25 (shipped 2026-04-01)
-- 📋 **v4.0 Scientific Validation & Extended Physics** — Phases 26-34 (planning)
-- 📋 **v5.0 Simulator Library & Streamlit UI** — Phases 35-43 (planning)
+- ⚠️ **v4.0 Scientific Validation & Extended Physics** — Phase 26 complete (2026-06-16); Phase 27 partial (kappa machinery built, data-blocked); Phase 28 partial (lazy uproot support only); Phases 29-34 not started (see MILESTONES.md)
+- ✅ **v5.0 Simulator Library & Streamlit UI** — Phases 35-43 (shipped 2026-07-15)
+- ✅ **v6.0 Audit-v7 Hardening & Performance Engines** — run as an audit/perf campaign, not numbered phases (shipped 2026-10-19, PR #1)
 
 ## Phases
 
@@ -80,8 +81,8 @@ Full details: [milestones/v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md)
 - **TIER 4 (Phases 33-34)** — Stretch goal and milestone audit/synthesis
 
 - [x] **Phase 26: Graded Doping 2D Calibration** — Fix `device2d.py` reverse-bias solver failure with re-calibrated graded epi doping profile in 2D _(TIER 1, unblocker)_ — **4 plans planned** (completed 2026-06-16)
-- [ ] **Phase 27: PSTAR+SRIM Stopping Power & Real κ** — Tabulated proton stopping power data with energy-dependent tissue-equivalence κ(E) _(TIER 1, unblocker)_
-- [ ] **Phase 28: Geant4 ROOT Integration with Golden Fixture** — RootSchemaMap + synthetic Geant4 fixture closing the MCCP-02 gap _(TIER 1, unblocker)_
+- [~] **Phase 27: PSTAR+SRIM Stopping Power & Real κ** — Tabulated proton stopping power data with energy-dependent tissue-equivalence κ(E) _(TIER 1, unblocker)_ — **PARTIAL:** `sic_stopping_power_bragg`/`compute_kappa_table`/kinetic-energy kappa lookup built (commit 18e4005, 2026-06-16); real PSTAR/SRIM CSVs still placeholders (data-blocked); the GSD phase itself was not formally executed
+- [~] **Phase 28: Geant4 ROOT Integration with Golden Fixture** — RootSchemaMap + synthetic Geant4 fixture closing the MCCP-02 gap _(TIER 1, unblocker)_ — **PARTIAL:** `mc_coupling.py` reads ROOT via lazily imported `uproot`; no `RootSchemaMap` or golden fixture found in the code
 - [ ] **Phase 29: Complete Noise Analysis** — Shot + Johnson + 1/f McWhorter noise, ENC/NEE bands, y*min figure-of-merit *(TIER 2, depends on Phase 26)\_
 - [ ] **Phase 30: Build-up Over-Response 2D** — Depth-resolved near-surface CCE(z) and dead-layer correction on y-spectra _(TIER 2, depends on Phase 26)_
 - [ ] **Phase 31: Anisotropic Mobility Tensor** — c-axis vs basal-plane μ tensor via custom devsim edge models, opt-in `anisotropic=True` _(TIER 3, prerequisite for Phase 33)_
@@ -608,8 +609,8 @@ Plans:
 | 24. Alternative Structures                      | v3.0      | 2/2            | Complete    | 2026-04-01 |
 | 25. Optimization & Feasibility Report           | v3.0      | 2/2            | Complete    | 2026-04-01 |
 | 26. Graded Doping 2D Calibration                | v4.0      | 4/4            | Complete    | 2026-06-16 |
-| 27. PSTAR+SRIM Stopping Power & Real κ          | v4.0      | 0/0            | Not started | -          |
-| 28. Geant4 ROOT Integration with Golden Fixture | v4.0      | 0/0            | Not started | -          |
+| 27. PSTAR+SRIM Stopping Power & Real κ          | v4.0      | 0/0            | Partial     | -          |
+| 28. Geant4 ROOT Integration with Golden Fixture | v4.0      | 0/0            | Partial     | -          |
 | 29. Complete Noise Analysis                     | v4.0      | 0/0            | Not started | -          |
 | 30. Build-up Over-Response 2D                   | v4.0      | 0/0            | Not started | -          |
 | 31. Anisotropic Mobility Tensor                 | v4.0      | 0/0            | Not started | -          |
@@ -625,3 +626,4 @@ Plans:
 | 41. Radiation Damage + Dark Current Pages       | v5.0      | 3/3            | Complete    | 2026-07-13 |
 | 42. Microdosimetry Page + Batch Sweep Page      | v5.0      | 3/3            | Complete    | 2026-07-14 |
 | 43. Integration Audit — All 20 Notebooks        | v5.0      | 2/2 | Complete    | 2026-07-15 |
+| v6.0 (campaign, no phases) | v6.0 | n/a | Complete | 2026-10-19 |
