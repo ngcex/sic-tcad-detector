@@ -1,6 +1,10 @@
 # SiC TCAD Simulator — Petringa Group
 
-## Current Milestone: v5.0 Simulator Library & Streamlit UI
+## Current State (2026-10-19)
+
+v6.0 (Audit-v7 Hardening & Performance Engines) is shipped and merged to `main` (PR #1). The tool is the installable `etna` package plus a 10-page Streamlit app and a one-shot `etna.run_all`; usage is documented in `docs/USAGE.md`. Next work is driven by the needs-user list in STATE.md (physics decisions and validation data), not by new GSD phases. The v5.0 goal text below is historical.
+
+## Previous Milestone: v5.0 Simulator Library & Streamlit UI (shipped 2026-07-15)
 
 **Goal:** Trasformare il toolkit notebook-based in un package Python installabile (`etna`) con un'interfaccia Streamlit usabile dal gruppo Petringa senza leggere il codice sorgente, replicando il workflow dei software commerciali (Sentaurus, Silvaco) con configurazione parametrica, visualizzazione geometrica 2D e risultati interattivi.
 
