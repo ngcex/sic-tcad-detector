@@ -188,6 +188,8 @@ class TestCurrentContact:
         monkeypatch.setattr(sp.devsim, "solve", lambda **k: None)
         monkeypatch.setattr(sp, "add_generation_to_dd", lambda info, g: None)
         monkeypatch.setattr(sp, "extract_contact_current", fake_current)
+        # no Poisson contact on the fake device: constant contact charge (I_disp = 0)
+        monkeypatch.setattr(sp, "extract_contact_charge", lambda info, c: 0.0)
         r = sp.simulate_single_particle(device_info, np.zeros(3), t_collect=3e-12, **kw)
         return r["current_contact"], set(seen)
 
@@ -245,6 +247,8 @@ class TestBackwardEulerEstimator:
             "extract_contact_current",
             lambda info, c: 0.0 if state["t"] == 0.0 else np.exp(-state["t"] / tau),
         )
+        # fake device without a Poisson contact: constant contact charge (I_disp = 0)
+        monkeypatch.setattr(sp, "extract_contact_charge", lambda info, c: 0.0)
         info = {"device_name": "x", "region_name": "sic", "nplus_thickness_cm": None}
         return sp.simulate_single_particle(info, np.zeros(3), **kw)
 
@@ -474,7 +478,14 @@ class TestBuildCCELetTableSmallMesh:
         assert d.max() < 1e-6, d.tolist()
         # simulated rows are the full-table rows (let_max: same series prefix)
         assert d[lin["simulated"]].max() < 1e-12
-        assert (lin["t_collection_ns"] - full["t_collection_ns"]).abs().max() < 1e-12
+        # t_collection (since 2026-10-20 the 95 % time of the terminal current,
+        # interpolated inside the step): identical on the simulated rows; on the
+        # synthesised ones it is continuous in the current, so it carries the linear
+        # synthesis' residual LET dependence (measured 2.7e-4 relative at the 4th LET;
+        # the old step-end value was quantised to the shared grid, hence equal)
+        dt95 = (lin["t_collection_ns"] - full["t_collection_ns"]).abs()
+        assert dt95[lin["simulated"]].max() < 1e-12
+        assert (dt95 / full["t_collection_ns"]).max() < 1e-3, dt95.tolist()
 
         # build-once parity: a fresh device gives the full-table row
         info = create_2d_dd_device(half_width_um=2.0, V_bias=50.0)

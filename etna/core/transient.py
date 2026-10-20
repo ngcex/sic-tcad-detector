@@ -31,6 +31,8 @@ import pandas as pd
 from etna.core.charge_collection import add_generation_to_dd
 from etna.core.drift_diffusion import (
     create_dd_device,
+    displacement_current,
+    extract_contact_charge,
     extract_contact_current,
     ramp_bias,
 )
@@ -319,7 +321,12 @@ class TransientSolver:
               the backward-Euler (BDF1) step solves the state at t + dt, so its
               current is stamped t + dt (before 2026-10-18 it was stamped t, one step
               early, A-04)
-            - "currents": np.array of contact currents (A/cm^2) at "times"
+            - "currents": np.array of CONDUCTION contact currents (A/cm^2) at "times"
+              (extract_contact_current; what compute_transient_cce integrates)
+            - "currents_displacement": np.array, displacement current dQ_contact/dt
+              of each step (A/cm^2; Mj-4, displacement_current)
+            - "currents_total": np.array, terminal current = conduction +
+              displacement (A/cm^2), the physical I(t)
             - "I_dark": float, dark current before pulse (A/cm^2)
             - "generation_integral": float, sum over the steps of envelope(t + dt) * dt
               (s): the generation the discrete system actually received, per unit
@@ -349,10 +356,15 @@ class TransientSolver:
             self._I_dark = I_dark
         logger.info(f"Dark current: {I_dark:.4e} A/cm^2")
 
+        # Contact charge the first step's displacement current is measured from: the
+        # state the previous pulse / initialize() left (always the present state)
+        Q_contact = extract_contact_charge(self.device_info, contact=self.contact)
+
         # Time-stepping loop
         t = 0.0
         times = []
         currents = []
+        displacement = []
         gen_integral = 0.0
         step_count = 0
 
@@ -396,8 +408,11 @@ class TransientSolver:
 
             # Extract current: the state (and current) at the step end
             I_t = extract_contact_current(self.device_info, contact=self.contact)
+            Q_prev = Q_contact
+            Q_contact = extract_contact_charge(self.device_info, contact=self.contact)
             times.append(t_next)
             currents.append(I_t)
+            displacement.append(displacement_current(Q_contact, Q_prev, dt))
             gen_integral += env * dt
 
             t = t_next
@@ -411,9 +426,13 @@ class TransientSolver:
 
         logger.info(f"Pulse simulation complete: {step_count} steps, t_end={t:.4e} s")
 
+        currents = np.array(currents)
+        displacement = np.array(displacement)
         return {
             "times": np.array(times),
-            "currents": np.array(currents),
+            "currents": currents,
+            "currents_displacement": displacement,
+            "currents_total": currents + displacement,
             "I_dark": float(I_dark),
             "generation_integral": float(gen_integral),
             "t_rise": t_rise,
@@ -572,7 +591,9 @@ def simulate_pulse_train(
     result : dict
         Dictionary with:
         - "times": np.array of concatenated time points (s), continuous
-        - "currents": np.array of concatenated contact currents (A/cm^2)
+        - "currents": np.array of concatenated conduction contact currents (A/cm^2)
+        - "currents_displacement" / "currents_total": the same for the displacement
+          and terminal (conduction + displacement) currents (see simulate_pulse)
         - "n_pulses": int, number of pulses simulated
         - "pulse_times": list of per-pulse result dicts from simulate_pulse
         - "I_dark": float, dark current before first pulse (A/cm^2)
@@ -590,6 +611,7 @@ def simulate_pulse_train(
 
     all_times = []
     all_currents = []
+    all_disp = []
     pulse_results = []
     t_offset = 0.0
 
@@ -614,6 +636,7 @@ def simulate_pulse_train(
         # Offset times to make continuous timeline
         all_times.append(result_i["times"] + t_offset)
         all_currents.append(result_i["currents"])
+        all_disp.append(result_i["currents_displacement"])
 
         # Advance offset by this pulse's total duration
         t_offset += t_rise + t_duration + t_fall + t_gap
@@ -625,6 +648,8 @@ def simulate_pulse_train(
     return {
         "times": np.concatenate(all_times),
         "currents": np.concatenate(all_currents),
+        "currents_displacement": np.concatenate(all_disp),
+        "currents_total": np.concatenate(all_currents) + np.concatenate(all_disp),
         "n_pulses": n_pulses,
         "pulse_times": pulse_results,
         "I_dark": float(I_dark),

@@ -193,9 +193,21 @@ def setup_sic_drift_diffusion(device_info):
 
 
 def extract_contact_current(device_info, contact="cathode"):
-    """Extract total current at a contact (A/cm^2 for 1D).
+    """Extract the CONDUCTION current at a contact (A/cm^2 for 1D, A/cm for 2D).
 
-    Returns the sum of electron and hole contact currents.
+    Returns the sum of electron and hole contact currents, read from the continuity
+    equations. It does NOT include the displacement current dQ_contact/dt (the
+    Poisson / PotentialEquation term, see :func:`extract_contact_charge` and
+    :func:`displacement_current`). In DC that term is zero and this is the terminal
+    current. In a transient the terminal current is ``conduction + displacement``
+    (Mj-4); the time integral of the two agrees once the device is back in its
+    initial state (the displacement term telescopes to Q_end - Q_start), so collected
+    charge / CCE from this function is right, the pulse SHAPE may not be: the
+    displacement share is large when the contact node is depleted (a contact on the
+    depleted epi, e.g. the legacy no-n+ stack at full depletion, where the conduction
+    current is zero until the carriers arrive) or when a step is not long compared with
+    the dielectric relaxation time of the contact layer (~0.1 ps for the 1e18 p+).
+    The transient drivers (single_particle, transient) record both components.
 
     Parameters
     ----------
@@ -218,6 +230,66 @@ def extract_contact_current(device_info, contact="cathode"):
         device=device, contact=contact, equation="HoleContinuityEquation"
     )
     return I_e + I_h
+
+
+def extract_contact_charge(device_info, contact="cathode"):
+    """Charge on a contact from the Poisson (PotentialEquation) contact equation.
+
+    ``devsim.get_contact_charge(equation="PotentialEquation")``: the electric
+    displacement flux into the contact (the ``contactcharge_edge`` model,
+    Permittivity * ElectricField, of CreateSiliconPotentialOnlyContact), C/cm^2 in 1D
+    and C/cm in 2D. Its time derivative is the displacement part of the terminal
+    current (:func:`displacement_current`).
+    """
+    return devsim.get_contact_charge(
+        device=device_info["device_name"], contact=contact, equation="PotentialEquation"
+    )
+
+
+def displacement_current(Q_contact, Q_contact_prev, dt):
+    """Displacement current of one implicit (BDF1) step, (Q_k - Q_{k-1}) / dt_k.
+
+    With this backward difference the TOTAL terminal current of a step is
+    ``extract_contact_current + displacement_current``, in the sign convention of
+    devsim's contact current (Kirchhoff: in 1D the totals at the two contacts sum to
+    zero at every step, the conduction parts alone do not). Summed over steps,
+    ``sum(I_disp * dt) = Q_end - Q_start`` exactly, so the total and the conduction
+    current carry the same charge once the contact charge is back to its start value.
+    Verified against the 1D Shockley-Ramo identity (:func:`ramo_current_1d`) and the
+    parallel-plate result I = q N v / d (tests/test_displacement_current.py).
+    """
+    return (Q_contact - Q_contact_prev) / dt
+
+
+def ramo_current_1d(device_info, contact="anode"):
+    """1D Shockley-Ramo terminal current (A/cm^2): (1/L) * integral (J_n + J_p) dx.
+
+    At fixed contact biases, in 1D the weighting field of either contact is 1/L over
+    the whole device (contacts at both ends), so the induced (total) terminal current
+    is the conduction current density averaged over the device length. This is an
+    independent route to ``extract_contact_current + displacement_current``: it uses
+    the edge currents of the whole mesh, not the contact equations. The sign is that
+    of devsim's contact current at ``contact`` (anode at the left end, x = x_min).
+    1D devices only (edge models ``ElectronCurrent`` / ``HoleCurrent`` / ``EdgeLength``).
+    """
+    device, region = device_info["device_name"], device_info["region_name"]
+    J = np.asarray(
+        devsim.get_edge_model_values(
+            device=device, region=region, name="ElectronCurrent"
+        )
+    ) + np.asarray(
+        devsim.get_edge_model_values(device=device, region=region, name="HoleCurrent")
+    )
+    length = np.asarray(
+        devsim.get_edge_model_values(device=device, region=region, name="EdgeLength")
+    )
+    x = np.asarray(devsim.get_node_model_values(device=device, region=region, name="x"))
+    I = float(np.sum(J * length) / (x.max() - x.min()))
+    if contact == "anode":
+        return I
+    if contact == "cathode":
+        return -I
+    raise ValueError(f"contact must be 'anode' or 'cathode', got {contact!r}")
 
 
 # Sign conventions measured on a 2D device (probe_edges.py):
@@ -469,13 +541,22 @@ def create_dd_device(doping_profile="graded", **kwargs):
 # (target point): same tolerance and the same 40-iteration cap. Kept as a separate name
 # so the two can be tuned independently.
 _RAMP_SOLVE = dict(
-    type="dc", absolute_error=DC_ABS_ERROR, relative_error=DC_REL_ERROR, maximum_iterations=40
+    type="dc",
+    absolute_error=DC_ABS_ERROR,
+    relative_error=DC_REL_ERROR,
+    maximum_iterations=40,
 )
 _RAMP_SOLVE_COARSE = dict(
-    type="dc", absolute_error=DC_ABS_ERROR, relative_error=DC_REL_ERROR, maximum_iterations=40
+    type="dc",
+    absolute_error=DC_ABS_ERROR,
+    relative_error=DC_REL_ERROR,
+    maximum_iterations=40,
 )
 _RAMP_SOLVE_RELAXED = dict(
-    type="dc", absolute_error=RELAXED_ABS_ERROR, relative_error=RELAXED_REL_ERROR, maximum_iterations=100
+    type="dc",
+    absolute_error=RELAXED_ABS_ERROR,
+    relative_error=RELAXED_REL_ERROR,
+    maximum_iterations=100,
 )
 # Third tier, same as solve_equilibrium's. Needed where the n- epi reaches a zero-flux
 # surface beyond a p+ implant edge (guard-ring gap, epi overhang, 3D-electrode top
@@ -486,7 +567,10 @@ _RAMP_SOLVE_RELAXED = dict(
 # relative; check it a posteriori with the balanced contact-current sum (should be
 # ~0 relative to the generated current).
 _RAMP_SOLVE_AGGRESSIVE = dict(
-    type="dc", absolute_error=AGGRESSIVE_ABS_ERROR, relative_error=AGGRESSIVE_REL_ERROR, maximum_iterations=200
+    type="dc",
+    absolute_error=AGGRESSIVE_ABS_ERROR,
+    relative_error=AGGRESSIVE_REL_ERROR,
+    maximum_iterations=200,
 )
 # Tier order of the fallback chain; the index is what the ramp bookkeeping stores.
 _RAMP_TIERS = (
