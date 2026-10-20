@@ -408,7 +408,9 @@ class ContinuityBatch:
             # cathode current of the continuity-consistent state (psi_T, n_new, p_new): it is a
             # tiny difference of two large SG terms, so it is NOT re-evaluated after the Poisson
             # update below
-            Jn0, JpL = _end_currents(psi_T, n_new, p_new, self.kn, self.kp, pb.V_t)
+            Jn0, JpL = _end_currents(
+                np.ascontiguousarray(psi_T), n_new, p_new, self.kn, self.kp, pb.V_t
+            )  # psi_T is F-ordered after a Poisson update with B > 1: one signature
             # Balanced form (as devsim's extract_steady_state_current): summing the electron
             # equation over the interior nodes gives Jn(cathode edge) = Jn(anode edge) +
             # sum q v (U - G); both terms are well conditioned (electrons are minority at the

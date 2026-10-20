@@ -516,11 +516,15 @@ class PoissonBatch:
         V_a = np.broadcast_to(np.asarray(V_anode, dtype=float), (B,))
         V_c = np.broadcast_to(np.asarray(V_cathode, dtype=float), (B,))
         Vt = self.V_t[:, None]
-        u_n = np.ascontiguousarray(
-            np.broadcast_to((V_c[:, None] if phi_n is None else phi_n) / Vt, (B, N))
+        u_n = np.require(  # C-contiguous and writeable: one kernel signature
+            np.broadcast_to((V_c[:, None] if phi_n is None else phi_n) / Vt, (B, N)),
+            float,
+            ["C", "W"],
         )
-        u_p = np.ascontiguousarray(
-            np.broadcast_to((V_a[:, None] if phi_p is None else phi_p) / Vt, (B, N))
+        u_p = np.require(  # C-contiguous and writeable: one kernel signature
+            np.broadcast_to((V_a[:, None] if phi_p is None else phi_p) / Vt, (B, N)),
+            float,
+            ["C", "W"],
         )
         # contact values of the last (V_a, V_c): constant along a Gummel loop
         key = (V_a.tobytes(), V_c.tobytes())

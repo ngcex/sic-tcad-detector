@@ -4,6 +4,7 @@ expression order) to rounding."""
 
 import math
 
+import numba
 import numpy as np
 import pytest
 
@@ -88,7 +89,7 @@ def dark_device(request):
     return dev, np.array(Gs)
 
 
-def test_column_solve_and_batch_match_reference(dark_device):
+def test_column_solve_and_batch_match_reference(dark_device, monkeypatch):
     dev, Gs = dark_device
     legacy = np.array([_reference_illuminated(dev, G) for G in Gs])
     dev.column_solve = False
@@ -101,6 +102,8 @@ def test_column_solve_and_batch_match_reference(dark_device):
     dev.gummel_iterations.clear()
     col = np.array([dev.illuminated_current(G) for G in Gs])
     dev.gummel_iterations.clear()
+    # xdist workers pin NUMBA_NUM_THREADS=1: force the thread-pool branch
+    monkeypatch.setattr(numba, "get_num_threads", lambda: 4)
     bat = dev.illuminated_currents(Gs)
     assert dev.gummel_iterations == ref_its
     assert np.max(np.abs(col / ref - 1)) <= 1e-13
