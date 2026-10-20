@@ -22,6 +22,7 @@ References:
     - TransientSolver pattern (transient.py): BDF1 solve API reference
 """
 
+import contextlib
 import json
 import logging
 
@@ -544,6 +545,7 @@ def build_cce_let_table(
     contact=None,
     device_kwargs=None,
     method="linear",
+    n_jobs=1,
 ):
     """Build CCE(LET) lookup table from transient simulations.
 
@@ -577,6 +579,15 @@ def build_cce_let_table(
         agrees with its synthesis to 2.5e-7, and the middle LET is simulated as a
         check (1e-6). Falls back to simulating the remaining LETs (with a warning) if
         the check fails or a transient fails.
+    n_jobs : int
+        Worker processes (default 1: serial). With n_jobs > 1 the LETs that will (or
+        may) be simulated run concurrently in spawned workers, each on its own fresh
+        device (same builder and keywords; a fresh device equals the shared one, see
+        TestBuildCCELetTableSmallMesh): method="linear" prefetches let_max, the middle
+        LET and the lowest n_jobs - 2 anchors, "full" every LET. The table is assembled
+        by exactly the serial logic: a prefetched anchor above the bottom-up stop is
+        discarded, an anchor not prefetched is simulated in the parent. Parity with
+        n_jobs=1: tests/test_cce_let_parallel.py.
 
     Returns
     -------
@@ -623,13 +634,55 @@ def build_cce_let_table(
     # the time-integration history, as a fresh device would (the transient_cce_vs_
     # dose_rate pattern, WP-F). Results are identical to the former build-per-LET
     # loop (lab/engine_box/bench/let_table_build_once.py).
+    pool_stack, prefetch = contextlib.ExitStack(), {}
+    with pool_stack:
+        if n_jobs is not None and n_jobs > 1:
+            # workers start before the parent's own build, so the builds overlap
+            prefetch = _prefetch_let_points(
+                pool_stack,
+                _prefetch_plan(method, n_let_points, n_jobs),
+                n_jobs,
+                (half_width_um, V_bias, device_kwargs, LET_values, x_ion_cm, contact),
+            )
+        return _build_cce_let_table_on_device(
+            half_width_um,
+            V_bias,
+            device_kwargs,
+            LET_values,
+            x_ion_cm,
+            contact,
+            method,
+            prefetch,
+        )
+
+
+def _build_cce_let_table_on_device(
+    half_width_um,
+    V_bias,
+    device_kwargs,
+    LET_values,
+    x_ion_cm,
+    contact,
+    method,
+    prefetch,
+):
+    """build_cce_let_table's serial driver; ``prefetch`` maps a grid index to
+    (sim_kw, future) of a worker that simulates that LET on its own device."""
+    n_let_points = len(LET_values)
     device_info = create_2d_dd_device(
         half_width_um=half_width_um, V_bias=V_bias, **(device_kwargs or {})
     )
     try:
         dark_state = _snapshot_dark_state(device_info)
 
-        def point(i, **sim_kw):
+        def point(i, return_series=False, **sim_kw):
+            job = prefetch.pop(i, None)
+            if job is not None and job[0] == sim_kw:
+                try:
+                    row, series = job[1].result()
+                    return (row, series) if return_series else row
+                except Exception as exc:  # a dead worker: simulate it here instead
+                    logger.warning(f"CCE(LET) worker failed for LET index {i}: {exc!r}")
             return _cce_let_point(
                 device_info,
                 dark_state,
@@ -638,6 +691,7 @@ def build_cce_let_table(
                 contact,
                 i,
                 n_let_points,
+                return_series=return_series,
                 **sim_kw,
             )
 
@@ -651,8 +705,85 @@ def build_cce_let_table(
             delete_device_and_mesh(device_info["device_name"])
         except Exception:
             pass
+        for (
+            _,
+            item,
+        ) in prefetch.values():  # speculative anchors the serial logic skipped
+            item.cancel()
 
     return pd.DataFrame(rows)
+
+
+def _prefetch_plan(method, n_let_points, n_jobs):
+    """[(grid index, sim_kw)] that build_cce_let_table(n_jobs > 1) simulates in workers:
+    the points the serial logic is certain (let_max, middle) or likely (lowest
+    anchors) to ask for; "full" (and n <= 3, which runs full) asks for every LET."""
+    if method != "linear" or n_let_points <= 3:
+        return [(i, {}) for i in range(n_let_points)]
+    i_hi, i_mid = n_let_points - 1, n_let_points // 2
+    plan = [(i_hi, {"rtol_converged": _LINEAR_REF_RTOL}), (i_mid, {})]
+    anchors = [i for i in range(i_hi) if i != i_mid][: max(n_jobs - 2, 1)]
+    return plan + [(i, {}) for i in anchors]
+
+
+def _prefetch_let_points(stack, plan, n_jobs, build_args):
+    """Start ``plan`` on a spawn pool entered on ``stack``; {index: (sim_kw, item)}.
+    The jobs are dealt round-robin into at most n_jobs chunks, one device build per
+    chunk (the plan's order puts let_max, the longest run, first)."""
+    from etna.core.optimization import _spawn_pool
+
+    n_chunks = min(n_jobs, len(plan))
+    chunks = [plan[k::n_chunks] for k in range(n_chunks)]
+    pool = stack.enter_context(_spawn_pool(n_chunks))
+    out = {}
+    for chunk in chunks:
+        fut = pool.submit(_cce_let_chunk, build_args, chunk)
+        for j, (i, kw) in enumerate(chunk):
+            out[i] = (kw, _ChunkItem(fut, j))
+    return out
+
+
+class _ChunkItem:
+    """Future-like view of job ``j`` of a chunk future (result / cancel)."""
+
+    def __init__(self, fut, j):
+        self._fut, self._j = fut, j
+
+    def result(self):
+        return self._fut.result()[self._j]
+
+    def cancel(self):
+        self._fut.cancel()
+
+
+def _cce_let_chunk(build_args, jobs):
+    """Worker of build_cce_let_table(n_jobs > 1): one fresh device, then the serial
+    point routine for each (i, sim_kw); returns [(row, series)]."""
+    from etna.core.devsim_lock import quiet_devsim
+
+    half_width_um, V_bias, device_kwargs, LET_values, x_ion_cm, contact = build_args
+    with quiet_devsim():
+        info = create_2d_dd_device(
+            half_width_um=half_width_um, V_bias=V_bias, **(device_kwargs or {})
+        )
+        try:
+            dark = _snapshot_dark_state(info)
+            return [
+                _cce_let_point(
+                    info,
+                    dark,
+                    LET_values[i],
+                    x_ion_cm,
+                    contact,
+                    i,
+                    len(LET_values),
+                    return_series=True,
+                    **kw,
+                )
+                for i, kw in jobs
+            ]
+        finally:
+            delete_device_and_mesh(info["device_name"])
 
 
 def synthesize_linear_response(
@@ -923,9 +1054,16 @@ def load_cce_let_table(filepath):
     LET_valid = LET[valid]
     CCE_valid = CCE[valid]
 
+    log_let_valid = np.log10(LET_valid)
+
     def cce_interp(let_value):
-        """Interpolate CCE at given LET using log-linear interpolation."""
-        return float(np.interp(np.log10(let_value), np.log10(LET_valid), CCE_valid))
+        """Interpolate CCE at given LET using log-linear interpolation (a scalar LET
+        gives a float, an array LET an array of the same per-element values)."""
+        cce = np.interp(np.log10(let_value), log_let_valid, CCE_valid)
+        return float(cce) if np.ndim(cce) == 0 else cce
+
+    # accepts arrays: process_mc_ensemble then looks the events up in one call
+    cce_interp.vectorized = True
 
     # np.interp clamps outside the table: expose the range so callers can flag it
     # (process_mc_ensemble warns on clamped events; audit-v7 B-11)

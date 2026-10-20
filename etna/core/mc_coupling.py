@@ -480,7 +480,12 @@ def process_mc_ensemble(events_df, cce_interp, sv_thickness_um=10.0):
             )
 
     # Vectorized CCE lookup
-    CCE = np.array([cce_interp(let) for let in LET])
+    vectorized = getattr(cce_interp, "vectorized", False)  # load_cce_let_table's
+    CCE = (
+        np.asarray(cce_interp(LET), dtype=float)
+        if vectorized
+        else np.array([cce_interp(let) for let in LET])
+    )
 
     # Collected energy
     E_collected = CCE * energies_pos

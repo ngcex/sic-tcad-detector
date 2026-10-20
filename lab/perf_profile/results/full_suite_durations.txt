@@ -1,0 +1,127 @@
+bringing up nodes...
+bringing up nodes...
+
+........................................................................ [  6%]
+........................................................................ [ 13%]
+..................................................................F..... [ 19%]
+........................................................................ [ 26%]
+........................................................................ [ 32%]
+........................................................................ [ 39%]
+........................................................................ [ 46%]
+........................................................................ [ 52%]
+........................................................................ [ 59%]
+........................................................................ [ 65%]
+........................................................................ [ 72%]
+........................................................................ [ 78%]
+........................................................................ [ 85%]
+........................................................................ [ 92%]
+........................................................................ [ 98%]
+..............                                                           [100%]
+=================================== FAILURES ===================================
+____________________________ test_run_caches_result ____________________________
+[gw9] darwin -- Python 3.13.5 /Users/ngcex/projects/physics/petringa/.claude/worktrees/agent-aa3143ec12a4c1ddc/.venv/bin/python3
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x1503e7100>
+
+    def test_run_caches_result(monkeypatch):
+        monkeypatch.setattr(etna, "run_cce", _fake_run_cce)
+    
+        at = AppTest.from_function(_run_cce_page)
+        at.session_state["device_config"] = DeviceConfig()
+>       at.run()
+
+tests/test_app_cce_page.py:45: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.13/site-packages/streamlit/testing/v1/app_test.py:428: in run
+    return self._tree.run(timeout=timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/streamlit/testing/v1/element_tree.py:2426: in run
+    return self._runner._run(widget_states, timeout=timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/streamlit/testing/v1/app_test.py:372: in _run
+    self._tree = script_runner.run(
+.venv/lib/python3.13/site-packages/streamlit/testing/v1/local_script_runner.py:147: in run
+    require_widgets_deltas(self, timeout)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+runner = LocalScriptRunner(forward_msg_queue=<streamlit.runtime.forward_msg_queue.ForwardMsgQueue object at 0x152d72270>, scrip..."codex"
+  installed_agents: "cursor"
+}
+}, {}, {'client_state': page_script_hash: "18d69748c166fa462a531e31dd69ee8d"
+}])
+timeout = 3
+
+    def require_widgets_deltas(runner: LocalScriptRunner, timeout: float = 3) -> None:
+        """Wait for the given ScriptRunner to emit a completion event. If the timeout
+        is reached, the runner will be shutdown and an error will be thrown.
+        """
+    
+        t0 = time.time()
+        while time.time() - t0 < timeout:
+            time.sleep(0.001)
+            if runner.script_stopped():
+                return
+    
+        # If we get here, the runner hasn't yet completed before our
+        # timeout. Create an error string for debugging.
+        err_string = f"AppTest script run timed out after {timeout}(s)"
+    
+        # Shutdown the runner before throwing an error, so that the script
+        # doesn't hang forever.
+        runner.request_stop()
+        runner.join()
+    
+>       raise RuntimeError(err_string)
+E       RuntimeError: AppTest script run timed out after 3(s)
+
+.venv/lib/python3.13/site-packages/streamlit/testing/v1/local_script_runner.py:195: RuntimeError
+----------------------------- Captured stderr call -----------------------------
+2026-10-20 23:38:00.047 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2026-10-20 23:38:00.245 WARNING streamlit.runtime.scriptrunner_utils.script_run_context: Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+------------------------------ Captured log call -------------------------------
+WARNING  streamlit.runtime.scriptrunner_utils.script_run_context:script_run_context.py:459 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+WARNING  streamlit.runtime.scriptrunner_utils.script_run_context:script_run_context.py:459 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+============================= slowest 40 durations =============================
+1917.95s call     tests/test_device2d_convergence.py::TestReverseBiasConvergence::test_converges_at_minus_50V_300um@test_device2d_convergence.py::TestReverseBiasConvergence::test_converges_at_minus_50V_300um
+1654.29s call     tests/test_single_particle.py::TestCCEVsBias::test_cce_le_one_and_monotone_in_bias@test_single_particle.py::TestCCEVsBias
+1464.20s call     tests/test_devsim_quiet.py::test_set_devsim_quiet_silences_direct_core_calls@test_devsim_quiet.py::test_set_devsim_quiet_silences_direct_core_calls
+1217.07s call     tests/test_field_engine_default_100V.py::test_default_stack_minus_100V_hw50_matches_devsim@test_field_engine_default_100V.py
+1164.92s call     tests/test_engine2d.py::test_sweep_row_failing_config_hw25@test_engine2d.py::test_sweep_row_failing_config_hw25
+1035.59s call     tests/test_device2d.py::TestCalibrationCV::test_2d_vs_1d_cv_centerline@test_device2d.py::TestCalibrationCV
+765.35s setup    tests/test_charge_collection_2d.py::TestCreate2DDDDevice::test_device_has_dd_initialized@test_charge_collection_2d.py
+628.05s call     tests/test_cce_let_parallel.py::test_parallel_table_equals_serial[linear-3]@test_cce_let_parallel.py
+465.25s call     tests/test_charge_collection_2d.py::TestCompareCCE2Dvs1D::test_ratio_is_one_for_laterally_uniform_device@test_charge_collection_2d.py::TestCompareCCE2Dvs1D
+437.79s call     tests/test_charge_collection_2d.py::TestCompareCCE2Dvs1D::test_engine_2d_half_matches_devsim@test_charge_collection_2d.py::TestCompareCCE2Dvs1D
+421.78s call     tests/test_device2d_convergence.py::TestReverseBiasConvergence::test_converges_at_minus_50V_100um@test_device2d_convergence.py::TestReverseBiasConvergence::test_converges_at_minus_50V_100um
+379.98s call     tests/test_v3_baseline_regression.py::test_default_2d_builder_cce_uniform_generation_10V_hw50@test_v3_baseline_regression.py::test_default_2d_builder_cce_uniform_generation_10V_hw50
+360.30s call     tests/test_charge_collection_2d.py::TestCCELateralScan::test_edge_equals_center_for_uniform_device@test_charge_collection_2d.py::TestCCELateralScan
+344.37s call     tests/test_engine2d_stack.py::test_stack_lateral_scan_matches_devsim[20.0-kw0]@test_engine2d_stack.py
+332.48s call     tests/test_nplus.py::test_2d_cce_with_nplus[False-0.9997262]@test_nplus.py
+322.60s call     tests/test_nplus.py::test_2d_cce_with_nplus[True-0.9625702]@test_nplus.py
+300.00s call     tests/test_single_particle.py::TestBuildCCELetTableSmallMesh::test_build_once_and_linear_parity@test_single_particle.py::TestBuildCCELetTableSmallMesh
+274.61s call     tests/test_dark_current_2d_engine.py::test_engine_twin_matches_devsim_2d[kw1]@test_dark_current_2d_engine.py
+273.00s call     tests/test_engine2d_epi30.py::test_engine_matches_devsim_epi30@test_engine2d_epi30.py
+259.16s call     tests/test_device2d.py::TestResetStateLeak::test_reset_after_alt_structures@test_device2d.py::TestResetStateLeak
+223.28s call     tests/test_fluence_engine.py::test_cv_at_fluence_engine_matches_devsim[5000000000000.0-V_range0]@test_fluence_engine.py
+182.14s call     tests/test_cce_let_parallel.py::test_parallel_table_equals_serial[full-2]@test_cce_let_parallel.py
+162.69s call     tests/test_measured_cv_preset.py::test_engine2d_matches_devsim_with_buffer@test_measured_cv_preset.py
+162.69s call     tests/test_measured_cv_preset.py::test_engine_matches_devsim_with_buffer@test_measured_cv_preset.py
+157.32s call     tests/test_nplus_engine.py::test_nplus_cv_potential_and_cce_match_devsim@test_nplus_engine.py
+152.21s call     tests/test_api_field_engine.py::test_engine_matches_devsim_hw25[-50.0]@test_api_field_engine.py
+150.20s call     tests/test_charge_collection_2d.py::test_cce_vs_bias_lateral_auto_uses_engine_and_falls_back@test_charge_collection_2d.py
+149.87s call     tests/test_api_concurrency.py::test_concurrent_facades_do_not_crash@test_api_concurrency.py
+136.91s call     tests/test_measured_cv_tabulated.py::test_engine_matches_devsim_with_table@test_measured_cv_tabulated.py
+129.43s call     tests/test_dark_current_2d_engine.py::test_engine_twin_matches_devsim_2d[kw0]@test_dark_current_2d_engine.py
+122.35s call     tests/test_measured_cv_tabulated.py::test_engine2d_matches_devsim_with_table@test_measured_cv_tabulated.py
+120.27s call     tests/test_engine2d_nplus.py::test_nplus_sweep_auto_matches_devsim@test_engine2d_nplus.py
+118.52s call     tests/test_engine2d_nplus.py::test_nplus_lateral_scan_matches_devsim@test_engine2d_nplus.py
+113.98s call     tests/test_single_particle_legacy.py::test_legacy_low_let_matches_steady_state_and_contacts_agree@test_single_particle_legacy.py
+112.82s call     tests/test_engine2d_stack.py::test_stack_lateral_scan_matches_devsim[40.0-kw1]@test_engine2d_stack.py
+109.55s call     tests/test_nplus.py::test_nplus_removes_the_1d_wall@test_nplus.py
+103.61s call     tests/test_nplus.py::test_dark_current_independent_of_nplus_thickness@test_nplus.py
+100.80s call     tests/test_api_field_engine.py::test_engine_matches_devsim_hw25[-20.0]@test_api_field_engine.py
+94.86s call     tests/test_charge_collection_2d.py::TestCCELateralScanSharedDevice::test_returns_correct_keys@test_charge_collection_2d.py
+90.86s call     tests/test_charge_collection_2d.py::TestCCEHeatmap2D::test_heatmap_shape_and_active_fraction@test_charge_collection_2d.py
+=========================== short test summary info ============================
+FAILED tests/test_app_cce_page.py::test_run_caches_result@test_app_cce_page.py
+1 failed, 1093 passed in 2400.95s (0:40:00)
