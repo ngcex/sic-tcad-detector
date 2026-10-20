@@ -102,6 +102,6 @@ def render() -> None:
             mime="text/csv",
         )
         st.caption(
-            "Generated current (alpha-like profile, 15 µm range): "
+            "Generated current (NIST ASTAR alpha Bragg profile, 18.43 µm range): "
             f"{float(result.metadata.get('I_generated', float('nan'))):.3e} A/cm²"
         )

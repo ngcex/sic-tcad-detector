@@ -56,13 +56,14 @@ def render() -> None:
     )
     sv_width = st.number_input(
         "Sensitive-volume width (µm)",
-        value=150.0,
+        value=100.0,
         min_value=0.1,
         key="micro_sv_w",
         help=(
-            "Currently has no effect on the spectrum: the mean chord length uses the "
-            "slab approximation l̄ = 2 × thickness (a finite-SV l̄ needs width and "
-            "depth). DESIGN-2's SV is 100 µm wide."
+            "Enters the mean chord length: Cauchy's l̄ = 4V/S of the finite box "
+            "width × thickness × depth, with depth = width here (square footprint; "
+            "run_microdosimetry takes a separate sv_depth_um). 100 µm (DESIGN-2's SV) "
+            "× 10 µm gives l̄ = 16.67 µm (slab limit 2 × thickness = 20 µm)."
         ),
     )
     st.caption(
