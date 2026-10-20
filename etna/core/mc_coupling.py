@@ -24,6 +24,13 @@ Two processing paths:
 
 Units: Internally cm and keV.  Input units are configurable per loader.
 
+Optional MC-truth columns (audit C-2): ``ekin_MeV`` -- kinetic energy (MeV, never
+unit-converted) of the primary at the step, needed for the kinetic-energy kappa(E)
+lookup in ``microdosimetry.tissue_equivalence_correction``; ``track_id`` -- if
+present, the per-event kinetic energy is taken from the first row with
+``track_id == 1`` (the Geant4 primary), else from the first row of the event.
+``process_mc_ensemble`` returns it as ``event_kinetic_MeV`` (None without the column).
+
 References:
     - Phase 21: single_particle.py (ion_track_generation_2d, load_cce_let_table)
     - Phase 22 research: MC event import architecture, CCE(LET) batch pattern
@@ -123,7 +130,8 @@ def load_mc_events_csv(filepath, column_map=None, pos_unit="cm", energy_unit="ke
         Keys are standard names (event_id, x_cm, y_cm, z_cm, edep_keV),
         values are the corresponding column names in the CSV file.
         Default: ``{"event_id": "event_id", "x_cm": "x", "y_cm": "y",
-        "z_cm": "z", "edep_keV": "edep"}``.
+        "z_cm": "z", "edep_keV": "edep", "ekin_MeV": "ekin",
+        "track_id": "track_id"}`` (the last two optional, see module docstring).
     pos_unit : str
         Position unit in the CSV file ("mm", "cm", "um").  Default: "cm".
     energy_unit : str
@@ -141,6 +149,8 @@ def load_mc_events_csv(filepath, column_map=None, pos_unit="cm", energy_unit="ke
         "y_cm": "y",
         "z_cm": "z",
         "edep_keV": "edep",
+        "ekin_MeV": "ekin",
+        "track_id": "track_id",
     }
     col_map = default_map if column_map is None else column_map
 
@@ -252,7 +262,8 @@ def load_mc_events_root(
     -------
     events : pd.DataFrame
         Standardized DataFrame with columns: event_id, x_cm, y_cm, z_cm,
-        edep_keV.  Optional: particle (if in branch_map and available).
+        edep_keV.  Optional: particle, ekin_MeV, track_id (if in branch_map and
+        available; ekin_MeV must already be in MeV).
     """
     try:
         import uproot
@@ -280,7 +291,7 @@ def load_mc_events_root(
         for std_name, root_name in bmap.items():
             if root_name in available_branches:
                 branches_to_read[std_name] = root_name
-            elif std_name == "particle":
+            elif std_name in ("particle", "ekin_MeV", "track_id"):
                 # Optional branch -- skip if not present
                 logger.debug("Optional branch '%s' not found in tree", root_name)
             else:
@@ -432,10 +443,14 @@ def process_mc_ensemble(events_df, cce_interp, sv_thickness_um=10.0):
         - n_zero_energy : int -- number of events with zero/negative energy
         - n_clamped : int -- events with LET outside the CCE table (edge CCE used);
           0 when cce_interp carries no range
+        - event_kinetic_MeV : ndarray or None -- primary kinetic energy per event
+          (same order/mask as event_energies_keV) if the events carry ``ekin_MeV``
+          (audit C-2: the variable for the kappa(E) lookup), else None
     """
     # Sum energy per event
     event_totals = events_df.groupby("event_id")["edep_keV"].sum()
     energies = event_totals.values.astype(float)
+    ekin = _event_kinetic_energy(events_df, event_totals.index)
 
     # Filter zero-energy events
     mask_positive = energies > 0
@@ -493,7 +508,23 @@ def process_mc_ensemble(events_df, cce_interp, sv_thickness_um=10.0):
         "n_events": int(len(energies_pos)),
         "n_zero_energy": n_zero,
         "n_clamped": n_clamped,
+        "event_kinetic_MeV": None if ekin is None else ekin[mask_positive],
     }
+
+
+def _event_kinetic_energy(events_df, event_index):
+    """Per-event primary kinetic energy (MeV) aligned with ``event_index``, or None.
+
+    First row with ``track_id == 1`` if a track_id column exists (Geant4 primary),
+    else the first row of the event (file order). NaN for events without such a row.
+    """
+    if "ekin_MeV" not in events_df.columns:
+        return None
+    df = events_df
+    if "track_id" in df.columns:
+        df = df[df["track_id"] == 1]
+    first = df.groupby("event_id", sort=True)["ekin_MeV"].first()
+    return first.reindex(event_index).to_numpy(dtype=float)
 
 
 # ---------------------------------------------------------------------------

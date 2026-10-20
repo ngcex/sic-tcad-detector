@@ -216,6 +216,7 @@ class TestProcessMCEnsemble:
             "n_events",
             "n_zero_energy",
             "n_clamped",
+            "event_kinetic_MeV",  # audit C-2 (None without an ekin_MeV column)
         }
         assert len(result["event_energies_keV"]) == 50
         assert result["n_events"] == 50
