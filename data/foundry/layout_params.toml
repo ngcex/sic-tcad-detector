@@ -1,0 +1,173 @@
+# ETNA layout / mask dimensions: the ONE user-editable source of every lateral and
+# passivation dimension used by etna.export (GDSII + SVG layout, spec sheet,
+# cross-section drawing). Loader + validation: etna/export/layout_params.py.
+#
+# Seeded on 2026-10-20 from deliverables/DIMENSIONS-provenance.md:
+#   - DOCUMENTED / MEASURED_FROM_FIGURE values keep the class and source of that file;
+#   - every dimension the sources do not give is a PLACEHOLDER: a drawing value so the
+#     layout can be produced, NOT a foundry or mask dimension. Overwrite it with the mask
+#     data (SiCILIA mask set: STM / IMM-CNR via G. Petringa) and set `class` and `source`
+#     accordingly (e.g. class = "DOCUMENTED", source = "mask set <name> rev <n>").
+#
+# While any PLACEHOLDER remains in a device, its GDSII top cell keeps REFERENCE-NOT-FAB,
+# every output lists the placeholder names, and a PlaceholderDimensionWarning is raised.
+#
+# Each dimension: value (> 0; count >= 0 integer), unit ("mm" | "um" | "nm" for lengths,
+# "count" for counts), class ("DOCUMENTED" | "MEASURED_FROM_FIGURE" | "PLACEHOLDER"),
+# source (non-empty), uncertainty (>= 0 in the same unit, or "unknown"). Optional:
+# doc_item (row of DIMENSIONS-provenance.md it comes from), note.
+#
+# Geometry convention (all squares centred on the active area): active p+ square (its
+# boundary is the p+ edge) -> gap -> guard ring(s) of `guard_ring_width`, separated by
+# `guard_ring_spacing` -> bond pad in a die corner between the outermost ring and the
+# die edge -> die edge -> half of the dicing street on each side.
+# Alternative file: load_layout_params(path) or the ETNA_LAYOUT_PARAMS environment
+# variable.
+
+schema_version = 1
+
+# ---------------------------------------------------------------- 2 x 2 mm dosimeter
+[dosimeter.active_side]
+value = 2.0
+unit = "mm"
+class = "DOCUMENTED"
+source = "JINST 20 C08019 p.3; Photons II.A p.3"
+uncertainty = "unknown"
+doc_item = "active p+ area, dosimeter"
+
+[dosimeter.die_side]
+value = 2.7
+unit = "mm"
+class = "MEASURED_FROM_FIGURE"
+source = "Photons Fig.1b (81/79 px = 2 mm, ~25 um/px)"
+uncertainty = 0.15
+doc_item = "die size, 2 mm device"
+
+[dosimeter.guard_ring_count]
+value = 1
+unit = "count"
+class = "PLACEHOLDER"
+source = "PLACEHOLDER: JINST Fig.1 schematic draws one ring (not to scale; ring count conflicting across sources)"
+uncertainty = "unknown"
+
+[dosimeter.guard_ring_gap]
+value = 150.0
+unit = "um"
+class = "PLACEHOLDER"
+source = "PLACEHOLDER: puts the ring near the frame line ~0.2 mm inside the die edge (Photons Fig.1b, line identity not documented); real gap MISSING"
+uncertainty = "unknown"
+note = "p+ edge to inner edge of the first ring"
+
+[dosimeter.guard_ring_width]
+value = 20.0
+unit = "um"
+class = "PLACEHOLDER"
+source = "PLACEHOLDER: drawing value; real ring width MISSING (mask data)"
+uncertainty = "unknown"
+
+[dosimeter.guard_ring_spacing]
+value = 20.0
+unit = "um"
+class = "PLACEHOLDER"
+source = "PLACEHOLDER: drawing value, used only when guard_ring_count > 1; MISSING"
+uncertainty = "unknown"
+
+[dosimeter.pad_size]
+value = 100.0
+unit = "um"
+class = "PLACEHOLDER"
+source = "PLACEHOLDER: one wire bond at a die corner (Photons Fig.1b), size unknown"
+uncertainty = "unknown"
+note = "square pad side; corner position arbitrary"
+
+[dosimeter.dicing_street]
+value = 100.0
+unit = "um"
+class = "PLACEHOLDER"
+source = "PLACEHOLDER: dicing street MISSING in every source"
+uncertainty = "unknown"
+
+[dosimeter.oxide_thickness]
+value = 4.6
+unit = "um"
+class = "PLACEHOLDER"
+source = "PLACEHOLDER: field-plate dielectric read from Phys. Med. Fig.1b (TCAD figure, +-0.3 um); the real oxide thickness is MISSING"
+uncertainty = "unknown"
+note = "not part of the simulated stack (the model has no oxide)"
+
+# ---------------------------------------------------------- 5 x 5 mm microdosimeter
+[microdosimeter.active_side]
+value = 5.0
+unit = "mm"
+class = "DOCUMENTED"
+source = "Phys. Med. 140 (2025) 105675 s2.1; Altana, Sensors 23:6522"
+uncertainty = "unknown"
+doc_item = "active p+ area, microdosimeter"
+
+[microdosimeter.die_side]
+value = 5.7
+unit = "mm"
+class = "PLACEHOLDER"
+source = "PLACEHOLDER: active + the dosimeter's 0.35 mm/side measured periphery; 5x5 die size MISSING"
+uncertainty = "unknown"
+
+[microdosimeter.guard_ring_count]
+value = 1
+unit = "count"
+class = "PLACEHOLDER"
+source = "PLACEHOLDER: no ring within 33 um of the anode in the Micro TCAD figure (Phys. Med. Fig.1b); count unknown"
+uncertainty = "unknown"
+
+[microdosimeter.guard_ring_gap]
+value = 150.0
+unit = "um"
+class = "PLACEHOLDER"
+source = "PLACEHOLDER: same drawing value as the dosimeter; real gap MISSING"
+uncertainty = "unknown"
+note = "p+ edge to inner edge of the first ring"
+
+[microdosimeter.guard_ring_width]
+value = 20.0
+unit = "um"
+class = "PLACEHOLDER"
+source = "PLACEHOLDER: drawing value; real ring width MISSING (mask data)"
+uncertainty = "unknown"
+
+[microdosimeter.guard_ring_spacing]
+value = 20.0
+unit = "um"
+class = "PLACEHOLDER"
+source = "PLACEHOLDER: drawing value, used only when guard_ring_count > 1; MISSING"
+uncertainty = "unknown"
+
+[microdosimeter.pad_size]
+value = 100.0
+unit = "um"
+class = "PLACEHOLDER"
+source = "PLACEHOLDER: pad size MISSING"
+uncertainty = "unknown"
+note = "square pad side; corner position arbitrary"
+
+[microdosimeter.dicing_street]
+value = 100.0
+unit = "um"
+class = "PLACEHOLDER"
+source = "PLACEHOLDER: dicing street MISSING in every source"
+uncertainty = "unknown"
+
+[microdosimeter.oxide_thickness]
+value = 4.6
+unit = "um"
+class = "PLACEHOLDER"
+source = "PLACEHOLDER: field-plate dielectric read from Phys. Med. Fig.1b (TCAD figure, +-0.3 um); the real oxide thickness is MISSING"
+uncertainty = "unknown"
+note = "not part of the simulated stack (the model has no oxide)"
+
+[microdosimeter.passivation_thickness]
+value = 7.0
+unit = "um"
+class = "DOCUMENTED"
+source = "Altana s5"
+uncertainty = "unknown"
+doc_item = "passivation"
+note = "polyimide over SiO2 (SiCILIA 5x5 family); not part of the simulated stack"

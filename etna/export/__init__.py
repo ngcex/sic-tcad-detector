@@ -10,10 +10,14 @@ Every export carries ``VALIDATION_LABEL`` verbatim.
 - ``mesh_export``: doping / potential / field / n / p per node (CSV, legacy-ASCII VTK,
   XML VTU), 1D and 2D.
 
-- ``gds``: labelled SCHEMATIC reference layouts (top cell ``*REFERENCE-NOT-FAB``), GDSII
-  (optional ``gdstk``) + SVG, from the documented / measured-from-figure dimensions only.
-  Not a fabrication layout: guard ring, pad and dicing dimensions are not available and
-  are not invented.
+- ``layout_params``: the user-editable layout / mask dimension file
+  (``data/foundry/layout_params.toml``; argument or $ETNA_LAYOUT_PARAMS for another
+  one), validated; read by ``gds``, the spec sheet and the cross-section. Dimensions
+  still classed PLACEHOLDER are listed in every output and warned about
+  (``PlaceholderDimensionWarning``).
+- ``gds``: labelled reference layouts ("reference layout, not TCAD-validated"; top cell
+  ``*REFERENCE-NOT-FAB`` while any PLACEHOLDER is left), GDSII (optional ``gdstk``) +
+  SVG: active p+ square, guard ring(s), corner pad, die outline, dicing street.
 """
 
 from etna.export.labels import VALIDATION_LABEL
@@ -27,6 +31,14 @@ from etna.export.spec_sheet import (
 )
 from etna.export.cross_section import cross_section_png, cross_section_svg, stack_layers
 from etna.export.mesh_export import profile_to_csv, profile_to_vtk, profile_to_vtu
+from etna.export.layout_params import (
+    DEFAULT_PARAMS_PATH as LAYOUT_PARAMS_PATH,
+    LayoutParams,
+    LayoutParamsError,
+    PlaceholderDimensionWarning,
+    load_layout_params,
+    parse_layout_params,
+)
 from etna.export.gds import (
     DISCLAIMER as LAYOUT_DISCLAIMER,
     gds_available,
@@ -48,6 +60,12 @@ __all__ = [
     "profile_to_csv",
     "profile_to_vtk",
     "profile_to_vtu",
+    "LAYOUT_PARAMS_PATH",
+    "LayoutParams",
+    "LayoutParamsError",
+    "PlaceholderDimensionWarning",
+    "load_layout_params",
+    "parse_layout_params",
     "LAYOUT_DISCLAIMER",
     "gds_available",
     "layout_gds",

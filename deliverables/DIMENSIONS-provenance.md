@@ -31,3 +31,13 @@ Recommendation: a GDSII may be produced only as a labelled schematic: top cell n
 0.2-0.4 mm instead of discrete rings, a placeholder corner pad marked SIZE UNKNOWN, no dicing
 layer; DESIGN-2's 100 um SV array has no documented counterpart (the real microdosimeter is one
 5x5 mm diode). Real dimensions require the mask data from the device owner.
+
+Update 2026-10-20: the layout dimensions now live in the user-editable file
+`data/foundry/layout_params.toml` (loader `etna/export/layout_params.py`), seeded from this
+table. Rows above keep their class and source there; every MISSING / QUALITATIVE item (ring
+count, widths and gaps, pad size, dicing street, oxide thickness, 5x5 die size) has a drawing
+value classed PLACEHOLDER that the owner overwrites with the mask data. The layout now draws
+discrete ring(s), the pad and a dicing frame from those values; while any PLACEHOLDER is left
+the top cell keeps `REFERENCE-NOT-FAB`, the placeholder names are written into the layout and
+every export warns. This table stays the provenance record; `tests/test_export_gds.py` checks
+that the file's non-PLACEHOLDER rows match it.

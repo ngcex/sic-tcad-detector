@@ -8,6 +8,7 @@ session caching, and the main-script navigation.
 from __future__ import annotations
 
 import numpy as np
+import pytest
 from streamlit.testing.v1 import AppTest
 
 import etna
@@ -15,6 +16,12 @@ from etna import DeviceConfig, MeshData, SimResult
 from etna.api.run_all import Report, SectionResult
 
 LABEL_START = "simulation output, validated against devsim reference"
+
+# the default layout parameter file has PLACEHOLDER values; the page shows them as
+# st.warning (asserted below), the Python warning is silenced here
+pytestmark = pytest.mark.filterwarnings(
+    "ignore::etna.export.layout_params.PlaceholderDimensionWarning"
+)
 
 
 def _page():
