@@ -119,6 +119,133 @@ def _newton_batch(
         conv[bi] = converged
 
 
+@njit(cache=True, inline="always")
+def _ionized(n_hat, p_hat, dd, dr, ad, ar, bi, i):
+    """Ionized net doping D+ - A- (scaled) and its |derivatives| dD = -dD+/du,
+    dA = dA-/du at node i (Burin Eq. 82; etna.core.incomplete_ionization)."""
+    Dp = 0.0
+    dD = 0.0
+    for l in range(dd.shape[1]):
+        s = n_hat / dr[bi, l, i]
+        f = 1.0 / (1.0 + s)
+        Dp += dd[bi, l, i] * f
+        dD += dd[bi, l, i] * s * f * f
+    Am = 0.0
+    dA = 0.0
+    for l in range(ad.shape[1]):
+        t = p_hat / ar[bi, l, i]
+        f = 1.0 / (1.0 + t)
+        Am += ad[bi, l, i] * f
+        dA += ad[bi, l, i] * t * f * f
+    return Dp - Am, dD, dA
+
+
+@njit(cache=True, parallel=True)
+def _newton_batch_ii(
+    u, u_n, u_p, dd, dr, ad, ar, lnni, lam2, inv_h, v, tol, max_iter, clamp, iters, conv
+):
+    """_newton_batch with the carrier-dependent ionized doping (opt-in, audit-v7 A-02):
+    D_i = sum_l dd/(1 + n^/dr) - sum_l ad/(1 + p^/ar), Jacobian diagonal
+    -lap - v (p^ + n^ + dD + dA). (B, L, N) scaled level densities / references."""
+    B, N = u.shape
+    for bi in prange(B):
+        a = np.empty(N)
+        b = np.empty(N)
+        c = np.empty(N)
+        F = np.empty(N)
+        cp = np.empty(N)
+        dp = np.empty(N)
+        l2 = lam2[bi]
+        ln = lnni[bi]
+        converged = False
+        it = 0
+        for it in range(1, max_iter + 1):
+            for i in range(1, N - 1):
+                ui = u[bi, i]
+                en = min(ui - u_n[bi, i] + ln, EXP_CLAMP)
+                ep = min(u_p[bi, i] - ui + ln, EXP_CLAMP)
+                n_hat = np.exp(en)
+                p_hat = np.exp(ep)
+                D, dD, dA = _ionized(n_hat, p_hat, dd, dr, ad, ar, bi, i)
+                fl = (u[bi, i + 1] - ui) * inv_h[i]
+                fr = (ui - u[bi, i - 1]) * inv_h[i - 1]
+                F[i] = l2 * (fl - fr) + v[i] * (p_hat - n_hat + D)
+                a[i] = l2 * inv_h[i - 1]
+                c[i] = l2 * inv_h[i]
+                b[i] = -l2 * (inv_h[i - 1] + inv_h[i]) - v[i] * (
+                    p_hat + n_hat + dD + dA
+                )
+            F[0] = 0.0
+            F[N - 1] = 0.0
+            cp[0] = 0.0
+            dp[0] = 0.0
+            for i in range(1, N - 1):
+                m = 1.0 / (b[i] - a[i] * cp[i - 1])
+                cp[i] = c[i] * m
+                dp[i] = (-F[i] - a[i] * dp[i - 1]) * m
+            upd = 0.0
+            dnext = 0.0
+            for i in range(N - 2, 0, -1):
+                d = dp[i] - cp[i] * dnext
+                if d > clamp:
+                    d = clamp
+                elif d < -clamp:
+                    d = -clamp
+                dnext = dp[i] - cp[i] * dnext
+                u[bi, i] += d
+                if abs(d) > upd:
+                    upd = abs(d)
+            if upd < tol:
+                converged = True
+                break
+        iters[bi] = it
+        conv[bi] = converged
+
+
+@njit(cache=True, parallel=True)
+def _dpsi_dvc_batch_ii(n_hat, p_hat, dd, dr, ad, ar, lam2, inv_h, v, out):
+    """_dpsi_dvc_batch with the carrier-dependent ionization (opt-in, A-02): Jacobian
+    diagonal gains dD + dA, dF_i/du_c = v_i (n^_i + dD_i) (the donor occupancy follows
+    phi_n = V_cathode), and the anode-conserved charge is p - N_A- (a neutral acceptor
+    is a bound hole): out[b] = sum_i v_i (p^_i + dA_i) du_i."""
+    B, N = n_hat.shape
+    for bi in prange(B):
+        l2 = lam2[bi]
+        cp = np.empty(N)
+        dp = np.empty(N)
+        du = np.empty(N)
+        dAs = np.zeros(N)
+        cp[0] = 0.0
+        dp[0] = 0.0
+        for i in range(1, N - 1):
+            _, dD, dA = _ionized(
+                n_hat[bi, i], p_hat[bi, i], dd, dr, ad, ar, bi, i
+            )
+            dAs[i] = dA
+            a = l2 * inv_h[i - 1]
+            c = l2 * inv_h[i]
+            b = -l2 * (inv_h[i - 1] + inv_h[i]) - v[i] * (
+                p_hat[bi, i] + n_hat[bi, i] + dD + dA
+            )
+            r = -v[i] * (n_hat[bi, i] + dD)
+            if i == N - 2:
+                r -= c
+                c = 0.0
+            m = 1.0 / (b - a * cp[i - 1])
+            cp[i] = c * m
+            dp[i] = (r - a * dp[i - 1]) * m
+        du[N - 1] = 1.0
+        du[0] = 0.0
+        nxt = 0.0
+        for i in range(N - 2, 0, -1):
+            du[i] = dp[i] - cp[i] * nxt
+            nxt = du[i]
+        s = 0.0
+        for i in range(1, N - 1):
+            s += v[i] * (p_hat[bi, i] + dAs[i]) * du[i]
+        out[bi] = s
+
+
 @njit(cache=True, parallel=True)
 def _dpsi_dvc_batch(n_hat, p_hat, lam2, inv_h, v, out):
     """Small-signal response du/du_c of a converged flat-quasi-Fermi Poisson state.
@@ -160,12 +287,23 @@ def _dpsi_dvc_batch(n_hat, p_hat, lam2, inv_h, v, out):
 
 
 class PoissonBatch:
-    """Fixed per-batch data; call solve() repeatedly along a bias ramp."""
+    """Fixed per-batch data; call solve() repeatedly along a bias ramp.
 
-    def __init__(self, x, donors, acceptors, n_i, V_t):
+    ``ionization`` (opt-in, audit-v7 A-02): None = the legacy static doping
+    (NetDoping = donors - acceptors, bit-identical); else a sequence of B
+    ``etna.core.incomplete_ionization.IonizationFields`` (one per device, node shape
+    (N,)) plus the static equilibrium net doping as ``(fields_list, netdop (B, N))``
+    (``batch_ionization``): the Poisson charge is then N_D+(n) - N_A-(p) and the
+    contacts / neutral guess use the static equilibrium value, as the devsim builders.
+    """
+
+    def __init__(self, x, donors, acceptors, n_i, V_t, ionization=None):
         self.x = np.asarray(x, dtype=float)
         self.N = len(self.x)
         D = np.asarray(donors, dtype=float) - np.asarray(acceptors, dtype=float)
+        if ionization is not None:
+            fields_list, netdop_eq = ionization
+            D = np.ascontiguousarray(np.broadcast_to(netdop_eq, D.shape), dtype=float)
         self.B = D.shape[0]
         self.n_i = np.broadcast_to(np.asarray(n_i, dtype=float), (self.B,)).copy()
         self.V_t = np.broadcast_to(np.asarray(V_t, dtype=float), (self.B,)).copy()
@@ -185,6 +323,20 @@ class PoissonBatch:
         self.v = v  # (N,) control volumes, ends unused
         self._D_hat = np.ascontiguousarray(D / self.N0[:, None])  # (B, N)
         self._inv_h = 1.0 / h  # (N-1,)
+        self.ionization = None
+        if ionization is not None:
+            if len(fields_list) != self.B:
+                raise ValueError(
+                    f"ionization: {len(fields_list)} field sets for {self.B} devices"
+                )
+            s = self.N0[:, None, None]
+            stack = lambda key: np.ascontiguousarray(
+                np.stack([getattr(f, key) for f in fields_list]) / s
+            )  # (B, L, N), scaled by N0
+            self.ionization = tuple(
+                stack(k) for k in ("d_dens", "d_ref", "a_dens", "a_ref")
+            )
+            self.ionization_fields = list(fields_list)
 
     def neutral_guess(self, V_anode=0.0, V_cathode=0.0):
         """Charge-neutral potential (V), (B, N) -- the standard Newton starting point."""
@@ -229,21 +381,38 @@ class PoissonBatch:
         u[:, -1] = psi_c / self.V_t
         iters = np.zeros(B, dtype=np.int64)
         conv = np.zeros(B, dtype=np.bool_)
-        _newton_batch(
-            u,
-            u_n,
-            u_p,
-            self._D_hat,
-            self.log_ni_hat,
-            self.lam2,
-            self._inv_h,
-            self.v,
-            tol,
-            max_iter,
-            clamp,
-            iters,
-            conv,
-        )
+        if self.ionization is None:
+            _newton_batch(
+                u,
+                u_n,
+                u_p,
+                self._D_hat,
+                self.log_ni_hat,
+                self.lam2,
+                self._inv_h,
+                self.v,
+                tol,
+                max_iter,
+                clamp,
+                iters,
+                conv,
+            )
+        else:
+            _newton_batch_ii(
+                u,
+                u_n,
+                u_p,
+                *self.ionization,
+                self.log_ni_hat,
+                self.lam2,
+                self._inv_h,
+                self.v,
+                tol,
+                max_iter,
+                clamp,
+                iters,
+                conv,
+            )
         lnni = self.log_ni_hat[:, None]
         n = self.N0[:, None] * np.exp(np.minimum(u - u_n + lnni, EXP_CLAMP))
         p = self.N0[:, None] * np.exp(np.minimum(u_p - u + lnni, EXP_CLAMP))
@@ -266,5 +435,23 @@ class PoissonBatch:
         n_hat = np.ascontiguousarray(res.n / self.N0[:, None])
         p_hat = np.ascontiguousarray(res.p / self.N0[:, None])
         out = np.empty(self.B)
-        _dpsi_dvc_batch(n_hat, p_hat, self.lam2, self._inv_h, self.v, out)
+        if self.ionization is None:
+            _dpsi_dvc_batch(n_hat, p_hat, self.lam2, self._inv_h, self.v, out)
+        else:
+            _dpsi_dvc_batch_ii(
+                n_hat, p_hat, *self.ionization, self.lam2, self._inv_h, self.v, out
+            )
         return Q * self.N0 * out / self.V_t
+
+    def ionized_doping(self, res):
+        """(N_D+, N_A-) (B, N), cm^-3, of a PoissonResult; the static doping for the
+        legacy model (donors, acceptors)."""
+        if self.ionization is None:
+            return self.donors.copy(), np.array(self.acceptors, dtype=float)
+        from etna.core.incomplete_ionization import ionized_densities
+
+        out = [
+            ionized_densities(f, res.n[b], res.p[b])
+            for b, f in enumerate(self.ionization_fields)
+        ]
+        return np.array([o[0] for o in out]), np.array([o[1] for o in out])

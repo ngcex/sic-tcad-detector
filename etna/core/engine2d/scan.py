@@ -254,6 +254,9 @@ def engine2d_unsupported_reason(
     then the bias range is ENGINE2D_NPLUS_BOX["V_bias"] instead of ENGINE2D_BOX's.
     """
     device_kwargs = dict(device_kwargs)
+    # opt-in carrier-dependent ionization (A-02): solved by the engine (Device2D reads
+    # the builder's model; parity tests/test_incomplete_ionization_engines.py)
+    device_kwargs.pop("incomplete_ionization", None)
     np_reason, has_nplus = _nplus_reason(device_kwargs)
     if np_reason is not None:
         return np_reason
@@ -467,6 +470,7 @@ def engine2d_dark_unsupported_reason(half_width_um, V_cathode, **device_kwargs):
     """Why ``dark_state_2d`` cannot serve this device/bias (None = it can)."""
     vals = dict(half_width_um=half_width_um, V_cathode=V_cathode)
     device_kwargs = dict(device_kwargs)
+    device_kwargs.pop("incomplete_ionization", None)  # solved by the engine (A-02)
     np_reason, has_nplus = _nplus_reason(device_kwargs, allow_generation=False)
     if np_reason is not None:
         return np_reason

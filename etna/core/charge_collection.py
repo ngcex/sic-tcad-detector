@@ -804,6 +804,8 @@ def _alpha_generation_values(device_info, x_nodes, alpha_range_cm, generation_ra
 
 def _fluence_engine_reason(dev_kw, V_bias):
     """Why the batched engine cannot serve this fluence sweep (None = it can)."""
+    if dev_kw.get("incomplete_ionization") not in (None, False):
+        return "incomplete_ionization (carrier-dependent model not in this engine)"
     profile = dev_kw.get("doping_profile", "graded")
     if profile not in _FLUENCE_ENGINE_PROFILES:
         return f"doping_profile={profile!r}"

@@ -386,6 +386,8 @@ def _engine_batch(kws):
         nplus=nplus,
         buffer=buffer,
         donor_table=table,
+        # opt-in carrier-dependent ionization: one value per group (_engine_groups)
+        incomplete_ionization=kws[0].get("incomplete_ionization"),
     )
     return pb, x
 
@@ -405,6 +407,7 @@ def _engine_groups(configs, bias_array, facade):
             kw.get("nplus_thickness_cm"),
             kw.get("buffer_thickness_cm") is not None,  # buffer values may differ
             kw.get("donor_table"),  # a tabulated profile is shared by its group
+            kw.get("incomplete_ionization"),  # one ionization model per group
         )
         groups.setdefault(key, []).append(i)
     return groups
