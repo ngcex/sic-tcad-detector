@@ -108,11 +108,51 @@ def grid_from_arrays(x, y, volume, donors, acceptors, anode, cathode):
 
 
 @serialized
-def grid_from_devsim(**device_kwargs):
-    """Mesh-only ``create_sic_2d_device(**device_kwargs)`` -> validated Grid2D."""
-    import devsim
+def _freeze(v):
+    """Hashable form of a keyword value (tuples for sequences/arrays); TypeError if none."""
+    if isinstance(v, np.ndarray):
+        return ("ndarray", v.dtype.str, v.shape, v.tobytes())
+    if isinstance(v, (list, tuple)):
+        return tuple(_freeze(e) for e in v)
+    hash(v)
+    return v
 
-    from etna.core.device2d import create_sic_2d_device
+
+_GRID_CACHE: "dict" = {}  # key -> (Grid2D, info), insertion order = age
+_GRID_CACHE_MAX = 16
+
+
+def grid_from_devsim(**device_kwargs):
+    """Mesh-only ``create_sic_2d_device(**device_kwargs)`` -> validated Grid2D.
+
+    Memoized on the keywords (and the builder function, so a monkeypatched builder is
+    called): the mesh-only devsim build costs 0.1-0.3 s per call and is repeated for
+    every bias of one device. A hit returns deep copies (the caller may mutate ``info``);
+    exceptions are not cached; unhashable keywords bypass the cache.
+    """
+    import copy
+
+    from etna.core import device2d
+
+    builder = device2d.create_sic_2d_device
+    try:
+        key = (
+            builder,
+            tuple(sorted((k, _freeze(v)) for k, v in device_kwargs.items())),
+        )
+    except TypeError:
+        return _grid_from_devsim(builder, device_kwargs)
+    hit = _GRID_CACHE.pop(key, None)
+    if hit is None:
+        hit = _grid_from_devsim(builder, device_kwargs)
+    _GRID_CACHE[key] = hit
+    while len(_GRID_CACHE) > _GRID_CACHE_MAX:
+        _GRID_CACHE.pop(next(iter(_GRID_CACHE)))
+    return copy.deepcopy(hit)
+
+
+def _grid_from_devsim(create_sic_2d_device, device_kwargs):
+    import devsim
 
     name = f"e2d_mesh_{uuid.uuid4().hex[:8]}"
     info = create_sic_2d_device(device_name=name, **device_kwargs)
