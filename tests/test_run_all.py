@@ -175,7 +175,8 @@ def test_damage_default_grid_adapts_to_the_compensation_fluence(factory):
 def test_damage_explicit_grid_is_used_unchanged():
     from etna.api import simulation as s
 
-    grid = np.array([1e11, 3e12, 5e14])
+    # default 5.6 MeV: compensation 1.01e12 p/cm2 with the SR-NIEL kappa (2026-10-20)
+    grid = np.array([1e10, 3e11, 5e14])
     res = s.run_radiation_damage(etna.DeviceConfig(), fluences=grid)
     np.testing.assert_array_equal(res.x, grid)
     assert list(res.metadata["valid"]) == [True, True, False]

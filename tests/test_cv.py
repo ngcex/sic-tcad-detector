@@ -152,15 +152,18 @@ class TestCvAtFluence:
     def test_cv_flattens_at_moderate_fluence(self):
         """C-V at moderate fluence is flatter than pristine.
 
-        At 1.2e13 protons/cm^2 (62 % of the default's 1.93e13 compensation fluence since
-        the 2026-10-18 default flip; was 2e13 of 4.7e13), carrier removal reduces doping
+        At 2.16e12 protons/cm^2 (62 % of the default's 3.48e12 compensation fluence with the
+        SR-NIEL kappa(62 MeV) = 1.942 since 2026-10-20: the same neq fluence as 1.2e13 of
+        1.93e13 with the 0.35 placeholder after the 2026-10-18 default flip; was 2e13 of
+        4.7e13 before), carrier removal reduces doping
         variation in the epi layer, leading to more uniform depletion and flatter C-V.
         """
         from etna.core.cv_analysis import cv_at_fluence
+        from etna.core.radiation_damage import get_hardness_factor
 
         V_pts = [0, -5, -10, -20, -30]
         pristine = cv_at_fluence(fluence=0.0, V_range=V_pts)
-        damaged = cv_at_fluence(fluence=1.2e13, V_range=V_pts)
+        damaged = cv_at_fluence(fluence=1.2e13 * 0.35 / get_hardness_factor(62.0), V_range=V_pts)
 
         # Capacitance spread (max - min) should be smaller for damaged device
         spread_pristine = np.max(pristine["capacitance"]) - np.min(
