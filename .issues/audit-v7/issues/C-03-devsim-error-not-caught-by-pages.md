@@ -77,3 +77,16 @@ S
 
 - Every devsim-calling page now catches `Exception` and routes it through `app.components.page_utils.show_error`, which treats the devsim `error` class (by name) as a solver failure (friendly st.error + details expander). DeviceConfig.__post_init__ rejects substrate_thickness_um <= 0 and the other non-positive inputs, and the sidebar shows the validation error instead of building.
 - Evidence: `grep -c "except RuntimeError" app/workflows/*.py` -> 0 in every file; `uv run pytest -q tests/test_app_robustness.py -k "devsim_error or stale or invalid_sidebar or rejects_out_of_range"` -> 15 passed (test_devsim_error_shows_friendly_error_with_details).
+
+## Status 2026-10-21: facade path hardened (d7280f7)
+
+- `DeviceConfig(substrate_thickness_um=0.0)` and the other non-physical values
+  (non-positive / non-finite thicknesses, area, doping, T outside 100-600 K, T <= 0
+  included) raise ValueError naming the field (cf64bef, now also rejecting inf).
+- Remaining hole closed: DeviceConfig is not frozen, so `cfg.substrate_thickness_um = 0.0`
+  after construction skipped `__post_init__` and reached devsim. `device_kwargs` (the entry
+  of `build_device` and of every `run_*` facade) now calls `DeviceConfig.validate()`, so
+  `run_cv(cfg)` raises that ValueError before any devsim call.
+- Tests: tests/test_device_config_contract.py
+  (`test_non_physical_values_raise_with_field_name`,
+  `test_in_place_mutation_is_caught_before_devsim`).

@@ -4,7 +4,7 @@ source: raw-C F12
 title: DeviceConfig has no validation; an unknown doping_profile silently becomes uniform, and uniform with N_D=None silently uses a hidden default
 severity: low
 category: bug
-status: open (partial: numeric validation fixed in cf64bef; doping_profile cases need a contract decision)
+status: fixed (d7280f7; numeric validation cf64bef)
 location:
   - etna/api/device.py:25-43 (DeviceConfig, no __post_init__)
   - etna/core/device.py:92-93 (`if N_D is None: N_D = DEFAULT_N_D`, DEFAULT_N_D = 1.07e15 at :33)
@@ -82,3 +82,39 @@ S
 - Still open (repro on final-c): `DeviceConfig(doping_profile="Graded")` and `DeviceConfig(doping_profile="uniform")` (N_D None) both construct; device_kwargs passes them on, and the uniform path substitutes DEFAULT_N_D = 1.07e15 (etna/api/simulation.py validated_domain_reason / compensation_fluence, etna/core/device.py).
 - Why not fixed here: the __post_init__ docstring says doping_profile is "deliberately not validated here (downstream code decides)", and two tests pin that acceptance (tests/test_app_robustness.py::test_device_config_accepts_defaults_and_edges, tests/test_api_engine_switch.py::test_outside_validated_domain_uses_devsim with doping_profile="linear"). Rejecting them changes the public contract.
 - Owner: Cesare (API owner). Decision needed: reject unknown doping_profile and require N_D for "uniform" in __post_init__ (then update the two pinned tests), or keep the current contract and document the DEFAULT_N_D fallback.
+
+## Status 2026-10-21: fixed (d7280f7)
+
+Contract decision taken with the API owner (Cesare): strict, no case folding.
+
+- `doping_profile` is typed `DopingProfile = Literal["graded", "uniform"]`
+  (`etna.api.device.DOPING_PROFILES`). Any other value, `"Graded"` included, raises
+  ValueError listing the allowed values. There is no case folding, because the config is
+  serialised into every CSV / figure header and its provenance must be unique per physics.
+- `doping_profile="uniform"` with `N_D=None` raises ValueError naming N_D, so the hidden
+  DEFAULT_N_D 1.07e15 is no longer reachable from DeviceConfig. Core `create_sic_device`
+  keeps its own fallback (not the public contract).
+- `doping_profile="graded"` with an explicit `N_D` raises. Checked first: the graded
+  builders set the epi from N_D_junction / N_D_bulk / L_transition (core/device.py graded
+  branch), `mobility_doping` uses N_D_bulk, the batched engine uses `nd` only where
+  `uniform` is true (simulation.py `np.where(uniform, nd, ...)`). The only readers of
+  `device_info["N_D"]` are the analytic `extract_depletion_width` (no facade calls it) and
+  the 2D-engine gate, which treats any N_D as out of box (it would only switch solver).
+  So the value was silently ignored, and it is now rejected.
+- Presets: `legacy_config()` is graded with an explicit junction / bulk / L triplet and no
+  N_D, so it does not rely on a hidden default and needed no change. The microdosimeter
+  (the only uniform preset) already sets N_D = 1e14.
+- Positive checks now also reject inf (and N_A must be finite). The checks are factored
+  into `DeviceConfig.validate()` (pure), which `__post_init__` and `device_kwargs` both call
+  (see C-03).
+- Call sites: no notebook uses DeviceConfig. The app restricts the profile to the two
+  strings and forces N_D=None for graded. Scripts and tests all pass N_D with uniform.
+  Two pinned tests were updated: tests/test_app_robustness.py ("linear" now raises) and
+  tests/test_api_engine_switch.py (out-of-box case is now a uniform N_D 5e13).
+- Bit-identity: a sha256 fingerprint of x / y for every `run_all(DeviceConfig())` section
+  and of `run_cv` for the legacy / microdosimeter / n+-calibrated / tabulated presets is
+  identical before (main f3f00ee) and after. Pinned in tests/test_device_config_contract.py.
+- Follow-up (not in this change, simulation.py is owned elsewhere): the
+  `DEFAULT_N_D if config.N_D is None else config.N_D` fallbacks in
+  etna/api/simulation.py (Debye length, engine batch, compensation fluence) and
+  etna/export/labels.py are now dead code for the uniform branch.
