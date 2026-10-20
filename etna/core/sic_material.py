@@ -92,8 +92,13 @@ class SiC4H_Parameters:
     S_p: float = 1e3  # cm/s, hole surface recombination velocity
 
     # --- Auger recombination coefficients ---
-    C_n: float = 5.0e-31  # cm^6/s, electron Auger (Ioffe NSM)
-    C_p: float = 2.0e-31  # cm^6/s, hole Auger (Ioffe NSM)
+    # Galeckas, Linnros, Grivickas, Lindefelt, Hallin, Appl. Phys. Lett. 71, 3269 (1997):
+    # C_n = (5 +- 1)e-31, C_p = (2 +- 1)e-31 cm^6/s, free-carrier absorption at 300 K,
+    # Delta N 2e18-2e19 cm^-3 (the values of the Ioffe NSM archive). Later measurements
+    # span ~1e-31..2e-30 cm^6/s with injection / temperature dependences (J. Burin et
+    # al., arXiv:2410.06798, Table XXII); not modelled: 300 K constants at every T.
+    C_n: float = 5.0e-31  # cm^6/s, electron Auger
+    C_p: float = 2.0e-31  # cm^6/s, hole Auger
 
     # --- Radiative recombination ---
     B: float = 1.5e-12  # cm^3/s, radiative coefficient (estimation); informational:

@@ -1686,13 +1686,15 @@ def run_flash_recombination(
 
     Solver (since 2026-10-18): inside ``etna.core.flash_recombination.flash_engine_reason``
     (the engine box with the junction doping widened to 2e17, 150-450 K, legacy only to
-    -40 V) the sweep runs on the batched numba engine (parity with devsim <= ~3e-12 in
+    -40 V) the sweep runs on the batched numba engine (parity with devsim <= ~7.5e-12 in
     CCE, tests/test_flash_engine.py; ~10 ms instead of ~1 s); otherwise, or on
     non-convergence (``metadata["fallback_reason"]``), on devsim. ``solver="devsim"``
     forces devsim, ``"engine"`` raises outside the scope. ``metadata["validated_domain"]``
-    / ``"domain_note"`` refer to that flash scope. Both paths are SRH-only: the devsim
-    path's Auger term is overwritten by add_generation_to_dd (see cce_vs_dose_rate,
-    open physics item).
+    / ``"domain_note"`` refer to that flash scope. Both paths solve SRH + Auger (Galeckas
+    1997 coefficients; until 2026-10-20 the Auger term was silently dropped, see
+    cce_vs_dose_rate): Auger lowers CCE by a dose-rate-independent ~3e-7 on the default
+    stack (up to 5.6e-5 on notebook 05b's grid) through minority-hole recombination in
+    the 1e19 n+.
 
     Bucket-a config->kwargs adapter over
     `etna.core.flash_recombination.cce_vs_dose_rate`, which builds AND
@@ -1724,8 +1726,9 @@ def run_flash_recombination(
     Warning
     -------
     SCOPE / LIMITATIONS (see flash_recombination.py module header): at these
-    dose rates the Auger (n^3) term is orders of magnitude below SRH, so any
-    CCE variation produced here is a NUMERICAL SENSITIVITY BOUND, NOT a
+    dose rates the high-injection Auger (n^3) term is orders of magnitude below
+    SRH in the epi (the n+ low-injection Auger offset above does not depend on the
+    dose rate), so any CCE variation WITH DOSE RATE is a NUMERICAL SENSITIVITY BOUND, NOT a
     validated FLASH plasma-recombination prediction. The genuine
     high-injection physics (field screening, ambipolar transport,
     conductivity modulation) is not modeled — do not present these outputs as

@@ -215,7 +215,7 @@ built-in-voltage difference; <1 % with V_bi matched), not a validation of this d
 
 - ✅ **Verified numerics (code-to-code, not against measurement):** the batched 1D and
   2D numba engines reproduce devsim inside their parameter boxes (1D dC/C ≲ 3e-8,
-  dCCE ≲ 1e-10 to −100 V, dark current ≲ 1.4e-11 relative, FLASH CCE ≲ 3e-12; 2D
+  dCCE ≲ 1e-10 to −100 V, dark current ≲ 1.4e-11 relative, FLASH CCE ≲ 7.5e-12 (Auger on); 2D
   potential ~1e-13 V), and the 2D graded model's C–V
   matches its 1D twin (R² ≥ 0.99 over 0…−50 V). Electrostatics, C–V and CCE-vs-bias are
   therefore solved consistently, but their agreement with this device rests on the
@@ -228,7 +228,9 @@ built-in-voltage difference; <1 % with V_bi matched), not a validation of this d
   estimate only.
 - ⚠️ **FLASH dose-rate:** the high-injection _plasma-recombination_ physics is
   **not implemented** — FLASH dose-rate outputs are exploratory sensitivity
-  bounds, not a validated mechanistic prediction.
+  bounds, not a validated mechanistic prediction. The steady-state sweep solves
+  SRH + Auger (active since 2026-10-20; before, the Auger term was silently
+  dropped): Auger only adds a dose-rate-independent CCE offset (≤ 5.6e-5, n⁺ layer).
 - ⚠️ **Device stack = calibration (default since 2026-10-18: the measured-C-V profile):** p⁺ anode
   0.3 µm / 10 µm graded n⁻ epi (N_D_junction 8.19e15, L 0.46 µm, N_D_bulk 3.38e13) with
   a graded n⁻/n⁺ transition over its last 1.14 µm (log-linear to 4.5e16 at 10 µm) /

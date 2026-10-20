@@ -421,13 +421,18 @@ print(r.metadata["solver"], np.round(r.y, 4))
 
 FLASH dose-rate sweeps. `x` is dose rate (Gy/s), `y` is CCE. `run_transient` also
 returns `transient_cce_raw` (unclipped). `run_flash_recombination` runs on the batched
-engine inside its scope (section 7; about 40 ms, parity <= ~3e-12), otherwise on devsim
-(about 1-3 s); `run_transient` runs on devsim (about 2 s). Any variation with dose rate is
-a **numerical sensitivity bound**. No plasma or high-injection physics is modelled. Both
-solvers of the steady-state sweep are **SRH-only**: the devsim path's Auger term is
-overwritten when the generation is added (`add_generation_to_dd`), and the engine
-reproduces that; with Auger really active CCE would drop by up to 5.6e-5 (heavily doped
-layers), dose-rate independent. Open physics item (`.issues/TECH-DEBT-2026-10-18.md`).
+engine inside its scope (section 7; about 40 ms, parity <= ~7.5e-12 with Auger on),
+otherwise on devsim (about 1-3 s); `run_transient` runs on devsim (about 2 s). Any
+variation with dose rate is a **numerical sensitivity bound**. No plasma or high-injection physics is modelled. Both
+solvers of the steady-state sweep solve **SRH + Auger** (C_n 5e-31, C_p 2e-31 cm^6/s,
+Galeckas et al. 1997, 300 K constants; override with
+`etna.core.flash_recombination.cce_vs_dose_rate(..., C_n=, C_p=)`). Auger lowers CCE by
+a dose-rate-independent offset: 3.4e-7 on the default stack at -30 V, up to 5.6e-5 on
+notebook 05b's grid (5 um epi, N_D_bulk 5e14, -10 V), from minority holes recombining in
+the 1e19 n+ substrate; it scales ~linearly with C_n, so the literature spread (up to
+~2e-30) allows up to ~2e-4 there. It adds no dose-rate dependence (<= 1.5e-8). Until
+2026-10-20 the Auger term was silently dropped (both solvers SRH-only). `run_transient`
+still is SRH-only (open item, `.issues/TECH-DEBT-2026-10-18.md`).
 
 ```python
 from etna import DeviceConfig, run_flash_recombination, run_transient
@@ -614,7 +619,7 @@ Which solver runs:
   FLASH widens N_D_junction to 1e15-2e17 (notebook 05b's scaled junction doping). Each
   takes `solver="auto" | "engine" | "devsim"`. Parity: `tests/test_dark_current_engine.py`
   (I_total, I_TAT <= 1e-9 relative, measured <= 1.4e-11), `tests/test_flash_engine.py`
-  (CCE <= 1e-9, measured <= 2.5e-12).
+  (CCE <= 1e-9, measured <= 7.5e-12 with Auger on).
 - **2D dark current** (`etna.core.optimization.get_dark_current_2d`): a device the 2D
   engine accepts is laterally uniform, so its current is the 1D engine's J times the SV
   area (vs the devsim 2D solve: 2.4e-7 / 3.3e-7, the f_depl node field discretisation;

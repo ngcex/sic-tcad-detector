@@ -9,7 +9,16 @@ The Auger recombination rate is:
     R_Auger = (C_n * n + C_p * p) * (n * p - n_i^2)
 
 where C_n and C_p are the Auger coefficients for electron- and hole-initiated
-processes. For 4H-SiC, C_n = 5e-31 cm^6/s and C_p = 2e-31 cm^6/s (Ioffe NSM).
+processes. For 4H-SiC, C_n = (5 +- 1)e-31 cm^6/s and C_p = (2 +- 1)e-31 cm^6/s:
+A. Galeckas, J. Linnros, V. Grivickas, U. Lindefelt, C. Hallin, "Auger recombination
+in 4H-SiC: unusual temperature behavior", Appl. Phys. Lett. 71, 3269 (1997)
+(free-carrier absorption, 300 K, Delta N 2e18-2e19 cm^-3; the values the Ioffe NSM
+archive lists). Later measurements span ~1e-31..2e-30 cm^6/s and report injection and
+temperature dependences (review: J. Burin et al., "TCAD parameters for 4H-SiC: a
+review", arXiv:2410.06798, Table XXII). Here they are T- and injection-independent 300 K
+constants (sic_material.SiC4H_Parameters), overridable per call (cce_vs_dose_rate C_n /
+C_p); applying them to low-injection minority carriers in the 1e19 n+ layer is an
+extrapolation of the high-injection measurement.
 
 SCOPE AND HONEST LIMITATIONS (audit C2/C3, 2026-06):
     This module is a SENSITIVITY / continuation study, NOT a validated model of
@@ -17,10 +26,17 @@ SCOPE AND HONEST LIMITATIONS (audit C2/C3, 2026-06):
     from it:
 
     1. At steady-state generation rates corresponding to 20-230 Gy/s, the
-       carrier densities reached are far too low for Auger (n^3) to measurably
-       reduce CCE -- the Auger term here is quantitatively negligible (orders of
-       magnitude below SRH). Any dose-rate dependence of CCE produced by the
-       Auger term alone is not physically significant.
+       excess carrier densities reached are far too low for high-injection Auger
+       (n^3) to matter: in the epi the term is orders of magnitude below SRH. Auger
+       is NOT negligible everywhere, though: in the 1e19 n+ layer the majority-
+       electron Auger channel shortens the minority-hole lifetime
+       (1 / (C_n N_D^2) ~ 20 ns vs tau_p = 600 ns), a LOW-injection effect that
+       lowers CCE by a dose-rate-independent 1.7e-7..5.6e-5 over notebook 05b's grid
+       (largest at 5 um epi, N_D_bulk 5e14, -10 V; it adds <= 1.5e-8 of dose-rate
+       dependence, measured 2026-10-20). Before 2026-10-20 the Auger term was
+       silently dropped in every solve (add_generation_to_dd overwrote it; see
+       set_generation). Any dose-rate dependence of CCE produced here is not a
+       physical FLASH effect.
     2. The genuine high-injection FLASH physics -- e-h plasma screening of the
        collecting field, ambipolar transport, conductivity modulation, track
        funnelling -- is NOT implemented here. Radiative recombination (coeff. B
@@ -34,6 +50,7 @@ SCOPE AND HONEST LIMITATIONS (audit C2/C3, 2026-06):
 
 This module provides:
 - add_auger_recombination: extend DD equations with Auger model and Jacobian
+- set_generation: set the radiation generation without dropping the Auger term
 - solve_with_continuation: generation-rate ramping for convergence at high injection
 
 All units CGS (cm, cm^-3, A/cm^2, V) per devsim convention.
@@ -53,7 +70,10 @@ from devsim.python_packages.model_create import (
 import numpy as np
 
 from etna.core.charge_collection import add_generation_to_dd, compute_cce_from_dd
-from etna.core.generation_profiles import confine_generation_to_epi, proton_generation_profile
+from etna.core.generation_profiles import (
+    confine_generation_to_epi,
+    proton_generation_profile,
+)
 from etna.core.device import DEFAULT_STACK as _STACK
 from etna.core.solver_tol import DC_ABS_ERROR, FLASH_REL_ERROR
 from etna.core.devsim_reset import delete_device_and_mesh
@@ -61,17 +81,26 @@ from etna.core.devsim_reset import delete_device_and_mesh
 logger = logging.getLogger(__name__)
 
 
-def add_auger_recombination(device_info):
+def add_auger_recombination(device_info, C_n=None, C_p=None):
     """Add Auger recombination to the drift-diffusion continuity equations.
 
     Must be called after setup_sic_drift_diffusion(). Can be called before
     or after add_generation_to_dd() -- if RadGenRate does not yet exist,
     a zero-valued model is created automatically.
 
+    CAUTION: ``add_generation_to_dd`` rewrites ElectronGeneration / HoleGeneration
+    with the SRH-only expressions, which silently drops the Auger term again. On a
+    device with Auger, set the generation with ``set_generation`` (this module), which
+    re-applies the Auger-augmented expressions afterwards.
+
     Parameters
     ----------
     device_info : dict
         Device info dict from create_dd_device() with dd_initialized=True.
+    C_n, C_p : float or None
+        Auger coefficients (cm^6/s); None = the material defaults
+        ``SiC4H_Parameters.C_n`` / ``C_p`` (Galeckas et al. 1997, 300 K; see
+        etna/core/sic_material.py).
 
     Notes
     -----
@@ -84,8 +113,8 @@ def add_auger_recombination(device_info):
     params = device_info["params"]
 
     # --- Step 1: Set Auger coefficients as region parameters ---
-    C_n = params.C_n
-    C_p = params.C_p
+    C_n = params.C_n if C_n is None else float(C_n)
+    C_p = params.C_p if C_p is None else float(C_p)
     devsim.set_parameter(device=device, region=region, name="C_n", value=C_n)
     devsim.set_parameter(device=device, region=region, name="C_p", value=C_p)
     logger.info(f"Set Auger coefficients: C_n={C_n:.2e}, C_p={C_p:.2e} cm^6/s")
@@ -107,21 +136,32 @@ def add_auger_recombination(device_info):
         CreateNodeModel(device, region, "RadGenRate", "0")
         logger.debug("Created zero RadGenRate placeholder for Auger setup")
 
-    # --- Step 4: Update ElectronGeneration to include Auger ---
+    _apply_auger_generation(device_info)
+
+    device_info["auger_enabled"] = True
+    device_info["auger_coefficients"] = (C_n, C_p)
+    logger.info("Auger recombination added to DD equations")
+
+
+def _apply_auger_generation(device_info):
+    """(Re)write ElectronGeneration / HoleGeneration as SRH + Auger - RadGenRate and
+    re-register the continuity equations. UAuger and RadGenRate must exist."""
+    device = device_info["device_name"]
+    region = device_info["region_name"]
+
     # Gn = -q * (USRH + UAuger) + q * RadGenRate
     Gn = "-ElectronCharge * (USRH + UAuger) + ElectronCharge * RadGenRate"
     CreateNodeModel(device, region, "ElectronGeneration", Gn)
     for var in ("Electrons", "Holes"):
         CreateNodeModelDerivative(device, region, "ElectronGeneration", Gn, var)
 
-    # --- Step 5: Update HoleGeneration to include Auger ---
     # Gp = +q * (USRH + UAuger) - q * RadGenRate
     Gp = "+ElectronCharge * (USRH + UAuger) - ElectronCharge * RadGenRate"
     CreateNodeModel(device, region, "HoleGeneration", Gp)
     for var in ("Electrons", "Holes"):
         CreateNodeModelDerivative(device, region, "HoleGeneration", Gp, var)
 
-    # --- Step 6: Re-register continuity equations with updated models ---
+    # Re-register continuity equations with updated models.
     # CRITICAL: time_node_model must match original registration in
     # setup_sic_drift_diffusion to preserve transient solve capability.
     devsim.equation(
@@ -145,8 +185,19 @@ def add_auger_recombination(device_info):
         variable_update="positive",
     )
 
-    device_info["auger_enabled"] = True
-    logger.info("Auger recombination added to DD equations")
+
+def set_generation(device_info, generation_values):
+    """``add_generation_to_dd`` that keeps Auger active on an Auger device.
+
+    add_generation_to_dd rewrites ElectronGeneration / HoleGeneration with the SRH-only
+    expressions; before 2026-10-20 this silently switched Auger off in every FLASH
+    solve (the "with Auger" CCE was bit-equal to the no-Auger reference). Here, if
+    ``add_auger_recombination`` was applied (``device_info["auger_enabled"]``), the
+    SRH + Auger expressions are re-applied after the generation values are set.
+    """
+    add_generation_to_dd(device_info, generation_values)
+    if device_info.get("auger_enabled"):
+        _apply_auger_generation(device_info)
 
 
 def solve_with_continuation(device_info, generation_values, n_steps=5):
@@ -184,7 +235,7 @@ def solve_with_continuation(device_info, generation_values, n_steps=5):
         # Scale generation to this fraction
         scaled_gen = generation_values * target_frac
 
-        add_generation_to_dd(device_info, scaled_gen)
+        set_generation(device_info, scaled_gen)
 
         try:
             devsim.solve(
@@ -211,7 +262,7 @@ def solve_with_continuation(device_info, generation_values, n_steps=5):
             for bisect_iter in range(max_bisections):
                 mid = (lo + hi) / 2.0
                 scaled_mid = generation_values * mid
-                add_generation_to_dd(device_info, scaled_mid)
+                set_generation(device_info, scaled_mid)
 
                 try:
                     devsim.solve(
@@ -234,7 +285,7 @@ def solve_with_continuation(device_info, generation_values, n_steps=5):
             # After bisection, try the original target again
             if current_frac < target_frac:
                 scaled_gen = generation_values * target_frac
-                add_generation_to_dd(device_info, scaled_gen)
+                set_generation(device_info, scaled_gen)
                 try:
                     devsim.solve(
                         type="dc",
@@ -274,6 +325,8 @@ def cce_vs_dose_rate(
     L_transition=_STACK["L_transition"],
     device_kwargs=None,
     solver="auto",
+    C_n=None,
+    C_p=None,
 ):
     """Compute CCE vs dose rate across the FLASH range (exploratory sensitivity bound).
 
@@ -286,18 +339,26 @@ def cce_vs_dose_rate(
     "engine" (raise outside the scope) or "devsim" (reference); ``result["solver"]``
     says which ran.
 
-    KNOWN (2026-10-18, open, physics owner): on the devsim path the Auger term added by
-    add_auger_recombination is overwritten by add_generation_to_dd (SRH-only
-    ElectronGeneration / HoleGeneration), so the "with Auger" CCE equals the no-Auger
-    reference bit for bit: both paths are SRH-only. The engine reproduces that (C_n =
-    C_p = 0). With Auger truly active, CCE drops by up to 5.6e-5 (minority recombination
-    in the 1e18-1e19 p+/n+ layers, where C n is comparable to 1/(tau n)), essentially
-    independent of the dose rate (<= 2e-9 across 20-230 Gy/s): the "Auger 9-14 orders
-    below SRH" statement holds in the epi, not in those layers.
+    Auger (fixed 2026-10-20): the swept device has SRH + Auger on both paths (devsim:
+    add_auger_recombination, kept active through every generation update by
+    set_generation; engine: C_n / C_p passed to generation_cce); the reference
+    ``cce_no_auger_ref`` is SRH-only at the lowest dose rate. Until 2026-10-20
+    add_generation_to_dd overwrote the Auger term, so the "with Auger" CCE was bit-equal
+    to the reference (and the engine reproduced that with C_n = C_p = 0). With Auger
+    active, CCE is lower than the same sweep with C_n = C_p = 0 by 1.7e-7..5.6e-5 over
+    notebook 05b's grid (3.4e-7 on the default stack at -30 V; 5.6e-5 at 5 um epi,
+    N_D_bulk 5e14, -10 V), almost entirely C_n: minority-hole recombination in the 1e19
+    n+ layer, where 1 / (C_n N_D^2) ~ 20 ns is shorter than tau_p = 600 ns. It is a
+    static offset: its dose-rate dependence is <= 1.5e-8 across 20-230 Gy/s. The offset
+    scales ~linearly with C_n and is coefficient-limited: at the high end of the
+    literature (C_n = 1.6e-30 / 2e-30 cm^6/s) the 05b corner gives 1.7e-4 / 2.1e-4, still
+    dose-rate independent (<= 3.5e-8). Engine/devsim parity with Auger on: <= 7.5e-12
+    (tests/test_flash_engine.py cases, measured 2026-10-20).
 
     Sweeps dose rates (typically 20-230 Gy/s) at fixed reference conditions.
-    NOTE (audit C2/C3): at these dose rates the Auger (n^3) term is ~9-14 orders
-    of magnitude below SRH, so any CCE variation produced here is a numerical
+    NOTE (audit C2/C3): at these dose rates the high-injection Auger (n^3) term is
+    orders of magnitude below SRH in the epi, so the variation of CCE WITH DOSE RATE
+    (up to ~1.8e-4 over 05b's grid, the same with and without Auger) is a numerical
     sensitivity bound, NOT a physical dose-rate effect. The genuine high-injection
     plasma physics (field screening, ambipolar transport, conductivity modulation)
     is not modeled -- see the module-level SCOPE AND HONEST LIMITATIONS block.
@@ -325,6 +386,13 @@ def cce_vs_dose_rate(
     device_kwargs : dict or None
         Additional keyword arguments for create_dd_device (e.g. N_A, T,
         substrate_thickness_cm, doping_profile, N_D); override the defaults.
+    solver : {"auto", "engine", "devsim"}
+        See "Solver" above.
+    C_n, C_p : float or None
+        Auger coefficients (cm^6/s) of the swept device; None = the material defaults
+        ``SiC4H_Parameters.C_n`` / ``C_p`` (Galeckas et al., APL 71, 3269 (1997),
+        300 K; literature spread ~1e-31..2e-30, see sic_material.py). ``C_n = C_p = 0``
+        reproduces the SRH-only reference (and the pre-2026-10-20 numbers).
 
     Returns
     -------
@@ -333,6 +401,7 @@ def cce_vs_dose_rate(
         - "dose_rates": numpy array of dose rates (Gy/s)
         - "cce_values": numpy array of CCE values
         - "cce_no_auger_ref": float, CCE at lowest dose rate without Auger
+        - "C_n", "C_p": Auger coefficients of the swept device (cm^6/s)
         - "V_bias": bias voltage used
         - "epi_thickness_cm": epi thickness used
         - "E_MeV": proton energy used
@@ -343,7 +412,9 @@ def cce_vs_dose_rate(
     from etna.core.drift_diffusion import create_dd_device, ramp_bias
 
     if solver not in ("auto", "engine", "devsim"):
-        raise ValueError(f"solver must be 'auto', 'engine' or 'devsim' (got {solver!r})")
+        raise ValueError(
+            f"solver must be 'auto', 'engine' or 'devsim' (got {solver!r})"
+        )
     dose_rates = np.asarray(dose_rates_Gy_s, dtype=float)
     sorted_idx = np.argsort(dose_rates)
     dose_rates_sorted = dose_rates[sorted_idx]
@@ -365,9 +436,9 @@ def cce_vs_dose_rate(
         if reason is not None and solver == "engine":
             raise ValueError(f"cce_vs_dose_rate: batched engine unavailable ({reason})")
         if reason is None:
-            out = _cce_vs_dose_rate_engine(dose_rates, V_bias, E_MeV, dev_kw)
+            out = _cce_vs_dose_rate_engine(dose_rates, V_bias, E_MeV, dev_kw, C_n, C_p)
             if out is not None:
-                cce_values, cce_no_auger = out
+                cce_values, cce_no_auger, auger = out
                 return {
                     "dose_rates": dose_rates,
                     "cce_values": cce_values,
@@ -378,10 +449,14 @@ def cce_vs_dose_rate(
                     "N_D_junction": dev_kw["N_D_junction"],
                     "N_D_bulk": dev_kw["N_D_bulk"],
                     "L_transition": dev_kw["L_transition"],
+                    "C_n": auger[0],
+                    "C_p": auger[1],
                     "solver": "batched",
                 }
             fallback = "batched engine did not converge"
-            logger.warning("cce_vs_dose_rate: batched engine did not converge, using devsim")
+            logger.warning(
+                "cce_vs_dose_rate: batched engine did not converge, using devsim"
+            )
         else:
             logger.info("cce_vs_dose_rate: using devsim (%s)", reason)
 
@@ -392,8 +467,10 @@ def cce_vs_dose_rate(
     region = device_info["region_name"]
 
     try:
-        # Add Auger recombination
-        add_auger_recombination(device_info)
+        # Add Auger recombination (kept active through every generation update by
+        # set_generation, see solve_with_continuation)
+        add_auger_recombination(device_info, C_n=C_n, C_p=C_p)
+        auger = device_info["auger_coefficients"]
 
         # Ramp to bias (cathode voltage is -V_bias for reverse bias)
         cathode_V = -V_bias
@@ -428,7 +505,7 @@ def cce_vs_dose_rate(
 
             # Reset generation to zero for next iteration
             zero_gen = np.zeros_like(gen_values)
-            add_generation_to_dd(device_info, zero_gen)
+            set_generation(device_info, zero_gen)
             devsim.solve(
                 type="dc",
                 absolute_error=DC_ABS_ERROR,
@@ -451,7 +528,9 @@ def cce_vs_dose_rate(
     try:
         # No Auger -- just SRH
         cathode_V = -V_bias
-        ramp_bias(device_info2, cathode_V, contact="cathode", V_step=0.5, V_step_max=2.0)
+        ramp_bias(
+            device_info2, cathode_V, contact="cathode", V_step=0.5, V_step_max=2.0
+        )
 
         x_nodes2 = np.array(
             devsim.get_node_model_values(device=device2, region=region2, name="x")
@@ -496,6 +575,8 @@ def cce_vs_dose_rate(
         "N_D_junction": dev_kw["N_D_junction"],
         "N_D_bulk": dev_kw["N_D_bulk"],
         "L_transition": dev_kw["L_transition"],
+        "C_n": auger[0],
+        "C_p": auger[1],
         "solver": "devsim",
         **({"fallback_reason": fallback} if fallback else {}),
     }
@@ -518,10 +599,10 @@ def flash_engine_reason(dev_kw, V_bias):
     )
 
 
-def _cce_vs_dose_rate_engine(dose_rates, V_bias, E_MeV, dev_kw):
-    """(cce per dose rate, no-Auger CCE at the lowest rate) on the engine, or None if a
-    point did not converge. Generation exactly as the devsim path: the proton profile on
-    the mesh nodes, zero in the p+, confined to the epi."""
+def _cce_vs_dose_rate_engine(dose_rates, V_bias, E_MeV, dev_kw, C_n=None, C_p=None):
+    """(cce per dose rate, no-Auger CCE at the lowest rate, (C_n, C_p)) on the engine,
+    or None if a point did not converge. Generation exactly as the devsim path: the
+    proton profile on the mesh nodes, zero in the p+, confined to the epi."""
     from etna.core.batched.dark import generation_cce
     from etna.core.dark_current import dark_reference
     from etna.core.sic_material import srh_lifetime
@@ -539,19 +620,25 @@ def _cce_vs_dose_rate_engine(dose_rates, V_bias, E_MeV, dev_kw):
         tau_n=srh_lifetime(info["T"], "electron", params),
         tau_p=srh_lifetime(info["T"], "hole", params),
     )
-    args = (x, ref["donors"], ref["acceptors"], info["T"], info["N_A"], info["n_i"], V_bias)
-    # C_n = C_p = 0 on purpose: the devsim path's Auger term is NOT active during its
-    # solves (add_auger_recombination's ElectronGeneration / HoleGeneration are
-    # overwritten by add_generation_to_dd with the SRH-only expressions, so its "Auger"
-    # sweep is bit-equal to its no-Auger reference). The engine reproduces the existing
-    # numbers; switching Auger on is a physics decision (with Auger truly active CCE moves
-    # by up to 5.6e-5 at notebook 05b's N_D_bulk 5e14 corners, dose-rate independent to
-    # 2e-9; the engine's Auger term matches devsim's to 4e-13, tests/test_flash_engine.py).
-    cce, ok = generation_cce(*args, G[:-1], C_n=0.0, C_p=0.0, **common)
+    args = (
+        x,
+        ref["donors"],
+        ref["acceptors"],
+        info["T"],
+        info["N_A"],
+        info["n_i"],
+        V_bias,
+    )
+    # Auger on in the sweep (the devsim path keeps it active through set_generation;
+    # the engine's Auger term matches devsim's, tests/test_flash_engine.py), off in the
+    # no-Auger reference (C_n = C_p = 0, generation_cce's defaults).
+    C_n = params.C_n if C_n is None else float(C_n)
+    C_p = params.C_p if C_p is None else float(C_p)
+    cce, ok = generation_cce(*args, G[:-1], C_n=C_n, C_p=C_p, **common)
     cce0, ok0 = generation_cce(*args, G[-1:], **common)
     if not (ok.all() and ok0.all()):
         return None
-    return cce, cce0[0]
+    return cce, cce0[0], (C_n, C_p)
 
 
 def parametric_cce_sweep(
