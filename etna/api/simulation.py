@@ -2120,7 +2120,9 @@ def run_microdosimetry(
     config: DeviceConfig,
     mc_csv_path: "str | os.PathLike | IO",
     sv_thickness_um: float = 10.0,
-    sv_width_um: float = 150.0,
+    sv_width_um: float = 100.0,
+    sv_depth_um: "float | None" = None,
+    chord_model: str = "cauchy",
 ) -> SimResult:
     """Compute an ICRU-36 lineal energy spectrum from MC events (bucket-c).
 
@@ -2155,11 +2157,22 @@ def run_microdosimetry(
     sv_thickness_um : float
         Sensitive-volume thickness (um), finite and > 0. Default 10.0.
     sv_width_um : float
-        Sensitive-volume width (um), finite and > 0. Default 150.0. Currently has NO effect:
-        mean_chord_length uses the 3D Cauchy form 4V/S only when both width and
-        depth are given, so with width alone it returns the slab value
-        l_bar = 2 * sv_thickness_um (audit-v7 D-15; DESIGN-2's 100 um SV gives the
-        same l_bar). Whether to use a finite-SV l_bar is open (physics owner).
+        Sensitive-volume width (um), finite and > 0. Default 100.0, DESIGN-2's
+        validated SV (half-width 50 um; was 150 before 2026-10-20).
+    sv_depth_um : float, optional
+        Sensitive-volume depth (um), finite and > 0. Default None = ``sv_width_um``
+        (square footprint).
+    chord_model : {"cauchy", "slab"}
+        Mean chord length l_bar of the lineal energy y = epsilon / l_bar.
+        ``"cauchy"`` (default since 2026-10-20, audit-v7 D-15): Cauchy's theorem for
+        the finite box, l_bar = 4 V / S with V = w t d, S = 2 (w t + w d + t d)
+        (mean_chord_length with width and depth): 16.67 um for 100 x 100 x 10 um,
+        17.65 um for 150 x 150 x 10 um. ``"slab"``: the infinite-slab limit
+        l_bar = 2 t (20 um at t = 10 um; the value used before 2026-10-20, when the
+        width had no effect). Both are mean chords for ISOTROPIC (mu-randomness)
+        irradiation of a convex body; for a normally incident beam the chord is t
+        itself, which neither model gives. With the "cauchy" model y scales by
+        2 t / l_bar (x1.2 for the 100 x 100 x 10 um SV) relative to the slab value.
 
     Returns
     -------
@@ -2179,12 +2192,17 @@ def run_microdosimetry(
     """
     # Reject meaningless inputs instead of returning a plausible-looking empty /
     # NaN spectrum (audit C-09). Written as `not (x > 0)` so NaN is rejected too.
+    if sv_depth_um is None:
+        sv_depth_um = sv_width_um
     for name, value in (
         ("sv_thickness_um", sv_thickness_um),
         ("sv_width_um", sv_width_um),
+        ("sv_depth_um", sv_depth_um),
     ):
         if not (np.isfinite(value) and value > 0):
             raise ValueError(f"{name} must be finite and > 0 (got {value!r})")
+    if chord_model not in ("cauchy", "slab"):
+        raise ValueError(f"chord_model must be 'cauchy' or 'slab' (got {chord_model!r})")
 
     # Bucket-c: no TCAD solve at all. Load per-step events, aggregate to
     # per-event collected energy (this sum-by-event_id has no core analog).
@@ -2203,7 +2221,12 @@ def run_microdosimetry(
     if not np.any(collected_energies_keV > 0):
         raise ValueError("no event in the MC events CSV deposits any energy")
 
-    l_bar = mean_chord_length(sv_thickness_um, sv_width_um=sv_width_um)
+    if chord_model == "cauchy":
+        l_bar = mean_chord_length(
+            sv_thickness_um, sv_width_um=sv_width_um, sv_depth_um=sv_depth_um
+        )
+    else:
+        l_bar = mean_chord_length(sv_thickness_um)
     spec = lineal_energy_spectrum(collected_energies_keV, l_bar)
 
     return SimResult(
@@ -2216,6 +2239,8 @@ def run_microdosimetry(
             "y_D": spec["y_D"],
             "f_y": spec["f_y"],
             "l_bar_um": l_bar,
+            "chord_model": chord_model,
+            "sv_dimensions_um": (sv_width_um, sv_depth_um, sv_thickness_um),
         },
         mesh=None,
     )

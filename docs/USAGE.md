@@ -437,22 +437,32 @@ t = run_transient(DeviceConfig())
 print(f.y.round(6), t.metadata["transient_cce_raw"].round(6))
 ```
 
-### `run_microdosimetry(config, mc_csv_path, sv_thickness_um=10.0, sv_width_um=150.0)`
+### `run_microdosimetry(config, mc_csv_path, sv_thickness_um=10.0, sv_width_um=100.0, sv_depth_um=None, chord_model="cauchy")`
 
 Pure data pipeline (no devsim). It reads Monte Carlo per-step depositions from a CSV
 (columns `event_id, x, y, z, edep`; edep in keV, positions in cm) and returns the lineal
-energy spectrum: `x` is y (keV/µm), `y` is y·d(y). Metadata holds `y_F`, `y_D`, `f_y` and
-`l_bar_um` (mean chord length). `config` is carried for provenance only. `mc_csv_path` may be
+energy spectrum: `x` is y (keV/µm), `y` is y·d(y). Metadata holds `y_F`, `y_D`, `f_y`,
+`l_bar_um` (mean chord length), `chord_model` and `sv_dimensions_um` (width, depth,
+thickness). `config` is carried for provenance only. `mc_csv_path` may be
 a path or a file-like object (e.g. `io.BytesIO`). It raises `ValueError` for non-positive or
-non-finite sensitive-volume dimensions, a CSV with no events, non-finite or negative `edep`,
-or no event depositing energy. `sv_width_um` currently has no effect: l̄ = 2·`sv_thickness_um`
-(slab approximation; a finite-SV 4V/S chord is an open physics choice, audit D-15).
+non-finite sensitive-volume dimensions, an unknown `chord_model`, a CSV with no events,
+non-finite or negative `edep`, or no event depositing energy.
+
+Mean chord length (audit D-15 follow-up, 2026-10-20): `chord_model="cauchy"` (default) is
+Cauchy's l̄ = 4V/S of the finite box w × d × t (`sv_depth_um=None` means a square footprint,
+d = w), so the width matters: 16.67 µm for DESIGN-2's 100 × 100 × 10 µm SV (the new default
+width; it was 150 µm), 17.65 µm for 150 × 150 × 10 µm. `chord_model="slab"` gives the
+infinite-slab limit l̄ = 2t (20 µm, the value used before 2026-10-20). Both assume isotropic
+irradiation; for a normally incident beam the chord is t, which neither gives. The Cauchy
+value raises y (and y_F, y_D) by 2t/l̄ = 1.2 for the default SV relative to the slab value.
 
 ```python
 from etna import DeviceConfig, run_microdosimetry
 
 r = run_microdosimetry(DeviceConfig(), "data/synthetic_mc_events.csv")
-print(round(float(r.metadata["y_F"]), 2), round(float(r.metadata["y_D"]), 2), r.metadata["l_bar_um"])  # 17.23 53.22 20.0
+print(round(float(r.metadata["y_F"]), 2), round(float(r.metadata["y_D"]), 2), round(r.metadata["l_bar_um"], 3))  # 20.67 63.8 16.667
+s = run_microdosimetry(DeviceConfig(), "data/synthetic_mc_events.csv", chord_model="slab")
+print(round(float(s.metadata["y_F"]), 2), round(float(s.metadata["y_D"]), 2), s.metadata["l_bar_um"])  # 17.23 53.22 20.0
 ```
 
 ### Batches and sweeps

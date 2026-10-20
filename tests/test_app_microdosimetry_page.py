@@ -152,7 +152,9 @@ def test_real_pipeline_reads_the_upload_in_memory(monkeypatch):
     at.run()
     assert at.exception == []
     assert seen == ["BytesIO"]
-    expected = real(DeviceConfig(), mc_csv_path=str(_FIXTURE))
+    # the page passes its own width widget value (150 um); since 2026-10-20 the width
+    # enters l_bar (finite-SV Cauchy 4V/S), so compare at the same geometry
+    expected = real(DeviceConfig(), mc_csv_path=str(_FIXTURE), sv_width_um=150.0)
     assert at.session_state["microdosimetry_result"].metadata["y_F"] == (
         expected.metadata["y_F"]
     )
