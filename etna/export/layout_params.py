@@ -144,14 +144,14 @@ class LayoutParams:
         return [k for k in d if k not in skip]
 
     def placeholders(self, device: "str | None" = None) -> "list[str]":
-        """'device.name' of every PLACEHOLDER dimension that is used (see ``used``),
-        of one device or of all."""
+        """'device.name' of every PLACEHOLDER dimension in the table (of one device, or
+        all), used or not: the REFERENCE-NOT-FAB rule counts every one of them."""
         devs = [device] if device else list(self.devices)
         return [
             f"{d}.{n}"
             for d in devs
-            for n in self.used(d)
-            if self.devices[d][n].is_placeholder
+            for n, x in self.devices[d].items()
+            if x.is_placeholder
         ]
 
     def placeholder_note(self, device: str) -> str:

@@ -136,16 +136,30 @@ def _worst(*dims) -> str:
     return max((d.cls for d in dims), key=CLASSES.index)
 
 
+# GDSII TEXT strings: at most 512 characters in the stream format; longer ones are
+# truncated by some readers.
+MAX_LABEL = 512
+
+
+def _clip(text: str) -> str:
+    return text if len(text) <= MAX_LABEL else text[: MAX_LABEL - 3] + "..."
+
+
 def _label(what: str, *dims) -> str:
     vals = "; ".join(f"{d.name} {d.text()}" for d in dims)
     srcs = "; ".join(dict.fromkeys(d.source for d in dims))
-    return f"{_worst(*dims)} | {what}: {vals} | src: {srcs}"
+    full = f"{_worst(*dims)} | {what}: {vals} | src: {srcs}"
+    if len(dims) == 1 and len(full) <= MAX_LABEL:
+        return full
+    # several dimensions (rings): sources are in the per-dimension SOURCE notes
+    names = ", ".join(d.name for d in dims)
+    return _clip(f"{_worst(*dims)} | {what}: {vals} | src: SOURCE notes of {names}")
 
 
 def _notes(extent: float, lines: "tuple[str, ...]") -> tuple[Note, ...]:
     top = extent * 0.92
     base = (
-        ("DISCLAIMER", DISCLAIMER, (-extent * 0.95, top), 1.8),
+        ("DISCLAIMER", DISCLAIMER, (-extent * 0.95, top), 1.3),
         ("NOTES", LAYER_MAP_NOTE, (-extent * 0.95, -extent * 0.80), 1.0),
         (
             "NOTES",
@@ -156,9 +170,15 @@ def _notes(extent: float, lines: "tuple[str, ...]") -> tuple[Note, ...]:
         ("NOTES", NO_SIM_NOTE, (-extent * 0.95, -extent * 0.92), 1.0),
     )
     out = [Note(*ln) for ln in base]
-    for i, t in enumerate(lines):
+    head = [t for t in lines if not t.startswith("SOURCE ")]
+    srcs = [t for t in lines if t.startswith("SOURCE ")]
+    for i, t in enumerate(head):  # under the disclaimer, above the drawing
         out.append(
-            Note("NOTES", t, (-extent * 0.95, top - extent * (0.10 + 0.06 * i)), 1.2)
+            Note("NOTES", t, (-extent * 0.95, top - extent * (0.08 + 0.05 * i)), 1.1)
+        )
+    for i, t in enumerate(srcs):  # below the drawing, above the base notes
+        out.append(
+            Note("NOTES", t, (-extent * 0.95, -extent * (0.50 + 0.026 * i)), 0.8)
         )
     return tuple(out)
 
@@ -239,10 +259,12 @@ def _build(device: str, params: LayoutParams) -> Layout:
     cell = f"ETNA_{device.upper()}_{side}_" + (
         "REFERENCE-NOT-FAB" if ph else "REFERENCE"
     )
-    extent = (b + s) * 1.6
+    extent = (b + s) * 2.2  # drawing within |y| < 0.45 extent, notes around it
     lines = (
-        f"{device.upper()}: {params.placeholder_note(device)}",
-        f"dimensions from {params.display_path}",
+        _clip(f"{device.upper()}: {params.placeholder_note(device)}"),
+        _clip(f"dimensions from {params.display_path}"),
+    ) + tuple(
+        _clip(f"SOURCE {x.name}: {x.cls} {x.text()} | {x.source}") for x in d.values()
     )
     return Layout(
         device,

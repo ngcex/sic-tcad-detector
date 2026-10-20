@@ -24,7 +24,6 @@ ROOT = Path(__file__).resolve().parents[1]
 DOC = ROOT / "deliverables" / "DIMENSIONS-provenance.md"
 
 
-
 def _polygon_area_um2(points) -> float:
     """Shoelace area (um^2) of a simple / keyhole polygon (test oracle for the layout)."""
     s = 0.0
@@ -199,13 +198,32 @@ def test_invalid_files_rejected_with_field_names(tmp_path):
         lp.load_layout_params(tmp_path / "missing.toml")
 
 
-def test_unused_ring_spacing_is_not_a_blocking_placeholder():
-    params = lp.load_layout_params()
-    assert "dosimeter.guard_ring_spacing" not in params.placeholders("dosimeter")
+def test_every_placeholder_blocks_even_if_unused():
+    """REFERENCE-NOT-FAB until no PLACEHOLDER is left in the device's table: an unused
+    ring spacing (one ring) still counts; it is only left out of the drawn quotes."""
+    raw = _all_real(_raw())
+    raw["dosimeter"]["guard_ring_spacing"]["class"] = "PLACEHOLDER"
+    params = lp.parse_layout_params(raw)
+    assert params.placeholders("dosimeter") == ["dosimeter.guard_ring_spacing"]
+    assert "guard_ring_spacing" not in params.used("dosimeter")
+    with pytest.warns(lp.PlaceholderDimensionWarning, match="guard_ring_spacing"):
+        lay = gds.build_layout("dosimeter", params)
+    assert lay.cell_name.endswith("REFERENCE-NOT-FAB")
+    assert params.placeholders("microdosimeter") == []
+    assert gds.build_layout("microdosimeter", params).cell_name.endswith("_REFERENCE")
+
+
+@pytest.mark.parametrize("rings", [1, 3])
+def test_gds_text_labels_fit_512_chars(rings):
     raw = _raw()
-    raw["dosimeter"]["guard_ring_count"]["value"] = 2
-    two = lp.parse_layout_params(raw)
-    assert "dosimeter.guard_ring_spacing" in two.placeholders("dosimeter")
+    raw["dosimeter"]["guard_ring_count"]["value"] = rings
+    lay = gds.build_layout("dosimeter", raw)
+    texts = [s.label for s in lay.shapes] + [n.text for n in lay.notes]
+    assert max(len(t) for t in texts) <= gds.MAX_LABEL
+    # every dimension's full source survives somewhere (shape label or SOURCE note)
+    blob = " ".join(texts)
+    for d in lp.parse_layout_params(raw).devices["dosimeter"].values():
+        assert d.source in blob, d.name
 
 
 # --------------------------------------------------------------------------- geometry

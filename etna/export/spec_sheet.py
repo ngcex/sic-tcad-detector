@@ -698,7 +698,8 @@ def spec_to_pdf(spec: dict, config=None, layout_params=None) -> bytes:
     """PDF bytes: the Markdown text on text pages, plus the cross-section if ``config``.
 
     The cross-section page reads ``layout_params``; if None, the file named in
-    ``spec["layout"]["params_file"]`` (when it is a file), else the default."""
+    ``spec["layout"]["params_file"]``; ValueError if that is not a readable file (e.g.
+    the spec was built from a mapping), so the two never quote different files."""
     import textwrap
 
     from matplotlib.backends.backend_pdf import FigureCanvasPdf, PdfPages
@@ -741,8 +742,13 @@ def spec_to_pdf(spec: dict, config=None, layout_params=None) -> bytes:
                 pf = (spec.get("layout") or {}).get("params_file")
                 if pf and not Path(pf).is_absolute():
                     pf = REPO_ROOT / pf
-                if pf and Path(pf).is_file():
-                    layout_params = load_layout_params(pf)
+                if not pf or not Path(pf).is_file():
+                    raise ValueError(
+                        "spec_to_pdf: the spec's layout parameter file "
+                        f"{(spec.get('layout') or {}).get('params_file')!r} cannot be "
+                        "re-read for the cross-section page; pass layout_params="
+                    )
+                layout_params = load_layout_params(pf)
             _draw_cross_section(fig, config, layout_params)
             pdf.savefig(fig)
     return buf.getvalue()

@@ -436,3 +436,15 @@ def test_layout_section_without_matching_device():
     assert build_spec(etna.microdosimeter_config())["layout"]["device"] == (
         "microdosimeter"
     )
+
+
+def test_spec_pdf_refuses_to_guess_the_layout_file():
+    import tomllib
+
+    raw = tomllib.loads(open(load_layout_params().path).read())
+    cfg = DeviceConfig()
+    spec = build_spec(cfg, layout_params=raw)  # built from a mapping
+    assert spec["layout"]["params_file"] == "<mapping>"
+    with pytest.raises(ValueError, match="pass layout_params"):
+        spec_to_pdf(spec, cfg)
+    assert spec_to_pdf(spec, cfg, layout_params=raw).startswith(b"%PDF")
