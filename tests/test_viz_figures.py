@@ -280,7 +280,7 @@ def test_honesty_notes():
     for name, phrase in [
         ("dark", "budget estimate"),
         ("flash", "sensitivity bound"),
-        ("damage", "placeholder"),
+        ("damage", "SiC neutron normalisation still open"),  # SR-NIEL since B-07
         ("let", "regeneration pending"),
     ]:
         fig = figure_for(INPUTS[name]())

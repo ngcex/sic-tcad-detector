@@ -28,7 +28,6 @@ import devsim
 import numpy as np
 import pandas as pd
 
-from etna.core.charge_collection import add_generation_to_dd
 from etna.core.drift_diffusion import (
     create_dd_device,
     displacement_current,
@@ -36,7 +35,11 @@ from etna.core.drift_diffusion import (
     extract_contact_current,
     ramp_bias,
 )
-from etna.core.flash_recombination import add_auger_recombination
+
+# set_generation (not add_generation_to_dd, which rewrites the SRH-only generation
+# models): Auger stays active on an add_auger_recombination device (before 2026-10-21
+# every transient pulse ran without Auger, as cce_vs_dose_rate before afbf055).
+from etna.core.flash_recombination import add_auger_recombination, set_generation
 from etna.core.generation_profiles import (
     confine_generation_to_epi,
     proton_generation_profile,
@@ -259,7 +262,7 @@ class TransientSolver:
         zeros = np.zeros_like(x_nodes)
 
         # Set zero generation
-        add_generation_to_dd(self.device_info, zeros)
+        set_generation(self.device_info, zeros)
 
         # transient_dc solve to initialize time data (Phase 7 pattern); the shared DC
         # tolerance (was 1e-10: Newton is quadratic, the 1D outputs are identical)
@@ -374,7 +377,7 @@ class TransientSolver:
             )
             # Implicit (BDF1) step to t_next: generation at the step end
             env = pulse_envelope(t_next, t_rise, t_duration, t_fall)
-            add_generation_to_dd(self.device_info, G_spatial * env)
+            set_generation(self.device_info, G_spatial * env)
 
             # Transient solve with retry at relaxed tolerances.
             # charge_error=1e10 effectively disables automatic step rejection

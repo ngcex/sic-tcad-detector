@@ -402,8 +402,8 @@ def build_spec(config, report=None, layout_params=None) -> dict:
                     (
                         DARK_CALIBRATION_NOTE
                         + f" (N_t = {n_t:.7g} refitted on the tabulated profile; the "
-                        "parametric default's 2.849024e12 gives 17.999 pA there: the proxy is "
-                        "profile-independent to 1e-4.)"
+                        f"parametric default's {DEFAULT_STACK['N_t']:.7g} gives 17.993 pA "
+                        "there: the proxy is profile-independent to 4e-4.)"
                     )
                     if calibrated_tab
                     else (

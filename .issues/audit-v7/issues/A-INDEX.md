@@ -29,7 +29,7 @@ Status changes from the raw file:
 | [A-14](A-14-thin-substrate-mesh-guard.md)                   | low      | fixed  | 1D mesh builder lacks thin-substrate guard; DeviceConfig unvalidated                                                                | S      |
 | [A-15](A-15-calibrate-2d-full-reset-per-trial.md)           | low      | fixed  | calibrate_graded_doping_2d deletes all devsim devices on every trial                                                                | S      |
 
-Totals: 15 issues written; 15 open, 0 rejected, 0 needs-info.
+Totals: 15 issues written; at audit time 15 open, 0 rejected, 0 needs-info. Current status (2026-10-21, from the issue files): 1 closed (A-08), 13 fixed, 1 mitigated (A-02, opt-in model, default OFF), 0 open.
 
 Cross-references (kept as separate issues, not merged):
 
@@ -94,3 +94,11 @@ Needed to close:
 
 - A literature or measured ionized fraction f(N_A) for Al in 4H-SiC at 300 K (Hall or C-V data, for example from the Pensl / Kimoto & Cooper sources the module cites), covering 1e16 to 1e19 cm^-3. This decides both the low-doping form and the blend.
 - Re-pinned baselines after a C-V re-run (tests/baselines, the batched-engine material constants).
+
+## Status sync 2026-10-21
+
+`grep -h '^status:' A-[0-9]*.md`: 1 closed (A-08), 13 fixed, 1 mitigated (A-02: opt-in
+carrier-dependent incomplete ionization, default OFF; calibration with the model ON open).
+No file changed status since the 2026-10-20 A-02 note. Related, outside this slice: the
+transient FLASH sweep (A-04 / A-05 code) dropped the Auger term until 2026-10-21
+(`.issues/TECH-DEBT-2026-10-18.md`, closed).

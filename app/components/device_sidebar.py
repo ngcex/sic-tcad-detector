@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from etna import DeviceConfig
+from etna import NPLUS_CALIBRATED_PRESET, DeviceConfig
 
 
 def assemble_config(values: dict) -> DeviceConfig:
@@ -160,7 +160,8 @@ def render_device_sidebar() -> None:
         help="Applies the previous default (etna.nplus_calibrated_config, 2026-10-17): "
         "exponential epi calibrated on two C-V points (N_D_junction 2.958237e15, N_D_bulk "
         "8.252732e13, L 0.987 um held), ABRUPT 1e19 n+ at the epi end (no graded "
-        "transition), N_t 2.805336e12 (overrides the doping fields). Its C-V knee is at "
+        f"transition), N_t {NPLUS_CALIBRATED_PRESET['N_t']:.6e} (overrides the doping "
+        "fields). Its C-V knee is at "
         "-8..-10 V where the measurement has it at -1..-4 V. The default (unchecked) is the "
         "measured-C-V profile: a fit to the digitised Photons Fig. 4b (plateau rms 0.013 um, "
         "knee rms 0.24 um; N_D_bulk 3.4e13 below the documented 0.5-1e14; epi/n+ position "
@@ -320,12 +321,11 @@ def render_device_sidebar() -> None:
                 "previous calibrated model."
             )
     elif nplus_cal_on:
-        from etna import NPLUS_CALIBRATED_PRESET
-
         values.update(NPLUS_CALIBRATED_PRESET)
         st.sidebar.info(
             "Previous calibrated model active: 3-point n+ calibration, abrupt epi/n+ step "
-            "(no graded transition), N_t 2.805336e12. Its C-V knee (-8..-10 V) disagrees "
+            f"(no graded transition), N_t {NPLUS_CALIBRATED_PRESET['N_t']:.6e}. Its C-V knee "
+            "(-8..-10 V) disagrees "
             "with the digitised measurement (-1..-4 V)."
         )
         if tabulated_on:

@@ -11,18 +11,18 @@ Each claim was re-checked against the code. Devsim runs were done for B-01, B-02
 | [B-04](B-04-compare-hecht-dd-truncation-crash.md)            | medium   | fixed  | compare_cce_hecht_vs_dd raises ValueError when the DD sweep truncates                                                | S                          |
 | [B-05](B-05-fluence-and-temperature-dd-truncation-loss.md)   | medium   | fixed  | cce_vs_bias_at_fluence loses all points on mid-sweep failure; sweep_cce_vs_temperature("dd") hides truncation        | S                          |
 | [B-06](B-06-dark-current-calibration-text-inconsistent.md)   | medium   | fixed  | Dark-current calibration claims (18 pA / 8 pA / 1e12) inconsistent; code gives ~141 pA; area defaults differ         | S (docs) / M (recalibrate) |
-| [B-07](B-07-api-proton-energy-default-out-of-niel-table.md)  | medium   | open   | API default proton_energy_MeV=5.6 is outside the NIEL table and silently clamps to kappa(30)                         | S                          |
-| [B-08](B-08-hurkx-gamma-inert-mislabelled-tat.md)            | low      | open   | Hurkx Gamma identically 1 at reachable fields; docs/labels overstate TAT; discontinuous Gamma<1 branch               | S                          |
+| [B-07](B-07-api-proton-energy-default-out-of-niel-table.md)  | medium   | fixed  | API default proton_energy_MeV=5.6 is outside the NIEL table and silently clamps to kappa(30)                         | S                          |
+| [B-08](B-08-hurkx-gamma-inert-mislabelled-tat.md)            | low      | fixed  | Hurkx Gamma identically 1 at reachable fields; docs/labels overstate TAT; discontinuous Gamma<1 branch               | S                          |
 | [B-09](B-09-plot-efield-multi-single-voltage-zerodiv.md)     | low      | fixed  | plot_electric_field_multi ZeroDivisionError for a single voltage                                                     | S                          |
 | [B-10](B-10-proton-generation-profile-energy-independent.md) | low      | fixed  | proton_generation_profile is energy-independent; 30/70/150 MeV curves identical                                      | S                          |
-| [B-11](B-11-mc-hit-positions-unused.md)                      | low      | partial| MC hit positions never used; per-event CCE ignores lateral position                                                  | M                          |
+| [B-11](B-11-mc-hit-positions-unused.md)                      | low      | fixed  | MC hit positions never used; per-event CCE ignores lateral position                                                  | M                          |
 | [B-12](B-12-dead-code-physics-slice.md)                      | low      | fixed  | Dead code / test-only symbols in the physics slice (multi-item)                                                      | M                          |
 | [B-13](B-13-temperature-coefficient-wrong-units.md)          | low      | fixed  | extract_temperature_coefficient labels "%/K" and "pA/K" for fraction and A/cm^2 inputs                               | S                          |
 | [B-14](B-14-compare-2d-vs-1d-center-key-wrong.md)            | low      | fixed  | compare_cce_2d_vs_1d "cce_2d_center" is the full-area CCE                                                            | S                          |
 | [B-15](B-15-notebook20-outputs-2-of-36-configs.md)           | medium   | closed | Notebook 20 committed outputs rest on 2/36 sweep configs (stale May-2026 run)                                        | M                          |
 | [B-16](B-16-single-particle-first-step-indexerror.md)        | low      | closed | simulate_single_particle masks a first-step failure with IndexError                                                  | S                          |
 
-**Totals:** 16 issues: 3 high, 5 medium, 8 low. 16 open, 0 rejected, 0 needs-info.
+**Totals:** 16 issues: 3 high, 5 medium, 8 low. At audit time 16 open, 0 rejected, 0 needs-info; current status (2026-10-21, from the issue files): 2 closed, 14 fixed, 0 open (see the last status sync).
 
 **Corrections to the raw audit:**
 
@@ -80,7 +80,7 @@ current code before it was changed or closed.
 
 Counts after this sync (`grep -h '^status:' B-[0-9]*.md`): 2 closed, 10 fixed, 1 partial (B-11), 3 open (B-07, B-08, B-10).
 
-### Physics items left open
+### Physics items left open (2026-10-18 state; all four fixed on 2026-10-20, see the 2026-10-21 sync below)
 
 **B-07 (API proton energy default 5.6 MeV outside the NIEL table).** `run_radiation_damage` and `default_fluence_grid` default to 5.6 MeV (`compensation_fluence` takes the energy explicitly and is called with that default). `get_hardness_factor` interpolates a 30 to 150 MeV table with `np.interp`, which returns the edge value outside the table. The default API run therefore uses kappa(30 MeV) = 0.5 while labelling the result 5.6 MeV. Proton NIEL in SiC rises steeply below about 30 MeV, so the default understates damage per proton.
 
@@ -129,3 +129,21 @@ Needed to close:
 
 - A validated lateral CCE map for the DESIGN-2 SV. DESIGN-2 currently says the laterally uniform model cannot discriminate edges, so this first needs edge physics in the 2D model.
 - A definition of the event position to use: the edep-weighted centroid, or per-step weighting.
+
+## Status sync 2026-10-21
+
+Status column synced from the issue files (`grep -h '^status:' B-[0-9]*.md`); the four
+physics items above were fixed on 2026-10-20 (branch fix/physics-b07-b08-b11-d15 and the
+stopping-power merge 15b736f):
+
+- B-07: fixed. SR-NIEL proton NIEL 1-1000 MeV (`data/niel/`), Si 1-MeV-neq convention;
+  out-of-table energies raise. Still open (tracked in `.issues/TECH-DEBT-2026-10-18.md`,
+  not in this issue): the SiC neutron NIEL normalisation.
+- B-08: fixed. Hurkx 1992 closed form, tau / (1 + Gamma) on SRH and the effective
+  generation; N_t refitted to 18 pA at -60 V (1.355575e12).
+- B-10: fixed. NIST PSTAR data in `data/nist_star/`; opt-in energy dependence
+  (fluence-rate and water-dose modes); the default SiC-dose mode stays energy-independent
+  (its 30-150 MeV scope is documented in `etna/core/generation_profiles.py`).
+- B-11: fixed (was partial). Opt-in lateral CCE map in `process_mc_ensemble`.
+
+Counts after this sync: 2 closed (B-15, B-16), 14 fixed, 0 open.

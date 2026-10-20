@@ -118,8 +118,8 @@ cd notebooks && uv run jupyter lab 01_phase1_validation.ipynb
 > pytest from `.venv`. `uv run pytest` may then fall through to a system pytest
 > (audit C-15).
 >
-> **Tests:** there are 1160 tests in 94 modules. `pytest.ini` deselects the 7 `exhaustive`
-> tests (run them with `-m exhaustive`), so the default run is 1153 tests, and it is the
+> **Tests:** there are 1280 tests in 105 modules. `pytest.ini` deselects the 8 `exhaustive`
+> tests (run them with `-m exhaustive`), so the default run is 1272 tests, and it is the
 > real gate. On a 10-core machine `-n auto` takes about 4 minutes (248 s, down from
 > 502 s with `--dist loadfile` on the same shared machine). `pytest.ini` supplies
 > `--dist loadgroup`; `tests/_xdist_schedule.py` balances the work and
@@ -176,7 +176,7 @@ and the presets `measured_cv_config`, `measured_cv_tabulated_config`,
 | `etna/`         | Installable Python package: `etna/api/` (public facades — `DeviceConfig`, `run_cv`, `run_cce`, …) and `etna/core/` (internal solver modules — material params, Poisson, drift-diffusion, CCE, dark current, radiation damage, microdosimetry, 2D devices, …) |
 | `app/`          | Streamlit UI: `app/main.py` (navigation shell), `app/workflows/` (one page per simulation type), `app/components/` (sidebar, plotting, CSV export)                                                                                                           |
 | `notebooks/`    | 21 analysis notebooks (validation, characterisation, FLASH, radiation damage, microdosimetry, feasibility); committed without outputs                                                                                                                        |
-| `tests/`        | 94 pytest modules (1160 tests; 1153 in the default run): `test_api_*.py` (library facades), `test_app_*.py` (Streamlit AppTest, incl. un-mocked per-page smoke tests), engine/devsim parity, presets, plus the core-physics modules                          |
+| `tests/`        | 105 pytest modules (1280 tests; 1272 in the default run): `test_api_*.py` (library facades), `test_app_*.py` (Streamlit AppTest, incl. un-mocked per-page smoke tests), engine/devsim parity, presets, plus the core-physics modules                          |
 | `docs/`         | `docs/USAGE.md`, the usage guide                                                                                                                                                                                                                             |
 | `lab/`          | Research spikes, each with `notes/LOG.md` (commands and numbers behind calibrated defaults; see `lab/README.md`)                                                                                                                                             |
 | `scripts/`      | Notebook generators, the generator drift check, validation scripts (`scripts/README.md`)                                                                                                                                                                     |
@@ -198,7 +198,8 @@ to be handed to a foundry (ST / FBK) as a feasibility study — not mask layouts
 
 Each states explicitly what is a validated model target vs. what the foundry must
 supply. The Markdown files are the source; the PDFs were regenerated from them on
-2026-10-18, after the default-stack flip. `deliverables/DIMENSIONS-provenance.md`
+2026-10-21 (`pandoc X.md -o X.pdf --pdf-engine=xelatex -V mainfont="Arial Unicode MS"
+-V geometry:margin=2cm`, run in `deliverables/`). `deliverables/DIMENSIONS-provenance.md`
 classifies every layout dimension as DOCUMENTED, MEASURED-FROM-FIGURE or PLACEHOLDER.
 
 ---
@@ -263,10 +264,11 @@ built-in-voltage difference; <1 % with V_bi matched), not a validation of this d
   (including the graded transition); pass `nplus_thickness_cm=None,
 buffer_thickness_cm=None, buffer_end_doping=None, substrate_thickness_cm=1e-4` (or
   `device_kwargs(legacy_config())`) for the legacy geometry.
-- 🔧 **Data-blocked (machinery ready, real data needed):**
-  - NIEL hardness factors: SR-NIEL proton NIEL (`data/niel/`, 1-1000 MeV) in the Si
-    1-MeV-neq convention of the defect rates; the SiC neutron normalisation is
-    not available (registered SR-NIEL calculator), so the SiC-specific factor is open.
+- 🔧 **Real data, one normalisation open:**
+  - NIEL hardness factors: SR-NIEL proton NIEL data (`data/niel/`, 1-1000 MeV, since
+    2026-10-20; the 30-150 MeV placeholders are gone) in the Si 1-MeV-neq convention of
+    the defect rates. The SiC neutron normalisation is still open (SR-NIEL's SiC neutron
+    calculator needs a login), so the absolute SiC fluence scale is unvalidated.
 - **Stopping powers (real data since 2026-10-20):** tissue-equivalence κ(E) and the
   alpha Bragg curve use NIST PSTAR/ASTAR tables (`data/nist_star/`, raw responses and
   provenance kept). NIST has no SiC table, so SiC is built by Bragg additivity of Si + C,

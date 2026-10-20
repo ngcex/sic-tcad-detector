@@ -9,12 +9,12 @@ run_radiation_damage`) so tests can intercept it via
 monkeypatch.setattr(etna, "run_radiation_damage", fake) -- the seam
 proven in tests/test_app_run_mockability.py (39-01).
 
-The kappa (NIEL hardness factor) data-blocked warning banner is rendered
-UNCONDITIONALLY, before the `cfg is None` empty-state guard, so it is
-visible on every page load regardless of device-config or run state (per
-project memory: stopping power CSV data produces unrealistically flat
-kappa -- this must stay visible until real SR-NIEL SiC proton NIEL data
-replaces the placeholder).
+The kappa (NIEL hardness factor) caveat banner is rendered UNCONDITIONALLY,
+before the `cfg is None` empty-state guard, so it is visible on every page
+load regardless of device-config or run state. Since 2026-10-20 (audit B-07)
+kappa is real SR-NIEL proton NIEL data (data/niel/) in the Si 1-MeV-neq
+convention of the defect introduction rates; the SiC neutron normalisation
+is still open, which is what the banner says.
 
 The `run_radiation_damage` facade can return a `result.y` array containing
 a single `np.nan` mid-array even at the spike-confirmed safe V_bias=-20.0
@@ -44,13 +44,14 @@ def render() -> None:
     st.title("Radiation Damage")
 
     st.warning(
-        "**Data-blocked placeholder:** kappa (NIEL hardness factor) values "
-        "used here are unvalidated placeholders. The energy TREND is "
-        "physically motivated, but no ABSOLUTE Phi_crit or "
-        "defect-concentration number is citable until real SR-NIEL SiC "
-        "proton NIEL data replaces these placeholders. Treat the "
-        "CCE-vs-fluence curve below as a relative sensitivity shape only, "
-        "not an absolute prediction."
+        "**NIEL normalisation open:** kappa (NIEL hardness factor) is "
+        "SR-NIEL proton NIEL data (1-1000 MeV, data/niel/) in the Si "
+        "1-MeV-neq convention of the defect introduction rates. The SiC "
+        "neutron normalisation is still open (no SiC reactor-neutron NIEL "
+        "available), so the absolute SiC fluence scale (Phi_crit, defect "
+        "concentrations) is unvalidated; if the SiC/Si NIEL ratio of the "
+        "reactor neutrons exceeds the proton one, kappa overstates the SiC "
+        "damage per proton."
     )
 
     cfg = require_config()

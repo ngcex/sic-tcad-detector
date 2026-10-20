@@ -92,7 +92,7 @@ legacy profile: 10.4 V.)
 3.3 V** (the 20 % margin covers ±20 % doping: V_fd 3.2 V at N_D_bulk + 20 %, 3.9 V with
 both N_D + 20 %). The paper's −10 V is 3× that gate (3.6× V_fd), −30 V is 9× (11×
 V_fd). **Recommendation: keep ≥ −10 V as the practical operating point.** The model
-CCE is already 0.998 at −3 V, but −10 V costs nothing in leakage terms (6.3 pA model
+CCE is already 0.998 at −3 V, but −10 V costs nothing in leakage terms (3.99 pA model
 estimate on 4 mm²), is where the measured C-V is flat (W within 0.4 µm of its −60 V
 value), and covers what the C-V fit cannot pin: if the bulk is at the documented
 0.5–1 × 10¹⁴ instead of the fitted 3.4 × 10¹³, V_fd rises to 3.9–7.6 V, still below
@@ -151,13 +151,15 @@ target and quote its model W(0 V).
 
 ## 5. Caveats — do NOT read these as committed specs
 
-- **Dark current / leakage: ESTIMATE ONLY.** N_t = 2.849 × 10¹² cm⁻³ s⁻¹
+- **Dark current / leakage: ESTIMATE ONLY.** N_t = 1.356 × 10¹² cm⁻³ s⁻¹
   (E_t = 0.67 eV) is **fitted** so that the model equals the experimental upper bound
   "< 18 pA up to −60 V" at −60 V, 4 mm², 300 K (18.000 pA) — a calibration input,
-  not a prediction or validation. The bias shape (6.3 / 15.8 / 18.0 pA at
-  −10 / −30 / −60 V) comes from a heuristic depletion weight min(E / 3.5 × 10⁴ V/cm, 1);
-  the "TAT" term is an effective field-weighted generation (the Hurkx field
-  enhancement is inactive below ~4.5 MV/cm, i.e. at all fields here); the
+  not a prediction or validation. The bias shape (3.99 / 11.88 / 18.00 pA at
+  −10 / −30 / −60 V) comes from a heuristic depletion weight min(E / 3.5 × 10⁴ V/cm, 1)
+  times the Hurkx (1992) trap-assisted-tunnelling enhancement (1 + Γ(E)) (active since
+  2026-10-20: Γ ≈ 1.8 at 10⁵ V/cm, 300 K, with an assumed tunnelling mass 0.25 m₀; it
+  replaced a branch that kept Γ = 1 at all fields here and gave 6.3 / 15.8 / 18.0 pA);
+  the "TAT" term is an effective field-weighted generation; the
   SRH/TAT/SRV split is not physically meaningful; and the temperature dependence
   N_t(T) ∝ n_i(T) is an assumption (~×15 per +13 K), not fitted. (Before
   2026-10-16 a stale-field bug made the model look consistent with 18 pA at −30 V;

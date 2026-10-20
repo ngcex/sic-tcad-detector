@@ -16,7 +16,8 @@ so simulated curves have no error band. What IS drawn, when the result carries i
 - results outside the engine/devsim cross-check box, truncated sweeps, dark-current
   points past reach-through, unsolved (fully compensated) damage points with their reason;
 - per-observable honesty notes (dark current = calibrated budget, FLASH = sensitivity
-  bound, kappa placeholder, tilted alpha does not reproduce the data, ...);
+  bound, kappa = Si-neq SR-NIEL with the SiC normalisation open, tilted alpha does not
+  reproduce the data, ...);
 - error bars on digitised measured points (their read-off uncertainty).
 
 Accepted inputs: a ``SimResult`` (any ``run_*`` facade, ``etna.viz.maps.carrier_state_2d``,
@@ -69,15 +70,15 @@ NOTES = {
     ),
     "flash": (
         "FLASH: numerical sensitivity bound, not a validated plasma-recombination "
-        "prediction (high injection not modelled; SRH only, Auger inactive)."
+        "prediction (high-injection plasma not modelled; SRH + low-injection Auger)."
     ),
     "transient": (
         "FLASH transient: low-injection DD pulse response; high-injection plasma "
         "physics not modelled."
     ),
     "damage": (
-        "kappa (NIEL hardness) is a data-blocked placeholder: absolute fluence "
-        "scale unvalidated."
+        "kappa (NIEL hardness): SR-NIEL proton NIEL, Si 1-MeV-neq convention; "
+        "SiC neutron normalisation still open, absolute SiC fluence scale unvalidated."
     ),
     "temperature": "CCE vs T: model trend, not validated against a T measurement.",
     "cce_let": (
@@ -170,7 +171,8 @@ def figure_for(
             _cce_let(fig, obj, notes)
             g = obj.get("geometry", {})
             prov = provenance(
-                solver="not recorded in the table (build_cce_let_table: devsim 2D transient)", source=obj.get("_source", "table")
+                solver="not recorded in the table (build_cce_let_table: devsim 2D transient)",
+                source=obj.get("_source", "table"),
             )
             notes.insert(
                 0,
@@ -463,9 +465,15 @@ def _cce(fig, res, notes, **_):
         )
     if "theta_deg" in md:
         ax.set_title(f"Tilted alpha ({md['theta_deg']:g} deg), CCE vs bias")
+        shape = md.get("generation_shape", "")
         notes.append(
-            f"Alpha generation shape '{md.get('generation_shape', '')}' is qualitative "
-            "(not ASTAR/SRIM). Steady-state 1D low-injection model."
+            f"Alpha generation shape '{shape}' is "
+            + (
+                "the NIST ASTAR Bragg curve (SiC by Bragg additivity of Si + C)."
+                if shape == "bragg"
+                else "qualitative (not ASTAR)."
+            )
+            + " Steady-state 1D low-injection model."
         )
     else:
         ax.set_title("CCE vs reverse bias")
@@ -684,19 +692,29 @@ def _map2d(fig, res, notes, kind="map_field", **_):
 
         steps = [res.config.substrate_thickness_um]
         if res.config.nplus_thickness_um:
-            steps.append(res.config.substrate_thickness_um + res.config.epi_thickness_um)
+            steps.append(
+                res.config.substrate_thickness_um + res.config.epi_thickness_um
+            )
         win = np.ones_like(y, bool)
         for s in steps:
             win &= np.abs(y - s) > INTERFACE_SPIKE_WINDOW_UM
         if win.any() and not win.all():
             z = np.minimum(z, float(np.nanmax(z[win])))
-            notes.append("Colour scale clipped: nm-scale spikes at the abrupt doping steps not shown.")
+            notes.append(
+                "Colour scale clipped: nm-scale spikes at the abrupt doping steps not shown."
+            )
     zmin, zmax = float(np.nanmin(z)), float(np.nanmax(z))
     if zmax <= zmin:
         zmax = zmin + 1.0
     levels = MaxNLocator(24).tick_values(zmin, zmax)
     cs = ax.tricontourf(tri, z, levels=levels, cmap=cmap, extend="neither")
-    lines = ax.tricontour(tri, z, levels=MaxNLocator(8).tick_values(zmin, zmax), colors="k", linewidths=0.35)
+    lines = ax.tricontour(
+        tri,
+        z,
+        levels=MaxNLocator(8).tick_values(zmin, zmax),
+        colors="k",
+        linewidths=0.35,
+    )
     ax.clabel(lines, fontsize=S.BASE_FONT_PT - 3, fmt="%.3g")
     for c in res.mesh.contacts or []:
         ax.axhline(c["position"] * 1e4, color="#222222", lw=1.2)
@@ -718,7 +736,9 @@ def _stack(fig, cfg, notes):
 
     layers = stack_layers(cfg)
     total = layers[-1]["bottom_um"]
-    ax, axt = fig.subplots(1, 2, gridspec_kw={"width_ratios": [1, 3.2], "wspace": 0}, sharey=True)
+    ax, axt = fig.subplots(
+        1, 2, gridspec_kw={"width_ratios": [1, 3.2], "wspace": 0}, sharey=True
+    )
     for L in layers:
         ax.add_patch(
             Rectangle(
@@ -742,10 +762,15 @@ def _stack(fig, cfg, notes):
     ys = [max(y, 0.03 * total) for y in ys]
     for L, yc, yl in zip(layers, centres, ys):
         axt.plot([0.0, 0.06], [yc, yl], color="#333333", lw=0.4)
-        txt = f"{L['name']}: {L['thickness_um']:.3g} " + r"$\mu$m" + "\n" + "\n".join(
-            textwrap.wrap(L["doping"], 52)
+        txt = (
+            f"{L['name']}: {L['thickness_um']:.3g} "
+            + r"$\mu$m"
+            + "\n"
+            + "\n".join(textwrap.wrap(L["doping"], 52))
         )
-        axt.text(0.08, yl, txt, va="center", fontsize=S.BASE_FONT_PT - 2.5, linespacing=1.1)
+        axt.text(
+            0.08, yl, txt, va="center", fontsize=S.BASE_FONT_PT - 2.5, linespacing=1.1
+        )
     ax.set_xlim(0, 1)
     axt.set_xlim(0, 1)
     ax.set_ylim(total, 0)

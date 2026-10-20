@@ -3,8 +3,17 @@
 Provides analytical models for carrier generation from:
 - Alpha particles (Am-241, 5.486 MeV): by default the real Bragg curve in SiC from
   NIST ASTAR (Si + C, Bragg additivity), legacy flat box as opt-out
-- Proton beams (30-150 MeV therapeutic energies): dose-rate (energy-independent) or,
-  opt-in, water-dose or fluence-rate input with the NIST PSTAR energy dependence
+- Proton beams: dose-rate in SiC (default; energy-independent, accepted for 30-150 MeV
+  therapeutic energies only) or, opt-in, water-dose or fluence-rate input with the NIST
+  PSTAR energy dependence (any energy of the PSTAR grid)
+
+Energy ranges (2026-10-21): the default mode's 30-150 MeV check is a scope choice of the
+flat entrance-region profile, not a data limit. PSTAR covers 1 keV - 10 GeV and the NIEL
+hardness table (etna.core.niel_tables / radiation_damage) 1-1000 MeV, but below ~10 MeV
+a flat profile is wrong for a 10 um epi: L_e,SiC(10 um) / L_e,SiC(0) = 1.009 at 10 MeV,
+1.031 at 5 MeV, 1.17 at 2 MeV, and a 1 MeV proton stops at 10.8 um (NIST PSTAR Si + C,
+csda_range_cm / residual_energy_MeV). The range was therefore not widened to the NIEL
+table's; use ``fluence_rate_cm2_s`` (depth-resolved) for other energies.
 - Dose rate to generation rate conversion
 
 All units in CGS (cm, cm^-3, eV, s) per devsim convention.
@@ -448,7 +457,8 @@ def proton_generation_profile(
         raise ValueError(f"dose_medium must be 'sic' or 'water' (got {dose_medium!r})")
 
     # Default: SiC dose rate. The range lookup only validates E_MeV (raises outside the
-    # 30-150 MeV table); the profile is the flat entrance-region value for every energy.
+    # 30-150 MeV table: the scope of the flat profile, see the module docstring; PSTAR
+    # itself covers 1 keV - 10 GeV); the profile is the flat entrance-region value.
     if E_MeV not in PROTON_RANGE_WATER_MM:
         _interpolate_proton_range_water(E_MeV)
 
