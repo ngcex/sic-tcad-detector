@@ -47,6 +47,8 @@ def _footer(d: dict, extra: str = "") -> VGroup:
     lines = [Text(d["label"], font_size=14, color=LABEL_COLOR, slant="ITALIC")]
     if extra:
         lines.append(Text(extra, font_size=12, color="#bbbbbb"))
+    if d.get("provenance"):
+        lines.append(Text(d["provenance"], font_size=11, color="#bbbbbb"))
     g = VGroup(*lines).arrange(DOWN, buff=0.06, aligned_edge=LEFT)
     return g.to_edge(DOWN, buff=0.12)
 

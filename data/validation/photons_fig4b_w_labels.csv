@@ -1,0 +1,10 @@
+# Photons paper (the 4 mm2 dosimeter), Fig. 4b: depletion-width labels W = eps*A/C
+# (A = 4 mm2, small-signal C) printed on the measured C-V curve at 0 / -10 / -30 V
+# (etna.export.labels.CALIBRATION_NOTE; lab/microdosimeter/notes/LOG.md section 4).
+# Uncertainty: the labels are printed to 0.01 um -> +-0.005 um rounding.
+# NOTE: the default stack doping is a FIT to the full digitised C-V curve these labels belong
+# to, so agreement with them is fit quality, not an independent validation.
+bias_V,W_um,W_err_um
+0,1.68,0.005
+-10,9.52,0.005
+-30,9.73,0.005

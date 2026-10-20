@@ -1,0 +1,14 @@
+# Petringa et al. 2025, Physica Medica 140, 105675 ("Microdosimetry" paper), Fig. 4b:
+# CCE vs reverse bias of the SiC microdosimeter, 241Am 5.5 MeV alphas, detector tilted 65 deg.
+# Blue markers digitised in this repository (lab/microdosimeter/bench/digitise_fig4b.py;
+# table in lab/microdosimeter/notes/LOG.md section 1). READ-OFF ESTIMATES from a raster
+# figure: uncertainty +-0.0005 (marker centroid +-2 px). The paper normalises to its -50 V
+# point (1.000); the y label says "CCE [%]" but the values are fractions. Use for SHAPE only.
+bias_V,cce,cce_err
+0,0.9083,0.0005
+-5,0.9662,0.0005
+-10,0.9806,0.0005
+-20,0.9904,0.0005
+-30,0.9932,0.0005
+-40,0.9976,0.0005
+-50,1.0000,0.0005
