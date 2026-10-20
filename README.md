@@ -224,8 +224,8 @@ built-in-voltage difference; <1 % with V_bi matched), not a validation of this d
   [`docs/USAGE.md`](docs/USAGE.md#2-what-to-trust).
 - ⚠️ **Calibration, not prediction:** dark current is a calibration input: one
   trap density N_t fitted to the experimental bound < 18 pA up to −60 V (4 mm²;
-  N_t = 2.849024e12 on the default stack, E_t = 0.67 eV); quote it as a budget
-  estimate only.
+  N_t = 1.355575e12 on the default stack since the Hurkx (1 + Gamma) field
+  enhancement of 2026-10-20, E_t = 0.67 eV); quote it as a budget estimate only.
 - ⚠️ **FLASH dose-rate:** the high-injection _plasma-recombination_ physics is
   **not implemented** — FLASH dose-rate outputs are exploratory sensitivity
   bounds, not a validated mechanistic prediction.
@@ -251,7 +251,7 @@ built-in-voltage difference; <1 % with V_bi matched), not a validation of this d
 - ⚠️ **Previous default:** `etna.nplus_calibrated_config()` (UI: "previous calibrated
   model") reproduces the 2026-10-17 numbers bit for bit: abrupt epi/n⁺ step, doping
   solved on the 0 / −10 V C-V points (2.958237e15 / 8.252732e13 / L 0.987 µm held),
-  N_t 2.805336e12; V_fd 9.93 V, reach-through 12.3 V, ε·A/C(−30 V) 9.98 vs 9.73 µm
+  N_t 1.343970e12 (2.805336e12 before the Hurkx refit; dark current not bit for bit); V_fd 9.93 V, reach-through 12.3 V, ε·A/C(−30 V) 9.98 vs 9.73 µm
   (+2.6 %), C-V knee at −8…−10 V (excluded by the full digitised curve).
 - ⚠️ **Legacy model:** `etna.legacy_config()` (UI: "historical model") reproduces the
   pre-flip numbers: cathode directly on the n⁻ epi, p⁺ 1 µm, 2.93e15 / 8.82e13 /
@@ -266,7 +266,9 @@ buffer_thickness_cm=None, buffer_end_doping=None, substrate_thickness_cm=1e-4` (
     (`compute_kappa_table(source="bragg")`) but `data/srim/*.csv` are placeholders
     — drop in real NIST PSTAR proton stopping powers (see `data/srim/README.md`).
     Surfaced as a persistent warning banner on the Radiation Damage page.
-  - NIEL hardness factors for SiC are placeholders pending SR-NIEL data.
+  - NIEL hardness factors: SR-NIEL proton NIEL (`data/niel/`, 1-1000 MeV) in the Si
+    1-MeV-neq convention of the defect rates; the SiC neutron normalisation is
+    not available (registered SR-NIEL calculator), so the SiC-specific factor is open.
 
 Residual gaps between the notebook workflows and the Streamlit UI are tracked as v6.0
 tech debt in the milestone audit above, not left as silent omissions. That audit found
