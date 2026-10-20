@@ -479,7 +479,7 @@ The transient drivers (`TransientSolver.simulate_pulse`, `simulate_pulse_train`,
     | quantity          | displacement share or effect                                  |
     | ----------------- | ------------------------------------------------------------- |
     | 1 ps injection step | 5 % of the current                                          |
-    | later steps       | <= 0.3 %                                                      |
+    | later steps       | <= 1.6 % of the peak                                          |
     | I_peak            | 5.49e-5 total vs 5.42e-5 conduction A/cm                      |
     | t_collection      | 0.11679 ns (new definition) vs 0.11739 ns (old step-end value) |
     | CCE               | 0.999970 either way                                           |
