@@ -43,7 +43,6 @@ References:
 import logging
 
 import numpy as np
-import pandas as pd
 
 from etna.core.sic_material import SiC4H_Parameters
 
@@ -157,6 +156,8 @@ def load_mc_events_csv(filepath, column_map=None, pos_unit="cm", energy_unit="ke
         "track_id": "track_id",
     }
     col_map = default_map if column_map is None else column_map
+
+    import pandas as pd  # lazy: keeps `import etna` light
 
     df = pd.read_csv(filepath)
 
@@ -306,6 +307,8 @@ def load_mc_events_root(
                 )
 
         arrays = tree.arrays(list(branches_to_read.values()), library="np")
+
+    import pandas as pd  # lazy: keeps `import etna` light
 
     df = pd.DataFrame(
         {
@@ -487,6 +490,8 @@ def event_lateral_distance(events_df, sv_center_cm=(0.0, 0.0), metric="chebyshev
         d = np.hypot(out["x_cm"], out["y_cm"])
     else:
         d = np.maximum(np.abs(out["x_cm"]), np.abs(out["y_cm"]))
+    import pandas as pd  # lazy: keeps `import etna` light
+
     return pd.Series(d, index=tot.index)
 
 

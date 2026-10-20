@@ -24,7 +24,6 @@ import logging
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -243,6 +242,8 @@ def _load_stopping_powers(filepath):
     tuple
         (energy_MeV, stopping_power) as ndarrays.
     """
+    import pandas as pd  # lazy: keeps `import etna` light
+
     df = pd.read_csv(filepath)
     return df["energy_MeV"].values, df["stopping_power_MeV_cm2_per_g"].values
 

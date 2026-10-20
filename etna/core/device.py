@@ -16,7 +16,6 @@ import logging
 
 import devsim
 import numpy as np
-import scipy.optimize
 
 from etna.core.sic_material import (
     SiC4H_Parameters,
@@ -1425,6 +1424,8 @@ def calibrate_graded_doping(
                 pass
 
         return cost
+
+    import scipy.optimize  # lazy: keeps `import etna` light
 
     result = scipy.optimize.minimize(
         objective,
