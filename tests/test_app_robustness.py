@@ -51,7 +51,9 @@ def test_device_config_accepts_defaults_and_edges():
     DeviceConfig()
     DeviceConfig(T=100.0, N_A=1e17)
     DeviceConfig(T=600.0, half_width_um=25.0)
-    DeviceConfig(doping_profile="linear")  # profile is not validated here
+    DeviceConfig(doping_profile="uniform", N_D=1e15)
+    with pytest.raises(ValueError, match="doping_profile"):
+        DeviceConfig(doping_profile="linear")  # C-12: exact profile strings only
     with pytest.raises(ValueError):
         replace(DeviceConfig(), area_cm2=0.0)  # replace() re-validates
 

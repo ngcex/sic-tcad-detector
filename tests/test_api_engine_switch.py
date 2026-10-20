@@ -85,7 +85,9 @@ def test_fallback_to_devsim_when_engine_does_not_converge(monkeypatch):
         (DeviceConfig(T=500.0), {}),  # outside the validated T range
         (DeviceConfig(), {"v_start": 0.5}),  # forward bias
         (DeviceConfig(), {"v_stop": -300.0, "n_points": 2}),  # jump too large
-        (DeviceConfig(doping_profile="linear"), {}),
+        # uniform N_D below the engine's validated N_D_uniform box (1e14-1e16); an
+        # unknown doping_profile is now rejected by DeviceConfig itself (C-12)
+        (DeviceConfig(doping_profile="uniform", N_D=5e13), {}),
     ],
 )
 def test_outside_validated_domain_uses_devsim(monkeypatch, cfg, kwargs):
