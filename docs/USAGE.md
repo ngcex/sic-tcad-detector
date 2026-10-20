@@ -63,7 +63,9 @@ What ETNA is **not**:
     V_bi matched (`.planning/VALIDATION_LITERATURE.md`). It does not validate this device.
   - **Not reproduced / open**. The microdosimeter's measured alpha CCE-vs-bias shape is
     not reproduced by any drift-diffusion variant (section 8). FLASH plasma recombination
-    is not implemented. The NIEL / tissue-equivalence (kappa) tables are placeholders.
+    is not implemented. The tissue-equivalence (kappa) table is a placeholder; the NIEL
+    hardness factors are SR-NIEL data in the Si 1-MeV-neq convention, with the SiC
+    neutron normalisation unavailable (`data/niel/README.md`).
     SIMS is unavailable, so the epi/n+ position comes from the C-V fit.
 
 ---
@@ -78,8 +80,8 @@ What ETNA is **not**:
 | Full-depletion voltage                                    | **definition-dependent**                                    | analytic V_fd 2.74 V, reach-through 3.10 V, sweep gate 1.2 V_fd = 3.28 V (default stack)                                                                                | `etna.export.labels.VFD_DEFINITION`                                                                                         |
 | CCE vs bias (1D, alpha in epi)                            | **model** (low injection, steady state)                     | engine verified vs devsim; no measured CCE reproduced for the dosimeter                                                                                                 | `run_cce` docstring                                                                                                         |
 | Microdosimeter alpha CCE shape (Fig. 4b, Phys. Med. 2025) | **not reproduced**                                          | flat to 0.5 % from 0 V in the model; data drop to 0.908 at 0 V                                                                                                          | `run_cce_tilted_alpha` docstring, `lab/microdosimeter/notes/LOG.md` §9                                                      |
-| Dark current                                              | **calibration** (budget estimate)                           | one N_t fitted to < 18 pA at -60 V, 4 mm²; bias and temperature shape heuristic                                                                                         | `run_dark_current`, DESIGN-1                                                                                                |
-| CCE vs proton fluence                                     | **relative shape only**                                     | NIEL hardness factors are placeholders; points at or beyond the compensation fluence are NaN                                                                            | `run_radiation_damage` docstring                                                                                            |
+| Dark current                                              | **calibration** (budget estimate)                           | one N_t fitted to < 18 pA at -60 V, 4 mm²; bias shape f_depl heuristic x Hurkx (1+Gamma), temperature shape assumed                                                                                         | `run_dark_current`, DESIGN-1                                                                                                |
+| CCE vs proton fluence                                     | **relative shape only**                                     | NIEL hardness factors: SR-NIEL data, Si-neq convention (SiC normalisation open); points at or beyond the compensation fluence are NaN                                                                            | `run_radiation_damage` docstring                                                                                            |
 | FLASH dose-rate CCE                                       | **numerical sensitivity bound**                             | no plasma or high-injection physics                                                                                                                                     | `run_flash_recombination`, `run_transient` docstrings                                                                       |
 | Tissue-equivalence kappa(E)                               | **data-blocked**                                            | `data/srim/*.csv` are placeholders                                                                                                                                      | `data/srim/README.md`                                                                                                       |
 | 2D field maps                                             | **verified** vs devsim inside the engine2d box              | laterally uniform device; no edge termination                                                                                                                           | `tests/test_engine2d*.py`, `tests/test_field_engine_default_100V.py`                                                        |
@@ -184,7 +186,7 @@ aborts the run.
 | graded n-/n+ transition | the last 1.136634 µm of the epi; N_D rises log-linearly to 4.516421e16 at the epi end                                       | `buffer_thickness_um`, `buffer_end_doping`                           |
 | n+                      | 1 µm modelled (the conductive substrate truncated), 1e19, cathode on its far end                                            | `nplus_thickness_um`, `N_D_nplus`                                    |
 | area                    | **0.04 cm² = 4 mm²** (the dosimeter); C and I are absolute for this area                                                    | `area_cm2`                                                           |
-| dark-current fit        | N_t 2.849024e12 cm^-3 s^-1, E_t 0.67 eV                                                                                     | `N_t`, `E_t`                                                         |
+| dark-current fit        | N_t 1.355575e12 cm^-3 s^-1 (Hurkx refit 2026-10-20), E_t 0.67 eV                                                            | `N_t`, `E_t`                                                         |
 | temperature             | 300 K                                                                                                                       | `T`                                                                  |
 
 `DeviceConfig` validates on construction: it rejects non-positive sizes, N_D >= N_A,
@@ -197,8 +199,8 @@ field. Set `half_width_um` (µm) for a 2D device (lateral half-width; depth is t
 | preset                            | call                                            | what it is                                                                                                                                                            | when to use                                                                                                                                                                                  |
 | --------------------------------- | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | default (measured-C-V parametric) | `DeviceConfig()` == `etna.measured_cv_config()` | the stack above: an exponential epi plus a graded n-/n+ transition, fitted to the digitised Photons Fig. 4b eps*A/C curve                                             | default for all dosimeter work                                                                                                                                                               |
-| tabulated measured-C-V (opt-in)   | `etna.measured_cv_tabulated_config()`           | 19-knot log-linear N_D table from a model-independent inversion of the same curve (knee rms 0.014 µm vs 0.24 µm for the parametric form), N_t refitted to 2.849219e12 | sensitivity check of results that depend on the knee (low bias). It is still one C-V curve, not SIMS. The first 0.5 µm and 8.5-9.25 µm are unresolved (`lab/tabulated_profile/notes/LOG.md`) |
-| previous default                  | `etna.nplus_calibrated_config()`                | 2026-10-17 model: exponential epi solved on 2 C-V points, abrupt 1e19 n+ step, N_t 2.805336e12                                                                        | reproducing numbers of that period bit for bit. Its C-V knee (-8..-10 V) is excluded by the full digitised curve                                                                             |
+| tabulated measured-C-V (opt-in)   | `etna.measured_cv_tabulated_config()`           | 19-knot log-linear N_D table from a model-independent inversion of the same curve (knee rms 0.014 µm vs 0.24 µm for the parametric form), N_t refitted to 1.356120e12 | sensitivity check of results that depend on the knee (low bias). It is still one C-V curve, not SIMS. The first 0.5 µm and 8.5-9.25 µm are unresolved (`lab/tabulated_profile/notes/LOG.md`) |
+| previous default                  | `etna.nplus_calibrated_config()`                | 2026-10-17 model: exponential epi solved on 2 C-V points, abrupt 1e19 n+ step, N_t 1.343970e12 (Hurkx refit)                                                          | reproducing numbers of that period bit for bit. Its C-V knee (-8..-10 V) is excluded by the full digitised curve                                                                             |
 | legacy                            | `etna.legacy_config()`                          | pre-n+ model: cathode directly on the n- epi, p+ 1 µm, 2.93e15 / 8.82e13 / 0.987 µm, N_t 2.8e12, E_t 0.65                                                             | reproducing old notebooks only. Its deep-bias devsim wall (~ -64 V) is a contact artefact                                                                                                    |
 | microdosimeter                    | `etna.microdosimeter_config(p_plus_um=0.3)`     | Petringa 2025 Phys. Med. 140: 25 mm² (`area_cm2=0.25`), uniform N_D 1e14, abrupt n+, V_fd 9.0 V                                                                       | with `run_cce_tilted_alpha` for the 65° 241Am test; layout/geometry studies                                                                                                                  |
 
@@ -407,16 +409,27 @@ Returns CCE vs proton fluence. `x` is fluence (p/cm²), `y` is CCE. Metadata:
 - `V_bias`, `energy_MeV`
 
 The donor-removal model fully compensates the low-doped epi at a fluence that depends on
-the profile: 1.35e13 p/cm² at 5.6 MeV on the default stack, 5.18e12 on the tabulated
-preset. Points at or beyond it are **NaN** with a reason, not solved. Choose the grid
+the profile: 1.01e12 p/cm² at 5.6 MeV (3.48e12 at 62 MeV) on the default stack, 3.88e11
+(1.33e12) on the tabulated preset. Points at or beyond it are **NaN** with a reason, not solved. Choose the grid
 from `compensation_fluence`, and always check `valid`. With `fluences=None` the grid
 adapts to the device (`etna.api.simulation.default_fluence_grid`): 8 log-spaced points
 from 0.01x to 3x the compensation fluence: 6 are solved, and the last 2 are normally NaN
 with a reason (the 3x point always; `compensation_fluence` is a lower bound on the mesh
-threshold), showing where the model ends. Explicit grids are used as given. The
-NIEL kappa factors are placeholders, so read only the relative shape.
-Also, the facade's default `proton_energy_MeV=5.6` lies below the NIEL table, and kappa
-is clamped to its 30 MeV value (logged once per energy; an edge value, not an extrapolation). This is audit B-07, open at this version. The
+threshold), showing where the model ends. Explicit grids are used as given.
+
+NIEL hardness factors (audit C-5 / B-07, since 2026-10-20): kappa(E) =
+NIEL_p,Si(E) / NIEL_n,Si(1 MeV) from SR-NIEL-7 proton NIEL (1-1000 MeV, 59 energies,
+log-log interpolation) over the ASTM 95 MeV mb normalisation: 6.67 at 5.6 MeV, 2.75 at
+30, 1.94 at 62, 1.82 at 70, 1.12 at 150 MeV (the old placeholders were 0.50 / 0.35 /
+0.33 / 0.22 at 30-150 MeV and 5.6 MeV was silently clamped to 0.5). Energies outside
+1-1000 MeV raise `ValueError`. This is the 1-MeV-neq convention of the defect
+introduction rates (Burin et al., fitted to reactor data labelled in Si neq). Open: the
+SiC/Si NIEL ratio of the reactor neutrons is not available (SR-NIEL's SiC neutron
+calculator needs a login), so the SiC-specific normalisation is unvalidated; if that
+ratio exceeds the proton one (0.94 at 5.6 MeV, 0.85 at 62 MeV:
+`radiation_damage.niel_ratio_sic_si`), kappa overstates the SiC damage per proton. At
+5.6 MeV NIEL scaling is also known to overpredict measured Si damage by tens of percent.
+Data and provenance: `data/niel/` (raw SR-NIEL pages, CSVs, fetch script, README). The
 Radiation Damage page offers 30, 62, 70 and 150 MeV only.
 
 ```python
@@ -425,8 +438,8 @@ from etna import DeviceConfig, run_radiation_damage
 from etna.api.simulation import compensation_fluence
 
 cfg = DeviceConfig()
-phi_c = compensation_fluence(cfg, 5.6)                       # 1.35e13 p/cm2
-r = run_radiation_damage(cfg, fluences=np.geomspace(1e11, 0.9 * phi_c, 5), V_bias=-40.0)
+phi_c = compensation_fluence(cfg, 5.6)                       # 1.01e12 p/cm2
+r = run_radiation_damage(cfg, fluences=np.geomspace(1e9, 0.9 * phi_c, 5), V_bias=-40.0)
 print(f"{phi_c:.3g}", r.metadata["valid"].all(), np.round(r.y, 4))
 ```
 
@@ -453,8 +466,21 @@ points), otherwise on devsim (about 2-3 s). `solver="devsim"` forces the devsim 
 from etna import DeviceConfig, run_dark_current
 
 r = run_dark_current(DeviceConfig(), 0.0, -60.0, 7)
-print([f"{i * 1e12:.2f}" for i in r.y[[1, 3, 6]]], "pA at -10/-30/-60 V")  # ~6.30 15.76 18.00
+print([f"{i * 1e12:.2f}" for i in r.y[[1, 3, 6]]], "pA at -10/-30/-60 V")  # 3.99 11.88 18.00
 ```
+
+Model (since 2026-10-20, audit B-08): Z1/2 SRH plus the fitted effective generation
+N_t f_depl, both with the Hurkx (1992) trap-assisted-tunnelling enhancement tau ->
+tau / (1 + Gamma), Gamma = 2 sqrt(3 pi) (F/F_Gamma) exp[(F/F_Gamma)^2], F_Gamma =
+sqrt(24 m_t (kT)^3) / (q hbar) = 3.69e5 V/cm at 300 K (m_t = 0.25 m0, assumed). Gamma is
+~1.8 at 1e5 V/cm, so the bias shape is f_depl x (1 + Gamma(E)); before, a Kt branch kept
+Gamma = 1 below ~4.5 MV/cm. N_t was refitted so that I(300 K, -60 V, 4 mm²) is still
+18.000 pA: 2.849024e12 -> 1.355575e12 (default), 2.849219e12 -> 1.356120e12 (tabulated),
+2.805336e12 -> 1.343970e12 (previous default); the legacy preset keeps its historical
+2.8e12 (37.4 pA at -60 V now). Other biases move: -10 / -30 / -100 V give 3.99 / 11.88 /
+24.87 pA (were 6.30 / 15.76 / ~18.2). The closed form is the saddle-point value of
+Hurkx's integral and is ~30 % above the integral at 1e5 V/cm; fields above its validity
+limit (~1.1e6 V/cm at 300 K) are logged (devsim) or sent to devsim (engine).
 
 ### `run_temperature_sweep(config, temperatures=None, voltage=-30.0, method="hecht")`
 
@@ -555,23 +581,51 @@ The transient drivers (`TransientSolver.simulate_pulse`, `simulate_pulse_train`,
     unaffected.
   - The tables were not regenerated (~40 min, `ETNA_REBUILD_CCE_TABLES=1` in notebook 16).
 
-### `run_microdosimetry(config, mc_csv_path, sv_thickness_um=10.0, sv_width_um=150.0)`
+### `run_microdosimetry(config, mc_csv_path, sv_thickness_um=10.0, sv_width_um=100.0, sv_depth_um=None, chord_model="cauchy")`
 
 Pure data pipeline (no devsim). It reads Monte Carlo per-step depositions from a CSV
 (columns `event_id, x, y, z, edep`; edep in keV, positions in cm) and returns the lineal
-energy spectrum: `x` is y (keV/µm), `y` is y·d(y). Metadata holds `y_F`, `y_D`, `f_y` and
-`l_bar_um` (mean chord length). `config` is carried for provenance only. `mc_csv_path` may be
+energy spectrum: `x` is y (keV/µm), `y` is y·d(y). Metadata holds `y_F`, `y_D`, `f_y`,
+`l_bar_um` (mean chord length), `chord_model` and `sv_dimensions_um` (width, depth,
+thickness). `config` is carried for provenance only. `mc_csv_path` may be
 a path or a file-like object (e.g. `io.BytesIO`). It raises `ValueError` for non-positive or
-non-finite sensitive-volume dimensions, a CSV with no events, non-finite or negative `edep`,
-or no event depositing energy. `sv_width_um` currently has no effect: l̄ = 2·`sv_thickness_um`
-(slab approximation; a finite-SV 4V/S chord is an open physics choice, audit D-15).
+non-finite sensitive-volume dimensions, an unknown `chord_model`, a CSV with no events,
+non-finite or negative `edep`, or no event depositing energy.
+
+Mean chord length (audit D-15 follow-up, 2026-10-20): `chord_model="cauchy"` (default) is
+Cauchy's l̄ = 4V/S of the finite box w × d × t (`sv_depth_um=None` means a square footprint,
+d = w), so the width matters: 16.67 µm for DESIGN-2's 100 × 100 × 10 µm SV (the new default
+width; it was 150 µm), 17.65 µm for 150 × 150 × 10 µm. `chord_model="slab"` gives the
+infinite-slab limit l̄ = 2t (20 µm, the value used before 2026-10-20). Both assume isotropic
+irradiation; for a normally incident beam the chord is t, which neither gives. The Cauchy
+value raises y (and y_F, y_D) by 2t/l̄ = 1.2 for the default SV relative to the slab value.
 
 ```python
 from etna import DeviceConfig, run_microdosimetry
 
 r = run_microdosimetry(DeviceConfig(), "data/synthetic_mc_events.csv")
-print(round(float(r.metadata["y_F"]), 2), round(float(r.metadata["y_D"]), 2), r.metadata["l_bar_um"])  # 17.23 53.22 20.0
+print(round(float(r.metadata["y_F"]), 2), round(float(r.metadata["y_D"]), 2), round(r.metadata["l_bar_um"], 3))  # 20.67 63.8 16.667
+s = run_microdosimetry(DeviceConfig(), "data/synthetic_mc_events.csv", chord_model="slab")
+print(round(float(s.metadata["y_F"]), 2), round(float(s.metadata["y_D"]), 2), s.metadata["l_bar_um"])  # 17.23 53.22 20.0
 ```
+
+#### Lateral (edge) CCE weighting of MC hits (core API, audit B-11)
+
+`etna.core.mc_coupling.process_mc_ensemble(events, cce_interp, cce_lateral=scan)`
+multiplies each event's CCE(LET) by f(r) = CCE_2D(r) / CCE_2D(0) of a 2D lateral scan
+(`etna.core.charge_collection_2d.cce_lateral_scan`), r the distance of the event's
+edep-weighted lateral centroid (x, y; z is depth) from `sv_center_cm`
+(`lateral_metric="chebyshev"` for a square SV, `"radial"`, `"x"`). Events beyond the scan
+are clamped to the edge value (`lateral_outside="edge"`, counted in `n_outside_lateral`
+and logged), set to 0 (`"zero"`) or rejected (`"raise"`). Without `cce_lateral` the CCE is
+position-independent, as before. Assumptions: CCE(LET, r) = CCE(LET) f(r) (separable, f
+from the scan's alpha-stripe generation), the centroid stands for the whole track. The
+default 2D device is laterally uniform, so its scan gives f = 1 (no edge physics); a
+structure with an edge does: the guard-ring device (`alternative_structures.
+create_guard_ring_device`, SV half-width 50 µm, 3 µm gap, 10 V, anode read-out) gives
+f = 0.9959 at 41 µm, 0.977 at 46 µm and 0.49 at 51.5 µm (middle of the gap;
+`lab/edge_cce/notes/LOG.md`).
+`run_microdosimetry` does not apply it (it has no CCE step).
 
 ### Batches and sweeps
 
@@ -677,7 +731,8 @@ Which solver runs:
   (CCE <= 1e-9, measured <= 7.5e-12 with Auger on).
 - **2D dark current** (`etna.core.optimization.get_dark_current_2d`): a device the 2D
   engine accepts is laterally uniform, so its current is the 1D engine's J times the SV
-  area (vs the devsim 2D solve: 2.4e-7 / 3.3e-7, the f_depl node field discretisation;
+  area (vs the devsim 2D solve: 2.3e-5 / 5.0e-6 since the Hurkx Gamma, 2.4e-7 / 3.3e-7
+  before; the node field discretisation entering f_depl and Gamma(E);
   `tests/test_dark_current_2d_engine.py`); otherwise devsim 2D.
 - **Incomplete ionization** (`incomplete_ionization=True`, §5.3): the 1D C-V/CCE engine
   and the 2D engine solve it; dark current, FLASH, fluence and C-V-at-fluence go to
@@ -1001,7 +1056,7 @@ run is whatever `DeviceConfig()` / the core defaults are now, unless they pin a 
 | 06_temperature_dependence      | material properties and CCE vs T               |                                                                                                                                                         |
 | 07_dark_current                | TAT / SRH / surface terms                      |                                                                                                                                                         |
 | 08_transient_flash             | FLASH pulse transients                         | generator `create_notebook_08.py`                                                                                                                       |
-| 09_radiation_damage            | defect introduction, lifetimes, NIEL scaling   | kappa placeholders                                                                                                                                      |
+| 09_radiation_damage            | defect introduction, lifetimes, NIEL scaling   | markdown still says NIEL placeholders / kappa 0.35 (SR-NIEL since 2026-10-20)                                                                                                                                      |
 | 10_cce_vs_fluence              | CCE degradation vs fluence                     |                                                                                                                                                         |
 | 11_dark_current_cv_evolution   | leakage and C-V vs fluence                     |                                                                                                                                                         |
 | 12_multi_defect_comparison     | 3-defect vs single-defect models               |                                                                                                                                                         |

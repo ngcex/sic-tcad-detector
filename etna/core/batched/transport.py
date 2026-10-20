@@ -186,6 +186,7 @@ class ContinuityBatch:
         max_iter=50,
         poisson_tol=1e-8,
         G_fn=None,
+        srh_scale_fn=None,
     ):
         """Gummel iteration from a converged Poisson state psi (B, N).
 
@@ -197,6 +198,10 @@ class ContinuityBatch:
         field: the frozen-field fixed point of etna.core.dark_current.
         _resolve_self_consistent. The generation of the last iteration is returned in
         ``TransportResult.G``.
+        srh_scale_fn: optional field-dependent SRH enhancement, ``srh_scale_fn(psi_T)
+        -> (N, B)``, re-evaluated like G_fn: U_SRH is multiplied by it (tau ->
+        tau / scale; the Hurkx (1 + Gamma) of the dark-current model). None = off,
+        every expression unchanged (FLASH path bit-identical).
         tol: relative change of the cathode current between successive Gummel
         iterations (and of psi [V_t], n, p, floored at 2*poisson_tol).
         """
@@ -234,6 +239,12 @@ class ContinuityBatch:
         for it in range(1, max_iter + 1):
             if G_fn is not None:
                 G_T = G_opt + G_fn(psi_T)
+            if srh_scale_fn is not None:
+                inv_scale = 1.0 / srh_scale_fn(psi_T)
+                tau_n, tau_p = (
+                    self.tau_n[None, :] * inv_scale,
+                    self.tau_p[None, :] * inv_scale,
+                )
             denom = tau_p * (n_T + n1) + tau_n * (p_T + p1)
             n_new = self._solve_carrier(
                 psi_T, p_T, "n", G_T, denom, self.n_bc, aug(n_T, p_T)

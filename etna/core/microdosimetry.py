@@ -37,8 +37,10 @@ def mean_chord_length(sv_thickness_um, sv_width_um=None, sv_depth_um=None):
 
     For a rectangular parallelepiped: l_bar = 4V/S (Cauchy's theorem,
     valid for convex bodies under isotropic irradiation).
-    If only thickness given: slab approximation l_bar = 2*thickness
-    (valid when lateral dimensions >> thickness).
+    If width or depth is missing: slab approximation l_bar = 2*thickness
+    (valid when lateral dimensions >> thickness). run_microdosimetry passes both
+    (depth defaults to the width there, audit-v7 D-15 follow-up); a width alone
+    still gives the slab value here (estimate_noise_floor relies on that).
 
     Parameters
     ----------

@@ -9,11 +9,15 @@ charge collection pipeline.  Provides:
 - Batch CCE(LET) lookup for fast ensemble processing (1000+ events/sec)
 - Pulse height distribution histogram
 
-Positions are loaded and unit-converted but NOT used: both paths reduce an event to
-LET = sum(edep) / sv_thickness and apply a position-independent CCE (the full path
-places every track at ``x_ion_cm``). Lateral / edge collection losses of the 2D work
-(charge_collection_2d.cce_lateral_scan) do not enter the spectrum (audit-v7 B-11,
-open as a model change).
+Positions: both paths reduce an event to LET = sum(edep) / sv_thickness. The fast path
+can weight the CCE by the event's lateral position (``process_mc_ensemble(...,
+cce_lateral=...)``, audit-v7 B-11, 2026-10-20): the edep-weighted lateral centroid of
+the event is mapped onto a 2D lateral CCE scan (charge_collection_2d.cce_lateral_scan,
+normalised to its centre value). Without a map (the default) the CCE is
+position-independent. The full path still places every track at ``x_ion_cm``. The default
+2D device is laterally uniform (CCE(edge) / CCE(centre) = 1 by construction), so the map
+only carries edge physics when it comes from a structure that has an edge (finite p+,
+guard ring: alternative_structures).
 
 Two processing paths:
     - **Full path** (events_to_charge_profiles): calls ion_track_generation_2d
@@ -402,12 +406,102 @@ def events_to_charge_profiles(
 # ---------------------------------------------------------------------------
 
 
-def process_mc_ensemble(events_df, cce_interp, sv_thickness_um=10.0):
+def lateral_cce_factor(r_cm, cce_lateral, outside="edge"):
+    """Relative lateral collection f(r) = CCE(r) / CCE(0) of a 2D lateral scan.
+
+    ``cce_lateral``: a :func:`etna.core.charge_collection_2d.cce_lateral_scan` result
+    (or any dict with ``x_positions_cm`` from the SV centre outwards and
+    ``cce_values``); ``r_cm`` (array) distances from the SV centre, linearly
+    interpolated. Beyond the last scan position: ``outside="edge"`` uses the last value
+    (clamped), ``"zero"`` gives 0 (no collection outside the scanned device), ``"raise"``
+    raises ValueError. Returns (f, n_outside).
+    """
+    x = np.asarray(cce_lateral["x_positions_cm"], dtype=float)
+    c = np.asarray(cce_lateral["cce_values"], dtype=float)
+    if x.ndim != 1 or x.size < 2 or x.shape != c.shape:
+        raise ValueError(
+            "cce_lateral needs 1D x_positions_cm / cce_values of equal length"
+        )
+    if np.any(np.diff(x) <= 0) or x[0] != 0.0:
+        raise ValueError("cce_lateral x_positions_cm must start at 0 and increase")
+    if not (np.all(np.isfinite(c)) and c[0] > 0):
+        raise ValueError("cce_lateral cce_values must be finite with CCE(0) > 0")
+    if outside not in ("edge", "zero", "raise"):
+        raise ValueError(f"outside must be 'edge', 'zero' or 'raise' (got {outside!r})")
+    r = np.abs(np.asarray(r_cm, dtype=float))
+    beyond = r > x[-1]
+    n_out = int(np.sum(beyond))
+    if n_out and outside == "raise":
+        raise ValueError(
+            f"{n_out} events lie beyond the lateral CCE scan ({x[-1] * 1e4:g} um)"
+        )
+    f = np.interp(r, x, c / c[0])
+    if outside == "zero":
+        f = np.where(beyond, 0.0, f)
+    return f, n_out
+
+
+def event_lateral_distance(events_df, sv_center_cm=(0.0, 0.0), metric="chebyshev"):
+    """Per-event lateral distance (cm) of the edep-weighted hit centroid from the SV
+    centre, indexed by event_id (sorted, as ``groupby``).
+
+    Lateral plane = (x_cm, y_cm); depth = z_cm (the loaders' convention). ``metric``:
+    ``"chebyshev"`` max(|dx|, |dy|) (square SV: distance towards the nearest side, so a
+    1D centre-to-edge scan applies along both axes), ``"radial"`` hypot(dx, dy) (round
+    SV), ``"x"`` |dx| (strip SV, edges along x only). Events with zero total edep get
+    the plain mean position.
+    """
+    if metric not in ("chebyshev", "radial", "x"):
+        raise ValueError(
+            f"metric must be 'chebyshev', 'radial' or 'x' (got {metric!r})"
+        )
+    cols = ["x_cm", "y_cm"] if metric != "x" else ["x_cm"]
+    missing = [c for c in cols if c not in events_df.columns]
+    if missing:
+        raise ValueError(f"lateral CCE weighting needs position columns {missing}")
+    w = events_df["edep_keV"].clip(lower=0.0)
+    g = events_df.assign(_w=w)
+    out = {}
+    tot = g.groupby("event_id")["_w"].sum()
+    for i, c in enumerate(cols):
+        num = (g[c] * g["_w"]).groupby(g["event_id"]).sum()
+        mean = g.groupby("event_id")[c].mean()
+        has_w = tot.values > 0
+        safe = np.where(has_w, tot.values, 1.0)
+        centroid = np.where(has_w, num.values / safe, mean.values)
+        out[c] = centroid - float(sv_center_cm[i])
+    if metric == "x":
+        d = np.abs(out["x_cm"])
+    elif metric == "radial":
+        d = np.hypot(out["x_cm"], out["y_cm"])
+    else:
+        d = np.maximum(np.abs(out["x_cm"]), np.abs(out["y_cm"]))
+    return pd.Series(d, index=tot.index)
+
+
+def process_mc_ensemble(
+    events_df,
+    cce_interp,
+    sv_thickness_um=10.0,
+    cce_lateral=None,
+    sv_center_cm=(0.0, 0.0),
+    lateral_metric="chebyshev",
+    lateral_outside="edge",
+):
     """Process MC events through CCE(LET) lookup table.
 
     Groups step-level data by event_id, computes effective LET per event,
     applies the pre-computed CCE interpolation function, and returns
     collected energy per event.
+
+    Lateral (edge) weighting, optional (audit-v7 B-11): with ``cce_lateral`` (a
+    :func:`etna.core.charge_collection_2d.cce_lateral_scan` result) each event's CCE is
+    CCE(LET) x f(r), f = CCE_2D(r) / CCE_2D(0) (lateral_cce_factor), r the distance of
+    its edep-weighted lateral centroid from ``sv_center_cm`` (event_lateral_distance,
+    ``lateral_metric``). Normalising to the centre keeps the CCE(LET) table (a centre /
+    1D quantity) from being counted twice. Assumption: separable CCE(LET, r) = CCE(LET)
+    f(r), with f from the scan's own (alpha-stripe) generation; the centroid stands for
+    the whole track (tracks crossing the edge are averaged, not split).
 
     Parameters
     ----------
@@ -420,6 +514,16 @@ def process_mc_ensemble(events_df, cce_interp, sv_thickness_um=10.0):
         counted in ``n_clamped`` and logged: their CCE is the table edge value.
     sv_thickness_um : float
         Sensitive volume thickness for LET computation (um).
+    cce_lateral : dict, optional
+        Lateral CCE scan (``x_positions_cm``, ``cce_values``); None = no lateral
+        weighting (position-independent CCE, the behaviour before 2026-10-20).
+    sv_center_cm : (float, float)
+        SV centre in the event (x_cm, y_cm) frame. Default (0, 0).
+    lateral_metric : {"chebyshev", "radial", "x"}
+        Lateral distance of event_lateral_distance. Default "chebyshev" (square SV).
+    lateral_outside : {"edge", "zero", "raise"}
+        Events beyond the last scan position (lateral_cce_factor). Default "edge"
+        (clamped, counted in ``n_outside_lateral`` and logged).
 
     Returns
     -------
@@ -432,6 +536,9 @@ def process_mc_ensemble(events_df, cce_interp, sv_thickness_um=10.0):
         - n_zero_energy : int -- number of events with zero/negative energy
         - n_clamped : int -- events with LET outside the CCE table (edge CCE used);
           0 when cce_interp carries no range
+        - event_lateral_factor : ndarray -- f(r) per event (1 without cce_lateral)
+        - event_lateral_distance_cm : ndarray or None -- r per event
+        - n_outside_lateral : int -- events beyond the lateral scan (0 without it)
     """
     # Sum energy per event
     event_totals = events_df.groupby("event_id")["edep_keV"].sum()
@@ -487,6 +594,24 @@ def process_mc_ensemble(events_df, cce_interp, sv_thickness_um=10.0):
         else np.array([cce_interp(let) for let in LET])
     )
 
+    # Lateral (edge) weighting of the CCE by the event position (audit-v7 B-11)
+    f_lat = np.ones(len(LET))
+    r_evt = None
+    n_out = 0
+    if cce_lateral is not None:
+        r_all = event_lateral_distance(events_df, sv_center_cm, lateral_metric)
+        r_evt = r_all.reindex(event_totals.index).to_numpy()[mask_positive]
+        f_lat, n_out = lateral_cce_factor(r_evt, cce_lateral, outside=lateral_outside)
+        if n_out:
+            logger.warning(
+                "%d of %d events lie beyond the lateral CCE scan (%g um): %s",
+                n_out,
+                len(LET),
+                float(np.max(cce_lateral["x_positions_cm"])) * 1e4,
+                "edge value used" if lateral_outside == "edge" else "CCE set to 0",
+            )
+        CCE = CCE * f_lat
+
     # Collected energy
     E_collected = CCE * energies_pos
 
@@ -498,6 +623,9 @@ def process_mc_ensemble(events_df, cce_interp, sv_thickness_um=10.0):
         "n_events": int(len(energies_pos)),
         "n_zero_energy": n_zero,
         "n_clamped": n_clamped,
+        "event_lateral_factor": f_lat,
+        "event_lateral_distance_cm": r_evt,
+        "n_outside_lateral": n_out,
     }
 
 

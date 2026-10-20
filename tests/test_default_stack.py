@@ -47,7 +47,7 @@ def test_one_source_of_truth():
     assert c.L_transition_um == 0.463863
     assert c.buffer_thickness_um == 1.136634
     assert c.buffer_end_doping == DEFAULT_STACK["buffer_end_doping"] == 4.516421e16
-    assert c.N_t == SiC4H_Parameters().N_t == DEFAULT_STACK["N_t"] == 2.849024e12
+    assert c.N_t == SiC4H_Parameters().N_t == DEFAULT_STACK["N_t"] == 1.355575e12
     assert c.E_t == SiC4H_Parameters().E_t == DEFAULT_STACK["E_t"] == 0.67
     assert core_device2d._N_D_JUNCTION_DEFAULT == DEFAULT_STACK["N_D_junction"]
     assert core_device2d._N_D_BULK_DEFAULT == DEFAULT_STACK["N_D_bulk"]
@@ -73,7 +73,7 @@ def test_one_source_of_truth():
         0.987,
     )
     assert p.buffer_thickness_um is None and p.buffer_end_doping is None
-    assert (p.N_t, p.E_t) == (2.805336e12, 0.67)
+    assert (p.N_t, p.E_t) == (1.343970e12, 0.67)
     # device_kwargs always carries the transition keys (None = abrupt epi end)
     kp = device_kwargs(p)
     assert kp["buffer_thickness_cm"] is None and kp["buffer_end_doping"] is None
@@ -142,8 +142,11 @@ def test_legacy_preset_reproduces_the_pre_flip_numbers():
         # 1.5958223017 5.9621516945 10.4615603668 14.5641749059; mobilities at N_D_bulk
         # (2026-10-17): 1.5988415042 5.9622111020 10.4615631238 14.5641756901 before;
         # local per-node mobility (p+ electrons at their own 1e19, A-03; 2026-10-18):
-        # 1.5989592488465492 5.962238289889233 10.461588518070496 14.564200940400156 before
-        [1.5940349754412595, 5.957760064773854, 10.457105099357713, 14.5597135908548],
+        # 1.5989592488465492 5.962238289889233 10.461588518070496 14.564200940400156 before;
+        # Hurkx (1 + Gamma) TAT enhancement since 2026-10-20 (audit-v7 B-08, legacy N_t kept
+        # at 2.8e12): 1.5940349754412595 5.957760064773854 10.457105099357713
+        # 14.5597135908548 before
+        [2.230295091286459, 8.486284044021607, 15.400318635481002, 23.14546081621414],
         rtol=1e-9,
     )
     assert d.metadata["N_t"] == 2.8e12 and d.metadata["E_t"] == 0.65
@@ -156,8 +159,8 @@ def test_default_numbers_are_the_measured_cv_record():
     reach-through 3.1 V (edge within one L_D of the transition start), CCE 0.9994734 /
     0.9998111 / 0.9998832 at -10 / -30 / -50 V (local per-node mobility since 2026-10-18,
     A-03; scalar epi mobility before: 0.9994722 / 0.9998104 / 0.9998829), dark 6.296 /
-    15.763 / 18.000 pA (4 mm2; N_t refitted to the 18 pA bound; 17.99985 pA at -60 V
-    with the local mobility)."""
+    15.763 / 18.000 pA before the Hurkx Gamma, 3.992 / 11.880 / 18.000 pA since
+    2026-10-20 (4 mm2; N_t refitted to the 18 pA bound)."""
     c = DeviceConfig()
     cv = sim.run_cv(c, 0.0, -30.0, 31)
     WC = np.asarray(cv.metadata["W_from_C"]) * 1e4
@@ -173,7 +176,7 @@ def test_default_numbers_are_the_measured_cv_record():
     np.testing.assert_allclose(cce.y, [0.9994734, 0.9998111, 0.9998832], atol=1e-7)
     d = sim.run_dark_current(c, 0.0, -60.0, 7)  # default area: 4 mm2
     np.testing.assert_allclose(
-        d.y[[1, 3, 6]] * 1e12, [6.296, 15.763, 18.000], atol=1e-3
+        d.y[[1, 3, 6]] * 1e12, [3.9919, 11.8799, 18.000], atol=1e-3
     )
 
 
@@ -181,7 +184,7 @@ def test_previous_default_numbers_are_the_calibration_record():
     """Previous default (nplus_calibrated_config; 2026-10-17 record, on the small-signal
     C; lab/solver2d/notes/LOG.md): eps*A/C 1.700 / 9.500 (inputs) / 9.979 um (out of fit,
     +2.56 %), depletion edge 1.689 / 9.267 / 9.896 um, dark 6.077 / 14.720 / 18.000 pA
-    (4 mm2). Previous record (edge calibration): edge 1.700 / 9.500 / 9.899,
+    (4 mm2; 4.138 / 11.231 / 18.000 pA with the Hurkx Gamma and its N_t refit, 2026-10-20). Previous record (edge calibration): edge 1.700 / 9.500 / 9.899,
     CCE 0.999021 / 0.999706 / 0.999819, dark 6.132 / 14.873 / 18.000, reach-through 10.3 V.
     """
     c = nplus_calibrated_config()
@@ -201,7 +204,7 @@ def test_previous_default_numbers_are_the_calibration_record():
     np.testing.assert_allclose(cce.y, [0.9993150, 0.9998155, 0.9998862], atol=1e-7)
     d = sim.run_dark_current(c, 0.0, -60.0, 7)  # default area: 4 mm2
     np.testing.assert_allclose(
-        d.y[[1, 3, 6]] * 1e12, [6.077, 14.720, 18.000], atol=1e-3
+        d.y[[1, 3, 6]] * 1e12, [4.1382, 11.2307, 18.000], atol=1e-3
     )
 
 
@@ -231,7 +234,11 @@ def test_legacy_dark_sweep_truncation_is_honest_and_the_plateau_smooth():
     assert len(d.y) == len(d.x) and np.all(np.isfinite(d.y))
     plateau = d.y[d.x <= -60.0]
     assert len(plateau) >= 3
-    assert np.all(np.diff(plateau) >= 0) and plateau[-1] / plateau[0] - 1 < 1e-3
+    # smooth and monotonic; no longer flat since the Hurkx (1 + Gamma) enhancement
+    # (2026-10-20: +34 % from -60 to -100 V, was < 1e-3)
+    step = np.diff(plateau)
+    assert np.all(step > 0)
+    assert np.max(np.abs(np.diff(step))) < 0.1 * np.mean(step)
     # ... but past reach-through the contact sits in depleted epi: flagged per point
     rt = d.metadata["reach_through_V"]
     assert rt == pytest.approx(run_cv_legacy_reach_through(), abs=1e-9)

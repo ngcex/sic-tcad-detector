@@ -94,7 +94,7 @@ DEFAULT_STACK = {
     "L_transition": 0.4638630e-4,
     "buffer_thickness_cm": 1.136634e-4,  # graded n-/n+ transition before the epi end
     "buffer_end_doping": 4.516421e16,  # N_D at the epi end (log-linear rise from the epi value)
-    "N_t": SiC4H_Parameters.N_t,  # 2.849024e12
+    "N_t": SiC4H_Parameters.N_t,  # 1.355575e12 (2.849024e12 before the Hurkx Gamma)
     "E_t": SiC4H_Parameters.E_t,  # 0.67
 }
 # Historical name of the same record (the opt-in preset before the 2026-10-18 flip).
@@ -135,7 +135,7 @@ NPLUS_CALIBRATION = {
     "L_transition": 0.987e-4,  # held, not fitted
     "buffer_thickness_cm": None,  # abrupt epi/n+ step
     "buffer_end_doping": None,
-    "N_t": 2.805336e12,
+    "N_t": 1.343970e12,  # Hurkx refit 2026-10-20 (was 2.805336e12: 37.572 pA)
     "E_t": 0.67,
 }
 
@@ -394,13 +394,15 @@ MEASURED_CV_TABULATED_STACK = {
     "L_transition": DEFAULT_STACK["L_transition"],  # unused with a table
     "buffer_thickness_cm": None,  # the table carries the n-/n+ rise
     "buffer_end_doping": None,
-    "N_t": 2.849219e12,  # refit (lab/tabulated_profile/notes/LOG.md section 4)
+    "N_t": 1.356120e12,  # Hurkx refit 2026-10-20 (was 2.849219e12: 37.818 pA)
     "E_t": DEFAULT_STACK["E_t"],
 }
 
 # LEGACY model (the default before the n+ flip, 2026-10-17), kept so old numbers stay reproducible:
 # cathode contact directly on the n- epi (no n+; non-convergence wall at deep reverse bias,
 # a contact artefact), p+ 1 um, the old DeviceConfig doping, N_t 2.8e12, E_t 0.65.
+# N_t is NOT refitted for the Hurkx Gamma (2026-10-20): the legacy dark current at -60 V
+# is 37.37 pA now (17.957 pA before), the historical N_t is kept as the record.
 # etna.api.device.legacy_config() builds the DeviceConfig; pinned by tests/test_default_stack.py.
 LEGACY_STACK = {
     "substrate_thickness_cm": 1e-4,

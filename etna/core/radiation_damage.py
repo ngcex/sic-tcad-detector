@@ -11,7 +11,8 @@ Pure-Python module (NO devsim dependency) implementing:
 All units in CGS (cm, cm^-3, eV, s) per project convention.
 Defect parameters from Burin et al., arXiv:2407.16710 (2024).
 
-NIEL hardness factors are placeholders pending SR-NIEL calculator lookup.
+NIEL hardness factors: SR-NIEL proton NIEL (data/niel/, 1-1000 MeV), Si-normalised
+1-MeV-neq convention of the introduction-rate source; see NIEL_HARDNESS_PROTON_SIC.
 The module works with any NIEL table -- values are data, not code.
 
 References:
@@ -25,6 +26,11 @@ import logging
 
 import numpy as np
 
+from etna.core.niel_tables import (
+    NIEL_NEUTRON_1MEV_SI_MEV_CM2_G,
+    SR_NIEL_PROTON_SI,
+    SR_NIEL_PROTON_SIC,
+)
 from etna.core.sic_material import SiC4H_Parameters
 
 logger = logging.getLogger(__name__)
@@ -41,29 +47,67 @@ _M_H_DOS = _sic.m_h_dos  # 1.0 m0
 
 
 # ---------------------------------------------------------------------------
-# NIEL hardness factors for protons in SiC
-# kappa(E) = NIEL_proton(E) / NIEL_neutron_SiC(1 MeV)
-# AUDIT C-5 (v5, 2026-06) -- DATA-BLOCKED, NOT YET FIXED. These are unvalidated
-# placeholders; kappa multiplies fluence everywhere (fluence_neq = fluence_proton
-# * kappa), so ALL absolute proton-damage and Phi_crit numbers ride on them.
-# The energy TREND is correct, but no ABSOLUTE Phi_crit / defect-concentration
-# number is citable until these are replaced.
-#   NOTE: the v5 audit REFUTED the "~3-5x too small / should be ~1-2" claim --
-#   that arose from comparing against SILICON-normalized factors. The denominator
-#   here is correctly the SiC 1-MeV-neutron NIEL (the right reference for a SiC
-#   simulator), which is ~2.5-3x larger than silicon's, so SiC-normalized proton
-#   kappa of ~0.3-0.5 is PLAUSIBLE. The residual issue is that they are
-#   unvalidated and may be off by tens of percent.
-# FIX REQUIRES EXTERNAL DATA (do not fabricate): SR-NIEL SiC proton NIEL at the
-# four beam energies, expressed as kappa(E)=NIEL_proton(E)/NIEL_neutron_SiC(1MeV);
-# document the SiC-neutron normalization explicitly. See PHYSICS_AUDIT_v5.md C-5.
+# NIEL hardness factors for protons (audit C-5 / audit-v7 B-07, 2026-10-20)
+#
+# DATA: SR-NIEL-7 ver. 11.1 proton NIEL (Hadron + Coulomb, no hadronic scaling,
+# Robinson partition), fetched 2026-10-20, raw pages + CSVs + script in data/niel/
+# (README there has the provenance and the convention argument). 59 energies,
+# 1-1000 MeV, interpolated log-log. Replaces the four 30-150 MeV placeholders
+# (0.50 / 0.35 / 0.33 / 0.22).
+#
+# CONVENTION (default table): kappa(E) = NIEL_p,Si(E) / NIEL_n,Si(1 MeV), with the
+# ASTM E722 normalisation 95 MeV mb = 2.037e-3 MeV cm^2/g. This is the convention of
+# the 1-MeV-neq fluence the introduction rates below are quoted in: Burin et al.
+# (arXiv:2407.16710) fit TRIGA reactor-neutron data labelled in neq (Gsponer et al.,
+# arXiv:2310.02047), and the same group converts protons with SILICON NIEL
+# (Radmanovac et al., arXiv:2510.11304: 252.7 MeV, k ~ 0.9; SR-NIEL here: 0.855).
+# kappa(62 MeV) = 1.942, kappa(5.6 MeV) = 6.672, kappa(150 MeV) = 1.119.
+#
+# WHAT IS STILL OPEN: the factor that maps a proton fluence onto the SiC damage of the
+# reactor-neutron calibration equals this Si ratio only if the SiC/Si NIEL ratio of the
+# protons (r_p, measured here: 0.94 at 5.6 MeV, 0.85 at 62 MeV, 0.82 at 150 MeV, see
+# niel_ratio_sic_si) equals that of the reactor neutrons (r_n). r_n is NOT available
+# offline (SR-NIEL's NJOY SiC neutron calculator needs a registered login; no open
+# table found) and is not fabricated. If r_n > r_p (lighter C recoils), this kappa
+# OVERSTATES the SiC damage per proton by r_n / r_p. This reopens the v5 C-5 note that
+# "SiC-normalised kappa ~0.3-0.5 is plausible": that note assumed SiC-neq rates, while
+# the rate source is Si-neq labelled. The old placeholders were 3.5-5.5x lower.
+# Known systematic: measured Si proton hardness factors are 35-50 % below the NIEL
+# prediction at 10-25 MeV (arXiv:2408.12410), i.e. at and below the 5.6 MeV default.
 # ---------------------------------------------------------------------------
+
+# Proton NIEL (MeV cm^2/g) by energy (MeV), SR-NIEL, E_d = 21 eV
+NIEL_PROTON_SI: dict[float, float] = dict(SR_NIEL_PROTON_SI)
+NIEL_PROTON_SIC: dict[float, float] = dict(SR_NIEL_PROTON_SIC)
+
 NIEL_HARDNESS_PROTON_SIC: dict[float, float] = {
-    30: 0.50,  # placeholder -- obtain from SR-NIEL (SiC-neutron normalized)
-    62: 0.35,  # placeholder -- obtain from SR-NIEL (SiC-neutron normalized)
-    70: 0.33,  # placeholder -- obtain from SR-NIEL (SiC-neutron normalized)
-    150: 0.22,  # placeholder -- obtain from SR-NIEL (SiC-neutron normalized)
+    E: niel / NIEL_NEUTRON_1MEV_SI_MEV_CM2_G for E, niel in NIEL_PROTON_SI.items()
 }
+"""Default proton hardness factors (Si-normalised 1-MeV-neq, see the block above).
+The name is kept for API compatibility: these are the factors used for SiC devices,
+computed with the silicon NIEL convention of the introduction-rate source."""
+
+
+def niel_ratio_sic_si(energy_MeV: float) -> float:
+    """SiC/Si proton NIEL ratio r_p(E) (SR-NIEL, both E_d = 21 eV), log-log
+    interpolated; 1-1000 MeV, ValueError outside. The SiC analogue of the default
+    kappa is kappa(E) * r_p(E) / r_n with the (unavailable) reactor-neutron ratio r_n."""
+    return _loglog(energy_MeV, NIEL_PROTON_SIC) / _loglog(energy_MeV, NIEL_PROTON_SI)
+
+
+def _loglog(energy_MeV: float, table: dict) -> float:
+    """log-log interpolation of a positive table; ValueError outside its range."""
+    energies = np.array(sorted(table), dtype=float)
+    values = np.array([table[e] for e in sorted(table)], dtype=float)
+    E = float(energy_MeV)
+    if not (np.isfinite(E) and energies[0] <= E <= energies[-1]):
+        raise ValueError(
+            f"energy_MeV={energy_MeV!r} is outside the NIEL table "
+            f"[{energies[0]:g}, {energies[-1]:g}] MeV; no extrapolation"
+        )
+    if np.any(values <= 0):
+        return float(np.interp(E, energies, values))
+    return float(np.exp(np.interp(np.log(E), np.log(energies), np.log(values))))
 
 
 @dataclass
@@ -407,11 +451,11 @@ def compute_K_tau(
 def get_hardness_factor(energy_MeV: float, niel_table: dict | None = None) -> float:
     """Get NIEL hardness factor for a given proton energy.
 
-    Uses linear interpolation between table entries for intermediate energies.
-    Outside the table (30-150 MeV for the default) np.interp returns the edge value:
-    the result is kappa(30 MeV) below 30 MeV and kappa(150 MeV) above. That is NOT an
-    extrapolation (proton NIEL in SiC rises steeply below ~30 MeV); a warning is
-    logged once per energy (audit-v7 B-07, open: the API default 5.6 MeV lies there).
+    Log-log interpolation between table entries (NIEL is close to a power law in E).
+    Outside the table a ValueError is raised: no extrapolation and no silent edge
+    clamping (audit-v7 B-07; before 2026-10-20 the default 30-150 MeV placeholder table
+    returned kappa(30 MeV) for the 5.6 MeV API default). The default table covers
+    1-1000 MeV (SR-NIEL, data/niel/), so 5.6 MeV is inside it.
 
     Parameters
     ----------
@@ -419,36 +463,22 @@ def get_hardness_factor(energy_MeV: float, niel_table: dict | None = None) -> fl
         Proton energy (MeV).
     niel_table : dict, optional
         Mapping energy (MeV) -> hardness factor. Defaults to
-        NIEL_HARDNESS_PROTON_SIC.
+        NIEL_HARDNESS_PROTON_SIC (Si-normalised 1-MeV-neq factors, see the module
+        block above it for the convention and its open SiC/Si assumption).
 
     Returns
     -------
     float
         Hardness factor (dimensionless).
+
+    Raises
+    ------
+    ValueError
+        ``energy_MeV`` outside the table range (or not finite).
     """
     if niel_table is None:
         niel_table = NIEL_HARDNESS_PROTON_SIC
-    energies = sorted(niel_table.keys())
-    factors = [niel_table[e] for e in energies]
-    if not (energies[0] <= energy_MeV <= energies[-1]):
-        key = (float(energy_MeV), energies[0], energies[-1])
-        if key not in _WARNED_OUT_OF_TABLE:
-            _WARNED_OUT_OF_TABLE.add(key)
-            edge = energies[0] if energy_MeV < energies[0] else energies[-1]
-            logger.warning(
-                "get_hardness_factor: %g MeV is outside the NIEL table [%g, %g] MeV; "
-                "using kappa(%g MeV) = %g (edge value, not an extrapolation)",
-                energy_MeV,
-                energies[0],
-                energies[-1],
-                edge,
-                niel_table[edge],
-            )
-    return float(np.interp(energy_MeV, energies, factors))
-
-
-# (energy, table min, table max) already warned about by get_hardness_factor
-_WARNED_OUT_OF_TABLE: set = set()
+    return _loglog(energy_MeV, niel_table)
 
 
 def scale_to_proton_energy(

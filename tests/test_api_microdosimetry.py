@@ -94,15 +94,33 @@ def test_meaningless_inputs_raise_instead_of_silent_spectrum(csv, kwargs, match)
         run_microdosimetry(DeviceConfig(), mc_csv_path=io.BytesIO(csv), **kwargs)
 
 
-def test_sv_width_does_not_enter_l_bar():
-    """audit-v7 D-15: with width alone mean_chord_length is the slab value 2 t, so the
-    facade default (150 um) and DESIGN-2's 100 um SV give the same l_bar."""
+def test_finite_sv_cauchy_chord_length_uses_the_width():
+    """audit-v7 D-15 follow-up: the facade's l_bar is Cauchy's 4V/S for the finite box
+    (square footprint by default), so sv_width_um now changes l_bar and y. Fails on the
+    old behaviour (slab l_bar = 2 t = 20 um for every width)."""
     from etna.core.microdosimetry import mean_chord_length
 
     default = run_microdosimetry(DeviceConfig(), mc_csv_path=str(MC_CSV_PATH))
-    design2 = run_microdosimetry(
-        DeviceConfig(), mc_csv_path=str(MC_CSV_PATH), sv_width_um=100.0
+    wide = run_microdosimetry(
+        DeviceConfig(), mc_csv_path=str(MC_CSV_PATH), sv_width_um=150.0
     )
-    assert default.metadata["l_bar_um"] == design2.metadata["l_bar_um"] == 20.0
-    assert mean_chord_length(10.0, sv_width_um=100.0) == 20.0
-    np.testing.assert_array_equal(default.y, design2.y)
+    slab = run_microdosimetry(
+        DeviceConfig(), mc_csv_path=str(MC_CSV_PATH), chord_model="slab"
+    )
+    # DESIGN-2 SV 100 x 100 x 10 um: 4 * 1e5 / (2 * (1e3 + 1e4 + 1e3)) = 16.667 um
+    assert default.metadata["l_bar_um"] == pytest.approx(100.0 / 6.0, rel=1e-12)
+    assert default.metadata["l_bar_um"] == mean_chord_length(10.0, 100.0, 100.0)
+    assert wide.metadata["l_bar_um"] == pytest.approx(9e5 / 51e3, rel=1e-12)
+    assert slab.metadata["l_bar_um"] == 20.0
+    # y = epsilon / l_bar: the means scale by 2t / l_bar = 1.2 against the slab value
+    # (to the log-bin resolution of lineal_energy_spectrum)
+    assert default.metadata["y_F"] == pytest.approx(1.2 * slab.metadata["y_F"], rel=2e-3)
+    assert default.metadata["y_F"] > 1.1 * slab.metadata["y_F"]
+    # an explicit depth enters too (rectangular footprint)
+    rect = run_microdosimetry(
+        DeviceConfig(), mc_csv_path=str(MC_CSV_PATH), sv_depth_um=200.0
+    )
+    assert rect.metadata["l_bar_um"] == mean_chord_length(10.0, 100.0, 200.0)
+    assert rect.metadata["l_bar_um"] != default.metadata["l_bar_um"]
+    with pytest.raises(ValueError, match="chord_model"):
+        run_microdosimetry(DeviceConfig(), mc_csv_path=str(MC_CSV_PATH), chord_model="x")

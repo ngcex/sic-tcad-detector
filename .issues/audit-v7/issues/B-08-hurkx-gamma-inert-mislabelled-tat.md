@@ -3,7 +3,7 @@ id: B-08
 title: TAT "Hurkx field enhancement" is identically 1 at every reachable field; docs and labels overstate it (plus a discontinuous, suppressing Gamma branch)
 severity: low
 category: docs
-status: open 2026-10-18 (docs and labels done: cf64bef module docstring 'Gamma INACTIVE at detector fields', 91194a5 documents the discontinuous Kt<4 branch; the Gamma form itself is physics, owner Giada Petringa / INFN-LNS, see B-INDEX; I_TAT/J_TAT keys kept, renaming them is API churn with no numerical gain)
+status: fixed 2026-10-20 (fix/physics-b07-b08-b11-d15: Hurkx 1992 closed form, tau/(1+Gamma) on SRH and the effective generation, N_t refitted to 18 pA, engine parity kept)
 location: etna/core/dark_current.py:1-9 (module docstring), 143-153 (Kt), 206-211 (U_TAT), 268-298 (_compute_gamma_factors); etna/core/sic_material.py:66-67; tests/test_dark_current.py (TestGammaEnhancement)
 labels: [dark-current, tat, documentation, physics-honesty, raw-F8]
 ---

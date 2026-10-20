@@ -1412,16 +1412,18 @@ def run_radiation_damage(
         it are normally NaN with a reason - the 3x point always - to show where the
         model ends: compensation_fluence is a lower bound on the mesh threshold).
         Before 2026-10-18 the default was a fixed 1e13..1e16 grid, which lies
-        beyond the compensation fluence of the default stack (1.35e13 at 5.6 MeV)
-        and of the tabulated preset (5.2e12): 6 of 6 points were NaN.
+        beyond the compensation fluence of the default stack (1.35e13 at 5.6 MeV
+        with the placeholder kappa 0.5; 1.0e12 with the SR-NIEL kappa 6.67) and of
+        the tabulated preset: 6 of 6 points were NaN.
     V_bias : float
         Reverse bias (V, conventional-negative sign). Default -40.0.
     proton_energy_MeV : float
         Incident proton energy (MeV) used for the NIEL damage model.
-        Default 5.6. CAUTION: the NIEL hardness table covers 30-150 MeV only, so
-        5.6 MeV uses kappa(30 MeV) (edge value, logged); the result is that of a
-        30 MeV hardness factor labelled 5.6 MeV (audit-v7 B-07, open: physics
-        owner). Pass 30-150 MeV for an in-table energy.
+        Default 5.6. The SR-NIEL hardness table covers 1-1000 MeV (kappa(5.6 MeV)
+        = 6.67, Si-normalised 1-MeV-neq); outside it get_hardness_factor raises
+        ValueError (audit-v7 B-07; before 2026-10-20 a 30-150 MeV placeholder table
+        silently gave kappa(30 MeV) = 0.5 here). At 5.6 MeV NIEL scaling is known to
+        overpredict measured Si proton damage by tens of percent (data/niel/README.md).
 
     Returns
     -------
@@ -1436,12 +1438,14 @@ def run_radiation_damage(
 
     Warning
     -------
-    The NIEL kappa hardness factors in
-    `etna.core.radiation_damage` are DATA-BLOCKED placeholders, so the
-    absolute critical-fluence (Phi_crit) numbers produced here are
-    UNVALIDATED. Do NOT present these outputs as validated radiation-hardness
-    predictions — they are a relative sensitivity shape only until real
-    NIEL/damage-coefficient data replaces the placeholders.
+    The NIEL kappa hardness factors in `etna.core.radiation_damage` are SR-NIEL
+    proton NIEL data (data/niel/) in the Si-normalised 1-MeV-neq convention of the
+    introduction-rate source (Burin et al.). The SiC/Si NIEL ratio of the reactor
+    neutrons behind that calibration is NOT available, so the SiC-specific
+    normalisation is unvalidated (kappa may overstate the SiC damage per proton by
+    r_n / r_p); the defect introduction rates themselves are literature values with
+    a wide spread. Absolute critical-fluence (Phi_crit) numbers are therefore not
+    validated radiation-hardness predictions.
     """
     _require_1d(config, "run_radiation_damage")
 
@@ -2148,7 +2152,9 @@ def run_microdosimetry(
     config: DeviceConfig,
     mc_csv_path: "str | os.PathLike | IO",
     sv_thickness_um: float = 10.0,
-    sv_width_um: float = 150.0,
+    sv_width_um: float = 100.0,
+    sv_depth_um: "float | None" = None,
+    chord_model: str = "cauchy",
 ) -> SimResult:
     """Compute an ICRU-36 lineal energy spectrum from MC events (bucket-c).
 
@@ -2183,11 +2189,22 @@ def run_microdosimetry(
     sv_thickness_um : float
         Sensitive-volume thickness (um), finite and > 0. Default 10.0.
     sv_width_um : float
-        Sensitive-volume width (um), finite and > 0. Default 150.0. Currently has NO effect:
-        mean_chord_length uses the 3D Cauchy form 4V/S only when both width and
-        depth are given, so with width alone it returns the slab value
-        l_bar = 2 * sv_thickness_um (audit-v7 D-15; DESIGN-2's 100 um SV gives the
-        same l_bar). Whether to use a finite-SV l_bar is open (physics owner).
+        Sensitive-volume width (um), finite and > 0. Default 100.0, DESIGN-2's
+        validated SV (half-width 50 um; was 150 before 2026-10-20).
+    sv_depth_um : float, optional
+        Sensitive-volume depth (um), finite and > 0. Default None = ``sv_width_um``
+        (square footprint).
+    chord_model : {"cauchy", "slab"}
+        Mean chord length l_bar of the lineal energy y = epsilon / l_bar.
+        ``"cauchy"`` (default since 2026-10-20, audit-v7 D-15): Cauchy's theorem for
+        the finite box, l_bar = 4 V / S with V = w t d, S = 2 (w t + w d + t d)
+        (mean_chord_length with width and depth): 16.67 um for 100 x 100 x 10 um,
+        17.65 um for 150 x 150 x 10 um. ``"slab"``: the infinite-slab limit
+        l_bar = 2 t (20 um at t = 10 um; the value used before 2026-10-20, when the
+        width had no effect). Both are mean chords for ISOTROPIC (mu-randomness)
+        irradiation of a convex body; for a normally incident beam the chord is t
+        itself, which neither model gives. With the "cauchy" model y scales by
+        2 t / l_bar (x1.2 for the 100 x 100 x 10 um SV) relative to the slab value.
 
     Returns
     -------
@@ -2207,12 +2224,17 @@ def run_microdosimetry(
     """
     # Reject meaningless inputs instead of returning a plausible-looking empty /
     # NaN spectrum (audit C-09). Written as `not (x > 0)` so NaN is rejected too.
+    if sv_depth_um is None:
+        sv_depth_um = sv_width_um
     for name, value in (
         ("sv_thickness_um", sv_thickness_um),
         ("sv_width_um", sv_width_um),
+        ("sv_depth_um", sv_depth_um),
     ):
         if not (np.isfinite(value) and value > 0):
             raise ValueError(f"{name} must be finite and > 0 (got {value!r})")
+    if chord_model not in ("cauchy", "slab"):
+        raise ValueError(f"chord_model must be 'cauchy' or 'slab' (got {chord_model!r})")
 
     # Bucket-c: no TCAD solve at all. Load per-step events, aggregate to
     # per-event collected energy (this sum-by-event_id has no core analog).
@@ -2231,7 +2253,12 @@ def run_microdosimetry(
     if not np.any(collected_energies_keV > 0):
         raise ValueError("no event in the MC events CSV deposits any energy")
 
-    l_bar = mean_chord_length(sv_thickness_um, sv_width_um=sv_width_um)
+    if chord_model == "cauchy":
+        l_bar = mean_chord_length(
+            sv_thickness_um, sv_width_um=sv_width_um, sv_depth_um=sv_depth_um
+        )
+    else:
+        l_bar = mean_chord_length(sv_thickness_um)
     spec = lineal_energy_spectrum(collected_energies_keV, l_bar)
 
     return SimResult(
@@ -2244,6 +2271,8 @@ def run_microdosimetry(
             "y_D": spec["y_D"],
             "f_y": spec["f_y"],
             "l_bar_um": l_bar,
+            "chord_model": chord_model,
+            "sv_dimensions_um": (sv_width_um, sv_depth_um, sv_thickness_um),
         },
         mesh=None,
     )

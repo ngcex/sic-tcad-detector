@@ -3,7 +3,7 @@ id: B-11
 title: MC event hit positions are loaded and unit-converted but never used; per-event CCE ignores lateral position (edge effects absent from the spectrum)
 severity: low
 category: improvement
-status: partial 2026-10-18 (final-abd 79e3777: module docstring says positions are loaded but unused and lateral CCE does not enter the spectrum; load_cce_let_table exposes let_min/let_max and process_mc_ensemble counts/logs clamped events (n_clamped). Open: lateral-position weighting of the CCE is a model change, physics owner, see B-INDEX)
+status: fixed 2026-10-20 (fix/physics-b07-b08-b11-d15: opt-in lateral CCE map in process_mc_ensemble; the default 2D device is laterally uniform, f = 1)
 location: etna/core/mc_coupling.py:92-99 (convert_units), 314-384 (events_to_charge_profiles), 392-462 (process_mc_ensemble, LET warning at ~l.440); etna/core/charge_collection_2d.py:203+ (cce_lateral_scan), 326-394 (cce_heatmap_2d)
 labels: [microdosimetry, mc-coupling, 2d, improvement, raw-F11]
 ---

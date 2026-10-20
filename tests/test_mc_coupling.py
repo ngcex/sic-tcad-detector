@@ -216,7 +216,12 @@ class TestProcessMCEnsemble:
             "n_events",
             "n_zero_energy",
             "n_clamped",
+            "event_lateral_factor",
+            "event_lateral_distance_cm",
+            "n_outside_lateral",
         }
+        assert np.all(result["event_lateral_factor"] == 1.0)
+        assert result["event_lateral_distance_cm"] is None
         assert len(result["event_energies_keV"]) == 50
         assert result["n_events"] == 50
 
@@ -256,6 +261,68 @@ class TestProcessMCEnsemble:
             result = process_mc_ensemble(df, interp, sv_thickness_um=10.0)
         assert result["n_clamped"] == 2
         assert "outside the CCE table" in caplog.text
+
+    def test_lateral_edge_weighting_halves_the_edge_event(self, mock_cce_interp):
+        """audit-v7 B-11: same edep, one event at the SV centre and one at the edge of
+        a lateral map whose edge CCE is half the centre CCE -> collected 2x apart.
+        Fails on the old behaviour (positions ignored, identical collected energy)."""
+        scan = {
+            "x_positions_cm": np.array([0.0, 20e-4, 40e-4, 50e-4]),
+            "cce_values": np.array([0.98, 0.98, 0.735, 0.49]),
+        }
+        df = pd.DataFrame(
+            {
+                "event_id": [0, 0, 1, 1],
+                "x_cm": [-1e-4, 1e-4, 50e-4, 50e-4],  # centroid 0 / 50 um
+                "y_cm": [0.0, 0.0, 0.0, 0.0],
+                "z_cm": [1e-4, 5e-4, 1e-4, 5e-4],
+                "edep_keV": [100.0, 100.0, 100.0, 100.0],
+            }
+        )
+        plain = process_mc_ensemble(df, mock_cce_interp)
+        lat = process_mc_ensemble(df, mock_cce_interp, cce_lateral=scan)
+        np.testing.assert_allclose(plain["event_collected_keV"], [190.0, 190.0])
+        np.testing.assert_allclose(lat["event_lateral_factor"], [1.0, 0.5])
+        np.testing.assert_allclose(lat["event_collected_keV"], [190.0, 95.0])
+        assert lat["event_collected_keV"][0] == pytest.approx(
+            2.0 * lat["event_collected_keV"][1]
+        )
+        np.testing.assert_allclose(lat["event_lateral_distance_cm"], [0.0, 50e-4])
+        assert lat["n_outside_lateral"] == 0
+
+    def test_lateral_metric_centroid_and_outside(self, mock_cce_interp, caplog):
+        from etna.core.mc_coupling import event_lateral_distance, lateral_cce_factor
+
+        scan = {"x_positions_cm": np.array([0.0, 50e-4]), "cce_values": np.array([1.0, 0.5])}
+        df = pd.DataFrame(
+            {
+                "event_id": [0, 0, 1, 2],
+                # event 0: edep-weighted centroid x = (3*10 + 1*50)/4 = 20 um
+                "x_cm": [10e-4, 50e-4, 10e-4, 80e-4],
+                "y_cm": [0.0, 0.0, 30e-4, 0.0],
+                "z_cm": [0.0] * 4,
+                "edep_keV": [30.0, 10.0, 40.0, 40.0],
+            }
+        )
+        d = event_lateral_distance(df)  # chebyshev: max(|x|, |y|)
+        np.testing.assert_allclose(d.to_numpy(), [20e-4, 30e-4, 80e-4])
+        np.testing.assert_allclose(
+            event_lateral_distance(df, metric="radial").to_numpy()[1], np.hypot(10e-4, 30e-4)
+        )
+        np.testing.assert_allclose(
+            event_lateral_distance(df, sv_center_cm=(10e-4, 0.0), metric="x").to_numpy(),
+            [10e-4, 0.0, 70e-4],
+        )
+        with caplog.at_level("WARNING", logger="etna.core.mc_coupling"):
+            r = process_mc_ensemble(df, mock_cce_interp, cce_lateral=scan)
+        assert r["n_outside_lateral"] == 1 and "beyond the lateral CCE scan" in caplog.text
+        assert r["event_lateral_factor"][2] == 0.5  # clamped to the edge value
+        z = process_mc_ensemble(df, mock_cce_interp, cce_lateral=scan, lateral_outside="zero")
+        assert z["event_collected_keV"][2] == 0.0
+        with pytest.raises(ValueError, match="beyond the lateral CCE scan"):
+            process_mc_ensemble(df, mock_cce_interp, cce_lateral=scan, lateral_outside="raise")
+        with pytest.raises(ValueError, match="start at 0"):
+            lateral_cce_factor([0.0], {"x_positions_cm": [1e-4, 2e-4], "cce_values": [1, 1]})
 
     def test_constant_cce(self, sample_events_df, mock_cce_interp):
         """With CCE=0.95, collected = 0.95 * deposited for all events."""

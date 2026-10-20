@@ -248,20 +248,38 @@ class TestNIELScaling:
     """Tests for get_hardness_factor and scale_to_proton_energy."""
 
     def test_known_energies(self):
-        """Table energies return exact hardness factors."""
-        assert scale_to_proton_energy(1.0, 62) == pytest.approx(0.35)
+        """Table energies return the SR-NIEL Si-normalised factors exactly."""
+        from etna.core.niel_tables import NIEL_NEUTRON_1MEV_SI_MEV_CM2_G as n1
+
+        # SR-NIEL proton NIEL in Si at 62 MeV: 3.9558e-3 MeV cm^2/g
+        assert scale_to_proton_energy(1.0, 62) == pytest.approx(3.9558e-3 / n1)
+        assert n1 == pytest.approx(2.0370e-3, rel=1e-4)  # ASTM E722 95 MeV mb
 
     def test_interpolation(self):
-        """Intermediate energy returns interpolated value."""
-        kappa_50 = get_hardness_factor(50)
-        # 50 MeV between 30 (0.50) and 62 (0.35)
-        assert 0.35 < kappa_50 < 0.50
+        """Intermediate energy: log-log interpolation between the bracketing rows."""
+        kappa_57 = get_hardness_factor(57.0)
+        assert get_hardness_factor(60.0) < kappa_57 < get_hardness_factor(55.0)
+        e0, e1 = 55.0, 60.0
+        k0, k1 = get_hardness_factor(e0), get_hardness_factor(e1)
+        w = np.log(57.0 / e0) / np.log(e1 / e0)
+        assert kappa_57 == pytest.approx(np.exp((1 - w) * np.log(k0) + w * np.log(k1)))
 
-    def test_all_table_energies(self):
-        """All 4 energies return expected hardness factors."""
-        expected = {30: 0.50, 62: 0.35, 70: 0.33, 150: 0.22}
+    def test_sr_niel_values_replace_the_placeholders(self):
+        """audit C-5 / B-07: the factors are SR-NIEL data, not the old placeholders
+        (0.50 / 0.35 / 0.33 / 0.22 at 30 / 62 / 70 / 150 MeV)."""
+        expected = {5.6: 6.672, 30: 2.746, 62: 1.942, 70: 1.817, 150: 1.119, 250: 0.855}
         for energy, kappa in expected.items():
-            assert get_hardness_factor(energy) == pytest.approx(kappa)
+            assert get_hardness_factor(energy) == pytest.approx(kappa, abs=1e-3)
+        assert get_hardness_factor(62) != pytest.approx(0.35, rel=0.5)
+        # monotonically falling NIEL over 1-700 MeV (Coulomb + hadronic)
+        E = [e for e in sorted(NIEL_HARDNESS_PROTON_SIC) if e <= 700]
+        k = [NIEL_HARDNESS_PROTON_SIC[e] for e in E]
+        assert all(a > b for a, b in zip(k, k[1:]))
+
+    def test_cross_check_against_published_252_MeV_factor(self):
+        """Radmanovac et al. (arXiv:2510.11304) quote k ~ 0.9 for 252.7 MeV protons
+        from Si NIEL; the SR-NIEL Si table gives 0.85."""
+        assert get_hardness_factor(252.7) == pytest.approx(0.9, abs=0.06)
 
     def test_custom_table(self):
         """Can pass custom NIEL table."""
@@ -269,10 +287,32 @@ class TestNIELScaling:
         result = scale_to_proton_energy(2.0, 55, niel_table=custom)
         kappa = get_hardness_factor(55, niel_table=custom)
         assert result == pytest.approx(2.0 * kappa)
+        # log-log: a power law 1/E is reproduced exactly
+        assert kappa == pytest.approx(10.0 / 55.0)
 
-    def test_niel_table_has_four_entries(self):
-        """NIEL table has entries for 30, 62, 70, 150 MeV."""
-        assert set(NIEL_HARDNESS_PROTON_SIC.keys()) == {30, 62, 70, 150}
+    def test_niel_table_covers_1_to_1000_MeV_including_the_api_default(self):
+        """The table spans 1-1000 MeV, so the 5.6 MeV API default is in range."""
+        import inspect
+
+        import etna.api.simulation as sim
+
+        E = sorted(NIEL_HARDNESS_PROTON_SIC)
+        assert E[0] == 1.0 and E[-1] == 1000.0 and len(E) == 59
+        default = (
+            inspect.signature(sim.run_radiation_damage)
+            .parameters["proton_energy_MeV"]
+            .default
+        )
+        assert E[0] <= default <= E[-1]
+        assert 5.6 in NIEL_HARDNESS_PROTON_SIC
+
+    def test_sic_si_ratio(self):
+        from etna.core.radiation_damage import niel_ratio_sic_si
+
+        assert niel_ratio_sic_si(5.6) == pytest.approx(0.943, abs=2e-3)
+        assert niel_ratio_sic_si(62.0) == pytest.approx(0.854, abs=2e-3)
+        with pytest.raises(ValueError):
+            niel_ratio_sic_si(0.5)
 
 
 class TestComputeDamagedParams:
@@ -474,13 +514,13 @@ class TestComputePhiCrit:
     def test_phi_crit_graded_profile(self):
         """Graded profile: Phi_crit from N_D_min at bulk end.
 
-        N_D_min = 8.5e13. eta = 5.0, kappa(62) = 0.35.
+        N_D_min = 8.5e13. eta = 5.0, kappa(62) = 1.942 (SR-NIEL).
         phi_crit_neq = 8.5e13 / 5.0 = 1.7e13
-        phi_crit_proton = 1.7e13 / 0.35 ~ 4.857e13
+        phi_crit_proton = 1.7e13 / 1.942 ~ 8.75e12 (4.857e13 with the 0.35 placeholder)
         """
         N_D = np.linspace(8.5e13, 2.9e15, 50)
         result = compute_phi_crit(N_D, eta_removal=5.0, energy_MeV=62.0)
-        expected_proton = 8.5e13 / 5.0 / 0.35
+        expected_proton = 8.5e13 / 5.0 / 1.942
         np.testing.assert_allclose(
             result["phi_crit_proton"], expected_proton, rtol=0.10
         )
@@ -490,13 +530,13 @@ class TestComputePhiCrit:
         """Uniform N_D=1e15 profile.
 
         phi_crit_neq = 1e15 / 5.0 = 2e14
-        phi_crit_proton = 2e14 / 0.35 ~ 5.714e14
+        phi_crit_proton = 2e14 / 1.942 ~ 1.03e14
         """
         N_D = np.full(20, 1e15)
         result = compute_phi_crit(N_D, eta_removal=5.0, energy_MeV=62.0)
-        expected_proton = 1e15 / 5.0 / 0.35
+        expected_proton = 1e15 / 5.0 / 1.942
         np.testing.assert_allclose(
-            result["phi_crit_proton"], expected_proton, rtol=0.01
+            result["phi_crit_proton"], expected_proton, rtol=0.001
         )
 
     def test_phi_crit_returns_all_keys(self):
@@ -511,7 +551,7 @@ class TestComputePhiCrit:
         }
 
     def test_phi_crit_different_energies(self):
-        """30 MeV (kappa~1.0) gives smaller phi_crit_proton than 62 MeV (kappa=0.35).
+        """30 MeV (kappa 2.75) gives smaller phi_crit_proton than 62 MeV (kappa 1.94).
 
         Harder protons deposit more NIEL per proton, so fewer are needed
         to reach compensation.
@@ -519,7 +559,7 @@ class TestComputePhiCrit:
         N_D = np.full(10, 1e15)
         result_30 = compute_phi_crit(N_D, energy_MeV=30.0)
         result_62 = compute_phi_crit(N_D, energy_MeV=62.0)
-        # kappa(30)=0.50 > kappa(62)=0.35 -> phi_crit_proton(30) < phi_crit_proton(62)
+        # kappa(30) > kappa(62) -> phi_crit_proton(30) < phi_crit_proton(62)
         assert result_30["phi_crit_proton"] < result_62["phi_crit_proton"]
 
 
@@ -868,16 +908,14 @@ class TestMakeSingleDefectParams:
         assert single.eta_EH4 > 0
 
 
-def test_hardness_factor_out_of_table_warns_once(caplog):
-    """audit-v7 B-07: outside the NIEL table the edge kappa is used and logged once."""
+def test_hardness_factor_outside_the_table_raises():
+    """audit-v7 B-07: no silent edge clamping (the old table returned kappa(30 MeV) for
+    5.6 MeV); outside 1-1000 MeV get_hardness_factor raises."""
     import etna.core.radiation_damage as rd
 
-    rd._WARNED_OUT_OF_TABLE.discard((5.6, 30, 150))
-    with caplog.at_level("WARNING", logger="etna.core.radiation_damage"):
-        assert rd.get_hardness_factor(5.6) == rd.NIEL_HARDNESS_PROTON_SIC[30]
-        assert rd.get_hardness_factor(5.6) == rd.NIEL_HARDNESS_PROTON_SIC[30]
-    assert caplog.text.count("outside the NIEL table") == 1
-    caplog.clear()
-    with caplog.at_level("WARNING", logger="etna.core.radiation_damage"):
-        rd.get_hardness_factor(62.0)
-    assert "outside the NIEL table" not in caplog.text
+    assert rd.get_hardness_factor(5.6) > rd.get_hardness_factor(30.0) * 2
+    for bad in (0.5, 2000.0, float("nan")):
+        with pytest.raises(ValueError, match="outside the NIEL table"):
+            rd.get_hardness_factor(bad)
+    with pytest.raises(ValueError, match="outside the NIEL table"):
+        rd.get_hardness_factor(5.6, niel_table={30: 0.5, 150: 0.22})
