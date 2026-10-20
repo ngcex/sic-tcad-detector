@@ -92,8 +92,13 @@ def animation_data(config, biases=DEFAULT_BIASES, max_points: int = 400) -> dict
             )
         )
     peaks = [fr["peak_E_V_per_cm"] for fr in frames if fr["peak_E_V_per_cm"]]
+    from etna.viz.provenance import footer_text, provenance
+
+    prov = provenance(config=config, solver=f"W: {cv.metadata.get('solver', '')}, E(x): {frames[0]['solver']}")
     return dict(
         label=VALIDATION_LABEL,
+        provenance=footer_text(prov),
+        config_hash=prov["config_hash"],
         layers=[
             {
                 k: L[k]
@@ -169,3 +174,35 @@ def render_animation(
             f"manim render of {scene} failed (exit {proc.returncode}):\n{tail}"
         )
     return hits[-1], wall
+
+
+ENGINES = ("auto", "manim", "matplotlib")
+
+
+def animate(
+    data: dict,
+    scene: str = "DepletionScene",
+    fmt: str = "mp4",
+    engine: str = "auto",
+    out_dir: "str | os.PathLike | None" = None,
+) -> "tuple[Path, float, str]":
+    """Render ``scene`` from ``data``; (path, wall seconds, engine used).
+
+    ``engine="auto"``: manim when it is importable and ``fmt`` is mp4, else the
+    matplotlib-frames fallback (``etna.viz.frames.render_frames``: mp4 via ffmpeg, gif
+    via Pillow). Both read the same ``animation_data`` dict.
+    """
+    from etna.viz.frames import render_frames
+
+    if engine not in ENGINES:
+        raise ValueError(f"engine must be one of {ENGINES}")
+    if engine == "manim" and fmt != "mp4":
+        raise ValueError("manim renders mp4 only; use engine='matplotlib' for gif")
+    use_manim = engine == "manim" or (
+        engine == "auto" and fmt == "mp4" and manim_available()[0]
+    )
+    if use_manim:
+        path, wall = render_animation(data, scene, out_dir=out_dir)
+        return path, wall, "manim"
+    path, wall = render_frames(data, scene, fmt=fmt, out_dir=out_dir)
+    return path, wall, "matplotlib"
