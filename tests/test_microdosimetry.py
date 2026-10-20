@@ -64,14 +64,14 @@ def spectrum_mono(monoenergetic_energies):
 
 @pytest.fixture
 def kappa_table():
-    """Pre-computed kappa table from bundled stopping power data.
+    """Real proton kappa(E) table (NIST PSTAR, SiC by Bragg additivity, LET ratio)."""
+    return compute_kappa_table(source="bragg")
 
-    Uses the explicit 'legacy_unsafe' opt-in (v6 physics-honesty fix: there is
-    no silent default anymore). This fixture only needs *some* table to test
-    correction arithmetic/wiring -- it is NOT a claim that these values are
-    physically correct (they are the fabricated, sign-inverted placeholder;
-    see C-1 and TestComputeKappaTable.test_legacy_unsafe_is_placeholder).
-    """
+
+@pytest.fixture
+def legacy_kappa_table():
+    """The FABRICATED flat ~0.58 legacy table (explicit opt-in; C-1). Only used to pin
+    that the placeholder stays reachable and stays labelled as such."""
     return compute_kappa_table(source="legacy_unsafe")
 
 
@@ -197,19 +197,37 @@ class TestLinealEnergySpectrum:
 
 class TestComputeKappaTable:
     def test_loads_and_computes(self, kappa_table):
-        """Kappa table loads CSV files and produces values."""
-        assert len(kappa_table["energy_MeV"]) > 20
+        """Real NIST-based kappa table: grid and metadata."""
+        assert len(kappa_table["energy_MeV"]) > 100
         assert len(kappa_table["kappa"]) == len(kappa_table["energy_MeV"])
+        assert kappa_table["source"] == "bragg"
+        assert kappa_table["particle"] == "proton"
+        assert kappa_table["ratio"] == "linear"
 
-    def test_legacy_unsafe_is_placeholder(self, kappa_table):
-        """AUDIT C-1: the legacy_unsafe table is the FABRICATED, sign-inverted
-        placeholder (~0.3-1.0, kappa < 1). This is NOT physically reasonable --
-        real kappa = S_water/S_SiC is > 1 (~1.13-1.24, see data/srim/README.md).
-        This test documents/pins the known-wrong placeholder range so a future
-        change to the placeholder data doesn't silently drift; it is not an
-        endorsement of the range as correct physics."""
-        assert np.all(kappa_table["kappa"] > 0.3)
-        assert np.all(kappa_table["kappa"] < 1.0)
+    def test_real_kappa_range_and_energy_dependence(self, kappa_table):
+        """SiC -> water LET ratio from NIST PSTAR: 0.426 @1 MeV -> 0.375 @150 MeV,
+        monotonic, NOT flat (C-1 fixed with real data)."""
+        E = kappa_table["energy_MeV"]
+        k = kappa_table["kappa"]
+        sel = (E >= 1.0) & (E <= 250.0)
+        assert np.all((k[sel] > 0.37) & (k[sel] < 0.43))
+        assert np.all(np.diff(k[sel]) < 0)
+        assert k[sel][0] / k[sel][-1] > 1.12
+
+    def test_mass_ratio_option(self):
+        """ratio='mass' is the Bragg-Gray dose factor (S/rho ratio), > 1."""
+        km = compute_kappa_table(source="bragg", ratio="mass")
+        E = km["energy_MeV"]
+        sel = (E >= 1.0) & (E <= 250.0)
+        assert np.all((km["kappa"][sel] > 1.19) & (km["kappa"][sel] < 1.37))
+
+    def test_legacy_unsafe_is_placeholder(self, legacy_kappa_table):
+        """AUDIT C-1: the legacy_unsafe table is the FABRICATED flat placeholder
+        (~0.58). Real SiC->water LET ratio is ~0.38-0.43 (protons); this pins the
+        known-wrong placeholder range, it is not an endorsement."""
+        k = legacy_kappa_table["kappa"]
+        assert np.all(k > 0.5) and np.all(k < 0.65)
+        assert k.max() / k.min() < 1.05  # flat: the defect
 
     def test_no_source_raises(self):
         """v6 physics-honesty fix: omitting source= must raise, not silently
@@ -223,13 +241,8 @@ class TestComputeKappaTable:
             compute_kappa_table(source="legacy")
 
 
-# ---------------------------------------------------------------------------
-# Tissue-equivalence correction tests
-# ---------------------------------------------------------------------------
-
-
 class TestBraggKappaMachinery:
-    """Phase 27 machinery: Bragg-additivity SiC + source switch (data-blocked)."""
+    """Bragg-additivity SiC + source switch."""
 
     def test_bragg_composer_weights(self):
         """SiC = 0.7004*Si + 0.2996*C (Bragg additivity), log-log interpolated."""
@@ -242,23 +255,19 @@ class TestBraggKappaMachinery:
         expected = 0.7004 * s_si + 0.2996 * s_c
         np.testing.assert_allclose(s_sic, expected, rtol=1e-6)
 
-    def test_bragg_source_refuses_placeholder(self):
-        """compute_kappa_table(source='bragg') must REFUSE placeholder data
-        (no fabrication) until real PSTAR files are dropped in."""
-        from etna.core.microdosimetry import compute_kappa_table
+    def test_bragg_source_uses_real_nist_data(self):
+        """compute_kappa_table(source='bragg') == stopping_power.kappa_table (NIST)."""
+        from etna.core.stopping_power import kappa_table as sp_kappa
 
-        with pytest.raises(FileNotFoundError, match="PSTAR"):
-            compute_kappa_table(source="bragg")
+        res = compute_kappa_table(source="bragg", particle="alpha", tissue="muscle_icru")
+        ref = sp_kappa("alpha", tissue="muscle_icru")
+        np.testing.assert_allclose(res["kappa"], ref["kappa"])
 
-    def test_legacy_unsafe_requires_explicit_opt_in(self):
-        """v6 physics-honesty fix: the fabricated flat-kappa table is only
-        reachable via the explicit, unmistakable source='legacy_unsafe' -- the
-        old silent source='legacy' default no longer exists."""
-        from etna.core.microdosimetry import compute_kappa_table
-
-        res = compute_kappa_table(source="legacy_unsafe")
-        assert res["source"] == "legacy_unsafe"
-        assert len(res["kappa"]) == len(res["energy_MeV"])
+    def test_legacy_unsafe_requires_explicit_opt_in(self, legacy_kappa_table):
+        """The fabricated flat-kappa table is only reachable via the explicit
+        source='legacy_unsafe' -- the old silent source='legacy' default is gone."""
+        assert legacy_kappa_table["source"] == "legacy_unsafe"
+        assert len(legacy_kappa_table["kappa"]) == len(legacy_kappa_table["energy_MeV"])
 
 
 class TestTissueEquivalenceCorrection:
@@ -291,21 +300,50 @@ class TestTissueEquivalenceCorrection:
         """AUDIT C-2: kappa(E) lookup uses particle KINETIC energy, scalar or
         per-event, NOT deposited energy."""
         y_sic = np.array([5.0, 5.0, 5.0])
-        # Per-event KINETIC energies (MeV) -- correct variable
-        Ek = np.array([1.0, 10.0, 100.0])
+        Ek = np.array([1.0, 10.0, 100.0])  # per-event KINETIC energies (MeV)
         y_tissue = tissue_equivalence_correction(
             y_sic, kappa_table=kappa_table, particle_energy_MeV=Ek
         )
         assert y_tissue.shape == y_sic.shape
-        # scalar (mono-energetic beam) path also works
+        # real kappa(E): lower kinetic energy -> larger LET ratio
+        assert y_tissue[0] > y_tissue[1] > y_tissue[2]
+        np.testing.assert_allclose(y_tissue / y_sic, [0.426, 0.391, 0.376], atol=2e-3)
+        # scalar (mono-energetic beam) path
         y_beam = tissue_equivalence_correction(
             y_sic, kappa_table=kappa_table, particle_energy_MeV=62.0
         )
-        assert y_beam.shape == y_sic.shape
+        np.testing.assert_allclose(y_beam / y_sic, 0.378, atol=2e-3)
+
+    def test_deposited_energy_is_not_used_for_lookup(self, kappa_table):
+        """C-2: passing deposited energies (keV) must not change the result."""
+        y_sic = np.array([5.0, 5.0])
+        a = tissue_equivalence_correction(
+            y_sic, [10.0, 900.0], kappa_table=kappa_table, particle_energy_MeV=62.0
+        )
+        b = tissue_equivalence_correction(
+            y_sic, None, kappa_table=kappa_table, particle_energy_MeV=62.0
+        )
+        np.testing.assert_allclose(a, b)
+
+    def test_kinetic_energy_outside_table_raises(self, kappa_table):
+        with pytest.raises(ValueError, match="kappa table"):
+            tissue_equivalence_correction(
+                [1.0], kappa_table=kappa_table, particle_energy_MeV=[np.nan]
+            )
+        with pytest.raises(ValueError, match="kappa table"):
+            tissue_equivalence_correction(
+                [1.0], kappa_table=kappa_table, particle_energy_MeV=1e6
+            )
+
+    def test_particle_mismatch_raises(self, kappa_table):
+        with pytest.raises(ValueError, match="particle-specific"):
+            tissue_equivalence_correction(
+                [1.0], kappa_table=kappa_table, particle_energy_MeV=5.0, particle="alpha"
+            )
 
     def test_no_kinetic_energy_falls_back_to_average(self, kappa_table):
-        """AUDIT C-2: without particle_energy_MeV, fall back to energy-averaged
-        kappa (documented approximation), NOT the deposited-energy lookup."""
+        """AUDIT C-2: without particle_energy_MeV, fall back to the table-mean
+        kappa (documented crude approximation), NOT the deposited-energy lookup."""
         y_sic = np.array([5.0, 5.0])
         y_tissue = tissue_equivalence_correction(y_sic, kappa_table=kappa_table)
         kappa_avg = float(np.mean(kappa_table["kappa"]))

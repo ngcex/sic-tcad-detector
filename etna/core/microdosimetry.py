@@ -8,7 +8,8 @@ standard microdosimetric observables following ICRU Report 36 conventions:
 - Dose distribution d(y): d(y) = y * f(y) / y_F
 - Frequency-mean lineal energy: y_F = integral(y * f(y) * dy)
 - Dose-mean lineal energy: y_D = integral(y * d(y) * dy)
-- Tissue-equivalence correction via kappa = S_tissue / S_SiC
+- Tissue-equivalence correction via kappa(E) = L_tissue / L_SiC (LET ratio at the
+  particle KINETIC energy, real NIST PSTAR/ASTAR data, see compute_kappa_table)
 
 Also provides publication-quality plotting functions for y*d(y) vs log(y)
 and y*f(y) vs log(y) spectra.
@@ -245,9 +246,12 @@ def _load_stopping_powers(filepath):
     return df["energy_MeV"].values, df["stopping_power_MeV_cm2_per_g"].values
 
 
-# 4H-SiC mass fractions (Si 28.0855, C 12.011 g/mol; 1:1 stoichiometry).
-SIC_MASS_FRACTION_SI = 0.7004
-SIC_MASS_FRACTION_C = 0.2996
+# 4H-SiC mass fractions (Si 28.0855, C 12.011 g/mol; 1:1 stoichiometry). Single
+# source: etna.core.stopping_power (re-exported here for backward compatibility).
+from etna.core.stopping_power import (  # noqa: E402
+    SIC_MASS_FRACTION_C,
+    SIC_MASS_FRACTION_SI,
+)
 
 
 def sic_stopping_power_bragg(
@@ -266,9 +270,9 @@ def sic_stopping_power_bragg(
 
         (S/rho)_SiC(E) = w_Si * (S/rho)_Si(E) + w_C * (S/rho)_C(E)
 
-    with w_Si = 0.7004, w_C = 0.2996 for 4H-SiC. This lets SiC stopping power be
-    built from NIST PSTAR/ASTAR elemental proton data (Si and C) rather than from
-    a single hand-entered SiC table -- the path the Phase 27 spec calls for.
+    with w_Si = 0.7004, w_C = 0.2996 for 4H-SiC. Generic array helper; the bundled
+    NIST data path is ``etna.core.stopping_power.sic_mass_stopping`` (used by
+    ``compute_kappa_table(source="bragg")``).
 
     Both elemental inputs are interpolated (log-log) onto a common grid.
 
@@ -300,49 +304,66 @@ def sic_stopping_power_bragg(
     return grid, w_si * s_si_g + w_c * s_c_g
 
 
-def compute_kappa_table(water_csv_path=None, sic_csv_path=None, source=None):
-    """Compute tissue-equivalence correction factor kappa(E) = S_water / S_SiC.
+def compute_kappa_table(
+    water_csv_path=None,
+    sic_csv_path=None,
+    source=None,
+    particle="proton",
+    tissue="water",
+    ratio="linear",
+    carbon="c_amorphous",
+):
+    """SiC -> tissue lineal-energy conversion factor kappa(E) vs KINETIC energy.
 
-    .. danger::
-       AUDIT C-1 (v5) -- the ``source="legacy_unsafe"`` path reads
-       ``data/stopping_power_{water,sic}.csv`` which are FABRICATED placeholders
-       (kappa ~0.58, flat, sign-inverted). The physics requires kappa > 1 (water
-       Z/A 0.555 vs SiC 0.499; I_water ~78 eV vs I_SiC ~136 eV); real NIST PSTAR
-       gives ~1.24 at 1 MeV decreasing to ~1.13 at 100 MeV.
+    ``source="bragg"`` (the physics path) uses REAL NIST data (PSTAR for protons,
+    ASTAR for alphas; ``data/nist_star/``, downloaded 2026-10-20 with provenance).
+    NIST has no SiC table: SiC is composed by Bragg additivity of NIST Si + C
+    (``etna.core.stopping_power``; caveat: binding/phase effects ignored, a few % for
+    protons > 1 MeV, up to ~10% near the stopping maximum).
 
-       Phase 27 machinery (``source="bragg"``) is now wired: it builds SiC by
-       Bragg additivity from elemental Si + C proton stopping powers and divides
-       real water PSTAR by it. **It is still DATA-BLOCKED**: the input files
-       ``data/srim/{water,si,c}_proton.csv`` are placeholders that must be filled
-       with real NIST PSTAR (water, Si, C) tabulated proton mass stopping powers
-       (see ``data/srim/README.md``). Until then ``source="bragg"`` raises a clear
-       error rather than returning a fabricated number. Network fetch is not used
-       (offline/CI environment). See ``.planning/PHYSICS_AUDIT_v5.md`` (C-1/C-2).
+    Convention (``ratio``):
+
+    - ``"linear"`` (default): kappa = L_tissue / L_SiC, the ratio of LINEAR
+      electronic stopping powers (LET ratio). For a track crossing the SV, lineal
+      energy y ~ LET, so y_tissue = kappa * y_SiC. This is the convention of the Si
+      microdosimetry literature (Si -> muscle ~0.58 for protons; from these same
+      NIST files: 0.584 at 10 MeV). For SiC -> water: 0.426 @1 MeV, 0.391 @10 MeV,
+      0.378 @62 MeV, 0.375 @150 MeV (protons).
+    - ``"mass"``: (S/rho)_tissue / (S/rho)_SiC (1.368 @1 MeV -> 1.204 @150 MeV for
+      protons): the Bragg-Gray DOSE conversion factor, NOT a lineal-energy factor.
+
+    History (C-1, v5 audit): the old ``data/stopping_power_{water,sic}.csv`` tables
+    are fabricated (water 274 MeV cm^2/g at 0.1 MeV vs PSTAR 817) and give a flat
+    ~0.58. The v5/v6 text called that value "sign-inverted" against an expected mass
+    ratio ~1.13-1.24; with the linear (lineal-energy) convention the real SiC value
+    is ~0.38-0.43, so 0.58 is wrong in magnitude and flatness, and the quoted
+    1.13-1.24 range matched neither convention. The legacy path is kept only as the
+    explicit ``source="legacy_unsafe"`` opt-in.
 
     .. important::
-       There is deliberately NO silent default. Omitting ``source`` (or passing
-       anything other than ``"bragg"``/``"legacy_unsafe"``) raises ``ValueError``.
-       This is a v6 physics-honesty fix: the old default (``source="legacy"``)
-       silently returned the fabricated, sign-inverted kappa with no exception --
-       only a log line nobody reads. See ``.planning/PHYSICS_REVIEW_v6.md``.
+       There is deliberately NO silent default for ``source``: omitting it raises
+       ``ValueError`` (v6 physics-honesty fix).
 
     Parameters
     ----------
     water_csv_path, sic_csv_path : str or Path, optional
         Override input paths (``source="legacy_unsafe"`` only).
     source : {"bragg", "legacy_unsafe"}
-        Required, no default. "bragg" -- compute SiC via Bragg additivity from
-        elemental Si + C PSTAR data in ``data/srim/`` and divide real water
-        PSTAR by it (Phase 27; currently DATA-BLOCKED, raises FileNotFoundError
-        until real data is dropped in). "legacy_unsafe" -- explicit opt-in to
-        the fabricated, sign-inverted v3.0 flat-kappa placeholder (~0.58); use
-        ONLY for illustrating the pipeline mechanics with a clearly-labeled fake
-        number, never as a stand-in for a real physics result.
+        Required.
+    particle : {"proton", "alpha"}
+        kappa depends on the particle: never apply a proton table to alpha events.
+    tissue : {"water", "muscle_icru"}
+        Tissue reference (NIST liquid water or ICRU striated muscle).
+    ratio : {"linear", "mass"}
+        See above. Default "linear" (lineal-energy / LET conversion).
+    carbon : {"c_amorphous", "c_graphite"}
+        NIST carbon used in the Bragg composition (<= 1% effect above 1 MeV).
 
     Returns
     -------
     dict
-        energy_MeV : ndarray, kappa : ndarray, source : str
+        energy_MeV, kappa (ndarrays on the NIST kinetic-energy grid), source,
+        particle, tissue, ratio.
 
     Raises
     ------
@@ -354,39 +375,27 @@ def compute_kappa_table(water_csv_path=None, sic_csv_path=None, source=None):
     if source not in ("bragg", "legacy_unsafe"):
         raise ValueError(
             "compute_kappa_table() requires an explicit source= kwarg -- there "
-            "is no silent default. Pass source='bragg' for the real (currently "
-            "data-blocked) physics path, or source='legacy_unsafe' to "
-            "deliberately opt into the FABRICATED, sign-inverted placeholder "
-            "(~0.58, physically wrong -- real kappa is ~1.13-1.24) for pipeline "
+            "is no silent default. Pass source='bragg' for the real NIST "
+            "PSTAR/ASTAR physics path, or source='legacy_unsafe' to "
+            "deliberately opt into the FABRICATED flat ~0.58 placeholder "
+            "(real SiC->water LET ratio is ~0.38-0.43 for protons) for pipeline "
             f"illustration only. Got source={source!r}."
         )
 
     if source == "bragg":
-        srim = data_dir / "srim"
-        paths = {
-            "water": srim / "water_proton.csv",
-            "si": srim / "si_proton.csv",
-            "c": srim / "c_proton.csv",
-        }
-        for name, p in paths.items():
-            if not p.exists() or _is_placeholder_stopping_csv(p):
-                raise FileNotFoundError(
-                    f"compute_kappa_table(source='bragg') needs real PSTAR data at "
-                    f"{p} ({name}). It is a placeholder/missing -- DO NOT fabricate. "
-                    f"See data/srim/README.md for the exact NIST PSTAR files to drop in."
-                )
-        e_w, s_w = _load_stopping_powers(paths["water"])
-        e_si, s_si = _load_stopping_powers(paths["si"])
-        e_c, s_c = _load_stopping_powers(paths["c"])
-        grid, s_sic = sic_stopping_power_bragg(e_si, s_si, e_c, s_c, energy_grid=e_w)
-        kappa = s_w / s_sic
+        from etna.core.stopping_power import kappa_table
+
+        res = kappa_table(particle=particle, tissue=tissue, ratio=ratio, carbon=carbon)
         logger.info(
-            "Kappa(bragg): %d points, range [%.3f, %.3f]",
-            len(kappa),
-            float(np.min(kappa)),
-            float(np.max(kappa)),
+            "Kappa(bragg, %s, %s, %s): %d points, range [%.3f, %.3f]",
+            particle,
+            tissue,
+            ratio,
+            len(res["kappa"]),
+            float(np.min(res["kappa"])),
+            float(np.max(res["kappa"])),
         )
-        return {"energy_MeV": e_w, "kappa": kappa, "source": "bragg"}
+        return res
 
     # legacy_unsafe (v3.0 flat-kappa artefact) -- explicit opt-in only, see above.
     if water_csv_path is None:
@@ -398,23 +407,15 @@ def compute_kappa_table(water_csv_path=None, sic_csv_path=None, source=None):
     s_sic_interp = np.interp(e_water, e_sic, s_sic)
     kappa = s_water / s_sic_interp
     logger.warning(
-        "Kappa(legacy_unsafe): %d points, range [%.3f, %.3f] -- FABRICATED, "
-        "SIGN-INVERTED PLACEHOLDER, NOT REAL PHYSICS (real kappa ~1.13-1.24, "
-        "see C-1). Caller explicitly opted in via source='legacy_unsafe'.",
+        "Kappa(legacy_unsafe): %d points, range [%.3f, %.3f] -- FABRICATED "
+        "PLACEHOLDER, NOT REAL PHYSICS (real SiC->water LET ratio ~0.38-0.43 "
+        "for protons, see C-1). Caller explicitly opted in via "
+        "source='legacy_unsafe'.",
         len(kappa),
         float(np.min(kappa)),
         float(np.max(kappa)),
     )
     return {"energy_MeV": e_water, "kappa": kappa, "source": "legacy_unsafe"}
-
-
-def _is_placeholder_stopping_csv(path):
-    """True if a stopping-power CSV is the documented placeholder (header marker)."""
-    try:
-        first = Path(path).read_text().splitlines()[0]
-    except (OSError, IndexError):
-        return True
-    return "PLACEHOLDER" in first.upper()
 
 
 # ---------------------------------------------------------------------------
@@ -431,32 +432,35 @@ def tissue_equivalence_correction(
     kappa_table=None,
     kappa_constant=_UNSET,
     particle_energy_MeV=None,
+    particle=None,
 ):
     """Apply tissue-equivalence correction to lineal energy values.
 
-    Converts SiC detector lineal energy to tissue-equivalent values using
-    kappa = S_tissue / S_SiC.
+    Converts SiC detector lineal energy to tissue-equivalent values,
+    y_tissue = kappa(E) * y_SiC, with kappa the SiC -> tissue LET ratio from
+    ``compute_kappa_table(source="bragg")`` (real NIST PSTAR/ASTAR data).
 
-    AUDIT C-2 (v5): kappa(E) is physically a function of the particle KINETIC
-    energy, NOT the energy deposited in the thin SV (for a penetrating particle
-    the deposited energy is ~1e4x below the kinetic energy). Pass the kinetic
-    energy via ``particle_energy_MeV``:
+    AUDIT C-2 (v5, fixed): kappa(E) is a function of the particle KINETIC energy,
+    NOT the energy deposited in the thin SV (for a penetrating particle the
+    deposited energy is ~1e4x below the kinetic energy). Pass the kinetic energy via
+    ``particle_energy_MeV``:
 
-    - scalar -> mono-energetic beam (e.g. 62.0 for a 62 MeV proton beam): exact,
-      and the recommended path for clinical beams;
-    - array (len == y_values) -> per-event primary kinetic energy from MC truth.
+    - scalar -> mono-energetic beam (e.g. 62.0 for a 62 MeV proton beam);
+    - array (len == y_values) -> per-event primary kinetic energy from MC truth, e.g.
+      ``process_mc_ensemble(...)["event_kinetic_MeV"]`` (needs an ``ekin_MeV``
+      column in the MC events, see ``etna.core.mc_coupling``).
 
-    If ``particle_energy_MeV`` is omitted and a ``kappa_table`` is given, the
-    function falls back to the **energy-averaged** kappa (documented approximation)
-    rather than silently using the wrong (deposited) energy variable.
+    The lookup is log-log interpolation on the NIST grid and raises outside it. If
+    ``particle_energy_MeV`` is omitted and a ``kappa_table`` is given, the function
+    falls back to the mean of the tabulated kappa (crude documented approximation,
+    logged as a warning) rather than using the deposited energy.
 
     .. important::
        There is deliberately NO silent default for ``kappa_constant`` (v6
-       physics-honesty fix). If ``kappa_table`` is None, you must pass
-       ``kappa_constant`` explicitly: either a real physical value (~1.13-1.24,
-       see C-1) or the literal string ``"legacy_unsafe"`` to deliberately opt
-       into the fabricated, sign-inverted 0.58 placeholder. Omitting it raises
-       ``ValueError``. See ``.planning/PHYSICS_REVIEW_v6.md``.
+       physics-honesty fix). If ``kappa_table`` is None, pass ``kappa_constant``
+       explicitly: a real value (SiC -> water LET ratio ~0.38-0.43 for protons, see
+       ``compute_kappa_table``) or the literal string ``"legacy_unsafe"`` to opt
+       into the fabricated flat 0.58 placeholder. Omitting it raises ``ValueError``.
 
     Parameters
     ----------
@@ -468,13 +472,11 @@ def tissue_equivalence_correction(
     kappa_table : dict, optional
         From ``compute_kappa_table``. If None, uses ``kappa_constant``.
     kappa_constant : float or "legacy_unsafe"
-        Constant kappa when no table is given. Required (no default) when
-        ``kappa_table`` is None: pass a real physical value (~1.13-1.24, see
-        C-1), or the literal string ``"legacy_unsafe"`` to explicitly opt into
-        the fabricated, sign-inverted 0.58 placeholder.
+        Constant kappa when no table is given (required in that case).
     particle_energy_MeV : float or array_like, optional
-        Particle KINETIC energy (MeV) for the kappa(E) lookup -- scalar (beam) or
-        per-event array. Correct variable per C-2.
+        Particle KINETIC energy (MeV) for the kappa(E) lookup.
+    particle : {"proton", "alpha"}, optional
+        If given, must match ``kappa_table["particle"]`` (kappa is particle-specific).
 
     Returns
     -------
@@ -484,7 +486,8 @@ def tissue_equivalence_correction(
     Raises
     ------
     ValueError
-        If ``kappa_table`` is None and ``kappa_constant`` is omitted.
+        If ``kappa_table`` is None and ``kappa_constant`` is omitted, if the particle
+        does not match the table, or if a kinetic energy is outside the table.
     """
     y_values = np.asarray(y_values, dtype=np.float64)
 
@@ -493,28 +496,39 @@ def tissue_equivalence_correction(
             raise ValueError(
                 "tissue_equivalence_correction() requires an explicit "
                 "kappa_constant= when kappa_table is None -- there is no "
-                "silent default. Pass a real physical value (~1.13-1.24, see "
-                "C-1) or kappa_constant='legacy_unsafe' to deliberately opt "
-                "into the FABRICATED, sign-inverted 0.58 placeholder for "
-                "pipeline illustration only."
+                "silent default. Pass a real value (SiC->water LET ratio "
+                "~0.38-0.43 for protons, see compute_kappa_table) or "
+                "kappa_constant='legacy_unsafe' to deliberately opt into the "
+                "FABRICATED flat 0.58 placeholder for pipeline illustration only."
             )
         if kappa_constant == "legacy_unsafe":
             kappa_constant = 0.58
             logger.warning(
-                "Constant kappa = %.3f -- FABRICATED, SIGN-INVERTED PLACEHOLDER, "
-                "NOT REAL PHYSICS (real kappa ~1.13-1.24, see C-1). Caller "
-                "explicitly opted in via kappa_constant='legacy_unsafe'.",
+                "Constant kappa = %.3f -- FABRICATED PLACEHOLDER, NOT REAL PHYSICS "
+                "(real SiC->water LET ratio ~0.38-0.43 for protons, see C-1). "
+                "Caller explicitly opted in via kappa_constant='legacy_unsafe'.",
                 kappa_constant,
             )
         else:
             logger.info(
-                "Constant kappa = %.3f (caller-supplied; real kappa(E) varies "
-                "~10-30%% with energy -- use compute_kappa_table(source='bragg') "
-                "for the energy-dependent correction once PSTAR data is in "
-                "place).",
+                "Constant kappa = %.3f (caller-supplied; the real SiC->water LET "
+                "ratio varies with kinetic energy -- use "
+                "compute_kappa_table(source='bragg') for kappa(E)).",
                 kappa_constant,
             )
         return kappa_constant * y_values
+
+    table_particle = kappa_table.get("particle")
+    if (
+        particle is not None
+        and table_particle is not None
+        and particle != table_particle
+    ):
+        raise ValueError(
+            f"kappa_table is for {table_particle!r} but particle={particle!r}: kappa "
+            "is particle-specific, build the table with compute_kappa_table("
+            f"source='bragg', particle={particle!r})."
+        )
 
     E_grid = np.asarray(kappa_table["energy_MeV"], float)
     K_grid = np.asarray(kappa_table["kappa"], float)
@@ -522,22 +536,30 @@ def tissue_equivalence_correction(
     if particle_energy_MeV is not None:
         # C-2 correct path: lookup by KINETIC energy (scalar beam or per-event).
         Ek = np.asarray(particle_energy_MeV, dtype=np.float64)
-        kappa = np.interp(Ek, E_grid, K_grid)
+        if (
+            np.any(~np.isfinite(Ek))
+            or np.any(Ek < E_grid[0])
+            or np.any(Ek > E_grid[-1])
+        ):
+            raise ValueError(
+                "particle_energy_MeV must be finite and inside the kappa table "
+                f"[{E_grid[0]:g}, {E_grid[-1]:g}] MeV"
+            )
+        kappa = np.exp(np.interp(np.log(Ek), np.log(E_grid), np.log(K_grid)))
         y_tissue = kappa * y_values
-        kmin, kmax = float(np.min(kappa)), float(np.max(kappa))
         logger.info(
             "Energy-dependent tissue correction (kinetic E): kappa [%.3f, %.3f]",
-            kmin,
-            kmax,
+            float(np.min(kappa)),
+            float(np.max(kappa)),
         )
         return y_tissue
 
-    # No kinetic energy supplied: fall back to ENERGY-AVERAGED kappa, NOT the
-    # deposited-energy lookup (which was the C-2 defect). Documented approximation.
+    # No kinetic energy supplied: fall back to the table-MEAN kappa, NOT the
+    # deposited-energy lookup (which was the C-2 defect). Crude approximation.
     kappa_avg = float(np.mean(K_grid))
     logger.warning(
-        "tissue_equivalence_correction: no particle_energy_MeV given; using "
-        "energy-averaged kappa = %.3f as a documented approximation. Pass the "
+        "tissue_equivalence_correction: no particle_energy_MeV given; using the "
+        "mean of the tabulated kappa = %.3f as a crude approximation. Pass the "
         "particle KINETIC energy (scalar beam or per-event MC truth) for the "
         "correct energy-dependent correction (AUDIT C-2).",
         kappa_avg,
