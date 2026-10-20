@@ -1,0 +1,12 @@
+main.py (sidebar + home), first run in process: 21.18 s, exceptions 0
+main.py rerun: 0.05 s
+home               first 0.055 s, rerun 0.042 s, exceptions 0
+run_all            first 0.047 s, rerun 0.065 s, exceptions 0
+cv                 first 0.024 s, rerun 0.017 s, exceptions 0
+cce                first 0.025 s, rerun 0.028 s, exceptions 0
+field_map          first 0.027 s, rerun 0.016 s, exceptions 0
+radiation_damage   first 0.041 s, rerun 0.067 s, exceptions 0
+dark_current       first 0.125 s, rerun 0.012 s, exceptions 0
+microdosimetry     first 0.013 s, rerun 0.035 s, exceptions 0
+batch_sweep        first 0.017 s, rerun 0.017 s, exceptions 0
+export             first 74.399 s, rerun 2.465 s, exceptions 0

@@ -29,7 +29,12 @@ def test_prefetch_plan():
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize("method,n_jobs", [("linear", 3), ("full", 2)])
+@pytest.mark.parametrize(
+    "method,n_jobs",
+    # "full" shares the prefetch path (every LET prefetched): exhaustive only, it
+    # costs two more small-mesh tables in the default suite
+    [("linear", 3), pytest.param("full", 2, marks=pytest.mark.exhaustive)],
+)
 def test_parallel_table_equals_serial(method, n_jobs):
     from etna.core.single_particle import build_cce_let_table
 

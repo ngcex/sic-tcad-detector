@@ -1,0 +1,43 @@
+== run_transient: wall 4.419s (warm call 5.050s) cpu 3.754s process 24.0s shares {'devsim': 0.914, 'builtin_other': 0.058, 'pandas': 0.016, 'other_python': 0.005, 'etna_python': 0.005, 'io': 0.001, 'numpy': 0.0}
+   cum [4.4182, 0.0, 1, 'core/devsim_lock.py:179(wrapper)']
+   cum [4.4181, 0.0001, 1, 'api/simulation.py:2032(run_transient)']
+   cum [4.4161, 0.0004, 1, 'core/transient.py:639(transient_cce_vs_dose_rate)']
+   cum [4.3294, 0.0047, 3252, 'core/devsim_lock.py:113(wrapper)']
+   cum [4.1507, 2.6844, 255, '~:0(<built-in method devsim.devsim_py3.solve>)']
+   cum [2.328, 0.001, 1, 'core/drift_diffusion.py:665(ramp_bias)']
+   cum [2.3197, 0.0002, 60, 'core/drift_diffusion.py:552(solve_tier)']
+   cum [1.7896, 0.0023, 6, 'core/transient.py:274(simulate_pulse)']
+   cum [1.4574, 0.0074, 2731, 'devsim/umfpack/umfshim.py:68(local_solver_callback)']
+   cum [1.083, 0.0105, 1238, 'devsim/umfpack/umfshim.py:37(factor)']
+   cum [0.9128, 0.0023, 1238, 'devsim/umfpack/umfpack_loader.py:431(numeric)']
+   cum [0.9099, 0.9077, 1238, 'devsim/umfpack/umfpack_loader.py:217(factor_numeric)']
+   cum [0.2539, 0.0002, 255, 'devsim/umfpack/umfshim.py:8(__init__)']
+   cum [0.2537, 0.0014, 255, 'devsim/umfpack/umfshim.py:25(initialize_umfpack)']
+   tot [2.6844, 4.1507, 255, '~:0(<built-in method devsim.devsim_py3.solve>)']
+   tot [0.9077, 0.9099, 1238, 'devsim/umfpack/umfpack_loader.py:217(factor_numeric)']
+   tot [0.2332, 0.2332, 510, '~:0(<built-in method _ctypes.dlopen>)']
+   tot [0.1391, 0.1413, 483, 'devsim/umfpack/umfpack_loader.py:186(factor_symbolic)']
+   tot [0.1063, 0.1084, 1238, 'devsim/umfpack/umfpack_loader.py:233(solve)']
+   tot [0.0697, 0.0699, 1, 'pandas/core/arrays/string_arrow.py:134(__init__)']
+   tot [0.0673, 0.0691, 1386, '~:0(<built-in method devsim.devsim_py3.node_model>)']
+== dark_current_2d: ERROR
+Traceback (most recent call last):
+  File "<string>", line 9, in <module>
+    get_dark_current_2d(half_width_um=50.0, epi_thickness_um=10.0, V_bias=-40.0)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ngcex/projects/physics/petringa/.claude/worktrees/agent-aa3143ec12a4c1ddc/etna/core/devsim_lock.py", line 182, in wrapper
+    return fn(*args, **kwargs)
+  File "/Users/ngcex/projects/physics/petringa/.claude/worktrees/agent-aa3143ec12a4c1ddc/etna/core/optimization.py", line 866, in get_dark_current_2d
+    device_info = create_2d_dd_device(
+        half_width_um=half_width_um,
+        V_bias=V_bias,
+        **device_kwargs,
+    )
+  File "/Users/ngcex/projects/physics/petringa/.claude/worktrees/agent-aa3143ec12a4c1ddc/etna/core/charge_collection_2d.py", line 213, in create_2d_dd_device
+    device_info = create_sic_2d_device(
+        device_name=device_name,
+        half_width_um=half_width_um,
+        **device_kwargs,
+    )
+TypeError: create_sic_2d_device() got an unexpected keyword argument 'epi_thickness_um'. Did you mean 'epi_thickness_cm'?
+
