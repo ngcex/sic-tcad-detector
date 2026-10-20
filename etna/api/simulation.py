@@ -106,6 +106,7 @@ def validated_domain_reason(config: DeviceConfig) -> "str | None":
     Results for devices outside it come from devsim alone and have no engine
     cross-check.
     """
+    config.validate()  # C-03: a config mutated after construction raises here
     if config.half_width_um is not None:
         from etna.core.engine2d import (
             ENGINE2D_DARK_BOX,
