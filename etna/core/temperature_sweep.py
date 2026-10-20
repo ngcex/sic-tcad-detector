@@ -14,7 +14,6 @@ import uuid
 
 import numpy as np
 import pandas as pd
-from scipy.stats import linregress
 
 from etna.core.sic_material import (
     SiC4H_Parameters,
@@ -410,6 +409,8 @@ def extract_temperature_coefficient(temperatures, values, quantity_name="CCE"):
     """
     temperatures = np.asarray(temperatures, dtype=float)
     values = np.asarray(values, dtype=float)
+
+    from scipy.stats import linregress  # lazy: scipy.stats costs ~1 s at import
 
     result = linregress(temperatures, values)
 

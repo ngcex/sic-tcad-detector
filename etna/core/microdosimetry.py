@@ -22,7 +22,6 @@ References:
 import logging
 from pathlib import Path
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
@@ -580,6 +579,8 @@ def plot_yd_spectrum(
     matplotlib.axes.Axes
         The axes with the plot.
     """
+    import matplotlib.pyplot as plt  # lazy: keeps `import etna` free of pyplot
+
     if ax is None:
         fig, ax = plt.subplots(figsize=(8, 5))
 
@@ -641,6 +642,8 @@ def plot_yf_spectrum(bin_centers, f_y, y_F=None, ax=None, label=None, color=None
     matplotlib.axes.Axes
         The axes with the plot.
     """
+    import matplotlib.pyplot as plt  # lazy: keeps `import etna` free of pyplot
+
     if ax is None:
         fig, ax = plt.subplots(figsize=(8, 5))
 
