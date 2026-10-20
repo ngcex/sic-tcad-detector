@@ -168,7 +168,7 @@ def test_run_field_2d_engine_carries_carriers(field2d, tmp_path):
 
 
 def test_run_field_1d_devsim_carriers():
-    res = etna.run_field(DeviceConfig(), bias_V=-10.0)
+    res = etna.run_field(DeviceConfig(), bias_V=-10.0, solver="devsim")
     nv = res.mesh.node_values
     assert res.metadata["solver"] == "devsim"
     assert nv["Electrons"].shape == res.mesh.x_coords.shape

@@ -92,7 +92,7 @@ def test_render_rejects_unknown_scene():
 def test_real_render_both_scenes(tmp_path):
     pytest.importorskip("manim")
     data = animation_data(DeviceConfig(), biases=(0.0, -10.0, -30.0))
-    assert {f["solver"] for f in data["frames"]} == {"devsim"}
+    assert {f["solver"] for f in data["frames"]} == {"batched"}
     t0 = time.perf_counter()
     for scene in SCENES:
         path, wall = render_animation(data, scene, out_dir=tmp_path / scene)

@@ -3,7 +3,9 @@
 Quantities per node: NetDoping (cm^-3, = N_D - N_A with IONIZED acceptors, the devsim
 NetDoping model), Potential (V), ElectricField magnitude (V/cm) and, when the result
 carries them (``run_field`` does since 2026-10-20), the carrier densities Electrons and
-Holes (cm^-3). devsim path: the node solutions of the solved device. 2D engine path:
+Holes (cm^-3). devsim path: the node solutions of the solved device. 1D batched-engine
+path: a dark Gummel solve on the Poisson state, within 2e-9 relative of devsim at every
+node (tests/test_field_engine_1d.py). 2D engine path:
 the engine dark state (``etna.core.engine2d.dark_state_2d``); measured against devsim on
 the default stack, hw 25 um, -20 V: same values to |dlog10| < 1e-13 wherever the
 density exceeds 1e10 cm^-3; in the depleted region both are < 1e-8 cm^-3 (devsim
