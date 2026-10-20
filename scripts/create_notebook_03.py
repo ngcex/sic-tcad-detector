@@ -205,7 +205,7 @@ nb.cells.append(
         "- Charge generated in the neutral (undepleted) region has incomplete "
         "collection via diffusion only\n"
         "- CCE should initially decrease with epi thickness as the depletion fraction drops\n"
-        "- For epi > alpha range (~15 um), CCE may increase as the generation profile "
+        "- For epi > alpha range (~18.4 um, NIST), CCE may increase as the generation profile "
         "shape changes (less concentrated near the surface)\n"
         "- At higher bias (e.g. -30V) all thicknesses are fully depleted and CCE ~ 1.0"
     )
@@ -239,7 +239,7 @@ nb.cells.append(
         "cce_arr = epi_data['cce_values']\n"
         "thin_exceeds_mid = cce_arr[0] > cce_arr[2]  # 5um > 10um\n"
         "print(f'\\nCCE(5um) > CCE(10um): {thin_exceeds_mid}  [{cce_arr[0]:.4f} vs {cce_arr[2]:.4f}]')\n"
-        "print(f'Note: Non-monotonic trend expected when epi approaches alpha range (~15um)')"
+        "print(f'Note: Non-monotonic trend expected when epi approaches alpha range (~18.4um)')"
     )
 )
 

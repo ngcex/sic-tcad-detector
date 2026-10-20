@@ -318,8 +318,9 @@ def compute_kappa_table(
     ``source="bragg"`` (the physics path) uses REAL NIST data (PSTAR for protons,
     ASTAR for alphas; ``data/nist_star/``, downloaded 2026-10-20 with provenance).
     NIST has no SiC table: SiC is composed by Bragg additivity of NIST Si + C
-    (``etna.core.stopping_power``; caveat: binding/phase effects ignored, a few % for
-    protons > 1 MeV, up to ~10% near the stopping maximum).
+    (``etna.core.stopping_power``; caveat: binding/phase effects ignored, roughly a few
+    % for protons > 1 MeV and up to ~10% near the stopping maximum -- an unverified
+    literature estimate).
 
     Convention (``ratio``):
 

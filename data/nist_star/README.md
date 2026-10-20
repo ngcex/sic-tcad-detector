@@ -36,8 +36,10 @@ S_total` (MeV cm2/g), `csda_range`, `projected_range` (g/cm2), `detour_factor`.
 
 4H-SiC is composed in `etna/core/stopping_power.py` by **Bragg additivity**
 `(S/rho)_SiC = 0.7004 (S/rho)_Si + 0.2996 (S/rho)_C` (amorphous carbon by default).
-This ignores chemical binding/phase effects: typically a few percent for protons above
-~1 MeV, up to ~10% near the stopping maximum (protons < ~0.3 MeV, alphas < ~2 MeV).
+This ignores chemical binding/phase effects. Order of magnitude of the error (an
+UNVERIFIED literature estimate, not computed or checked in this repo): a few percent
+for protons above ~1 MeV, up to ~10% near the stopping maximum (protons < ~0.3 MeV,
+alphas < ~2 MeV).
 Graphite instead of amorphous carbon changes SiC stopping by <= 1% above 1 MeV.
 A SRIM-2013 or ICRU-73/90 SiC table would be the natural cross-check (not done).
 

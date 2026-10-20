@@ -72,8 +72,10 @@ extrapolation. With the previous abrupt-n⁺ default the three V_fd were 4.0 / 9
 - Full-depletion voltage and recommended operating bias **for a p-n-type junction**.
 - CCE → 1 (> 0.96) when fully depleted (DD model; consistent with the 1D twin).
   **CCE is relative to the e-h pairs generated inside the simulated epi**, not to
-  the full alpha deposit: the model alpha (~15 µm range) leaves ~83 % of its pairs
-  in a 10 µm epi (5 µm: ~42 %, 20 µm: ~100 %); collected/deposited ≈ that fraction
+  the full alpha deposit: the model alpha (5.486 MeV, NIST ASTAR Bragg curve in SiC,
+  18.4 µm range, since 2026-10-20) leaves ~43 % of its pairs in a 10 µm epi at normal
+  incidence (5 µm: ~20 %, 20 µm: ~100 %; the earlier 15 µm flat box gave ~83 % /
+  ~42 % / ~100 %); collected/deposited ≈ that fraction
   × CCE. The lateral scans report both (`in_mesh_generation_fraction`,
   `q_collected_over_deposited`).
 

@@ -320,7 +320,8 @@ $$\\kappa(E) = \\frac{L_{\\text{water}}(E)}{L_{\\text{SiC}}(E)}
 **Data:** NIST PSTAR (protons) for liquid water, silicon and carbon, downloaded
 2026-10-20 (`data/nist_star/`, raw responses and SHA-256 kept). NIST has no SiC
 table, so SiC is composed by Bragg additivity (0.7004 Si + 0.2996 C by mass),
-which ignores chemical binding: a few percent for protons above 1 MeV.
+which ignores chemical binding (roughly a few percent for protons above 1 MeV,
+an unverified literature estimate).
 
 The water mass stopping power is higher than the SiC one (mass ratio 1.37 at
 1 MeV -> 1.20 at 150 MeV), but SiC is 3.21x denser, so per micrometre SiC

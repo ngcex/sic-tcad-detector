@@ -14,7 +14,8 @@ NIST has no SiC table. 4H-SiC is composed here by **Bragg additivity** of the
 elemental mass stopping powers, ``(S/rho)_SiC = w_Si (S/rho)_Si + w_C (S/rho)_C``
 (w_Si = 0.7004, w_C = 0.2996). Caveats, stated rather than corrected:
 
-- Bragg additivity ignores chemical-binding and phase effects. For protons above
+- Bragg additivity ignores chemical-binding and phase effects (error sizes below are
+  an UNVERIFIED literature estimate, not checked in this repo). For protons above
   ~1 MeV the error is usually a few percent or less; near the stopping-power maximum
   (protons < ~0.3 MeV, alphas < ~2 MeV) it can reach ~10%.
 - The carbon component is NIST "amorphous carbon" by default. Graphite instead

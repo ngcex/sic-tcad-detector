@@ -103,9 +103,11 @@ the published measurements).
 CCE → 1 (> 0.96) once the device is fully depleted. This is a drift-diffusion
 model result for the simulated p-n junction; not an absolute device guarantee.
 **CCE is relative to the e-h pairs generated inside the simulated epi**, not to
-the full particle deposit: for the model alpha (~15 µm range) a 10 µm epi holds
-~83 % of the pairs (5 µm: ~42 %, 20 µm: ~100 %), so collected/deposited charge ≈
-0.83 × CCE on 10 µm (the 2D lateral scans report both, as
+the full particle deposit: for the model alpha (5.486 MeV, NIST ASTAR Bragg curve
+in SiC, 18.4 µm range, deposit peaking near 17 µm; since 2026-10-20) a 10 µm epi holds
+~43 % of the pairs (5 µm: ~20 %, 20 µm: ~100 %), so collected/deposited charge ≈
+0.43 × CCE on 10 µm at normal incidence (the earlier 15 µm flat-box model gave
+~83 % / ~42 % / ~100 %; the 2D lateral scans report both, as
 `in_mesh_generation_fraction` and `q_collected_over_deposited`).
 
 ---
