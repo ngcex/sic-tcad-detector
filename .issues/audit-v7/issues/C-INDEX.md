@@ -18,7 +18,7 @@ Streamlit bind check).
 | C-09 | low      | fixed  | Unbounded numeric inputs produce silent nonsense (area=0, sv_thickness=0, negative edep)     | S      |
 | C-10 | low      | fixed  | Batch Sweep parser accepts nan/inf/non-positive values                                       | S      |
 | C-11 | low      | fixed  | Session-state results go stale silently; no progress spinner                                 | S      |
-| C-12 | low      | open (partial) | DeviceConfig has no validation (unknown profile becomes uniform, hidden N_D default)         | S      |
+| C-12 | low      | fixed (d7280f7) | DeviceConfig has no validation (unknown profile becomes uniform, hidden N_D default)         | S      |
 | C-13 | info     | fixed  | Dead or test-only API surface (MeshData.regions/contacts, device_name, flash/transient CSV)  | S      |
 | C-14 | info     | fixed  | Stale docstrings and user-facing text (Phase 40, placeholder pages, "note above")            | S      |
 | C-15 | low      | resolved (documented, 2790a8f) | `uv run pytest` falls through to system pytest after a plain `uv sync`                       | S      |
@@ -80,3 +80,14 @@ Branch final-c (from final-verify 3727bd0). Evidence per item (details in each i
 - C-17: fixed. ba9a5af (file-like accepted, page passes io.BytesIO, no tempfile). Same y_F/y_D/y as the path call.
 
 Counts after this sync (from the issue files): 14 fixed, 1 open (C-12, partial), 2 resolved (C-05, C-15). 25 new tests (affected files: 108 -> 133 collected).
+
+## Status sync 2026-10-21 (C-12 contract)
+
+- C-12: fixed. d7280f7. Strict contract: `doping_profile` is `Literal["graded", "uniform"]`,
+  case-sensitive, unknown values raise; uniform requires N_D; graded rejects an explicit
+  N_D (ignored by every graded builder). Presets unchanged and bit-identical (run_all +
+  preset C-V fingerprint vs main f3f00ee); tests/test_device_config_contract.py.
+- C-03: still fixed, hardened in d7280f7: `device_kwargs` re-validates, so a config mutated
+  in place after construction raises ValueError at facade entry instead of a devsim error.
+
+Counts after this sync (from the issue files): 15 fixed, 0 open, 2 resolved (C-05, C-15).

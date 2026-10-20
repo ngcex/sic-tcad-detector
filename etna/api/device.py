@@ -13,9 +13,10 @@ followed by the same Poisson + drift-diffusion setup sequence used by
 
 from __future__ import annotations
 
+import math
 import uuid
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Literal, Optional, Tuple, Union, get_args
 
 from etna.core.devsim_lock import serialized
 from etna.core.incomplete_ionization import IonizationModel, resolve_ionization
@@ -33,6 +34,13 @@ from etna.core.device import (
 )
 
 
+# Allowed epi doping profiles. Exact, case-sensitive strings: no case folding, so one
+# physical model has exactly one spelling (the config is serialised into every CSV /
+# figure header and its provenance must be unique per physics).
+DopingProfile = Literal["graded", "uniform"]
+DOPING_PROFILES: Tuple[str, ...] = get_args(DopingProfile)
+
+
 def _um(cm):
     """cm -> um rounded to 12 digits (0.3e-4 cm -> 0.3, not 0.30000000000000004)."""
     return None if cm is None else round(cm * 1e4, 12)
@@ -48,10 +56,12 @@ class DeviceConfig:
     substrate_thickness_um: float = _um(DEFAULT_STACK["substrate_thickness_cm"])
     half_width_um: Optional[float] = None  # um, lateral half-width (2D devices only)
     N_A: float = DEFAULT_N_A  # cm^-3, p+ anode acceptor doping
-    doping_profile: str = "graded"  # "graded" or "uniform" epi doping profile
-    N_D: Optional[float] = (
-        None  # cm^-3, uniform epi donor doping (uniform profile only)
-    )
+    # epi doping profile, exactly "graded" (N_D_junction / N_D_bulk / L_transition_um, or
+    # donor_table) or "uniform" (N_D); any other value (also "Graded") is a ValueError
+    doping_profile: DopingProfile = "graded"
+    # cm^-3, uniform epi donor doping: REQUIRED with "uniform", must be None with "graded"
+    # (the graded builders never read it, so an explicit value would be silently ignored)
+    N_D: Optional[float] = None
     N_D_junction: float = DEFAULT_STACK["N_D_junction"]  # cm^-3, epi doping at junction
     N_D_bulk: float = DEFAULT_STACK["N_D_bulk"]  # cm^-3, epi donor doping in bulk
     L_transition_um: float = _um(DEFAULT_STACK["L_transition"])  # um, graded transition
@@ -101,17 +111,68 @@ class DeviceConfig:
     incomplete_ionization: Union[bool, IonizationModel] = False
 
     def __post_init__(self) -> None:
-        """Reject physically meaningless values early, with a clear message.
+        """Normalise the derived fields, then reject meaningless values (``validate``).
 
-        Written as ``not (x > lo)`` so NaN is rejected too. ``doping_profile``
-        is deliberately not validated here (downstream code decides).
+        ``dataclasses.replace`` re-runs this, so sweeps are validated too.
+        """
+        buffer_at_default = (
+            self.buffer_thickness_um == _um(DEFAULT_STACK["buffer_thickness_cm"])
+            and self.buffer_end_doping == DEFAULT_STACK["buffer_end_doping"]
+        )
+        if self.doping_profile == "uniform" and buffer_at_default:
+            # the measured-C-V transition was fitted with the graded epi profile: a
+            # uniform-doping device keeps the abrupt epi end unless set explicitly
+            self.buffer_thickness_um = self.buffer_end_doping = None
+        if self.donor_table is not None:
+            # tabulated epi profile: normalise to a tuple of (depth_um, N_D) pairs (left
+            # as given when malformed: validate() reports it) and drop the default
+            # transition (an explicit one is refused by validate())
+            try:
+                self.donor_table = tuple(
+                    (float(d), float(n)) for d, n in self.donor_table
+                )
+            except (TypeError, ValueError):
+                pass
+            if buffer_at_default:
+                self.buffer_thickness_um = self.buffer_end_doping = None
+        self.validate()
+
+    def validate(self) -> None:
+        """Raise ValueError (naming every bad field) if this config is not physical.
+
+        Pure check, no mutation: called by ``__post_init__`` and again by
+        ``device_kwargs`` (the entry of ``build_device`` and every ``run_*`` facade),
+        so a field changed in place after construction is caught before devsim sees
+        it. Comparisons are written as ``not (x > lo)`` so NaN is rejected too.
+        Contract: ``doping_profile`` is exactly one of ``DOPING_PROFILES`` (case-sensitive);
+        "uniform" requires ``N_D``; "graded" requires ``N_D=None``.
         """
         problems = []
 
         def _positive(name, value):
-            if value is None or not (value > 0):
-                problems.append(f"{name} must be > 0 (got {value!r})")
+            try:
+                ok = value is not None and math.isfinite(value) and value > 0
+            except TypeError:
+                ok = False
+            if not ok:
+                problems.append(f"{name} must be > 0 and finite (got {value!r})")
 
+        if self.doping_profile not in DOPING_PROFILES:
+            problems.append(
+                f"doping_profile must be one of {list(DOPING_PROFILES)} (exact, "
+                f"case-sensitive; got {self.doping_profile!r})"
+            )
+        elif self.doping_profile == "uniform" and self.N_D is None:
+            problems.append(
+                "doping_profile='uniform' requires N_D (cm^-3, the uniform epi donor "
+                "doping); there is no default"
+            )
+        elif self.doping_profile == "graded" and self.N_D is not None:
+            problems.append(
+                f"N_D={self.N_D!r} is not used by doping_profile='graded' (set "
+                "N_D_junction / N_D_bulk / L_transition_um or donor_table instead, or "
+                "use doping_profile='uniform' with N_D)"
+            )
         _positive("epi_thickness_um", self.epi_thickness_um)
         _positive("substrate_thickness_um", self.substrate_thickness_um)
         _positive("area_cm2", self.area_cm2)
@@ -130,23 +191,11 @@ class DeviceConfig:
         if self.nplus_thickness_um is not None:
             _positive("nplus_thickness_um", self.nplus_thickness_um)
             _positive("N_D_nplus", self.N_D_nplus)
-        buffer_at_default = (
-            self.buffer_thickness_um == _um(DEFAULT_STACK["buffer_thickness_cm"])
-            and self.buffer_end_doping == DEFAULT_STACK["buffer_end_doping"]
-        )
-        if self.doping_profile == "uniform" and buffer_at_default:
-            # the measured-C-V transition was fitted with the graded epi profile: a
-            # uniform-doping device keeps the abrupt epi end unless set explicitly
-            self.buffer_thickness_um = self.buffer_end_doping = None
         if self.donor_table is not None:
-            # tabulated epi profile: normalise to a tuple of (depth_um, N_D) pairs,
-            # validate it against the epi, drop the default transition, refuse an explicit one
             try:
-                self.donor_table = tuple(
-                    (float(d), float(n)) for d, n in self.donor_table
-                )
+                table = tuple((float(d), float(n)) for d, n in self.donor_table)
                 if self.epi_thickness_um is not None and self.epi_thickness_um > 0:
-                    donor_table_spec(self.epi_thickness_um * 1e-4, self.donor_table)
+                    donor_table_spec(self.epi_thickness_um * 1e-4, table)
             except (TypeError, ValueError) as e:
                 problems.append(f"donor_table: {e}")
             if self.doping_profile != "graded":
@@ -154,9 +203,7 @@ class DeviceConfig:
                     f"donor_table requires doping_profile='graded' (got "
                     f"{self.doping_profile!r})"
                 )
-            if buffer_at_default:
-                self.buffer_thickness_um = self.buffer_end_doping = None
-            elif (
+            if (
                 self.buffer_thickness_um is not None
                 or self.buffer_end_doping is not None
             ):
@@ -181,10 +228,12 @@ class DeviceConfig:
                     "n-/n+ transition; pass buffer_thickness_um=None, "
                     "buffer_end_doping=None for an abrupt epi end)"
                 )
-        if not (self.N_A >= 1e17):
-            problems.append(f"N_A must be >= 1e17 cm^-3 (p+ anode; got {self.N_A!r})")
+        if not (self.N_A >= 1e17 and math.isfinite(self.N_A)):
+            problems.append(
+                f"N_A must be >= 1e17 cm^-3 and finite (p+ anode; got {self.N_A!r})"
+            )
         if not problems:
-            if self.doping_profile == "uniform" and self.N_D is not None:
+            if self.doping_profile == "uniform":
                 donors = {"N_D": self.N_D}
             else:
                 donors = {"N_D_junction": self.N_D_junction, "N_D_bulk": self.N_D_bulk}
@@ -211,7 +260,10 @@ def device_kwargs(config: DeviceConfig) -> dict:
 
     Single source of truth for the config -> core unit conversion, shared by
     ``build_device`` and every simulation facade so no config field is dropped.
+    Re-validates ``config`` first (``DeviceConfig.validate``): a field changed in place
+    after construction raises ValueError naming it, not a raw devsim error.
     """
+    config.validate()
     kw = dict(
         epi_thickness_cm=config.epi_thickness_um * 1e-4,
         substrate_thickness_cm=config.substrate_thickness_um * 1e-4,

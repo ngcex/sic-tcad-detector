@@ -190,10 +190,26 @@ aborts the run.
 | dark-current fit        | N_t 1.355575e12 cm^-3 s^-1 (Hurkx refit 2026-10-20), E_t 0.67 eV                                                            | `N_t`, `E_t`                                                         |
 | temperature             | 300 K                                                                                                                       | `T`                                                                  |
 
-`DeviceConfig` validates on construction: it rejects non-positive sizes, N_D >= N_A,
-T outside 100-600 K and an inconsistent transition, with a `ValueError` that names the
-field. Set `half_width_um` (µm) for a 2D device (lateral half-width; depth is the 2D
+`DeviceConfig` validates on construction: it rejects non-positive or non-finite sizes,
+doping and area, N_D >= N_A, T outside 100-600 K and an inconsistent transition, with a
+`ValueError` that names the field. The same check runs again when a facade (`run_*`,
+`build_device`) receives the config, so a field changed in place after construction
+(`cfg.substrate_thickness_um = 0.0`) gives that `ValueError` and never a raw devsim
+error. Set `half_width_um` (µm) for a 2D device (lateral half-width; depth is the 2D
 `y`).
+
+The epi doping profile is a strict contract. The field is typed
+`DopingProfile = Literal["graded", "uniform"]`; the allowed values are
+`etna.api.device.DOPING_PROFILES`.
+
+- `doping_profile` is exactly `"graded"` or `"uniform"`. Matching is case-sensitive:
+  `"Graded"`, `"step"` or a typo raises a `ValueError` that lists the allowed values.
+  The config is written into every CSV and figure header, so each physical model has
+  one spelling only.
+- `"uniform"` requires `N_D`. There is no hidden default, and leaving it `None` raises.
+- `"graded"` requires `N_D=None`. The graded epi is set by `N_D_junction`, `N_D_bulk`
+  and `L_transition_um` (or by `donor_table`), and the builders never read `N_D`, so an
+  explicit value raises instead of being ignored silently.
 
 ### 5.2 Presets
 
