@@ -518,8 +518,11 @@ a dose-rate-independent offset: 3.4e-7 on the default stack at -30 V, up to 5.6e
 notebook 05b's grid (5 um epi, N_D_bulk 5e14, -10 V), from minority holes recombining in
 the 1e19 n+ substrate; it scales ~linearly with C_n, so the literature spread (up to
 ~2e-30) allows up to ~2e-4 there. It adds no dose-rate dependence (<= 1.5e-8). Until
-2026-10-20 the Auger term was silently dropped (both solvers SRH-only). `run_transient`
-still is SRH-only (open item, `.issues/TECH-DEBT-2026-10-18.md`).
+2026-10-20 the Auger term was silently dropped (both solvers SRH-only); `run_transient`
+dropped it until 2026-10-21 (now SRH + Auger too). Its direct-anode estimator does not
+resolve the offset (round-off ~1e-4 of q*integral(G)): on the default stack Auger moves
+the transient CCE by ~1e-12, at the 05b corner by 4e-8..9e-5 depending on the dose rate;
+use the steady-state numbers above for the Auger magnitude.
 
 ```python
 from etna import DeviceConfig, run_flash_recombination, run_transient

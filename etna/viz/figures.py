@@ -69,7 +69,7 @@ NOTES = {
     ),
     "flash": (
         "FLASH: numerical sensitivity bound, not a validated plasma-recombination "
-        "prediction (high injection not modelled; SRH only, Auger inactive)."
+        "prediction (high-injection plasma not modelled; SRH + low-injection Auger)."
     ),
     "transient": (
         "FLASH transient: low-injection DD pulse response; high-injection plasma "

@@ -482,3 +482,37 @@ def test_compute_transient_cce_reports_the_unclipped_ratio():
     cce, raw = solver.compute_transient_cce(res, G, x, return_raw=True)
     assert cce == 1.0 and raw == pytest.approx(1.002, rel=1e-12)
     assert solver.compute_transient_cce(res, G, x) == 1.0
+
+
+@pytest.mark.slow
+def test_transient_sweep_keeps_auger_active(monkeypatch):
+    """Regression (2026-10-21): TransientSolver set the pulse generation with
+    add_generation_to_dd, which rewrites the SRH-only generation models, so the Auger
+    term added by transient_cce_vs_dose_rate was inactive and the transient CCE was bit
+    for bit the C_n = C_p = 0 one (same bug as cce_vs_dose_rate before afbf055). At
+    notebook 05b's Auger corner (5 um, N_D_bulk 5e14, -10 V; steady-state Auger drop
+    5.604e-5) Auger must now lower the transient CCE. Only the sign is pinned: the
+    direct-anode transient estimator (round-off ~1e-4 of q*integral(G)) does not
+    resolve the 5.6e-5 magnitude reliably (1 ms plateau, 20-230 Gy/s: 4e-8..9e-5).
+    """
+    import etna.core.transient as tr
+    from etna.core.device import DEFAULT_STACK as S
+
+    real_add = tr.add_auger_recombination
+    nd = 5e14
+    kw = dict(
+        V_bias=-10.0,
+        dose_rates=[230.0],
+        epi_thickness_cm=5e-4,
+        device_kwargs=dict(
+            N_D_bulk=nd, N_D_junction=S["N_D_junction"] * nd / S["N_D_bulk"]
+        ),
+        t_duration=20e-6,  # short plateau: same code path, fewer steps
+    )
+    auger = tr.transient_cce_vs_dose_rate(**kw)["transient_cce_raw"].iloc[0]
+    monkeypatch.setattr(
+        tr, "add_auger_recombination", lambda info: real_add(info, C_n=0.0, C_p=0.0)
+    )
+    srh = tr.transient_cce_vs_dose_rate(**kw)["transient_cce_raw"].iloc[0]
+    # the old code gave srh == auger exactly; measured 2026-10-21: 5.96e-5
+    assert srh - auger > 1e-6, (srh, auger)
