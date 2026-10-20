@@ -736,16 +736,46 @@ def _ramp_anode(device_info, V_target, V_step=DARK_RAMP_STEP_V):
             raise devsim.error(f"ramp failed at V={V_int:.3f} V: {e}") from e
 
 
+def _bias_anode(device_info, V_target, V_step=DARK_RAMP_STEP_V):
+    """Anode to ``V_target`` (V) on the TAT / Hurkx device: ``seeded_bias`` with the
+    TAT model allowed in the strict solve, the frozen field / Gamma refreshed from the
+    seeded state before it, and ``_ramp_anode`` as the fallback (seed not applicable,
+    e.g. forward bias or the contact-on-epi cathode past FIELD_ENGINE_MAX, or the
+    strict solve did not converge: solution and bias restored first). The state at the
+    bias is iterated to the frozen-field fixed point afterwards either way
+    (``_resolve_self_consistent``), so it does not depend on the path. Honours
+    ``drift_diffusion.SEED_BIAS``; ``device_info["bias_seeded"]`` records the outcome.
+    """
+    from etna.core import drift_diffusion as dd
+
+    device = device_info["device_name"]
+    region = device_info["region_name"]
+
+    def refresh():
+        _compute_node_efield(device, region)
+        _compute_gamma_factors(device, region)
+
+    dd.seeded_bias(
+        device_info,
+        V_target,
+        "anode",
+        allow=("U_TAT",),
+        pre_solve=refresh,
+        fallback=lambda: _ramp_anode(device_info, V_target, V_step),
+    )
+
+
 def dark_current_at_bias(
     device_info, V, area=AREA_DOSIMETER_CM2, V_step=DARK_RAMP_STEP_V
 ):
     """Dark-current components at anode bias ``V`` (V, negative = reverse).
 
-    Ramps from the device's present bias (``_ramp_anode``), iterates the frozen TAT
-    field to self-consistency (``_resolve_self_consistent``) and returns
+    Brings the anode to ``V`` (``_bias_anode``: engine seed + one strict solve, else
+    the ramp ``_ramp_anode`` from the present bias), iterates the frozen TAT field to
+    self-consistency (``_resolve_self_consistent``) and returns
     ``extract_dark_current_components``. Raises devsim.error on non-convergence.
     """
-    _ramp_anode(device_info, V, V_step)
+    _bias_anode(device_info, V, V_step)
     try:
         _resolve_self_consistent(device_info["device_name"], device_info["region_name"])
     except devsim.error as e:
@@ -774,12 +804,14 @@ def dark_current_sweep(
     -------
     dict
         Dictionary with arrays: voltages, I_total, I_SRH, I_TAT, I_SRV,
-        J_total, J_SRH, J_TAT, J_SRV; plus "truncated" (bool: the sweep stopped
+        J_total, J_SRH, J_TAT, J_SRV; "bias_seeded" (bool per point: the bias was
+        reached by the engine seed, ``_bias_anode``; False = ramp or no bias change);
+        plus "truncated" (bool: the sweep stopped
         before the end of V_range), "requested_v_start", "requested_v_stop" and
         "reached_v_stop" (last converged bias, None if none).
     """
     V_range = np.asarray(V_range, dtype=float)
-    results = {"voltages": [], **{key: [] for key in _SWEEP_KEYS}}
+    results = {"voltages": [], "bias_seeded": [], **{key: [] for key in _SWEEP_KEYS}}
     for V_target in V_range:
         try:
             components = dark_current_at_bias(device_info, V_target, area, V_step)
@@ -787,6 +819,7 @@ def dark_current_sweep(
             logger.warning(f"dark_current_sweep: {e}")
             return _finish_sweep(results, V_range)
         results["voltages"].append(V_target)
+        results["bias_seeded"].append(bool(device_info.get("bias_seeded")))
         for key in _SWEEP_KEYS:
             results[key].append(components[key])
     return _finish_sweep(results, V_range)

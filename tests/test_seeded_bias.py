@@ -6,7 +6,10 @@ current -- its TAT model is added after the seeded bias) to <= 1e-10 relative. E
 parity test also asserts the seed was actually used (a fallback to the ramp would pass
 any parity trivially). Devices with physics the seed engine does not carry (Auger,
 TAT / Hurkx, carrier-dependent ionization) and unsupported biases must be ramped: those
-cases assert the reason and the bit-for-bit ramp state.
+cases assert the reason and the bit-for-bit ramp state. Auger and TAT / Hurkx are
+seeded where the call site allows them (seeded_bias(allow=...), the strict solve
+carries the model): the dark Auger device of transient_cce_vs_dose_rate and the devsim
+dark-current sweep (dark_current._bias_anode), with the same state / downstream gates.
 """
 
 import uuid
@@ -271,3 +274,115 @@ def test_2d_cce_and_dark_parity(monkeypatch):
         return np.concatenate([np.ravel(cce), [dark]])
 
     _assert_close(*_both(monkeypatch, run))
+
+
+# ------------------------------------------- Auger / TAT allowed in the strict solve
+def _tat_state_at(V, monkeypatch, seed, **kw):
+    """TAT / Hurkx device at anode bias V via dark_current_at_bias (frozen-field fixed
+    point), seeded or ramped; returns (state, components, bias_seeded)."""
+    from etna.api.device import DeviceConfig, device_kwargs
+    from etna.core.dark_current import create_dark_current_device, dark_current_at_bias
+
+    monkeypatch.setattr(dd, "SEED_BIAS", seed)
+    cfg = DeviceConfig()
+    dev_kw = {**device_kwargs(cfg), **kw}
+    info = create_dark_current_device(N_t=cfg.N_t, E_t=cfg.E_t, **dev_kw)
+    try:
+        comp = dark_current_at_bias(info, V)
+        return _state(info), comp, info["bias_seeded"], info["bias_seed_reason"]
+    finally:
+        delete_device_and_mesh(info["device_name"])
+
+
+def test_auger_allowed_seed_equals_ramp():
+    """transient_cce_vs_dose_rate's dark Auger device: seed + strict solve WITH Auger
+    == the 0.5 V ramp with Auger. (Auger moves the minority carriers of the dark state
+    pointwise by up to ~8 % in the n+, so the strict solve must carry it.)"""
+    V = -30.0
+    info = _build_1d(auger=True)
+    try:
+        dd.ramp_bias(info, V, "anode")
+        assert not info.get("ramp_relaxed_retries")
+        assert not info.get("ramp_aggressive_retries")
+        ref = _state(info)
+    finally:
+        delete_device_and_mesh(info["device_name"])
+    info = _build_1d(auger=True)
+    try:
+        dd.seeded_bias(info, V, "anode", allow=("UAuger",))
+        assert info["bias_seeded"] is True, info["bias_seed_reason"]
+        got = _state(info)
+    finally:
+        delete_device_and_mesh(info["device_name"])
+    _assert_same_state(got, ref)
+
+
+@pytest.mark.parametrize("V", [-10.0, -60.0])
+def test_tat_seeded_state_equals_ramped_state(V, monkeypatch):
+    got, cg, seeded, reason = _tat_state_at(V, monkeypatch, True)
+    ref, cr, ref_seeded, _ = _tat_state_at(V, monkeypatch, False)
+    assert seeded is True, reason
+    assert ref_seeded is False
+    _assert_same_state(got, ref)
+    _assert_close(cg["I_total"], cr["I_total"])
+
+
+def test_tat_legacy_past_the_wall_is_ramped(monkeypatch):
+    """Contact-on-epi cathode past FIELD_ENGINE_MAX: the dark sweep keeps its own ramp
+    (and its convergence verdict), bit for bit."""
+    got, cg, seeded, reason = _tat_state_at(-60.0, monkeypatch, True, **LEGACY)
+    ref, cr, _, _ = _tat_state_at(-60.0, monkeypatch, False, **LEGACY)
+    assert seeded is False and "past the devsim wall" in reason
+    _assert_same_state(got, ref, tol=0.0)
+    assert cg["I_total"] == cr["I_total"]
+
+
+def test_tat_failed_seed_solve_restores_and_ramps(monkeypatch):
+    """Seed strict solve fails on the TAT device: restored, then the dark sweep's own
+    field-refreshing ramp (_ramp_anode) -- the ramped result bit for bit."""
+    import etna.core.dark_current as dc
+
+    ref, cr, _, _ = _tat_state_at(-20.0, monkeypatch, False)
+    monkeypatch.setattr(dd, "solve_tier", lambda tier: None)
+    ramps = []
+    real = dc._ramp_anode
+    monkeypatch.setattr(
+        dc, "_ramp_anode", lambda *a, **k: (ramps.append(a[1]), real(*a, **k))
+    )
+    got, cg, seeded, reason = _tat_state_at(-20.0, monkeypatch, True)
+    assert seeded is False and "strict solve" in reason
+    assert ramps == [-20.0]
+    _assert_same_state(got, ref, tol=0.0)
+    assert cg["I_total"] == cr["I_total"]
+
+
+def test_transient_dose_rate_parity(monkeypatch):
+    from etna.core.transient import transient_cce_vs_dose_rate
+
+    seen = []
+
+    def run():
+        df = transient_cce_vs_dose_rate(dose_rates=[20.0, 230.0])
+        seen.append(df.attrs["bias_seeded"])
+        return df["transient_cce_raw"].to_numpy()
+
+    _assert_close(*_both(monkeypatch, run))
+    assert seen == [False, True]
+
+
+def test_run_dark_current_devsim_parity(monkeypatch):
+    from etna.api.device import DeviceConfig
+    from etna.api.simulation import run_dark_current
+
+    seen = []
+
+    def run():
+        r = run_dark_current(DeviceConfig(), n_points=6, solver="devsim")
+        assert not r.metadata["truncated"]
+        seen.append(r.metadata["bias_seeded"])
+        return r.y
+
+    _assert_close(*_both(monkeypatch, run))
+    assert not seen[0].any()
+    # every bias point but the first (0 V: no bias change) was seeded
+    assert seen[1].tolist() == [False] + [True] * 5
