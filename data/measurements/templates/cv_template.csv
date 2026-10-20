@@ -1,0 +1,14 @@
+# ETNA C-V measurement template (header only: no data). Columns and units: data/measurements/README.md
+# Fill the metadata values after the colon (leave empty when unknown); add one data row per bias.
+# sample:
+# device:
+# operator:
+# date:
+# instrument:
+# source:
+# area_cm2:
+# frequency_hz:
+# temperature_k:
+# bias_convention: reverse_negative
+# notes:
+V_V,C_pF,sigma_C_pF,sigma_V_V

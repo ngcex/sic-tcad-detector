@@ -1,0 +1,15 @@
+# ETNA SIMS / SRP depth-profile template (header only: no data). Columns and units: data/measurements/README.md
+# Depth is measured from the device SURFACE (p+ top). Fill the metadata values after the colon (leave empty when unknown).
+# technique: SIMS
+# quantity:
+# depth_reference: surface
+# junction_depth_um:
+# detection_limit_N_cm3:
+# detection_limit_Al_cm3:
+# sample:
+# lab:
+# date:
+# instrument:
+# source:
+# notes:
+depth_um,N_cm3,sigma_N_cm3,Al_cm3,sigma_Al_cm3
