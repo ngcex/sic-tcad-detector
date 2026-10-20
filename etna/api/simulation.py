@@ -809,19 +809,52 @@ def _engine2d_cathode_field(config: DeviceConfig, bias_V: float) -> "float | Non
         return None
 
 
+_DELAUNAY_CACHE: "dict" = {}  # key -> scipy Delaunay, insertion order = age
+_DELAUNAY_CACHE_MAX = 8
+
+
+def _delaunay(key, points_fn):
+    """Delaunay triangulation of ``points_fn()``, memoized on ``key`` (a few entries).
+
+    The triangulation depends only on the point coordinates, which repeat across
+    run_field calls on one mesh (every bias, both solvers); building it is ~0.17 s
+    per call for the 18k-node default 2D mesh. Same points -> same qhull result, so
+    the interpolated field is bit-identical (tests/test_node_field_2d_cache.py).
+    """
+    from scipy.spatial import Delaunay
+
+    tri = _DELAUNAY_CACHE.pop(key, None)
+    if tri is None:
+        tri = Delaunay(points_fn())
+    _DELAUNAY_CACHE[key] = tri
+    while len(_DELAUNAY_CACHE) > _DELAUNAY_CACHE_MAX:
+        _DELAUNAY_CACHE.pop(next(iter(_DELAUNAY_CACHE)))
+    return tri
+
+
 def _node_field_2d(x_coords, y_coords, potential):
     """Node-aligned |E| (V/cm) for a 2D mesh, the plotting2d.py pattern: interpolate
     Potential onto a regular 100 x 200 grid, gradient, interpolate |E| back onto the
-    nodes, NaN -> 0. Shared by the devsim and engine paths of ``run_field``."""
+    nodes, NaN -> 0. Shared by the devsim and engine paths of ``run_field``. The two
+    triangulations (mesh nodes, regular grid) are cached by their coordinates."""
+    import hashlib
+
     from scipy.interpolate import LinearNDInterpolator
 
     n_x = 100
     n_y = 200
+    x_coords = np.asarray(x_coords, dtype=float)
+    y_coords = np.asarray(y_coords, dtype=float)
     x_reg = np.linspace(x_coords.min(), x_coords.max(), n_x)
     y_reg = np.linspace(y_coords.min(), y_coords.max(), n_y)
     X_reg, Y_reg = np.meshgrid(x_reg, y_reg)
 
-    interp = LinearNDInterpolator(list(zip(x_coords, y_coords)), potential)
+    h = hashlib.blake2b(digest_size=16)
+    h.update(np.ascontiguousarray(x_coords).tobytes())
+    h.update(np.ascontiguousarray(y_coords).tobytes())
+    mesh_key = ("mesh", x_coords.size, h.hexdigest())
+    tri_mesh = _delaunay(mesh_key, lambda: list(zip(x_coords, y_coords)))
+    interp = LinearNDInterpolator(tri_mesh, potential)
     V_grid = interp(X_reg, Y_reg)
 
     dy = y_reg[1] - y_reg[0]
@@ -829,10 +862,10 @@ def _node_field_2d(x_coords, y_coords, potential):
     Ey, Ex = np.gradient(-V_grid, dy, dx)
     E_mag_grid = np.sqrt(Ex**2 + Ey**2)
 
-    E_interp = LinearNDInterpolator(
-        list(zip(X_reg.ravel(), Y_reg.ravel())),
-        E_mag_grid.ravel(),
-    )
+    # the regular grid depends only on the bounding box (and n_x, n_y)
+    grid_key = ("grid", n_x, n_y, x_reg[0], x_reg[-1], y_reg[0], y_reg[-1])
+    tri_grid = _delaunay(grid_key, lambda: list(zip(X_reg.ravel(), Y_reg.ravel())))
+    E_interp = LinearNDInterpolator(tri_grid, E_mag_grid.ravel())
     field_nodes = E_interp(x_coords, y_coords)
     nan_mask = np.isnan(field_nodes)
     if np.any(nan_mask):
