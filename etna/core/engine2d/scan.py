@@ -548,6 +548,11 @@ def dark_state_2d(half_width_um, V_cathode, **device_kwargs):
         "y": grid.to_devsim(Y),
         "NetDoping": grid.to_devsim(np.repeat(dev.D, grid.nx)),
         "Potential": grid.to_devsim(dev.u * dev.Vt),
+        # Carrier densities (cm^-3) of the engine dark state (Device2D.dark: Newton
+        # Poisson with the quasi-Fermi levels of the 1D column ramp, contact rows at
+        # their ohmic values). Read-out only, for the mesh export.
+        "Electrons": grid.to_devsim(np.asarray(dev.n, dtype=float)),
+        "Holes": grid.to_devsim(np.asarray(dev.p, dtype=float)),
         "device_info": info,
         "cathode_field": field,
     }
