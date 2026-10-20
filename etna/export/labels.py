@@ -223,7 +223,7 @@ def epi_donor_profile(config, depth_um):
     """N_D (cm^-3) at ``depth_um`` below the metallurgical junction (p+/epi interface),
     the epi profile with its graded n-/n+ transition if any (no n+ step; a depth at or
     beyond the epi end reads the epi value just before the n+ step)."""
-    from etna.core.device import DEFAULT_N_D, donor_profile, tabulated_donor_profile
+    from etna.core.device import donor_profile, tabulated_donor_profile
 
     t = config.epi_thickness_um * 1e-4
     d = np.minimum(np.asarray(depth_um, dtype=float) * 1e-4, t * (1.0 - 1e-12))
@@ -233,7 +233,7 @@ def epi_donor_profile(config, depth_um):
     if has_buffer(config):
         buffer = (t, config.buffer_thickness_um * 1e-4, config.buffer_end_doping)
     if config.doping_profile == "uniform":
-        nd = DEFAULT_N_D if config.N_D is None else config.N_D
+        nd = config.N_D  # required with "uniform" (C-12)
         return donor_profile(d, 0.0, nd, nd, 1e-4, buffer=buffer, n_side=False)
     return donor_profile(
         d,

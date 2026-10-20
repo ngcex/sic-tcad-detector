@@ -39,7 +39,6 @@ from etna.core.dark_current import (
     dark_reference,
 )
 from etna.core.device import (
-    DEFAULT_N_D,
     donor_table_spec,
     table_sensitive_end_cm,
     table_sensitive_end_doping,
@@ -148,7 +147,7 @@ def validated_domain_reason(config: DeviceConfig) -> "str | None":
             L_transition_um=config.L_transition_um,
         )
     else:
-        checks["N_D_uniform"] = DEFAULT_N_D if config.N_D is None else config.N_D
+        checks["N_D_uniform"] = config.N_D  # required with "uniform" (C-12)
     for name, value in checks.items():
         lo, hi = _ENGINE_BOX[name]
         if not lo <= value <= hi:
@@ -254,7 +253,7 @@ def _debye_length_epi_end(config: DeviceConfig) -> float:
             donor_table_spec(config.epi_thickness_um * 1e-4, config.donor_table)
         )
     elif config.doping_profile == "uniform":
-        nd = DEFAULT_N_D if config.N_D is None else config.N_D
+        nd = config.N_D
     else:
         L = config.L_transition_um * 1e-4
         nd = config.N_D_bulk + (config.N_D_junction - config.N_D_bulk) * np.exp(
@@ -374,7 +373,9 @@ def _engine_batch(kws):
         buffer = (epi_end, col("buffer_thickness_cm"), col("buffer_end_doping"))
     # tabulated epi profile: one table for the whole group (_engine_groups)
     table = donor_table_spec(kws[0]["epi_thickness_cm"], kws[0].get("donor_table"))
-    nd = np.array([DEFAULT_N_D if k["N_D"] is None else k["N_D"] for k in kws], float)
+    # N_D is set exactly for the uniform devices (C-12); graded ones (None -> nan) never
+    # reach the np.where below
+    nd = np.array([k["N_D"] for k in kws], float)
     uniform = np.array([k["doping_profile"] == "uniform" for k in kws])
     # A uniform profile is a flat graded one; L_transition only has to be > 0.
     pb = make_batch(
@@ -1705,7 +1706,7 @@ def compensation_fluence(config: DeviceConfig, proton_energy_MeV: float) -> floa
     if config.donor_table is not None:
         nd_min = min(n for _, n in config.donor_table)
     elif config.doping_profile == "uniform":
-        nd_min = DEFAULT_N_D if config.N_D is None else config.N_D
+        nd_min = config.N_D
     else:
         nd_min = min(config.N_D_junction, config.N_D_bulk)
     eta = RadiationDamageParams().eta_removal
