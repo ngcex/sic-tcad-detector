@@ -58,6 +58,41 @@ logger = logging.getLogger(__name__)
 _EXP_CLAMP = 700
 
 
+def ionization_level_counts(device, region):
+    """(donor levels, acceptor levels) of the opt-in carrier-dependent ionization fields
+    the builder loaded (etna.core.device.apply_ionization_fields); (0, 0) = legacy."""
+    counts = []
+    for kind in ("D", "A"):
+        L = 0
+        while InNodeModelList(device, region, f"Ion{kind}{L}"):
+            L += 1
+        counts.append(L)
+    return tuple(counts)
+
+
+def create_ionized_dopant_models(device, region, electrons, holes, prefix, variables):
+    """Node models ``{prefix}IonizedDonors`` = sum_l IonD<l> / (1 + n / IonD<l>Ref) and
+    ``{prefix}IonizedAcceptors`` = sum_l IonA<l> / (1 + p / IonA<l>Ref) of the carrier
+    models ``electrons`` / ``holes`` (Burin et al. arXiv:2410.06798 Eq. 82; parameters in
+    etna.core.incomplete_ionization), with derivatives in ``variables``. Returns False
+    (nothing created) when the region carries no ionization fields (legacy model)."""
+    n_d, n_a = ionization_level_counts(device, region)
+    if n_d == 0 and n_a == 0:
+        return False
+    for kind, carrier, count, name in (
+        ("D", electrons, n_d, f"{prefix}IonizedDonors"),
+        ("A", holes, n_a, f"{prefix}IonizedAcceptors"),
+    ):
+        terms = [
+            f"Ion{kind}{l} / (1 + {carrier} / Ion{kind}{l}Ref)" for l in range(count)
+        ]
+        expr = " + ".join(terms) if terms else "0"
+        CreateNodeModel(device, region, name, expr)
+        for var in variables:
+            CreateNodeModelDerivative(device, region, name, expr, var)
+    return True
+
+
 def _create_sic_potential_only(device, region):
     """Create Poisson equation models for 4H-SiC.
 
@@ -79,9 +114,20 @@ def _create_sic_potential_only(device, region):
     charge_i = "kahan3(IntrinsicHoles, -IntrinsicElectrons, NetDoping)"
     pcharge_i = "-ElectronCharge * IntrinsicCharge"
 
+    for name, expr in (("IntrinsicElectrons", elec_i), ("IntrinsicHoles", hole_i)):
+        CreateNodeModel(device, region, name, expr)
+        CreateNodeModelDerivative(device, region, name, expr, "Potential")
+    # opt-in carrier-dependent ionization (audit-v7 A-02): the dopant charge follows the
+    # local Boltzmann carriers instead of the static NetDoping
+    if create_ionized_dopant_models(
+        device, region, "IntrinsicElectrons", "IntrinsicHoles", "Intrinsic",
+        ("Potential",),
+    ):  # fmt: skip
+        charge_i = (
+            "kahan4(IntrinsicHoles, -IntrinsicElectrons, IntrinsicIonizedDonors, "
+            "-IntrinsicIonizedAcceptors)"
+        )
     for name, expr in (
-        ("IntrinsicElectrons", elec_i),
-        ("IntrinsicHoles", hole_i),
         ("IntrinsicCharge", charge_i),
         ("PotentialIntrinsicCharge", pcharge_i),
     ):
