@@ -466,7 +466,10 @@ The transient drivers (`TransientSolver.simulate_pulse`, `simulate_pulse_train`,
 - **How large the correction is depends on the contact.**
   - _Contact on depleted material_ (legacy no-n+ cathode at full depletion, the
     parallel-plate test): the conduction current is ~0 until the carriers arrive, then
-    it spikes. Its peak is 17.1 A/cm^2 against the true 5.68.
+    it spikes. Its peak is 18.36 A/cm^2 at 30.3 ps, against the true 5.69 A/cm^2 at
+    2.5 ps. In 2D (legacy stack, hw 5 µm, 50 V) the conduction currents of the two
+    contacts miss Kirchhoff by up to 1.5x the anode current; the totals sum to zero
+    to 3e-8.
   - _Contact on a heavily doped ohmic layer_ (every current preset): conduction already
     carries nearly all of the terminal current. The displacement share is only
     significant on steps not long compared with the layer's dielectric relaxation time

@@ -36,7 +36,7 @@ class TestPulseShapeDefinitions:
     def test_t_collection_interpolated_in_the_step(self):
         # constant current on a coarse, growing grid: charge is linear in t, so the
         # 95 % time is exactly 0.95 * t_end. The old definition returned the end of
-        # the step that crosses it (8 here).
+        # the step that crosses it (10 here: cumsum 3, 6, 12, 24, 30 vs 28.5).
         times = np.array([1.0, 2.0, 4.0, 8.0, 10.0])
         currents = np.full_like(times, 3.0)
         r = analyze_current_pulse(times, currents, 0.0)
@@ -176,7 +176,8 @@ def test_parallel_plate_induced_current_q_v_over_d():
     )
     # the old (conduction-only) current is ~0 until the electron front (diffusion-
     # broadened) reaches the cathode, then an arrival spike (measured 2026-10-20 at
-    # -30 V: < 1e-3 A/cm^2 up to 0.55 t_e, peak 17.1 against the true 5.68)
+    # -30 V: < 1e-3 A/cm^2 up to 0.55 t_e, peak 18.36 at 30.3 ps against the true
+    # 5.69 A/cm^2 at 2.5 ps)
     early = t < 0.55 * t_e
     assert np.max(np.abs(I_cond[early] - I_dark)) < 0.01 * I_e
 
@@ -311,3 +312,82 @@ def test_transient_solver_records_total_current():
     # end of collection: the conduction CCE equals the induced charge (40 ps of drift
     # was too short for it: CCE 0.9945, the contact charge not yet relaxed)
     assert cce == pytest.approx(Q_ind / qN_eff, abs=1e-3)
+
+
+@pytest.mark.slow
+def test_kirchhoff_2d_legacy_device():
+    """2D (the single-particle / CCE(LET) path), legacy stack (no n+, cathode on the
+    n- epi): per step the terminal currents of the two contacts sum to zero, the
+    conduction parts do not (measured 2026-10-20, hw 5 um, 50 V, LET 10: total sum
+    <= 3e-8 of the current, conduction sum up to ~1.5x the anode current at 16 ps)."""
+    import devsim
+    from etna.core.charge_collection import add_generation_to_dd
+    from etna.core.charge_collection_2d import create_2d_dd_device
+    from etna.core.devsim_reset import delete_device_and_mesh
+    from etna.core.drift_diffusion import (
+        displacement_current,
+        extract_contact_charge,
+        extract_contact_current,
+    )
+    from etna.core.single_particle import ion_track_generation_2d
+    from etna.core.solver_tol import DC_ABS_ERROR, DC_REL_ERROR
+
+    legacy_2d = dict(
+        substrate_thickness_cm=1e-4,
+        nplus_thickness_cm=None,
+        buffer_thickness_cm=None,
+        buffer_end_doping=None,
+        N_D_junction=2.931417e15,
+        N_D_bulk=8.823059e13,
+        L_transition=9.872267e-5,
+    )
+    info = create_2d_dd_device(
+        half_width_um=5.0,
+        V_bias=50.0,
+        device_name=f"disp2d_{uuid.uuid4().hex[:8]}",
+        **legacy_2d,
+    )
+    contacts = ("anode", "cathode")
+    tot_sum, cond_sum, scale = [], [], []
+    try:
+        gen, _ = ion_track_generation_2d(info, 10.0)
+        zeros = np.zeros_like(gen)
+        add_generation_to_dd(info, zeros)
+        devsim.solve(
+            type="transient_dc",
+            absolute_error=DC_ABS_ERROR,
+            relative_error=DC_REL_ERROR,
+            maximum_iterations=30,
+        )
+        dark = {c: extract_contact_current(info, c) for c in contacts}
+        Qc = {c: extract_contact_charge(info, c) for c in contacts}
+        dt, t = 1e-12, 0.0
+        add_generation_to_dd(info, gen / dt)
+        for k in range(20):
+            devsim.solve(
+                type="transient_bdf1",
+                tdelta=dt,
+                absolute_error=1e10,
+                relative_error=1e-9,
+                maximum_iterations=100,
+                charge_error=1e10,
+            )
+            if k == 0:
+                add_generation_to_dd(info, zeros)
+            t += dt
+            cond, tot = {}, {}
+            for c in contacts:
+                q = extract_contact_charge(info, c)
+                cond[c] = extract_contact_current(info, c) - dark[c]
+                tot[c] = cond[c] + displacement_current(q, Qc[c], dt)
+                Qc[c] = q
+            tot_sum.append(sum(tot.values()))
+            cond_sum.append(sum(cond.values()))
+            scale.append(abs(tot["anode"]))
+            dt = max(dt, 0.1 * t)
+    finally:
+        delete_device_and_mesh(info["device_name"])
+
+    tot_sum, cond_sum, scale = map(np.abs, (tot_sum, cond_sum, scale))
+    assert np.all(tot_sum <= 1e-6 * scale), (tot_sum / scale).max()
+    assert np.max(cond_sum / scale) > 0.2  # the old quantity breaks Kirchhoff
