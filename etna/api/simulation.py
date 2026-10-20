@@ -1686,7 +1686,7 @@ def run_flash_recombination(
 
     Solver (since 2026-10-18): inside ``etna.core.flash_recombination.flash_engine_reason``
     (the engine box with the junction doping widened to 2e17, 150-450 K, legacy only to
-    -40 V) the sweep runs on the batched numba engine (parity with devsim <= ~3e-12 in
+    -40 V) the sweep runs on the batched numba engine (parity with devsim <= ~7.5e-12 in
     CCE, tests/test_flash_engine.py; ~10 ms instead of ~1 s); otherwise, or on
     non-convergence (``metadata["fallback_reason"]``), on devsim. ``solver="devsim"``
     forces devsim, ``"engine"`` raises outside the scope. ``metadata["validated_domain"]``

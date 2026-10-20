@@ -345,11 +345,15 @@ def cce_vs_dose_rate(
     ``cce_no_auger_ref`` is SRH-only at the lowest dose rate. Until 2026-10-20
     add_generation_to_dd overwrote the Auger term, so the "with Auger" CCE was bit-equal
     to the reference (and the engine reproduced that with C_n = C_p = 0). With Auger
-    active, ``cce_no_auger_ref - cce_values`` is 1.7e-7..5.6e-5 over notebook 05b's grid
-    (3.4e-7 on the default stack at -30 V; 5.6e-5 at 5 um epi, N_D_bulk 5e14, -10 V),
-    almost entirely C_n: minority-hole recombination in the 1e19 n+ layer, where
-    1 / (C_n N_D^2) ~ 20 ns is shorter than tau_p = 600 ns. It is a static offset: its
-    dose-rate dependence is <= 1.5e-8 across 20-230 Gy/s.
+    active, CCE is lower than the same sweep with C_n = C_p = 0 by 1.7e-7..5.6e-5 over
+    notebook 05b's grid (3.4e-7 on the default stack at -30 V; 5.6e-5 at 5 um epi,
+    N_D_bulk 5e14, -10 V), almost entirely C_n: minority-hole recombination in the 1e19
+    n+ layer, where 1 / (C_n N_D^2) ~ 20 ns is shorter than tau_p = 600 ns. It is a
+    static offset: its dose-rate dependence is <= 1.5e-8 across 20-230 Gy/s. The offset
+    scales ~linearly with C_n and is coefficient-limited: at the high end of the
+    literature (C_n = 1.6e-30 / 2e-30 cm^6/s) the 05b corner gives 1.7e-4 / 2.1e-4, still
+    dose-rate independent (<= 3.5e-8). Engine/devsim parity with Auger on: <= 7.5e-12
+    (tests/test_flash_engine.py cases, measured 2026-10-20).
 
     Sweeps dose rates (typically 20-230 Gy/s) at fixed reference conditions.
     NOTE (audit C2/C3): at these dose rates the high-injection Auger (n^3) term is

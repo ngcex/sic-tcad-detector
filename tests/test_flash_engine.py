@@ -1,7 +1,8 @@
 """Steady-state FLASH CCE (cce_vs_dose_rate) on the batched engine vs devsim, and the
 engine's Auger n^3 term vs devsim's Auger model.
 
-Facade parity (gate 1e-9) on the default stack, 150/450 K, legacy -30 V and notebook
+Facade parity (gate 1e-9; measured <= 7.5e-12 in CCE, 1.0e-11 in the dose-rate
+differences, 2026-10-20) on the default stack, 150/450 K, legacy -30 V and notebook
 05b's grid corners, with Auger active on both paths since 2026-10-20 (before, the devsim
 path's add_generation_to_dd overwrote the Auger-augmented generation models and the engine
 reproduced that with C_n = C_p = 0). test_auger_changes_cce fails on that old behaviour:
@@ -89,11 +90,13 @@ def test_auger_changes_cce(solver):
     on devsim, C_n = C_p = 0 on the engine)."""
     r = cce_vs_dose_rate([20.0, 230.0], solver=solver, **AUGER_CORNER)
     assert r["solver"] == ("batched" if solver == "engine" else "devsim")
-    assert (r["C_n"], r["C_p"]) == (5e-31, 2e-31)
     # the old behaviour fails here: the difference was exactly 0
     assert r["cce_no_auger_ref"] - r["cce_values"][0] > 4e-5
+    assert (r["C_n"], r["C_p"]) == (5e-31, 2e-31)
     # per dose rate vs the same sweep without Auger: a static ~5.6e-5 offset
-    srh = cce_vs_dose_rate([20.0, 230.0], solver=solver, C_n=0.0, C_p=0.0, **AUGER_CORNER)
+    srh = cce_vs_dose_rate(
+        [20.0, 230.0], solver=solver, C_n=0.0, C_p=0.0, **AUGER_CORNER
+    )
     drop = srh["cce_values"] - r["cce_values"]
     assert np.all(drop > 4e-5) and np.all(drop < 7e-5), drop
     assert abs(drop[1] - drop[0]) < 1e-7  # Auger adds no dose-rate dependence (~1e-8)
@@ -136,7 +139,9 @@ def test_set_generation_keeps_auger_active():
         with_auger = -q * (get("USRH") + u_a)
         np.testing.assert_allclose(get("ElectronGeneration"), with_auger, rtol=1e-12)
         add_generation_to_dd(info, g)  # bare: SRH-only again
-        np.testing.assert_allclose(get("ElectronGeneration"), -q * get("USRH"), rtol=1e-12)
+        np.testing.assert_allclose(
+            get("ElectronGeneration"), -q * get("USRH"), rtol=1e-12
+        )
     finally:
         delete_device_and_mesh(name)
 
