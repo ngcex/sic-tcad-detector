@@ -76,7 +76,9 @@ class SiC4H_Parameters:
     # (1 + Gamma(E)) enhancement, not saturation past full depletion; "TAT" is an
     # effective field-weighted generation; the SRH/TAT/SRV split is not physically
     # meaningful; and
-    # N_t(T) ∝ n_i(T) is an assumption (dark_current.nt_temperature_scale).
+    # N_t(T) ∝ n_i(T) is an assumption (dark_current.nt_temperature_scale; the Hurkx
+    # Gamma(T) adds a weak T dependence, x15.1 vs x15.4 per +13 K at 300 K).
+    # Refit provenance: lab/hurkx_tat/notes/LOG.md, lab/hurkx_tat/bench/nt_refit.py.
     # (The earlier 2.2e13 was fitted on a path with a stale TAT field, B-01; leakage is
     # linear in N_t, 2.2e13 gave 141 pA on the corrected path.)
     # Refitted on the default stack (p+ 0.3 um / graded epi / n+, NPLUS calibration):

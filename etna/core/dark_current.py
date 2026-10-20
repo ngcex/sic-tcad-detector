@@ -33,8 +33,10 @@ What the numbers mean (read before quoting any leakage value):
     is an assumed tunnelling mass, not fitted).
     The SRH / TAT / SRV split is a bookkeeping of model terms and is not
     physically meaningful. The temperature dependence N_t(T) = N_t * n_i(T) /
-    n_i(300) is an ASSUMPTION (E_a = E_g/2), not fitted to data; it gives ~x15
-    per +13 K near room temperature.
+    n_i(300) is an ASSUMPTION (E_a = E_g/2), not fitted to data. With the Hurkx
+    (1 + Gamma(T)) on top (F_Gamma ~ T^1.5, so Gamma falls with T) the model gives
+    x19.2 from 287 to 300 K and x15.1 from 300 to 313 K at -30 V (n_i alone: x19.7 /
+    x15.4).
 
 All units CGS (cm, cm^-3, A/cm^2, V) per devsim convention.
 
@@ -203,8 +205,9 @@ def nt_temperature_scale(T, params=None):
     This is anchored so the factor is EXACTLY 1.0 at 300 K, so the 300 K fit of
     N_t (model = the "< 18 pA up to -60 V" upper bound at -60 V, 4 mm2) is kept.
     The E_a = E_g/2 activation is an ASSUMPTION (classical depletion generation
-    through a midgap-like level), not fitted to temperature data: it gives ~x15
-    leakage per +13 K near 300 K, so any T-dependent leakage is assumption-driven.
+    through a midgap-like level), not fitted to temperature data: it gives x15.4
+    per +13 K from 300 K (the full model, with the Hurkx (1 + Gamma(T)), x15.1 at
+    -30 V), so any T-dependent leakage is assumption-driven.
     The n_i(T)
     used is the project's calibrated intrinsic_concentration (anchored to
     params.n_i_300), keeping it consistent with the n_i the rest of the device
@@ -320,7 +323,8 @@ def setup_tat_model(device_info, E_t=None, m_t=None, N_t=None):
     # classical depletion generation G ∝ n_i(T) ∝ exp(-E_g/2kT):
     # N_t_eff(T) = N_t * n_i(T)/n_i(300). The factor is 1.0 at 300 K, so the 300 K
     # fit is kept; at other temperatures the leakage follows this assumed
-    # E_a = E_g/2 (~x15 per +13 K), which is not fitted to data.
+    # E_a = E_g/2 (~x15 per +13 K, with the Hurkx Gamma(T) x15.1 300 -> 313 K at -30 V),
+    # which is not fitted to data.
     T_scale = c["T_scale"]
     N_t_eff = c["G0"]
     # Store G0_TAT = N_t_eff as generation rate parameter
@@ -554,7 +558,8 @@ def extract_dark_current_components(device_info, area=AREA_DOSIMETER_CM2):
     effective generation, a post-hoc SRV estimate) and is NOT physically meaningful;
     only J_total is used for the fit. I_SRH + I_TAT are volume integrals and
     differ from the terminal J_total by the carriers leaving through the "wrong"
-    ohmic contact (~0.3 % at -60 V, ~0.9 % at -10 V on the default device).
+    ohmic contact (0.02 % at -60 V, 0.09 % at -10 V on the default device with the
+    Hurkx Gamma, 2026-10-20; ~0.3 % / ~0.9 % before).
 
     Sign: the components use the sign of J_total (the cathode current, positive
     under reverse bias), i.e. J = -q * integral(U) with devsim's U < 0 for net
