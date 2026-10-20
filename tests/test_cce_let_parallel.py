@@ -1,4 +1,4 @@
-"""build_cce_let_table(n_jobs > 1) reproduces the serial table (lab/perf_profile/REPORT.md).
+"""build_cce_let_table(n_jobs > 1) reproduces the serial table (timing: lab/perf_profile/bench_cce_let_parallel.py).
 
 Small mesh (hw 2 um, 5 mesh columns, the TestBuildCCELetTableSmallMesh setup): the
 workers build their own device with the same builder and keywords, so every

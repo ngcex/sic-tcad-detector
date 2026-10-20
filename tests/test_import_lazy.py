@@ -4,7 +4,7 @@ matplotlib.pyplot (~0.6 s cpu) and scipy.stats (~0.9 s cpu) used to be imported 
 module level by etna.core.cv_analysis / microdosimetry / temperature_sweep only for
 one plot helper or one linregress call; every process (xdist worker, app start,
 notebook kernel, spawn-pool worker) paid them. They are imported inside the
-functions now (lab/perf_profile/REPORT.md). A fresh interpreter is needed: pytest
+functions now (A/B: lab/perf_profile/ab_import.py). A fresh interpreter is needed: pytest
 itself may already have imported them.
 """
 

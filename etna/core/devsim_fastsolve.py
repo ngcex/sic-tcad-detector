@@ -6,7 +6,7 @@ that solves the Newton systems with UMFPACK through ctypes. Its ``init`` action
 runs for EVERY ``devsim.solve`` call and builds a ``dsobject`` whose
 ``initialize_umfpack`` dlopens ``libumfpack_lgpl`` and the BLAS again and rebinds
 the BLAS function table: two ``ctypes.dlopen`` per solve, ~4-6 % of a devsim solve
-on the 1D/2D devices (lab/perf_profile/REPORT.md).
+on the 1D/2D devices (lab/perf_profile/devsim_shim_share.py, bench_devsim_fastsolve.py).
 
 :func:`install` swaps in the same callback with that one-time setup cached: the
 library handles are the same (dlopen of a loaded library returns its handle), the
