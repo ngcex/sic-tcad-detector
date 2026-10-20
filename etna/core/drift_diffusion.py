@@ -46,7 +46,12 @@ import devsim.python_packages.simple_physics as simple_physics
 import numpy as np
 
 from etna.core.device import create_sic_device
-from etna.core.poisson import region_contacts, setup_poisson, solve_equilibrium
+from etna.core.poisson import (
+    create_ionized_dopant_models,
+    region_contacts,
+    setup_poisson,
+    solve_equilibrium,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +99,12 @@ def setup_sic_drift_diffusion(device_info):
     # Replace Boltzmann approximation with actual carrier concentrations
     charge = "kahan3(Holes, -Electrons, NetDoping)"
     pcharge = "-ElectronCharge * IntrinsicCharge2"
+    # opt-in carrier-dependent ionization (audit-v7 A-02): N_D+(Electrons) and
+    # N_A-(Holes) replace the static NetDoping in the Poisson charge
+    if create_ionized_dopant_models(
+        device, region, "Electrons", "Holes", "", ("Electrons", "Holes")
+    ):
+        charge = "kahan4(Holes, -Electrons, IonizedDonors, -IonizedAcceptors)"
 
     CreateNodeModel(device, region, "IntrinsicCharge2", charge)
     CreateNodeModelDerivative(device, region, "IntrinsicCharge2", charge, "Electrons")

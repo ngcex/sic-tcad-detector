@@ -3,7 +3,7 @@ id: A-02
 title: Incomplete-ionization model is unphysical below ~1e18 cm^-3 (ionized fraction increases with doping; 0.02 % at 1e15 instead of ~66 %)
 severity: medium
 category: bug
-status: open 2026-10-18 (final-verify: physics, not changed here; owner Giada Petringa / INFN-LNS physics group; see A-INDEX 'Physics items left open')
+status: mitigated 2026-10-20 (opt-in carrier-dependent model `DeviceConfig(incomplete_ionization=True)`, default OFF; legacy scalar kept bit-identical; see "Resolution 2026-10-20"). Calibration with the model ON (C-V re-inversion) open: owner Giada Petringa / INFN-LNS physics group
 location: etna/core/incomplete_ionization.py:1-10 (module docstring), 26-36 (_gibbs_ionization), 112-172 (ionized_acceptor_fraction); callers etna/core/device.py:226, etna/core/device2d.py:404; etna/api/device.py (DeviceConfig.N_A unvalidated); app/components/device_sidebar.py (N_A number_input); tests/test_incomplete_ionization.py
 labels: [audit-v7, slice-A, physics, material-model]
 source: raw-A-core-solvers.md F2
@@ -82,3 +82,26 @@ def _neutrality_ionization(N_A, T, E_A, g_A, k_B, N_V):
 ## Effort
 
 S
+
+## Resolution 2026-10-20 (opt-in, default OFF)
+
+- `etna.core.incomplete_ionization.IonizationModel`: N_D+(n) = sum_l w_l N_D/(1 + g_D n/n1_l),
+  N_A-(p) likewise (Burin et al. arXiv:2410.06798 Eq. 82), dE(N) = dE0 - alpha N^(1/3)
+  (Eq. 85, clamped at 0). N: Kagamihara 2004 hexagonal/cubic (70.9 / 123.7 meV, 3.38e-5 /
+  4.65e-5 meV cm, 1/2 each, Eq. 88), Al: Achatz 2008 (220 meV, 2.32e-5 meV cm), g_D 2, g_A 4,
+  N_C/N_V from `effective_dos` (now a production consumer, A-11).
+- The ionized densities follow the LOCAL carriers in Poisson in devsim 1D/2D, the batched 1D
+  engine (C-V, CCE, small-signal C with the bound-hole term) and engine2d. Per-node fields are
+  computed once in numpy (`device_ionization_fields`) and loaded as devsim node solutions;
+  NetDoping becomes the static equilibrium value (contacts). Parity ON: C <= 2.5e-8 (devsim
+  central difference), W ~1e-18 cm, CCE <= 4e-13, 2D psi 7e-15 V, lateral CCE 5e-15
+  (`tests/test_incomplete_ionization_engines.py`). Dark/FLASH/fluence engines fall back to
+  devsim with the model on.
+- Neutral fractions (300 K): f(1e15) 0.673 > f(1e16) 0.322 > f(1e17) 0.129 > f(1e19) 0.0291,
+  i.e. the issue's test plan holds for the new model. The issue's 0.132 -> 0.138 figure was for
+  the neutrality form with the module's own (uncited) alpha 3.4e-8 eV cm and the empirical
+  blend; with the cited Achatz parameters and no blend the p+ value is 0.029 (V_bi -56 mV).
+- Default stays OFF: the tabulated measured-C-V preset fails its knee gate with the model on
+  (knee rms 0.0764 um vs <= 0.05 um); the parametric default keeps its gates (knee 0.2445 <
+  0.3 um, plateau 0.0137 um). Both presets were inverted with the legacy model; a re-inversion
+  with the model on, then re-pinned baselines, is the path to a default flip.

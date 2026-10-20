@@ -39,7 +39,7 @@ def _acceptor_scale(N_A, T):
     return acceptor_total_scale(N_A, ionized_acceptor_concentration(N_A, T))
 
 
-def edge_mobilities(donors, acceptors, N_A, T):
+def edge_mobilities(donors, acceptors, N_A, T, acceptor_scales=None):
     """Edge mobilities (mu_n, mu_p), each (N-1, B), of the devsim builders' local model.
 
     ``donors`` / ``acceptors`` (B, N) are the doping the solver sees (acceptors
@@ -47,13 +47,18 @@ def edge_mobilities(donors, acceptors, N_A, T):
     mobility = Caughey-Thomas at Donors + (N_A / N_A_ionized) * Acceptors
     (etna.core.device.local_mobility), arithmetic edge average (edge_mobility): the
     numpy twin of etna.core.device.add_local_mobility_models.
+    ``acceptor_scales`` (B,): the N_A / N_A_ionized factors when the batch does not use
+    the legacy ionization (``PoissonBatch.acceptor_scales``, opt-in A-02 model).
     """
     donors = np.atleast_2d(np.asarray(donors, dtype=float))
     acceptors = np.broadcast_to(np.asarray(acceptors, dtype=float), donors.shape)
     B = donors.shape[0]
     N_A = np.broadcast_to(np.asarray(N_A, dtype=float), (B,))
     T = np.broadcast_to(np.asarray(T, dtype=float), (B,))
-    scales = [_acceptor_scale(float(N_A[b]), float(T[b])) for b in range(B)]
+    if acceptor_scales is None:
+        scales = [_acceptor_scale(float(N_A[b]), float(T[b])) for b in range(B)]
+    else:
+        scales = [float(a) for a in np.broadcast_to(acceptor_scales, (B,))]
     out = []
     for carrier in ("electron", "hole"):
         mu = np.empty((B, donors.shape[1] - 1))

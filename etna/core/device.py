@@ -24,7 +24,11 @@ from etna.core.sic_material import (
     mobility_caughey_thomas_T,
     srh_lifetime,
 )
-from etna.core.incomplete_ionization import ionized_acceptor_concentration
+from etna.core.incomplete_ionization import (
+    ionized_acceptor_concentration,
+    neutral_ionized_acceptor_concentration,
+    resolve_ionization,
+)
 from etna.core.solver_tol import (
     DC_ABS_ERROR,
     DC_REL_ERROR,
@@ -111,6 +115,7 @@ def graded_stack_kwargs() -> dict:
         "L_transition": DEFAULT_STACK["L_transition"],
     }
 
+
 # PREVIOUS DEFAULT (2026-10-17 .. 2026-10-18): the n+ stack calibrated on three C-V points,
 # exponential epi with an ABRUPT 1e19 n+ step at the epi end (no transition). Kept so its
 # numbers stay reproducible: etna.nplus_calibrated_config(); pinned by
@@ -189,6 +194,78 @@ def acceptor_total_scale(N_A, N_A_ionized):
     shared by every engine, so devsim and numpy use the identical float.
     """
     return float(N_A) / float(N_A_ionized)
+
+
+def ionized_acceptor_concentration_for(N_A, T, ionization=None):
+    """Equilibrium ionized acceptors of the p+ (cm^-3): the LEGACY scalar model for
+    ``ionization=None`` (bit-identical), else the carrier-dependent model's neutral
+    value (etna.core.incomplete_ionization; 0.029 * N_A at 1e19, 300 K)."""
+    if ionization is None:
+        return ionized_acceptor_concentration(N_A, T)
+    return neutral_ionized_acceptor_concentration(N_A, T, ionization)
+
+
+def device_ionization_fields(donors, acceptors, N_A, N_A_ionized, T, n_i, model):
+    """(IonizationFields, static NetDoping) of a doping profile as the builders store it
+    (``acceptors`` IONIZED as the Acceptors model, total = acceptor_total_scale *
+    acceptors). The single numpy source of the carrier-dependent ionization inputs of
+    every solver (devsim node solutions, batched 1D, engine2d rows): audit-v7 A-02."""
+    from etna.core.incomplete_ionization import ionization_fields, neutral_net_doping
+
+    total = acceptor_total_scale(N_A, N_A_ionized) * np.asarray(acceptors, dtype=float)
+    fields = ionization_fields(donors, total, T, model)
+    return fields, neutral_net_doping(fields, n_i)
+
+
+def ionization_level_names(kind, l):
+    """devsim node-solution names of level ``l`` of ``kind`` ("D" or "A")."""
+    return f"Ion{kind}{l}", f"Ion{kind}{l}Ref"
+
+
+def apply_ionization_fields(device_info):
+    """Load the carrier-dependent ionization fields of ``device_info``'s region into devsim.
+
+    Opt-in model (``device_info["incomplete_ionization"]``, an IonizationModel): node
+    solutions IonD<l> / IonD<l>Ref / IonA<l> / IonA<l>Ref (densities and n1/g, p1/g per
+    level, from the CURRENT Donors / Acceptors node values) and NetDoping replaced by the
+    static equilibrium-ionized value IonNetDopingEq (ohmic contacts, majority carrier).
+    Poisson / DD (etna.core.poisson, etna.core.drift_diffusion) detect IonD0 and use the
+    carrier-dependent charge. Called by the builders after the doping, and again by
+    apply_damaged_params after it overrides Donors. No-op for the legacy model.
+    """
+    model = device_info.get("incomplete_ionization")
+    if model is None:
+        return
+    device, region = device_info["device_name"], device_info["region_name"]
+    get = lambda name: np.array(
+        devsim.get_node_model_values(device=device, region=region, name=name)
+    )
+    fields, netdop = device_ionization_fields(
+        get("Donors"),
+        get("Acceptors"),
+        device_info["N_A"],
+        device_info["N_A_ionized"],
+        device_info["T"],
+        device_info["n_i"],
+        model,
+    )
+    for kind, dens, ref in (
+        ("D", fields.d_dens, fields.d_ref),
+        ("A", fields.a_dens, fields.a_ref),
+    ):
+        for l in range(dens.shape[0]):
+            for name, values in zip(ionization_level_names(kind, l), (dens[l], ref[l])):
+                devsim.node_solution(device=device, region=region, name=name)
+                devsim.set_node_values(
+                    device=device, region=region, name=name, values=list(values)
+                )
+    devsim.node_solution(device=device, region=region, name="IonNetDopingEq")
+    devsim.set_node_values(
+        device=device, region=region, name="IonNetDopingEq", values=list(netdop)
+    )
+    devsim.node_model(
+        device=device, region=region, name="NetDoping", equation="IonNetDopingEq"
+    )
 
 
 def local_mobility(donors, acceptors, acceptor_scale, T, carrier, params=None):
@@ -425,6 +502,7 @@ def create_sic_device(
     buffer_thickness_cm=DEFAULT_STACK["buffer_thickness_cm"],
     buffer_end_doping=DEFAULT_STACK["buffer_end_doping"],
     donor_table=None,
+    incomplete_ionization=None,
 ):
     """Create a 1D p+/n- 4H-SiC diode device in devsim.
 
@@ -498,6 +576,13 @@ def create_sic_device(
         (explicit) = the abrupt epi/n+ form of the previous default and the legacy model.
         Both must be given together, with 0 < buffer_thickness_cm < epi_thickness_cm (an
         epi thinner than the default transition needs an explicit None or a thinner one).
+    incomplete_ionization : None, bool or IonizationModel
+        None / False (default): the LEGACY ionization (one scalar ionized Al fraction,
+        ``ionized_acceptor_concentration``; donors fully ionized). True or an
+        ``etna.core.incomplete_ionization.IonizationModel``: OPT-IN carrier-dependent
+        ionization of donors and acceptors (audit-v7 A-02; ``apply_ionization_fields``):
+        ``N_A_ionized`` / Acceptors become the model's neutral p+ value and Poisson / DD
+        use N_D+(n) - N_A-(p).
 
     Returns
     -------
@@ -628,7 +713,8 @@ def create_sic_device(
     )
 
     # --- Set doping profile ---
-    N_A_ionized = ionized_acceptor_concentration(N_A, T)
+    ionization = resolve_ionization(incomplete_ionization)
+    N_A_ionized = ionized_acceptor_concentration_for(N_A, T, ionization)
 
     if table is not None:
         set_tabulated_doping_profile(
@@ -686,7 +772,7 @@ def create_sic_device(
         f"N_A_ionized={N_A_ionized:.2e}, N_D={N_D:.2e}, profile={doping_profile}"
     )
 
-    return {
+    info = {
         "device_name": device_name,
         "region_name": region_name,
         "junction_pos": junction_pos,
@@ -722,6 +808,10 @@ def create_sic_device(
             else tuple((float(d), float(n)) for d, n in donor_table)
         ),
     }
+    if ionization is not None:  # opt-in carrier-dependent ionization (A-02)
+        info["incomplete_ionization"] = ionization
+        apply_ionization_fields(info)
+    return info
 
 
 def default_buffer_for_profile(
@@ -1162,6 +1252,8 @@ def apply_damaged_params(device_info, damaged_params):
     devsim.set_node_values(
         device=device, region=region, name="NetDoping", values=list(net_doping)
     )
+    # opt-in carrier-dependent ionization: rebuild its fields from the damaged donors
+    apply_ionization_fields(device_info)
 
     # epi_mask (x >= junction_pos) also covers the n+ layer, consistently with the
     # reference profiles the callers extract, so the n+ doping is carried through; the

@@ -102,6 +102,76 @@ def poisson_system(u, un, up, Drow, lnni, lam, hx, hy, dxd, dyd, nx, ny, A, F, b
 
 
 @njit(cache=True)
+def poisson_system_ii(
+    u, un, up, dd, dr, ad, ar, lnni, lam, hx, hy, dxd, dyd, nx, ny, A, F, build
+):
+    """poisson_system with the opt-in carrier-dependent ionized doping (audit-v7 A-02):
+    the row doping D is replaced by sum_l dd[l, j] / (1 + n / dr[l, j]) -
+    sum_l ad[l, j] / (1 + p / ar[l, j]) (cm^-3, per row j; etna.core.incomplete_ionization),
+    whose derivative adds V (dD + dA) to the Jacobian diagonal."""
+    w = nx
+    for j in range(ny):
+        for i in range(nx):
+            k = j * nx + i
+            if j == 0 or j == ny - 1:
+                F[k] = 0.0
+                if build:
+                    for m in range(2 * w + 1):
+                        A[k, m] = 0.0
+                    A[k, w] = 1.0
+                continue
+            V = dxd[i] * dyd[j]
+            uk = u[k]
+            n = math.exp(min(uk - un[k] + lnni, EXP_CLAMP))
+            p = math.exp(min(up[k] - uk + lnni, EXP_CLAMP))
+            Dp = 0.0
+            dD = 0.0
+            for l in range(dd.shape[0]):
+                s = n / dr[l, j]
+                f = 1.0 / (1.0 + s)
+                Dp += dd[l, j] * f
+                dD += dd[l, j] * s * f * f
+            Am = 0.0
+            dA = 0.0
+            for l in range(ad.shape[0]):
+                t = p / ar[l, j]
+                f = 1.0 / (1.0 + t)
+                Am += ad[l, j] * f
+                dA += ad[l, j] * t * f * f
+            f = -V * (p - n + Dp - Am)
+            diag = V * (p + n + dD + dA)
+            c = lam * dxd[i] / hy[j - 1]
+            f += c * (uk - u[k - nx])
+            diag += c
+            cS = c
+            c = lam * dxd[i] / hy[j]
+            f += c * (uk - u[k + nx])
+            diag += c
+            cN = c
+            cW = 0.0
+            cE = 0.0
+            if i > 0:
+                cW = lam * dyd[j] / hx[i - 1]
+                f += cW * (uk - u[k - 1])
+                diag += cW
+            if i < nx - 1:
+                cE = lam * dyd[j] / hx[i]
+                f += cE * (uk - u[k + 1])
+                diag += cE
+            F[k] = f
+            if build:
+                for m in range(2 * w + 1):
+                    A[k, m] = 0.0
+                A[k, w] = diag
+                A[k, w - nx] -= cS
+                A[k, w + nx] -= cN
+                if i > 0:
+                    A[k, w - 1] -= cW
+                if i < nx - 1:
+                    A[k, w + 1] -= cE
+
+
+@njit(cache=True)
 def continuity_system(
     which,
     u,

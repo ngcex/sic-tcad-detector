@@ -23,10 +23,18 @@ from etna.core.batched.material import (
 )
 from etna.core.batched.poisson import PoissonBatch
 from etna.core.batched.transport import ContinuityBatch
-from etna.core.device import DEFAULT_N_A
+from etna.core.device import (
+    DEFAULT_N_A,
+    acceptor_total_scale,
+    device_ionization_fields,
+    ionized_acceptor_concentration_for,
+)
 from etna.core.devsim_lock import serialized
 from etna.core.generation_profiles import alpha_generation_profile
-from etna.core.incomplete_ionization import ionized_acceptor_concentration
+from etna.core.incomplete_ionization import (
+    ionized_acceptor_concentration,
+    resolve_ionization,
+)
 from etna.core.sic_material import intrinsic_concentration, srh_lifetime
 
 
@@ -38,6 +46,11 @@ def _n_i(T):
 @lru_cache(maxsize=4096)
 def _n_a_ionized(N_A, T):
     return ionized_acceptor_concentration(N_A, T)
+
+
+@lru_cache(maxsize=4096)
+def _n_a_ionized_model(N_A, T, model):
+    return ionized_acceptor_concentration_for(N_A, T, model)
 
 
 def _per_device(fn, *args):
@@ -68,6 +81,7 @@ def make_batch(
     nplus,
     buffer,
     donor_table=None,
+    incomplete_ionization=None,
 ):
     """PoissonBatch for graded p+/n- diodes on mesh ``x`` (uniform: N_D_junction == N_D_bulk).
 
@@ -83,9 +97,17 @@ def make_batch(
     batch): the tabulated epi profile instead of the exponential one (the
     ``create_sic_device`` donor_table keyword); then buffer must be None and the
     N_D_junction / N_D_bulk / L_transition values are not used.
+    ``incomplete_ionization`` (opt-in, the create_sic_device keyword; one value for the
+    batch): None / False = legacy static doping; True or an IonizationModel = the
+    carrier-dependent ionization (audit-v7 A-02), with the same per-node fields and
+    static NetDoping as the devsim builder (etna.core.device.device_ionization_fields).
     """
+    model = resolve_ionization(incomplete_ionization)
     T = np.atleast_1d(np.asarray(T, dtype=float))
-    N_A_ion = _per_device(_n_a_ionized, N_A, T)
+    if model is None:
+        N_A_ion = _per_device(_n_a_ionized, N_A, T)
+    else:
+        N_A_ion = _per_device(lambda a, t: _n_a_ionized_model(a, t, model), N_A, T)
     donors, acceptors = graded_doping(
         x,
         junction_pos,
@@ -99,7 +121,26 @@ def make_batch(
     )
     B = donors.shape[0]
     T = np.broadcast_to(T, (B,))
-    return PoissonBatch(x, donors, acceptors, _per_device(_n_i, T), thermal_voltage(T))
+    n_i = _per_device(_n_i, T)
+    ionization = None
+    if model is not None:
+        N_A_b = np.broadcast_to(np.asarray(N_A, dtype=float), (B,))
+        N_A_ion_b = np.broadcast_to(N_A_ion, (B,))
+        acc = np.broadcast_to(acceptors, donors.shape)
+        fields, netdop = [], np.empty(donors.shape)
+        for b in range(B):
+            f, netdop[b] = device_ionization_fields(
+                donors[b], acc[b], N_A_b[b], N_A_ion_b[b], T[b], n_i[b], model
+            )
+            fields.append(f)
+        ionization = (fields, netdop)
+    pb = PoissonBatch(x, donors, acceptors, n_i, thermal_voltage(T), ionization=ionization)
+    if model is not None:
+        # mobility total doping: Acceptors carry the model's ionized p+ value (A-02)
+        pb.acceptor_scales = np.array(
+            [acceptor_total_scale(a, i) for a, i in zip(N_A_b, N_A_ion_b)]
+        )
+    return pb
 
 
 # Largest Poisson bias step of the sweeps (V): longer jumps are walked in sub-steps.
@@ -256,7 +297,9 @@ def cce_sweep(
     voltages = _check_voltages(voltages)
     T = np.broadcast_to(np.asarray(T, dtype=float), (pb.B,))
     N_A = np.broadcast_to(np.asarray(N_A, dtype=float), (pb.B,))
-    mu_n, mu_p = edge_mobilities(pb.donors, pb.acceptors, N_A, T)
+    mu_n, mu_p = edge_mobilities(
+        pb.donors, pb.acceptors, N_A, T, getattr(pb, "acceptor_scales", None)
+    )
     cb = ContinuityBatch(
         pb,
         mu_n,

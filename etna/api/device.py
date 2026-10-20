@@ -15,9 +15,10 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 from etna.core.devsim_lock import serialized
+from etna.core.incomplete_ionization import IonizationModel, resolve_ionization
 from etna.core.device2d import create_sic_2d_device
 from etna.core.drift_diffusion import create_dd_device, setup_sic_drift_diffusion
 from etna.core.poisson import setup_poisson, solve_equilibrium
@@ -87,6 +88,17 @@ class DeviceConfig:
     # here; an explicit one is an error). Preset: measured_cv_tabulated_config() (the
     # 19-knot inversion of the digitised measured C-V, etna.core.device.MEASURED_CV_TABLE).
     donor_table: Optional[Tuple[Tuple[float, float], ...]] = None
+    # OPT-IN carrier-dependent incomplete ionization of N donors and Al acceptors (audit-v7
+    # A-02; etna.core.incomplete_ionization): False (default) = the LEGACY model (one
+    # scalar ionized Al fraction, 0.132 at 1e19 / 300 K, donors fully ionized; every
+    # baseline is pinned on it). True = the cited default IonizationModel (N: Kagamihara
+    # 2004 two-site, Al: Achatz 2008, g_D 2, g_A 4, dE(N) = dE0 - alpha N^(1/3)): N_D+(n)
+    # and N_A-(p) follow the local carriers in Poisson (devsim, batched 1D C-V / CCE,
+    # engine2d), so depleted dopants are fully ionized and only neutral regions freeze
+    # out (p+ 1e19: 2.9 % ionized). An IonizationModel instance sets custom parameters.
+    # Paths without the model in their engine (dark current, FLASH, fluence, C-V at
+    # fluence) run on devsim when it is on. Why it is not the default: docs/USAGE.md.
+    incomplete_ionization: Union[bool, IonizationModel] = False
 
     def __post_init__(self) -> None:
         """Reject physically meaningless values early, with a clear message.
@@ -184,6 +196,10 @@ class DeviceConfig:
                         f"{name}={value:.3g} cm^-3 must be below N_A={self.N_A:.3g} "
                         "cm^-3 (p+ anode on an n- epi)"
                     )
+        try:
+            resolve_ionization(self.incomplete_ionization)
+        except TypeError as e:
+            problems.append(str(e))
         if not (100.0 <= self.T <= 600.0):
             problems.append(f"T must be between 100 and 600 K (got {self.T!r})")
         if problems:
@@ -228,6 +244,11 @@ def device_kwargs(config: DeviceConfig) -> dict:
     # the tabulated profile is emitted only when set (the builders' default is no table)
     if config.donor_table is not None:
         kw.update(donor_table=config.donor_table)
+    # the opt-in carrier-dependent ionization is emitted only when on (legacy = no key,
+    # so every legacy call keeps its exact keyword set); resolved to the IonizationModel
+    model = resolve_ionization(getattr(config, "incomplete_ionization", False))
+    if model is not None:
+        kw.update(incomplete_ionization=model)
     return kw
 
 

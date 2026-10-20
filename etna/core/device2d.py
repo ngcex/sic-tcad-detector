@@ -39,8 +39,13 @@ from etna.core.sic_material import (
     mobility_caughey_thomas_T,
     srh_lifetime,
 )
-from etna.core.incomplete_ionization import ionized_acceptor_concentration
+from etna.core.incomplete_ionization import (  # noqa: F401 (re-export)
+    ionized_acceptor_concentration,
+    resolve_ionization,
+)
 from etna.core.device import (
+    apply_ionization_fields,
+    ionized_acceptor_concentration_for,
     DEFAULT_N_A,
     DEFAULT_STACK,
     _buffer_term,
@@ -215,6 +220,7 @@ def create_sic_2d_device(
     buffer_thickness_cm=_BUFFER_THICKNESS_DEFAULT_CM,
     buffer_end_doping=_BUFFER_END_DOPING_DEFAULT,
     donor_table=None,
+    incomplete_ionization=None,
 ):
     """Create a 2D p+/n- 4H-SiC diode device in devsim.
 
@@ -486,7 +492,9 @@ def create_sic_2d_device(
     )
 
     # --- Set doping profile ---
-    N_A_ionized = ionized_acceptor_concentration(N_A, T)
+    # incomplete_ionization: as etna.core.device.create_sic_device (opt-in, A-02)
+    ionization = resolve_ionization(incomplete_ionization)
+    N_A_ionized = ionized_acceptor_concentration_for(N_A, T, ionization)
 
     # Resolve graded doping defaults
     _N_D_junction = N_D_junction if N_D_junction is not None else _N_D_JUNCTION_DEFAULT
@@ -549,7 +557,7 @@ def create_sic_2d_device(
         f"N_A_ionized={N_A_ionized:.2e}, profile={doping_profile}"
     )
 
-    return {
+    info = {
         "device_name": device_name,
         "region_name": region_name,
         "junction_pos": junction_pos,
@@ -585,6 +593,10 @@ def create_sic_2d_device(
             else tuple((float(d), float(n)) for d, n in donor_table)
         ),
     }
+    if ionization is not None:  # opt-in carrier-dependent ionization (A-02)
+        info["incomplete_ionization"] = ionization
+        apply_ionization_fields(info)
+    return info
 
 
 def calibrate_graded_doping_2d(

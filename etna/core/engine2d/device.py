@@ -21,7 +21,12 @@ from dataclasses import dataclass
 import numpy as np
 
 from etna.core.batched.poisson import contact_values
-from etna.core.device import acceptor_total_scale, edge_mobility, local_mobility
+from etna.core.device import (
+    acceptor_total_scale,
+    device_ionization_fields,
+    edge_mobility,
+    local_mobility,
+)
 from etna.core.device2d import EPS_0, K_B_J, Q
 from etna.core.sic_material import SiC4H_Parameters, srh_lifetime
 
@@ -33,6 +38,7 @@ from .kernels import (
     cathode_current_balanced,
     continuity_system,
     poisson_system,
+    poisson_system_ii,
 )
 
 
@@ -79,6 +85,19 @@ class Device2D:
             setattr(self, f"k{tag}_h", np.ascontiguousarray(row * self.Vt))
         self.donors = grid.donors
         self.D = grid.donors - grid.acceptors  # (ny,) devsim NetDoping per row
+        # opt-in carrier-dependent ionization (audit-v7 A-02): the builder's fields from
+        # the same numpy function on the evaluated rows; NetDoping = its static value
+        self.ion = None
+        model = info.get("incomplete_ionization")
+        if model is not None:
+            fields, self.D = device_ionization_fields(
+                grid.donors, grid.acceptors, info["N_A"], info["N_A_ionized"], T,
+                info["n_i"], model,
+            )  # fmt: skip
+            self.ion = tuple(
+                np.ascontiguousarray(getattr(fields, k))
+                for k in ("d_dens", "d_ref", "a_dens", "a_ref")
+            )
         ni, D0, D1 = self.ni, self.D[0], self.D[-1]
         celec = lambda d: 1e-10 + 0.5 * abs(d + math.sqrt(d * d + 4 * ni * ni))
         chole = lambda d: 1e-10 + 0.5 * abs(-d + math.sqrt(d * d + 4 * ni * ni))
@@ -90,16 +109,22 @@ class Device2D:
         self.Vc_col = 0.0
 
     # ------------------------------------------------------------------ Poisson
+    def _poisson(self, u, un, up, lnni, *rest):
+        """poisson_system on the static row doping (legacy) or poisson_system_ii."""
+        if self.ion is None:
+            poisson_system(u, un, up, self.D, lnni, *rest)
+        else:
+            poisson_system_ii(u, un, up, *self.ion, lnni, *rest)
+
     def _newton(self, g, u, un, up, tol=1e-12, max_iter=200, clamp=20.0):
         w = g.nx
         A = np.empty((g.N, 2 * w + 1))
         F = np.empty(g.N)
         for it in range(1, max_iter + 1):
-            poisson_system(
+            self._poisson(
                 u,
                 un,
                 up,
-                self.D,
                 self.lnni,
                 self.lam,
                 g.hx,
@@ -243,11 +268,10 @@ class Device2D:
             np.maximum(p, 1e-300, out=p)
             un = u - (np.log(n) - lnni)
             up = u + (np.log(p) - lnni)
-            poisson_system(
+            self._poisson(
                 u,
                 un,
                 up,
-                self.D,
                 lnni,
                 self.lam,
                 g.hx,

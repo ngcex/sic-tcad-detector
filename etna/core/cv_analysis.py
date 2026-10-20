@@ -154,8 +154,14 @@ def small_signal_capacitance(device_info, step_V=_SS_STEP_V):
     leave the Newton bookkeeping corrupted (fatal CIRCUIT_UNEXPECTED / UNEXPECTED on the
     next DC solve), so a transient circuit cannot be removed again.
 
+    With the opt-in carrier-dependent ionization (A-02) the summed quantity is
+    Holes - IonizedAcceptors (holes bound to neutral Al leave through the anode too):
+    the quasi-static, low-frequency C (dopant occupancy follows the signal).
+
     Valid for a DD-initialised 1D device (create_dd_device / build_device).
     """
+    from devsim.python_packages.model_create import InNodeModelList
+
     from etna.core.drift_diffusion import _restore_solution, _snapshot_solution
 
     device = device_info["device_name"]
@@ -166,6 +172,7 @@ def small_signal_capacitance(device_info, step_V=_SS_STEP_V):
         devsim.get_node_model_values(device=device, region=region, name="NodeVolume")
     )
     snap = _snapshot_solution(device, region)
+    ionized = InNodeModelList(device, region, "IonizedAcceptors")
     holes = {}
     try:
         for sign in (+1, -1):
@@ -190,6 +197,14 @@ def small_signal_capacitance(device_info, step_V=_SS_STEP_V):
             holes[sign] = np.array(
                 devsim.get_node_model_values(device=device, region=region, name="Holes")
             )
+            if ionized:
+                # carrier-dependent ionization (A-02): a neutral acceptor is a bound
+                # hole, so the anode-conserved charge is p - N_A- (constant N_A dropped)
+                holes[sign] = holes[sign] - np.array(
+                    devsim.get_node_model_values(
+                        device=device, region=region, name="IonizedAcceptors"
+                    )
+                )
     finally:
         devsim.set_parameter(device=device, name=bias_name, value=Vc)
         _restore_solution(device, region, snap)
@@ -359,6 +374,8 @@ _CV_ENGINE_STEP_V = 10.0
 
 def _cv_engine_reason(dev_kw, V_range):
     """Why the batched engine cannot serve this C-V sweep (None = it can)."""
+    if dev_kw.get("incomplete_ionization") not in (None, False):
+        return "incomplete_ionization (carrier-dependent model not in this engine)"
     profile = dev_kw.get("doping_profile", "graded")
     if profile not in ("graded", "uniform"):
         return f"doping_profile={profile!r}"

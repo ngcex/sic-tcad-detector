@@ -14,7 +14,7 @@ Status changes from the raw file:
 | id                                                          | severity | status | title                                                                                                                               | effort |
 | ----------------------------------------------------------- | -------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------- | ------ |
 | [A-01](A-01-cv-sweep-off-grid-bias-mislabel.md)             | high     | fixed  | cv_sweep ramps on a fixed 0.5 V lattice and records the requested bias; off-grid sweeps mislabelled, sub-0.5 V spacing never solves | S      |
-| [A-02](A-02-incomplete-ionization-low-doping-unphysical.md) | medium   | open   | Incomplete-ionization model unphysical below ~1e18 cm^-3 (fraction increases with doping)                                           | S      |
+| [A-02](A-02-incomplete-ionization-low-doping-unphysical.md) | medium   | mitigated (opt-in) | Incomplete-ionization model unphysical below ~1e18 cm^-3 (fraction increases with doping)                                           | S      |
 | [A-03](A-03-mobility-from-wrong-region-doping.md)           | medium   | fixed  | Scalar mobilities evaluated at the other region's doping                                                                            | M      |
 | [A-04](A-04-transient-dt-overshoots-pulse-phases.md)        | medium   | fixed  | Transient stepper overshoots phase boundaries; fall edge skipped at 100 % generation                                                | S      |
 | [A-05](A-05-simulate-pulse-skip-init-dead.md)               | medium   | fixed  | simulate_pulse(skip_init) dead; per-pulse I_dark includes residual carriers                                                         | S      |
@@ -71,6 +71,10 @@ current code before it was changed or closed.
 - A-02: still open, physics. See the paragraph below.
 
 Counts after this sync (`grep -h '^status:' A-[0-9]*.md`): 1 closed, 13 fixed, 1 open (A-02).
+
+2026-10-20: A-02 is now **mitigated (opt-in)**: carrier-dependent model behind
+`DeviceConfig(incomplete_ionization=True)`, default OFF (tabulated preset knee gate fails with
+it on). See the A-02 file, "Resolution 2026-10-20". The paragraph below is the 2026-10-18 state.
 
 ### Physics items left open
 

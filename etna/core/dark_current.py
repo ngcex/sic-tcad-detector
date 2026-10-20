@@ -826,6 +826,10 @@ def engine_box_reason(dev_kw, voltages, N_D_junction=None, legacy_max_V=None):
         default_buffer_for_profile,
     )
 
+    if dev_kw.get("incomplete_ionization") not in (None, False):
+        # opt-in carrier-dependent ionization (A-02): wired into the C-V / CCE engine
+        # (make_batch) and engine2d only; dark / FLASH engines keep the static doping
+        return "incomplete_ionization (carrier-dependent model not in this engine)"
     defaults = _SIC_DEVICE_DEFAULTS
     kw = {**defaults, **{k: v for k, v in dev_kw.items() if k in defaults}}
     profile = kw["doping_profile"]

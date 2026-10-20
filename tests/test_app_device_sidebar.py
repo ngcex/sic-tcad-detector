@@ -33,6 +33,9 @@ ALL_FIELDS_VALUES = {
     # opt-in tabulated profile: None here (a table needs the graded profile and excludes
     # the transition above; its round trip is tests/test_measured_cv_tabulated.py)
     "donor_table": None,
+    # opt-in A-02 model: the sidebar has no toggle yet (app/ not touched), so the
+    # round-trip is the default (legacy) value
+    "incomplete_ionization": False,
 }
 
 
