@@ -869,6 +869,8 @@ def _run_field_2d_engine(config: DeviceConfig, bias_V: float) -> SimResult:
             "NetDoping": net_doping,
             "Potential": potential,
             "ElectricField": _node_field_2d(x_coords, y_coords, potential),
+            "Electrons": st["Electrons"],
+            "Holes": st["Holes"],
         },
         regions=[
             {
@@ -1061,6 +1063,17 @@ def run_field(config: DeviceConfig, bias_V: float = -50.0) -> SimResult:
                 "NetDoping": net_doping,
                 "Potential": potential,
                 "ElectricField": field_nodes,
+                # node solutions of the DD-initialised device (cm^-3), read-out only
+                "Electrons": np.array(
+                    devsim.get_node_model_values(
+                        device=device, region=region, name="Electrons"
+                    )
+                ),
+                "Holes": np.array(
+                    devsim.get_node_model_values(
+                        device=device, region=region, name="Holes"
+                    )
+                ),
             },
             regions=regions,
             contacts=contacts,
@@ -1851,7 +1864,9 @@ def run_dark_current(
     """
     _require_1d(config, "run_dark_current")
     if solver not in ("auto", "engine", "devsim"):
-        raise ValueError(f"solver must be 'auto', 'engine' or 'devsim' (got {solver!r})")
+        raise ValueError(
+            f"solver must be 'auto', 'engine' or 'devsim' (got {solver!r})"
+        )
 
     bias_array = np.linspace(v_start, v_stop, n_points)
     N_t_used = config.N_t if N_t is None else N_t
@@ -1919,7 +1934,9 @@ def run_dark_current(
             reset_devsim_fully()
 
 
-def _dark_result(config: DeviceConfig, result: dict, N_t_used, solver: str) -> SimResult:
+def _dark_result(
+    config: DeviceConfig, result: dict, N_t_used, solver: str
+) -> SimResult:
     """SimResult of a dark sweep (devsim ``dark_current_sweep`` dict, or the engine's)."""
     if solver == "batched":
         v = np.asarray(result["voltages"], dtype=float)
@@ -1939,7 +1956,12 @@ def _dark_result(config: DeviceConfig, result: dict, N_t_used, solver: str) -> S
     else:
         trunc = {
             k: result[k]
-            for k in ("truncated", "requested_v_start", "requested_v_stop", "reached_v_stop")
+            for k in (
+                "truncated",
+                "requested_v_start",
+                "requested_v_stop",
+                "reached_v_stop",
+            )
         }
         extra = {}
     return SimResult(

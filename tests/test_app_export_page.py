@@ -17,6 +17,7 @@ from etna.api.run_all import Report, SectionResult
 LABEL_START = "simulation output, validated against devsim reference"
 
 
+
 def _page():
     from app.workflows.export import render
 
@@ -198,3 +199,20 @@ def test_layout_block_shows_disclaimer_and_degrades_without_gdstk(monkeypatch):
     at = _start(monkeypatch, [])
     assert any("GDSII download unavailable" in i.value for i in at.info)
     assert ex.LAYOUT_DISCLAIMER in [w.value for w in at.warning]
+
+
+def test_layout_params_placeholders_shown_and_invalid_file_reported(
+    monkeypatch, tmp_path
+):
+    at = _start(monkeypatch, [])
+    warns = [w.value for w in at.warning]
+    assert any("PLACEHOLDER dimensions (dosimeter)" in w for w in warns)
+    assert any("PLACEHOLDER dimensions (microdosimeter)" in w for w in warns)
+    assert any("data/foundry/layout_params.toml" in c.value for c in at.caption)
+    bad = tmp_path / "bad.toml"
+    bad.write_text("schema_version = 1\n")
+    monkeypatch.setenv("ETNA_LAYOUT_PARAMS", str(bad))
+    at = _start(monkeypatch, [])
+    assert any("missing device table" in e.value for e in at.error)
+    assert any("need a valid layout parameter file" in i.value for i in at.info)
+    assert any("layout unavailable" in i.value for i in at.info)

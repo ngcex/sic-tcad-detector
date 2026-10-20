@@ -1,8 +1,10 @@
 """Dimensioned cross-section of the simulated stack (SVG hand-written, PNG via matplotlib).
 
-The vertical (depth) axis is to scale. The lateral extent is NOT: only the active area
-``area_cm2`` is known, not the die shape or the guard ring / pad layout, so the width is
-schematic and labelled as such (no dimension is invented).
+The vertical (depth) axis is to scale. The lateral extent is NOT drawn to scale (mm
+next to um): the block width is schematic. The lateral and passivation dimensions are
+quoted from the layout parameter file (``etna.export.layout_params``, default
+``data/foundry/layout_params.toml``) for the layout device whose active square matches
+``area_cm2``, each with its class; PLACEHOLDER values are listed and warned about.
 """
 
 from __future__ import annotations
@@ -11,6 +13,11 @@ import io
 import textwrap
 from xml.sax.saxutils import escape
 
+from etna.export.layout_params import (
+    as_layout_params,
+    device_for_config,
+    warn_placeholders,
+)
 from etna.export.labels import (
     BUFFER_NOTE,
     NPLUS_THICKNESS_NOTE,
@@ -138,18 +145,62 @@ def stack_layers(config) -> "list[dict]":
 def _lateral_note(config) -> str:
     return (
         f"lateral: schematic, not to scale; active area {config.area_cm2:g} cm^2 "
-        f"({config.area_cm2 * 100:g} mm^2), shape not specified"
+        f"({config.area_cm2 * 100:g} mm^2)"
     )
 
 
-def cross_section_svg(config, width_px: int = 900) -> str:
-    """SVG string of the stack, depth to scale, with thickness quotes and doping."""
+_LATERAL_DIMS = (
+    ("active_side", "active side"),
+    ("die_side", "die"),
+    ("guard_ring_count", "guard rings"),
+    ("guard_ring_gap", "ring gap from p+ edge"),
+    ("guard_ring_width", "ring width"),
+    ("guard_ring_spacing", "ring spacing"),
+    ("pad_size", "pad"),
+    ("dicing_street", "dicing street"),
+    ("oxide_thickness", "oxide (not modelled)"),
+    ("passivation_thickness", "passivation (not modelled)"),
+)
+
+
+def layout_dimension_lines(config, layout_params=None) -> "list[str]":
+    """Text lines quoting the layout parameter file for ``config`` (warns on
+    PLACEHOLDER values). Shared by the SVG / PNG drawing."""
+    params = as_layout_params(layout_params)
+    device = device_for_config(config, params)
+    if device is None:
+        return [
+            f"layout dimensions: no device in {params.display_path} has an active square of "
+            f"{config.area_cm2:g} cm^2; lateral dimensions not quoted"
+        ]
+    warn_placeholders(params, device, "cross-section")
+    used = set(params.used(device))
+    parts = []
+    for name, what in _LATERAL_DIMS:
+        d = params.get(device, name)
+        if d is not None and name in used:
+            parts.append(f"{what} {d.text()} [{d.cls}]")
+    return [
+        f"layout dimensions ({device}, from {params.display_path}): "
+        + "; ".join(parts),
+        params.placeholder_note(device),
+    ]
+
+
+def cross_section_svg(config, width_px: int = 900, layout_params=None) -> str:
+    """SVG string of the stack, depth to scale, with thickness quotes and doping, plus
+    the lateral dimensions quoted from the layout parameter file."""
     layers = stack_layers(config)
+    lateral = layout_dimension_lines(config, layout_params)
     total = layers[-1]["bottom_um"]
     top, left, block_w = 70.0, 110.0, 300.0
     body_h = 460.0
     s = body_h / total  # px per um, vertical
-    height = top + body_h + 130
+    n_note = sum(
+        len(textwrap.wrap(n, 110))
+        for n in [L["note"] for L in layers if L["note"]] + lateral
+    )
+    height = top + body_h + 90 + 16 * (n_note + len(layers))
     out = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width_px}" height="{height:.0f}" '
         f'viewBox="0 0 {width_px} {height:.0f}" font-family="Helvetica, Arial, sans-serif">',
@@ -187,7 +238,7 @@ def cross_section_svg(config, width_px: int = 900) -> str:
         ym = y0 + h / 2 + 4
         out.append(
             f'<text x="{xq + 14}" y="{ym:.2f}" font-size="13" font-weight="bold">'
-            f'{escape(L["name"])}: {escape(_fmt_um(L["thickness_um"]))}</text>'
+            f"{escape(L['name'])}: {escape(_fmt_um(L['thickness_um']))}</text>"
         )
         for k, part in enumerate(textwrap.wrap(L["doping"], 62)):
             out.append(
@@ -229,7 +280,7 @@ def cross_section_svg(config, width_px: int = 900) -> str:
         "depth (µm)</text>"
     )
     yb = bottom + 45
-    notes = [f"{n['key']}: {n['note']}" for n in layers if n["note"]]
+    notes = [f"{n['key']}: {n['note']}" for n in layers if n["note"]] + lateral
     for n in notes:
         for part in textwrap.wrap(n, 110):
             out.append(
@@ -249,13 +300,20 @@ def cross_section_svg(config, width_px: int = 900) -> str:
     return "\n".join(out)
 
 
-def _draw_cross_section(fig, config) -> None:
+def _draw_cross_section(fig, config, layout_params=None) -> None:
     """Draw the stack on a matplotlib Figure (shared by PNG and the PDF spec sheet)."""
     from matplotlib.patches import Rectangle
 
+    lateral = layout_dimension_lines(config, layout_params)
     layers = stack_layers(config)
     total = layers[-1]["bottom_um"]
-    ax = fig.add_axes([0.12, 0.2, 0.36, 0.68])
+    lines = [f"{L['key']}: {L['note']}" for L in layers if L["note"]] + lateral
+    lines = [p for ln in lines for p in textwrap.wrap(ln, 140)]
+    lines.append(VALIDATION_LABEL)
+    # the note block (6.5 pt, ~1.2 line spacing) sits under the axes, never on them
+    note_h = len(lines) * 6.5 * 1.25 / (fig.get_figheight() * 72.0)
+    bottom = 0.03 + note_h + 0.07
+    ax = fig.add_axes([0.12, bottom, 0.36, 0.90 - bottom])
     for L in layers:
         ax.add_patch(
             Rectangle(
@@ -292,24 +350,21 @@ def _draw_cross_section(fig, config) -> None:
     ax.set_ylabel("depth (µm)  [to scale]")
     ax.set_xlabel(_lateral_note(config), fontsize=7)
     fig.suptitle("Device cross-section (depth to scale)", fontsize=11)
-    lines = [f"{L['key']}: {L['note']}" for L in layers if L["note"]]
-    lines = [p for ln in lines for p in textwrap.wrap(ln, 140)]
-    lines.append(VALIDATION_LABEL)
     fig.text(
         0.02, 0.03, "\n".join(lines), fontsize=6.5, color="#b2182b", style="italic"
     )
 
 
-def cross_section_png(config, dpi: int = 150) -> bytes:
+def cross_section_png(config, dpi: int = 150, layout_params=None) -> bytes:
     """PNG bytes of the same drawing (matplotlib Agg canvas; no pyplot global state)."""
     from matplotlib.backends.backend_agg import FigureCanvasAgg
     from matplotlib.figure import Figure
 
     # manual axes placement: opt out of the constrained layout that etna.core.plotting
     # turns on in rcParams (it warned 'no gridspecs with layoutgrids' on every export)
-    fig = Figure(figsize=(9, 6), layout="none")
+    fig = Figure(figsize=(9, 7.5), layout="none")
     FigureCanvasAgg(fig)
-    _draw_cross_section(fig, config)
+    _draw_cross_section(fig, config, layout_params)
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=dpi)
     return buf.getvalue()

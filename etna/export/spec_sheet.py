@@ -5,6 +5,9 @@ area, bias, full-depletion numbers with their definitions, CCE, dark current, so
 provenance and validity per section, known systematics). The serialisers turn it into
 JSON, CSV (key/value rows), Markdown and a PDF (matplotlib; already a dependency).
 Pure: never runs a simulation; sections missing from the report become labelled rows.
+Layout dimensions (die, guard ring, pad, dicing, oxide / passivation) are read from the
+layout parameter file (``etna.export.layout_params``) for the device whose active square
+matches ``area_cm2``; PLACEHOLDER values are listed in ``spec["layout"]`` and warned about.
 """
 
 from __future__ import annotations
@@ -13,12 +16,20 @@ import csv
 import io
 import json
 from dataclasses import asdict
+from pathlib import Path
 
 import numpy as np
 
 from etna._version import __version__
 from etna.api.results import peak_field_1d
 from etna.export.cross_section import stack_layers
+from etna.export.layout_params import (
+    REPO_ROOT,
+    as_layout_params,
+    device_for_config,
+    load_layout_params,
+    warn_placeholders,
+)
 from etna.export.labels import (
     ALPHA_NOTE,
     CALIBRATION_NOTE,
@@ -112,11 +123,38 @@ def _provenance_rows(report) -> "list[dict]":
     return rows
 
 
-def build_spec(config, report=None) -> dict:
+def _layout_section(config, layout_params) -> dict:
+    params = as_layout_params(layout_params)
+    device = device_for_config(config, params)
+    if device is None:
+        return dict(
+            params_file=params.display_path,
+            device=None,
+            dimensions=[],
+            placeholders=[],
+            note=(
+                f"no layout device in {params.display_path} has an active square of "
+                f"{config.area_cm2:g} cm^2; no layout dimensions quoted"
+            ),
+        )
+    ph = warn_placeholders(params, device, "spec sheet")
+    used = params.used(device)
+    return dict(
+        params_file=params.display_path,
+        device=device,
+        dimensions=[params.dim(device, n).as_dict() for n in used],
+        placeholders=ph,
+        note=params.placeholder_note(device),
+    )
+
+
+def build_spec(config, report=None, layout_params=None) -> dict:
     """Spec-sheet dict for ``config`` from ``report`` (an ``etna.run_all`` Report).
 
     ``report`` may be None or partial (2D device, skipped / failed sections): the
     corresponding entries are None with a reason; nothing is recomputed here.
+    ``layout_params``: layout parameter file (None = default / $ETNA_LAYOUT_PARAMS, a
+    path, a mapping or a LayoutParams).
     """
     if report is not None and report.config != config:
         raise ValueError("report was computed for a different DeviceConfig")
@@ -415,6 +453,7 @@ def build_spec(config, report=None) -> dict:
     spec["field"] = fd
 
     spec["provenance"] = _provenance_rows(report)
+    spec["layout"] = _layout_section(config, layout_params)
     spec["statements"] = [
         VALIDATION_LABEL,
         "Measurement comparisons (the 'stated' exceptions): "
@@ -440,8 +479,10 @@ def build_spec(config, report=None) -> dict:
                 )
             )
         ),
-        "No fabrication layout: the GDSII export is a labelled REFERENCE-NOT-FAB schematic; "
-        "guard ring / pad dimensions are not available and are not invented.",
+        "No fabrication layout: the GDSII export is a reference layout, not "
+        "TCAD-validated; its top cell stays REFERENCE-NOT-FAB while any dimension of the "
+        "layout parameter file is a PLACEHOLDER (drawing value, not mask data). "
+        + spec["layout"]["note"],
     ]
     return spec
 
@@ -628,6 +669,22 @@ def spec_to_markdown(spec: dict) -> str:
         "engines and devsim agree; it is a solver cross-check, not a validation "
         "against measurement."
     )
+    lay = spec.get("layout")
+    if lay:
+        L.append("")
+        L.append("## Layout dimensions")
+        L.append("")
+        L.append(f"From `{lay['params_file']}` (device: {lay['device'] or 'none'}).")
+        if lay["dimensions"]:
+            L.append("")
+            L.append("| dimension | value | class | source |")
+            L.append("|---|---|---|---|")
+            for d in lay["dimensions"]:
+                unc = "" if d["uncertainty"] is None else f" +- {d['uncertainty']:g}"
+                v = f"{d['value']:g}{unc} {d['unit']}"
+                L.append(f"| {d['name']} | {v} | {d['cls']} | {d['source']} |")
+        L.append("")
+        L.append(f"**{lay['note']}**")
     L.append("")
     L.append("## Statements")
     L.append("")
@@ -637,8 +694,12 @@ def spec_to_markdown(spec: dict) -> str:
     return "\n".join(L)
 
 
-def spec_to_pdf(spec: dict, config=None) -> bytes:
-    """PDF bytes: the Markdown text on text pages, plus the cross-section if ``config``."""
+def spec_to_pdf(spec: dict, config=None, layout_params=None) -> bytes:
+    """PDF bytes: the Markdown text on text pages, plus the cross-section if ``config``.
+
+    The cross-section page reads ``layout_params``; if None, the file named in
+    ``spec["layout"]["params_file"]``; ValueError if that is not a readable file (e.g.
+    the spec was built from a mapping), so the two never quote different files."""
     import textwrap
 
     from matplotlib.backends.backend_pdf import FigureCanvasPdf, PdfPages
@@ -677,6 +738,17 @@ def spec_to_pdf(spec: dict, config=None) -> bytes:
 
             fig = Figure(figsize=(11.69, 8.27), layout="none")
             FigureCanvasPdf(fig)
-            _draw_cross_section(fig, config)
+            if layout_params is None:
+                pf = (spec.get("layout") or {}).get("params_file")
+                if pf and not Path(pf).is_absolute():
+                    pf = REPO_ROOT / pf
+                if not pf or not Path(pf).is_file():
+                    raise ValueError(
+                        "spec_to_pdf: the spec's layout parameter file "
+                        f"{(spec.get('layout') or {}).get('params_file')!r} cannot be "
+                        "re-read for the cross-section page; pass layout_params="
+                    )
+                layout_params = load_layout_params(pf)
+            _draw_cross_section(fig, config, layout_params)
             pdf.savefig(fig)
     return buf.getvalue()

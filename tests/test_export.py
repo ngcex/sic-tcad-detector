@@ -31,6 +31,8 @@ from etna.export import (
     stack_layers,
 )
 from etna.export.labels import analytic_vfd
+from etna.export.layout_params import PlaceholderDimensionWarning, load_layout_params
+
 
 LABEL = (
     "simulation output, validated against devsim reference; "
@@ -94,7 +96,9 @@ def test_analytic_vfd_pinned_default_stack():
     # measured-C-V default (to the transition start) since 2026-10-18; 9.93 V on the
     # previous default (8.21 V before the 2026-10-17 small-signal C recalibration)
     assert analytic_vfd(DeviceConfig()) == pytest.approx(2.736, abs=0.005)
-    assert analytic_vfd(etna.nplus_calibrated_config()) == pytest.approx(9.93, abs=0.005)
+    assert analytic_vfd(etna.nplus_calibrated_config()) == pytest.approx(
+        9.93, abs=0.005
+    )
 
 
 def test_spec_default_reference_device():
@@ -134,7 +138,9 @@ def test_spec_default_reference_device():
     )
     # 4 mm2 default area since 2026-10-18: 1.8e-11 A (was 4.5e-14 A on 1e-4 cm2, x400)
     assert spec["dark_current"]["I_at_minus60V_A"] == pytest.approx(1.8e-11, rel=1e-12)
-    assert spec["dark_current"]["J_at_minus60V_A_per_cm2"] == pytest.approx(4.5e-10, rel=1e-12)
+    assert spec["dark_current"]["J_at_minus60V_A_per_cm2"] == pytest.approx(
+        4.5e-10, rel=1e-12
+    )
     assert "calibration" in spec["dark_current"]["note"]
     # the spikes at both abrupt steps (8e5 at 0.3 um, 9e5 at 10.3 um) are excluded from the peak
     assert spec["field"]["peak_E_V_per_cm"] == pytest.approx(1.14e5)
@@ -204,12 +210,22 @@ def test_spec_formats_carry_label():
     assert pdf.startswith(b"%PDF") and len(pdf) > 5000
 
 
+def _svg_text(svg: str) -> str:
+    """All <text> contents joined (long notes are wrapped over several elements)."""
+    import re
+
+    return " ".join(re.findall(r">([^<]*)</text>", svg))
+
+
 def test_cross_section_svg_to_scale_and_labelled():
     cfg = DeviceConfig()
     svg = cross_section_svg(cfg)
     assert svg.startswith("<svg") and svg.rstrip().endswith("</svg>")
     assert LABEL in svg
-    assert "not to scale" in svg and "shape not specified" in svg
+    txt = _svg_text(svg)
+    assert "not to scale" in txt and "layout dimensions (dosimeter" in txt
+    assert "die 2.7 +- 0.15 mm [MEASURED_FROM_FIGURE]" in txt
+    assert "PLACEHOLDER dimensions (dosimeter)" in txt
     assert "0.3 µm" in svg and "10 µm" in svg and "1 µm" in svg
     import re
     import xml.etree.ElementTree as ET
@@ -221,7 +237,9 @@ def test_cross_section_svg_to_scale_and_labelled():
             r'<rect x="110.0" y="[^"]+" width="300.0" height="([^"]+)"', svg
         )
     ]
-    assert len(hs) == 4  # p+ / n- epi / graded n-/n+ transition / n+ (default since 2026-10-18)
+    assert (
+        len(hs) == 4
+    )  # p+ / n- epi / graded n-/n+ transition / n+ (default since 2026-10-18)
     np.testing.assert_allclose(
         np.array(hs) / sum(hs), np.array([0.3, 8.863366, 1.136634, 1]) / 11.3, rtol=1e-3
     )
@@ -364,3 +382,69 @@ def test_profile_2d_non_grid_falls_back_to_polydata():
 def test_profile_requires_mesh():
     with pytest.raises(ValueError, match="no mesh"):
         profile_to_csv(SimResult(DeviceConfig(), "cv", np.array([]), np.array([])))
+
+
+# ------------------------------------------------------------ layout parameter file
+
+
+def test_spec_and_cross_section_read_the_layout_file(tmp_path):
+    cfg = DeviceConfig()
+    with pytest.warns(PlaceholderDimensionWarning, match="spec sheet"):
+        spec = build_spec(cfg)
+    lay = spec["layout"]
+    assert lay["device"] == "dosimeter"
+    assert lay["params_file"] == "data/foundry/layout_params.toml"
+    assert "dosimeter.guard_ring_gap" in lay["placeholders"]
+    names = {d["name"]: d for d in lay["dimensions"]}
+    assert names["die_side"]["value_um"] == 2700.0
+    assert names["guard_ring_gap"]["cls"] == "PLACEHOLDER"
+    md = spec_to_markdown(spec)
+    assert "## Layout dimensions" in md and "PLACEHOLDER dimensions (dosimeter)" in md
+    json.loads(spec_to_json(spec))  # valid JSON
+    rows = list(csv.reader(io.StringIO(spec_to_csv(spec))))
+    assert ["layout.device", "dosimeter"] in rows
+    with pytest.warns(PlaceholderDimensionWarning, match="cross-section"):
+        cross_section_svg(cfg)
+    # an alternative file changes what is quoted
+    alt = tmp_path / "alt.toml"
+    text = load_layout_params().path
+    alt.write_text(
+        open(text)
+        .read()
+        .replace(
+            "[dosimeter.guard_ring_gap]\nvalue = 150.0",
+            "[dosimeter.guard_ring_gap]\nvalue = 120.0",
+        )
+    )
+    spec2 = build_spec(cfg, layout_params=alt)
+    gap = {d["name"]: d for d in spec2["layout"]["dimensions"]}["guard_ring_gap"]
+    assert gap["value"] == 120.0
+    assert "ring gap from p+ edge 120 um" in _svg_text(
+        cross_section_svg(cfg, layout_params=alt)
+    )
+    pdf = spec_to_pdf(spec2, cfg, layout_params=alt)
+    assert pdf.startswith(b"%PDF")
+
+
+def test_layout_section_without_matching_device():
+    cfg = DeviceConfig(area_cm2=0.1)
+    spec = build_spec(cfg)
+    assert spec["layout"]["device"] is None and spec["layout"]["placeholders"] == []
+    assert "no layout dimensions quoted" in spec["layout"]["note"]
+    assert "lateral dimensions not quoted" in _svg_text(cross_section_svg(cfg))
+    assert etna.microdosimeter_config().area_cm2 == 0.25
+    assert build_spec(etna.microdosimeter_config())["layout"]["device"] == (
+        "microdosimeter"
+    )
+
+
+def test_spec_pdf_refuses_to_guess_the_layout_file():
+    import tomllib
+
+    raw = tomllib.loads(open(load_layout_params().path).read())
+    cfg = DeviceConfig()
+    spec = build_spec(cfg, layout_params=raw)  # built from a mapping
+    assert spec["layout"]["params_file"] == "<mapping>"
+    with pytest.raises(ValueError, match="pass layout_params"):
+        spec_to_pdf(spec, cfg)
+    assert spec_to_pdf(spec, cfg, layout_params=raw).startswith(b"%PDF")

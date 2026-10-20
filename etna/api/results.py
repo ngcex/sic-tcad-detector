@@ -76,7 +76,9 @@ class MeshData:
 
     x_coords: np.ndarray  # node x coordinates (cm): depth in 1D, lateral in 2D
     y_coords: "np.ndarray | None"  # node y = depth coordinates (cm), None for 1D
-    node_values: dict[str, np.ndarray]  # "NetDoping", "Potential", "ElectricField"
+    # "NetDoping", "Potential", "ElectricField"; run_field also fills "Electrons" and
+    # "Holes" (cm^-3). Consumers must treat the carrier densities as optional.
+    node_values: dict[str, np.ndarray]
     regions: list[dict]  # [{name, x_min, x_max, y_min, y_max}] (cm)
     contacts: list[dict]  # [{name, position}] (position = depth, cm)
 

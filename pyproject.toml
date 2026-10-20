@@ -30,6 +30,7 @@ dev = [
     "jupyter>=1.0",
     "nbstripout>=0.9.1",
     "ruff>=0.17.1",
+    "meshio>=5.3.5",
 ]
 viz = [
     "gdstk>=1.0.1",

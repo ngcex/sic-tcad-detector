@@ -76,7 +76,7 @@ previous-calibrated and tabulated models. The configuration persists across page
 | **Dark Current**            | Total leakage vs temperature (calibrated budget estimate)                                                |
 | **Microdosimetry**          | MC-events CSV upload → y·d(y) spectrum, y_F / y_D readouts                                               |
 | **Batch Sweep**             | Parametric sweep over a curated device field, overlaid curves, bulk CSV                                  |
-| **Export**                  | Spec sheet (JSON/CSV/MD/PDF), cross-section, mesh CSV/VTK, animations, schematic GDS (REFERENCE-NOT-FAB) |
+| **Export**                  | Spec sheet (JSON/CSV/MD/PDF), cross-section, mesh CSV/VTK/VTU, animations, reference GDS from `data/foundry/layout_params.toml` (REFERENCE-NOT-FAB) |
 
 Every result page shows which solver produced it (batched engine, 2D engine
 or devsim) and whether the device lies inside the engine/devsim cross-check domain; the CSV
