@@ -35,7 +35,11 @@ from etna.core.charge_collection_2d import (
     integrate_nodes_box_2d,
 )
 from etna.core.charge_collection import add_generation_to_dd
-from etna.core.drift_diffusion import extract_contact_current
+from etna.core.drift_diffusion import (
+    displacement_current,
+    extract_contact_charge,
+    extract_contact_current,
+)
 from etna.core.solver_tol import (
     DC_ABS_ERROR,
     DC_REL_ERROR,
@@ -202,10 +206,20 @@ def simulate_single_particle(
     result : dict
         - "times": end time of each step from the injection start (s), ndarray;
           the first entry is the injection step (t = dt_inject)
-        - "currents": contact current at each time (A/cm for 2D), ndarray
-        - "Q_collected": collected charge (C/cm for 2D), float
-        - "I_dark": baseline dark current (A/cm), float
-        - "I_peak": peak signal current (A/cm), float
+        - "currents": CONDUCTION contact current at each time (A/cm for 2D),
+          ndarray (extract_contact_current; what Q_collected / CCE integrate)
+        - "currents_displacement": displacement current dQ_contact/dt of each step
+          (A/cm), ndarray (displacement_current of the PotentialEquation contact
+          charge, Mj-4)
+        - "currents_total": terminal current = conduction + displacement (A/cm),
+          ndarray: the physical pulse SHAPE (I_peak, t_peak, t_collection come from
+          it, analyze_current_pulse(..., currents_total=...))
+        - "Q_collected": collected charge (C/cm for 2D), float, conduction estimator
+          (unchanged; equal to Q_induced up to Q_contact_end - Q_contact_start)
+        - "Q_induced": the same backward-Euler sum on currents_total (C/cm), float
+        - "I_dark": baseline dark current (A/cm), float (no displacement in DC)
+        - "I_peak": peak CONDUCTION current (A/cm), float (historical key)
+        - "I_peak_total": peak terminal (total) current (A/cm), float
         - "current_contact": the contact actually integrated, str
         - "converged": False if t_collect / max_steps / a failed step ended the run
     """
@@ -240,8 +254,10 @@ def simulate_single_particle(
         )
     logger.debug("Transient state initialized (transient_dc with zero gen)")
 
-    # Step 2: Record dark current
+    # Step 2: Record dark current (and the contact charge the displacement current
+    # of the first step is measured from)
     I_dark = extract_contact_current(device_info, contact)
+    Q_contact = extract_contact_charge(device_info, contact)
     logger.debug(f"Dark current: {I_dark:.4e} A/cm")
 
     # Step 3: Inject charge as short pulse
@@ -269,6 +285,8 @@ def simulate_single_particle(
         )
 
     I_after_inject = extract_contact_current(device_info, contact)
+    Q_prev, Q_contact = Q_contact, extract_contact_charge(device_info, contact)
+    I_disp = displacement_current(Q_contact, Q_prev, dt_inject)
     logger.debug(f"Current after injection: {I_after_inject:.4e} A/cm")
 
     # Step 4: Zero generation and time-step loop.
@@ -282,13 +300,16 @@ def simulate_single_particle(
     # quadrature the solver does not use: legacy CCE 0.9776 / 1.0066 at 10 / 50 V
     # (>1), default stack 0.982 / 0.977 (non-monotone). This sum gives legacy
     # 0.9615 / 0.9985 (steady-state CCE 0.9609 / 0.9983) and default 0.99978 / 0.99997.
-    # NOTE: extract_contact_current reads ONLY the continuity-equation
-    # (conduction) contact current -- it does NOT include displacement current
-    # (dD/dt lives in the Poisson/PotentialEquation, which is never queried).
+    # extract_contact_current reads ONLY the continuity-equation (conduction)
+    # contact current; the displacement current dQ_contact/dt (Poisson /
+    # PotentialEquation contact charge, Mj-4) is recorded beside it, and the terminal
+    # current is their sum. Q_collected / CCE stay on the conduction current (their
+    # charges differ by Q_contact_end - Q_contact_start, ~0 once collected).
     add_generation_to_dd(device_info, zeros)
 
     times = [dt_inject]
     currents = [I_after_inject]
+    displacement = [I_disp]
     t = dt_inject
     Q_run = (abs(I_after_inject) - abs(I_dark)) * dt_inject
     n_small = 0
@@ -328,8 +349,10 @@ def simulate_single_particle(
 
         t += dt
         I = extract_contact_current(device_info, contact)
+        Q_prev, Q_contact = Q_contact, extract_contact_charge(device_info, contact)
         times.append(t)
         currents.append(I)
+        displacement.append(displacement_current(Q_contact, Q_prev, dt))
         step_count += 1
 
         if abs(I) > abs(I_peak):
@@ -352,6 +375,8 @@ def simulate_single_particle(
 
     times = np.array(times)
     currents = np.array(currents)
+    displacement = np.array(displacement)
+    currents_total = currents + displacement
     if not converged:
         logger.warning(
             f"Single-particle collection not converged at t={t:.3e} s "
@@ -360,6 +385,7 @@ def simulate_single_particle(
         )
 
     Q_collected = collected_charge(times, currents, I_dark)
+    Q_induced = induced_charge(times, currents_total, I_dark)
 
     logger.info(
         f"Transient complete: {len(times)} steps, t_final={times[-1]:.3e} s, "
@@ -369,9 +395,15 @@ def simulate_single_particle(
     return {
         "times": times,
         "currents": currents,
+        "currents_displacement": displacement,
+        "currents_total": currents_total,
         "Q_collected": Q_collected,
+        "Q_induced": Q_induced,
         "I_dark": float(I_dark),
         "I_peak": float(I_peak),
+        "I_peak_total": float(
+            currents_total[np.argmax(np.abs(currents_total - I_dark))]
+        ),
         "current_contact": contact,
         "converged": converged,
     }
@@ -394,50 +426,112 @@ def collected_charge(times, currents, I_dark, t0=0.0):
     return float(np.sum((np.abs(currents) - abs(I_dark)) * dt))
 
 
-def analyze_current_pulse(times, currents, I_dark):
+def induced_charge(times, currents_total, I_dark, t0=0.0):
+    """Backward-Euler charge of the TOTAL (terminal) current, |sum_k (I_k - I_dark) dt_k|.
+
+    The signed sum (the total current may change sign within a pulse, so the
+    per-sample ``|I|`` of collected_charge would be wrong), returned as a magnitude.
+    The displacement part telescopes, so this equals the signed conduction charge plus
+    Q_contact_end - Q_contact_start.
+    """
+    times = np.asarray(times, dtype=float)
+    currents_total = np.asarray(currents_total, dtype=float)
+    if times.size == 0:
+        return 0.0
+    dt = np.diff(times, prepend=t0)
+    return float(abs(np.sum((currents_total - I_dark) * dt)))
+
+
+def _pulse_shape(times, currents, I_dark, fraction):
+    """(I_peak, t_peak, t_collection) of one current series (see
+    analyze_current_pulse)."""
+    dt = np.diff(times, prepend=0.0)
+    signed = (currents - I_dark) * dt
+    total = float(np.sum(signed))
+    sign = 1.0 if total >= 0.0 else -1.0
+    I_signal = sign * (currents - I_dark)  # positive for the collected polarity
+    k_peak = int(np.argmax(I_signal))
+    Q_cumulative = np.cumsum(sign * signed)
+    Q_target = fraction * abs(total)
+    if abs(total) == 0.0:
+        return float(I_signal[k_peak]), float(times[k_peak]), float("nan")
+    k = int(np.argmax(Q_cumulative >= Q_target))  # FIRST step that reaches it
+    Q_before = Q_cumulative[k - 1] if k > 0 else 0.0
+    t_start = times[k - 1] if k > 0 else 0.0
+    # a BDF1 step moves charge at its constant step-end current: linear within the step
+    t_collection = t_start + (Q_target - Q_before) / I_signal[k]
+    return float(I_signal[k_peak]), float(times[k_peak]), float(t_collection)
+
+
+def analyze_current_pulse(times, currents, I_dark, currents_total=None, fraction=0.95):
     """Extract pulse characteristics from transient simulation.
 
-    Uses the same backward-Euler estimator as simulate_single_particle
-    (collected_charge): ``times`` are step end times measured from the injection
-    start (t = 0), so Q_collected here equals simulate_single_particle's.
+    Q_collected uses the same backward-Euler estimator as simulate_single_particle
+    (collected_charge) on ``currents``: ``times`` are step end times measured from the
+    injection start (t = 0), so Q_collected here equals simulate_single_particle's.
+
+    The pulse SHAPE (I_peak, t_peak, t_collection) is taken from ``currents_total``
+    (the terminal current, conduction + displacement, simulate_single_particle's
+    "currents_total") when it is given, else from ``currents``. Mj-4: the conduction
+    current alone is not the terminal current in a transient (no dQ_contact/dt).
+
+    ``t_collection`` (fixed 2026-10-20) is the time from the injection start at which
+    the backward-Euler cumulative charge of that series, sum_k (I_k - I_dark) dt_k
+    oriented to the collected polarity, FIRST reaches ``fraction`` (95 %) of its
+    final value, interpolated linearly inside that step (a BDF1 step moves charge at
+    its constant step-end current). Before it was the END time of the step found by
+    ``searchsorted`` on the per-sample |I| cumulative sum: quantised to the step grid
+    (the 10 % step growth gives ~10 % jumps, e.g. the uniform 0.208 ns of the
+    data/cce_let_table_* files) and undefined for a non-monotone cumulative sum.
 
     Parameters
     ----------
     times : array_like
         Step end times (s), from t = 0 at the injection start.
     currents : array_like
-        Contact current at each time point (A/cm for 2D).
+        Conduction contact current at each time point (A/cm for 2D).
     I_dark : float
         Baseline dark current (A/cm).
+    currents_total : array_like or None
+        Terminal (total) current at the same times; None = shape from ``currents``.
+    fraction : float
+        Charge fraction defining t_collection. Default 0.95.
 
     Returns
     -------
     result : dict
-        - "Q_collected": collected charge (C/cm for 2D)
+        - "Q_collected": collected charge (C/cm for 2D), conduction estimator
         - "I_peak": peak signal current magnitude (A/cm)
         - "t_peak": time of peak current (s)
-        - "t_collection": time to collect 95% of total charge (s)
+        - "t_collection": time to collect ``fraction`` of the charge (s)
+        - "pulse_current": "total" or "conduction", the series of the three above
+        - with ``currents_total`` also "Q_induced" (induced_charge) and
+          "I_peak_conduction" / "t_peak_conduction" / "t_collection_conduction"
+          (same definitions on ``currents``)
     """
     times = np.asarray(times, dtype=float)
     currents = np.asarray(currents, dtype=float)
 
-    I_signal = np.abs(currents) - np.abs(I_dark)
     Q_total = collected_charge(times, currents, I_dark)
-
-    I_peak = float(np.max(I_signal))
-    t_peak = float(times[np.argmax(I_signal)])
-
-    # Collection time: end of the step at which the cumulative charge reaches 95%
-    Q_cumulative = np.cumsum(I_signal * np.diff(times, prepend=0.0))
-    idx_95 = int(np.searchsorted(Q_cumulative, 0.95 * Q_total))
-    t_collection = float(times[min(idx_95, len(times) - 1)])
-
-    return {
-        "Q_collected": Q_total,
-        "I_peak": I_peak,
-        "t_peak": t_peak,
-        "t_collection": t_collection,
-    }
+    shape_cond = _pulse_shape(times, currents, I_dark, fraction)
+    result = {"Q_collected": Q_total}
+    if currents_total is None:
+        I_peak, t_peak, t_collection = shape_cond
+        result["pulse_current"] = "conduction"
+    else:
+        currents_total = np.asarray(currents_total, dtype=float)
+        I_peak, t_peak, t_collection = _pulse_shape(
+            times, currents_total, I_dark, fraction
+        )
+        result["pulse_current"] = "total"
+        result["Q_induced"] = induced_charge(times, currents_total, I_dark)
+        (
+            result["I_peak_conduction"],
+            result["t_peak_conduction"],
+            result["t_collection_conduction"],
+        ) = shape_cond
+    result.update(I_peak=I_peak, t_peak=t_peak, t_collection=t_collection)
+    return result
 
 
 def build_cce_let_table(
@@ -490,6 +584,11 @@ def build_cce_let_table(
         Columns: LET_keV_um, Q_generated_fC, Q_collected_fC, CCE (clipped to
         [0, 1]), CCE_raw (unclipped Q_collected / Q_generated), t_collection_ns,
         converged, simulated (False for the rows synthesised by method="linear").
+        CCE is the conduction-current charge (unchanged by Mj-4); t_collection_ns is
+        analyze_current_pulse's 95 % time on the TERMINAL (conduction + displacement)
+        current, interpolated within the step (since 2026-10-20; the tracked
+        data/cce_let_table_*.json predate it: their t_collection_ns column is
+        stale, docs/USAGE.md "Transient terminal current").
 
     Notes
     -----
@@ -606,7 +705,13 @@ def _linear_table(device_info, LET_values, x_ion_cm, point):
         if out is None:
             return None
         Q_col, t, I = out
-        t95 = analyze_current_pulse(t, I, ref["I_dark"])["t_collection"]
+        # the terminal current scales with the same factor (linear transient)
+        I_tot = ref["I_dark"] + (Q_gen / q_gen_hi) * (
+            np.asarray(ref["currents_total"][: len(t)]) - ref["I_dark"]
+        )
+        t95 = analyze_current_pulse(t, I, ref["I_dark"], currents_total=I_tot)[
+            "t_collection"
+        ]
         row = _table_row(LET_values[i], Q_gen, Q_col, True, t95)
         return {**row, "simulated": False}
 
@@ -697,7 +802,10 @@ def _cce_let_point(
             device_info, generation, contact=contact, **sim_kw
         )
         pulse_info = analyze_current_pulse(
-            sim_result["times"], sim_result["currents"], sim_result["I_dark"]
+            sim_result["times"],
+            sim_result["currents"],
+            sim_result["I_dark"],
+            currents_total=sim_result["currents_total"],
         )
         row = _table_row(
             LET,
