@@ -181,7 +181,7 @@ and the presets `measured_cv_config`, `measured_cv_tabulated_config`,
 | `lab/`          | Research spikes, each with `notes/LOG.md` (commands and numbers behind calibrated defaults; see `lab/README.md`)                                                                                                                                             |
 | `scripts/`      | Notebook generators, the generator drift check, validation scripts (`scripts/README.md`)                                                                                                                                                                     |
 | `.issues/`      | Audit findings, performance issues and the tech-debt inventory                                                                                                                                                                                               |
-| `data/`         | Material/stopping-power tables (`data/srim/` holds **placeholders** for κ — see below)                                                                                                                                                                       |
+| `data/`         | Material/stopping-power tables (`data/nist_star/`: real NIST PSTAR/ASTAR with provenance, used for κ(E) and the alpha Bragg curve)                                                                                                                          |
 | `deliverables/` | Foundry-facing detector design specs (PDF + Markdown)                                                                                                                                                                                                        |
 | `figures/`      | Generated publication figures                                                                                                                                                                                                                                |
 | `examples/`     | Standalone usage scripts (e.g. `examples/cv_example.py`)                                                                                                                                                                                                     |
@@ -262,11 +262,13 @@ built-in-voltage difference; <1 % with V_bi matched), not a validation of this d
 buffer_thickness_cm=None, buffer_end_doping=None, substrate_thickness_cm=1e-4` (or
   `device_kwargs(legacy_config())`) for the legacy geometry.
 - 🔧 **Data-blocked (machinery ready, real data needed):**
-  - Tissue-equivalence κ(E): the Bragg-additivity machinery is in place
-    (`compute_kappa_table(source="bragg")`) but `data/srim/*.csv` are placeholders
-    — drop in real NIST PSTAR proton stopping powers (see `data/srim/README.md`).
-    Surfaced as a persistent warning banner on the Radiation Damage page.
   - NIEL hardness factors for SiC are placeholders pending SR-NIEL data.
+- **Stopping powers (real data since 2026-10-20):** tissue-equivalence κ(E) and the
+  alpha Bragg curve use NIST PSTAR/ASTAR tables (`data/nist_star/`, raw responses and
+  provenance kept). NIST has no SiC table, so SiC is built by Bragg additivity of Si + C,
+  which is an approximation. κ is the SiC → water LET ratio, 0.43 at 1 MeV → 0.375 at
+  150 MeV for protons. The earlier "κ > 1" expectation was a mass ratio, which is the dose
+  conversion factor, not the lineal-energy one.
 
 Residual gaps between the notebook workflows and the Streamlit UI are tracked as v6.0
 tech debt in the milestone audit above, not left as silent omissions. That audit found

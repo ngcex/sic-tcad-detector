@@ -63,7 +63,9 @@ What ETNA is **not**:
     V_bi matched (`.planning/VALIDATION_LITERATURE.md`). It does not validate this device.
   - **Not reproduced / open**. The microdosimeter's measured alpha CCE-vs-bias shape is
     not reproduced by any drift-diffusion variant (section 8). FLASH plasma recombination
-    is not implemented. The NIEL / tissue-equivalence (kappa) tables are placeholders.
+    is not implemented. The NIEL hardness factors are placeholders. The
+    tissue-equivalence kappa(E) uses real NIST PSTAR/ASTAR data (SiC by Bragg
+    additivity, `data/nist_star/`).
     SIMS is unavailable, so the epi/n+ position comes from the C-V fit.
 
 ---
@@ -77,11 +79,11 @@ What ETNA is **not**:
 | Doping profile N_D(x)                                     | **inferred**, not measured                     | inversion of one C-V curve; bulk 3.4e13 is below the documented 0.5-1e14; no SIMS                                                                                       | section 8                                                                                                                   |
 | Full-depletion voltage                                    | **definition-dependent**                       | analytic V_fd 2.74 V, reach-through 3.10 V, sweep gate 1.2 V_fd = 3.28 V (default stack)                                                                                | `etna.export.labels.VFD_DEFINITION`                                                                                         |
 | CCE vs bias (1D, alpha in epi)                            | **model** (low injection, steady state)        | engine verified vs devsim; no measured CCE reproduced for the dosimeter                                                                                                 | `run_cce` docstring                                                                                                         |
-| Microdosimeter alpha CCE shape (Fig. 4b, Phys. Med. 2025) | **not reproduced**                             | flat to 0.5 % from 0 V in the model; data drop to 0.908 at 0 V                                                                                                          | `run_cce_tilted_alpha` docstring, `lab/microdosimeter/notes/LOG.md` §9                                                      |
+| Microdosimeter alpha CCE shape (Fig. 4b, Phys. Med. 2025) | **not reproduced**                             | flat to 0.7 % from 0 V in the model; data drop to 0.908 at 0 V                                                                                                          | `run_cce_tilted_alpha` docstring, `lab/microdosimeter/notes/LOG.md` §9                                                      |
 | Dark current                                              | **calibration** (budget estimate)              | one N_t fitted to < 18 pA at -60 V, 4 mm²; bias and temperature shape heuristic                                                                                         | `run_dark_current`, DESIGN-1                                                                                                |
 | CCE vs proton fluence                                     | **relative shape only**                        | NIEL hardness factors are placeholders; points at or beyond the compensation fluence are NaN                                                                            | `run_radiation_damage` docstring                                                                                            |
 | FLASH dose-rate CCE                                       | **numerical sensitivity bound**                | no plasma or high-injection physics                                                                                                                                     | `run_flash_recombination`, `run_transient` docstrings                                                                       |
-| Tissue-equivalence kappa(E)                               | **data-blocked**                               | `data/srim/*.csv` are placeholders                                                                                                                                      | `data/srim/README.md`                                                                                                       |
+| Tissue-equivalence kappa(E)                               | **data** (NIST) + approximation                | NIST PSTAR/ASTAR (2026-10-20); SiC by Bragg additivity (few % for p > 1 MeV); LET-ratio convention, 0.43 @1 MeV -> 0.375 @150 MeV (p -> water) | `data/nist_star/README.md`, `compute_kappa_table`                                                                           |
 | 2D field maps                                             | **verified** vs devsim inside the engine2d box | laterally uniform device; no edge termination                                                                                                                           | `tests/test_engine2d*.py`, `tests/test_field_engine_default_100V.py`                                                        |
 | Schematic layout (GDS/SVG)                                | **reference only, not for fabrication**        | documented dimensions only; ring, pad and dicing sizes missing                                                                                                          | `deliverables/DIMENSIONS-provenance.md`                                                                                     |
 
@@ -306,7 +308,12 @@ raises `etna.api.simulation.OutsideModelValidity` outside the engine box. Metada
 - `projected_end_um`, `dead_layer_energy_fraction`, `generation_shape`
 - `reach_through_V`
 
-The Bragg shape is qualitative, not ASTAR/SRIM data. The model **does not** reproduce the
+Since 2026-10-20 `shape="bragg"` is the NIST ASTAR curve in SiC (Si + C by Bragg
+additivity, Bohr straggling, peak/entrance 2.49), depth-scaled to `alpha_range_um`
+(NIST CSDA range: 18.50 um at 5.5 MeV); `"bragg_powerlaw"` is the former qualitative
+curve. The 1D/2D alpha profiles (`alpha_depth_shape`) use the same data by default
+(range 18.43 um at 5.486 MeV; the old 15 um flat box is `bragg_peak_ratio=None`).
+The model **does not** reproduce the
 paper's CCE-vs-bias shape (section 8).
 
 ```python
@@ -825,7 +832,7 @@ run is whatever `DeviceConfig()` / the core defaults are now, unless they pin a 
 | 15_2d_electrostatics_cce       | 2D field and CCE of the microdosimeter         | generator `create_notebook_15.py`                                      |
 | 16_single_particle_cce         | single-particle 2D transient CCE, CCE(LET)     | generator `create_notebook_16.py`; loads `data/cce_let_table_*.json`; `ETNA_REBUILD_CCE_TABLES=1` rebuilds them (~40 min) into `$ETNA_FIGURE_DIR/data/` |
 | 17_mc_coupling                 | MC energy deposition to pulse height           | generator executes it in place                                         |
-| 18_microdosimetric_spectra     | lineal energy spectra, y_F / y_D               | kappa placeholders; generator executes it                              |
+| 18_microdosimetric_spectra     | lineal energy spectra, y_F / y_D               | real NIST kappa, 62 MeV assumed; generator executes it                 |
 | 19_alternative_structures      | mesa, 3D electrode, ΔE-E, guard ring           | pins the previous-default doping on the legacy geometry (PERF-06)      |
 | 20_feasibility_report          | microdosimeter design study                    | outside-validity rows reported                                         |
 
