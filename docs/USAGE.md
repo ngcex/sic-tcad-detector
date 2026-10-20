@@ -218,7 +218,61 @@ twod = DeviceConfig(half_width_um=50.0)                        # 2D slice, 50 um
 print(md.area_cm2, md.N_D, flat.buffer_thickness_um)           # 0.25 1e14 None
 ```
 
-### 5.3 Units and signs
+### 5.3 Incomplete ionization (opt-in, `incomplete_ionization=True`)
+
+By default (`incomplete_ionization=False`) ETNA keeps the **legacy** ionization: the p+
+Al carries one scalar ionized fraction (0.132 at 1e19, 300 K,
+`etna.core.incomplete_ionization.ionized_acceptor_concentration`) and the donors are
+fully ionized. Every baseline and fit in this guide uses it. The scalar's low-doping
+branch is known to be unphysical below ~1e18 (audit-v7 A-02: it rises with N_A);
+`DeviceConfig` rejects N_A < 1e17.
+
+`DeviceConfig(incomplete_ionization=True)` switches on the **carrier-dependent** model
+(any preset accepts it as an override, e.g. `etna.measured_cv_tabulated_config(
+incomplete_ionization=True)`). The ionized densities follow the local carriers inside
+the Poisson equation (Burin et al., arXiv:2410.06798, Eq. 82; Pearson-Bardeen
+dE(N) = dE0 - alpha N^(1/3), Eq. 85, clamped at 0):
+
+| dopant        | levels (dE0, alpha)                                                           | g | source                                                |
+| ------------- | ----------------------------------------------------------------------------- | - | ----------------------------------------------------- |
+| N (donor)     | hexagonal 70.9 meV, 3.38e-5 meV cm; cubic 123.7 meV, 4.65e-5 meV cm (1/2 each) | 2 | Kagamihara et al., JAP 96, 5601 (2004); Burin Tab. XXV |
+| Al (acceptor) | 220 meV, 2.32e-5 meV cm                                                       | 4 | Achatz et al., APL 92, 072103 (2008); Burin Tab. XXIV  |
+
+N_C(T), N_V(T) come from `etna.core.sic_material.effective_dos`. Depleted dopants are
+fully ionized and only neutral regions freeze out. At 300 K the neutral fractions are:
+p+ Al 1e19 2.9 % (legacy scalar 13.2 %), n+ 1e19 51 %, the 4.5e16 transition end 87 %,
+the 8.2e15 junction layer 96 %, the 3.4e13 bulk 99.97 %. **Assumed, not from the
+sources:** no T dependence of g, N in Eq. 85 is the local density of the same dopant
+(no compensation term), no Al impurity band or deep level, and the dopant occupancy is
+quasi-static (C is the low-frequency C). Custom parameters:
+`DeviceConfig(incomplete_ionization=IonizationModel(acceptor_levels=(DopantLevel(1.0,
+0.205, 1.7e-8),)))` (`etna.core.incomplete_ionization`; alpha in eV cm).
+
+Effect on the default device (300 K, legacy -> carrier-dependent):
+
+| quantity                         | legacy                | carrier-dependent     |
+| -------------------------------- | --------------------- | --------------------- |
+| N_A_ionized (p+)                 | 1.322e18              | 2.913e17              |
+| V_bi (psi(cathode) - psi(anode)) | 3.198 V               | 3.142 V               |
+| eps*A/C at 0 / -2 / -10 / -30 V  | 1.655 / 6.939 / 9.519 / 9.750 µm | 1.619 / 6.867 / 9.519 / 9.750 µm |
+| CCE at -10 V                     | 0.999473              | 0.999466              |
+| reach-through                    | 3.10 V                | 3.15 V                |
+
+**Why it is not the default.** The two measured-C-V presets were fitted with the legacy
+model. With the carrier-dependent model the parametric default keeps its gates (plateau
+rms 0.0137 µm, knee rms 0.2445 µm against the stated < 0.3 µm), but the tabulated preset
+fails its knee gate: knee rms 0.0764 µm against <= 0.05 µm (13/13 markers still within
+1 sigma; plateau rms 0.0076 µm). Its W(0) moves 1.679 -> 1.654 µm. Making it the default
+needs a re-inversion of the C-V with the model on, then re-pinned baselines (and the
+N_t refits). Solvers: devsim (1D, 2D), the batched 1D C-V/CCE engine (`run_cv`,
+`run_cce`, batches, `run_temperature_sweep`, `run_cce_tilted_alpha`) and the 2D engine
+(`run_field` 2D, lateral CCE) carry the model, with parity to devsim at the existing
+levels (C <= 3.2e-8, W <= 1e-13 cm, CCE <= 1e-9, 2D psi <= 1e-9 V;
+`tests/test_incomplete_ionization_engines.py`). The dark-current, FLASH, fluence and
+C-V-at-fluence engines do not carry it: with the model on those paths run on devsim.
+The Streamlit sidebar has no toggle yet.
+
+### 5.4 Units and signs
 
 - **Inputs (`DeviceConfig`)**: lengths in µm, doping in cm^-3, T in K, area in cm²,
   N_t in cm^-3 s^-1, E_t in eV below Ec.
@@ -561,6 +615,9 @@ Which solver runs:
   engine accepts is laterally uniform, so its current is the 1D engine's J times the SV
   area (vs the devsim 2D solve: 2.4e-7 / 3.3e-7, the f_depl node field discretisation;
   `tests/test_dark_current_2d_engine.py`); otherwise devsim 2D.
+- **Incomplete ionization** (`incomplete_ionization=True`, §5.3): the 1D C-V/CCE engine
+  and the 2D engine solve it; dark current, FLASH, fluence and C-V-at-fluence go to
+  devsim (`metadata["domain_note"]` / the engine reason names `incomplete_ionization`).
 - **devsim only**: 1D `run_field`, `run_transient`, `dark_current_sweep(device_info)` (a
   devsim device you built), and any engine fallback.
 - **Fluence sweeps**: `run_radiation_damage` (through the core `cce_vs_fluence`) uses the
@@ -656,6 +713,9 @@ E)` the epi is fully compensated in this model, and the point is NaN with a reas
 flat to 0.5 % from 0 V. The data drop to 0.908 at 0 V and rise 1 % from -20 to -50 V. No
 drift-diffusion variant fits (chi2 >= 228). A field-dependent columnar-recombination loss
 does fit, but it is lab-only (`lab/microdosimeter/notes/LOG.md` §9).
+
+**Incomplete ionization** is the legacy scalar by default; the carrier-dependent model
+is opt-in (§5.3) and not yet calibrated against the C-V.
 
 **Not modelled:**
 
