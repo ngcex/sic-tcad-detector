@@ -83,7 +83,7 @@ What ETNA is **not**:
 | FLASH dose-rate CCE                                       | **numerical sensitivity bound**                | no plasma or high-injection physics                                                                                                                                     | `run_flash_recombination`, `run_transient` docstrings                                                                       |
 | Tissue-equivalence kappa(E)                               | **data-blocked**                               | `data/srim/*.csv` are placeholders                                                                                                                                      | `data/srim/README.md`                                                                                                       |
 | 2D field maps                                             | **verified** vs devsim inside the engine2d box | laterally uniform device; no edge termination                                                                                                                           | `tests/test_engine2d*.py`, `tests/test_field_engine_default_100V.py`                                                        |
-| Schematic layout (GDS/SVG)                                | **reference only, not for fabrication**        | documented dimensions only; ring, pad and dicing sizes missing                                                                                                          | `deliverables/DIMENSIONS-provenance.md`                                                                                     |
+| Reference layout (GDS/SVG)                                | **reference only, not TCAD-validated, not for fabrication** | dimensions from `data/foundry/layout_params.toml`; ring, pad, dicing, oxide and 5x5 die are PLACEHOLDER drawing values until the mask data is entered       | `deliverables/DIMENSIONS-provenance.md`, section 10                                                                         |
 
 Summary: the numerics are well verified. The physics is calibrated on one C-V curve and
 one leakage bound. Everything else is a model prediction that has not been checked
@@ -104,7 +104,8 @@ uv sync --extra dev --extra viz     # library + dev tools + optional animation/G
 ```
 
 - `dev` is the one development dependency set (`pyproject.toml`): pytest,
-  pytest-xdist, jupyter, nbstripout and ruff.
+  pytest-xdist, jupyter, nbstripout, ruff and meshio (independent VTK/VTU reader in the
+  export tests).
 - `viz` (optional) adds `manim` (Export page animations) and `gdstk` (GDSII download).
   On macOS manim's pycairo needs `brew install pkgconf cairo pango` first. Without
   `viz`, the Export page hides the animation section and the GDS button, and the
@@ -713,7 +714,7 @@ header carries solver, domain, config and version.
 | Dark Current            | total leakage vs T at one bias (`ParametricSweep` over T of `run_dark_current`) | T range (250-400 K), points (6), bias (-20 V), advanced N_t                                                                                                        | I_total vs T, CSV. A calibration banner is shown; only the total is shown                                                                                                                                                                                                                        |
 | Microdosimetry          | `run_microdosimetry`                                                            | MC events CSV upload, SV thickness (10 µm) and width                                                                                                               | y·d(y), y_F / y_D, CSV. Independent of the sidebar                                                                                                                                                                                                                                               |
 | Batch Sweep             | `ParametricSweep`                                                               | one of epi thickness, p+ thickness, N_A, N_D junction, N_D bulk, transition length, T, area; comma-separated values; facade (CCE vs bias, C-V, CCE vs temperature) | overlaid curves, bulk CSV, per-value failures listed                                                                                                                                                                                                                                             |
-| Export                  | engineering files (section 10)                                                  | spec sheet (reuses the Run All report when it matches); profile bias (default -30 V); animation button                                                             | spec sheet JSON/CSV/Markdown/PDF; cross-section SVG/PNG; mesh/profile CSV and VTK (ParaView/VisIt); two 480p manim MP4s (needs `viz`); schematic layout SVG and GDSII (needs `gdstk`) with the disclaimer "schematic, not a fabrication layout; missing dimensions must come from the mask data" |
+| Export                  | engineering files (section 10)                                                  | spec sheet (reuses the Run All report when it matches); profile bias (default -30 V); animation button                                                             | layout parameter file in use (upload an alternative TOML) with its PLACEHOLDER list; spec sheet JSON/CSV/Markdown/PDF; cross-section SVG/PNG; mesh/profile CSV, VTK and VTU (ParaView/VisIt/meshio); two 480p manim MP4s (needs `viz`); reference layout SVG and GDSII (needs `gdstk`) with the disclaimer "reference layout, not TCAD-validated; not a fabrication layout while any dimension is a PLACEHOLDER" |
 
 Page details not in the table:
 
@@ -752,9 +753,69 @@ pdf = ex.spec_to_pdf(spec, cfg)                      # bytes
 svg = ex.cross_section_svg(cfg)                      # depth to scale, lateral schematic
 prof = run_field(cfg, bias_V=-30.0)
 vtk = ex.profile_to_vtk(prof)                        # legacy ASCII VTK; profile_to_csv too
+vtu = ex.profile_to_vtu(prof)                        # XML UnstructuredGrid (lines / quads)
 layout = ex.layout_svg("dosimeter")                  # REFERENCE-NOT-FAB; layout_gds needs gdstk
 print(len(md) > 0, pdf[:4], ex.gds_available()[0])
 ```
+
+### Mesh / profile files
+
+`profile_to_csv` / `profile_to_vtk` / `profile_to_vtu` write, per mesh node of a
+`run_field` result: `NetDoping_cm-3` (N_D - N_A, ionized acceptors), `Potential_V`,
+`ElectricField_V_per_cm` (|E|) and `Electrons_cm-3` / `Holes_cm-3`. Coordinates in um:
+1D x = depth from the anode; 2D x = lateral, y = depth. The VTU uses VTK_LINE cells
+in 1D, VTK_QUAD cells on the 2D tensor grid and VTK_VERTEX otherwise; `bias_V` and
+`validated_domain` are FieldData, the label / solver / units an XML comment. Carrier
+provenance: devsim path = node solutions of the solved device; 2D engine path = the
+engine dark state, equal to devsim's to rtol 1e-9 wherever the density exceeds
+1e10 cm^-3 (default stack, hw 25 um, -20 V, `tests/test_export_mesh.py`); in the
+depleted region both are below 1 cm^-3 (the engine underflows towards 0), i.e. zero
+for any comparison. Results built without carriers export the three base columns.
+
+### Layout / mask dimension file
+
+Every lateral and passivation dimension used by the reference layout, the spec sheet
+(`spec["layout"]`) and the cross-section is read from **`data/foundry/layout_params.toml`**
+(nothing is hard-coded). One table per dimension and device:
+
+```toml
+[dosimeter.guard_ring_gap]
+value = 150.0            # > 0; counts: integer >= 0
+unit = "um"              # mm | um | nm, or "count"
+class = "PLACEHOLDER"    # DOCUMENTED | MEASURED_FROM_FIGURE | PLACEHOLDER
+source = "PLACEHOLDER: ..."
+uncertainty = "unknown"  # >= 0 in `unit`, or "unknown"
+note = "p+ edge to inner edge of the first ring"   # optional (also doc_item)
+```
+
+Devices `dosimeter` and `microdosimeter`; dimensions `active_side`, `die_side`,
+`guard_ring_count`, `guard_ring_gap` (p+ edge to the first ring), `guard_ring_width`,
+`guard_ring_spacing` (used only with two or more rings), `pad_size` (square corner pad,
+placed between the outermost ring and the die edge), `dicing_street` (half drawn
+around the die), `oxide_thickness`, optional `passivation_thickness`. The file is
+seeded from `deliverables/DIMENSIONS-provenance.md`: the 2 x 2 / 5 x 5 mm active areas
+are DOCUMENTED, the 2.7 +- 0.15 mm dosimeter die MEASURED_FROM_FIGURE; ring count,
+widths and gaps, pad, dicing street, oxide thickness and the 5 x 5 die are PLACEHOLDER
+drawing values, **not foundry dimensions**. Replace them with the mask data and set
+`class = "DOCUMENTED"` plus a `source` naming the mask set.
+
+- Other file: `ex.load_layout_params(path)`, the `layout_params=` argument of
+  `build_spec` / `spec_to_pdf` / `cross_section_svg` / `cross_section_png` /
+  `layout_svg` / `layout_gds` (path, mapping or `LayoutParams`), the environment
+  variable `ETNA_LAYOUT_PARAMS`, or the upload box on the Export page.
+- Validation (`LayoutParamsError`, the message names the field, e.g.
+  `dosimeter.guard_ring_width.value: must be > 0`): schema version, required keys, units,
+  positive values, integer counts, known classes, die larger than the active area, rings
+  inside the die, pad between the outermost ring and the die edge.
+- Placeholders: while a device has a PLACEHOLDER dimension that is used, its GDSII top
+  cell ends in `REFERENCE-NOT-FAB` (`REFERENCE` once none is left), the placeholder names
+  are written as a layout label, quoted in the spec sheet and the cross-section, shown as
+  a warning on the Export page, and every export raises a
+  `PlaceholderDimensionWarning`. Every layout carries "reference layout, not
+  TCAD-validated".
+- The spec sheet / cross-section pick the device whose active square equals
+  `config.area_cm2` (0.04 cm^2 -> dosimeter, 0.25 cm^2 -> microdosimeter); other areas
+  get no layout dimensions, stated as such.
 
 Animations (`etna.viz`, needs `viz`): `etna.viz.animation_data(cfg)`, then
 `render_animation(data, scene, out_dir)` for `scene in etna.viz.SCENES`
