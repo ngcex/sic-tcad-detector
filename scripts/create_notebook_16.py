@@ -90,6 +90,8 @@ sys.path.insert(0, '..')
 import os
 # Rebuild the CCE(LET) tables (~40 min) instead of loading data/*.json
 REBUILD_CCE_TABLES = os.environ.get('ETNA_REBUILD_CCE_TABLES', '').strip() not in ('', '0')
+# worker processes of a rebuild (build_cce_let_table n_jobs; same table as serial)
+CCE_TABLE_JOBS = int(os.environ.get('ETNA_CCE_TABLE_JOBS', min(8, os.cpu_count() or 1)))
 FIG_DIR = os.path.abspath(os.environ.get("ETNA_FIGURE_DIR", "figures"))  # before the chdir: notebooks/figures/ (untracked)
 REBUILT_DIR = os.path.join(FIG_DIR, 'data')  # rebuilt tables go here, never over data/
 os.chdir('..')
@@ -151,7 +153,7 @@ def cce_table(path, build_kwargs, geometry_info):
     os.makedirs(REBUILT_DIR, exist_ok=True)
     out = os.path.join(REBUILT_DIR, os.path.basename(path))
     t0 = time.time()
-    table = build_cce_let_table(**build_kwargs)
+    table = build_cce_let_table(n_jobs=CCE_TABLE_JOBS, **build_kwargs)
     print(f"Rebuilt in {(time.time() - t0)/60:.1f} minutes ({len(table)} LET points)")
     save_cce_let_table(table, out, geometry_info=geometry_info)
     print(f"Saved to {out} (tracked {path} left untouched)")
