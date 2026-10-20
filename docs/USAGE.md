@@ -424,10 +424,14 @@ returns `transient_cce_raw` (unclipped). `run_flash_recombination` runs on the b
 engine inside its scope (section 7; about 40 ms, parity <= ~3e-12), otherwise on devsim
 (about 1-3 s); `run_transient` runs on devsim (about 2 s). Any variation with dose rate is
 a **numerical sensitivity bound**. No plasma or high-injection physics is modelled. Both
-solvers of the steady-state sweep are **SRH-only**: the devsim path's Auger term is
-overwritten when the generation is added (`add_generation_to_dd`), and the engine
-reproduces that; with Auger really active CCE would drop by up to 5.6e-5 (heavily doped
-layers), dose-rate independent. Open physics item (`.issues/TECH-DEBT-2026-10-18.md`).
+solvers of the steady-state sweep solve **SRH + Auger** (C_n 5e-31, C_p 2e-31 cm^6/s,
+Galeckas et al. 1997, 300 K constants; override with
+`etna.core.flash_recombination.cce_vs_dose_rate(..., C_n=, C_p=)`). Auger lowers CCE by
+a dose-rate-independent offset: 3.4e-7 on the default stack at -30 V, up to 5.6e-5 on
+notebook 05b's grid (5 um epi, N_D_bulk 5e14, -10 V), from minority holes recombining in
+the 1e19 n+ substrate. It adds no dose-rate dependence (<= 1.5e-8). Until 2026-10-20 the
+Auger term was silently dropped (both solvers SRH-only). `run_transient` still is
+SRH-only (open item, `.issues/TECH-DEBT-2026-10-18.md`).
 
 ```python
 from etna import DeviceConfig, run_flash_recombination, run_transient
