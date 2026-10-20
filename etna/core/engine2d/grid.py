@@ -107,7 +107,6 @@ def grid_from_arrays(x, y, volume, donors, acceptors, anode, cathode):
     return Grid2D(xs=xs, ys=ys, perm=perm, donors=rows[0], acceptors=rows[1])
 
 
-@serialized
 def _freeze(v):
     """Hashable form of a keyword value (tuples for sequences/arrays); TypeError if none."""
     if isinstance(v, np.ndarray):
@@ -122,6 +121,7 @@ _GRID_CACHE: "dict" = {}  # key -> (Grid2D, info), insertion order = age
 _GRID_CACHE_MAX = 16
 
 
+@serialized
 def grid_from_devsim(**device_kwargs):
     """Mesh-only ``create_sic_2d_device(**device_kwargs)`` -> validated Grid2D.
 
