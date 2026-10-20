@@ -17,7 +17,6 @@ from etna.api.run_all import Report, SectionResult
 LABEL_START = "simulation output, validated against devsim reference"
 
 
-
 def _page():
     from app.workflows.export import render
 
@@ -216,3 +215,49 @@ def test_layout_params_placeholders_shown_and_invalid_file_reported(
     assert any("missing device table" in e.value for e in at.error)
     assert any("need a valid layout parameter file" in i.value for i in at.info)
     assert any("layout unavailable" in i.value for i in at.info)
+
+
+def test_cross_section_cached_across_reruns_and_downloads_lazy(monkeypatch):
+    """Reruns reuse the cross-section bytes (session cache keyed by config / layout
+    hashes); the PDF / profile bytes are not built until a download."""
+    from etna import export as ex
+
+    built = []
+    real_png = ex.cross_section_png
+
+    def png(cfg, layout_params=None):
+        built.append("png")
+        return real_png(cfg, layout_params=layout_params)
+
+    monkeypatch.setattr(ex, "cross_section_png", png)
+    for name in ("spec_to_pdf", "profile_to_csv", "profile_to_vtk", "profile_to_vtu"):
+        monkeypatch.setattr(ex, name, lambda *a, _n=name, **k: built.append(_n) or b"x")
+    at = _start(monkeypatch, [])
+    _button(at, "ex_spec_btn").click()
+    at.run()
+    _button(at, "ex_field_btn").click()
+    at.run()
+    at.run()
+    assert at.exception == [], at.exception
+    assert built == ["png"]
+    at.session_state["device_config"] = DeviceConfig(T=350.0)
+    at.run()
+    assert built == ["png", "png"]
+
+
+def test_memo_needs_no_script_context():
+    import threading
+
+    from app.workflows.export import _memo
+
+    cache, out = {}, {}
+    src = object()
+    t = threading.Thread(
+        target=lambda: out.update(
+            a=_memo(cache, ("k", id(src)), lambda: b"abc", keep=src),
+            b=_memo(cache, ("k", id(src)), lambda: b"never", keep=src),
+        )
+    )
+    t.start()
+    t.join()
+    assert out == {"a": b"abc", "b": b"abc"} and cache[("k", id(src))][0] is src
