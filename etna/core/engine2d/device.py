@@ -16,8 +16,10 @@ Neumann sides. Only laterally uniform devices (asserted by ``grid.py``) are solv
 from __future__ import annotations
 
 import math
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
+import numba
 import numpy as np
 
 from etna.core.batched.poisson import contact_values
@@ -30,16 +32,18 @@ from etna.core.device import (
 from etna.core.device2d import EPS_0, K_B_J, Q
 from etna.core.sic_material import SiC4H_Parameters, srh_lifetime
 
-from .banded import band_lu, band_solve
+from .banded import band_lu, band_solve, band_split
 from .grid import Grid2D
 from .kernels import (
     EXP_CLAMP,
-    cathode_current,
-    cathode_current_balanced,
     continuity_system,
+    gummel_illuminated,
     poisson_system,
     poisson_system_ii,
 )
+
+
+_NO_ION = np.zeros((1, 1))  # placeholder ionization fields (static doping)
 
 
 class EngineNotConverged(RuntimeError):
@@ -81,7 +85,9 @@ class Device2D:
         scale = acceptor_total_scale(info["N_A"], info["N_A_ionized"])
         for carrier, tag in (("electron", "n"), ("hole", "p")):
             row = local_mobility(grid.donors, grid.acceptors, scale, T, carrier, prm)
-            setattr(self, f"k{tag}_v", np.ascontiguousarray(edge_mobility(row) * self.Vt))
+            setattr(
+                self, f"k{tag}_v", np.ascontiguousarray(edge_mobility(row) * self.Vt)
+            )
             setattr(self, f"k{tag}_h", np.ascontiguousarray(row * self.Vt))
         self.donors = grid.donors
         self.D = grid.donors - grid.acceptors  # (ny,) devsim NetDoping per row
@@ -106,6 +112,9 @@ class Device2D:
         self.g2 = _Geom(grid.nx, grid.ny, grid.hx, grid.hy, grid.dxd, grid.dyd)
         self.g1 = _Geom(1, grid.ny, np.zeros(0), grid.hy, np.ones(1), grid.dyd)
         self.gummel_iterations = []
+        # illuminated Gummel: column-oriented triangular solves (banded.band_solve_cols,
+        # ~4x faster, rounding-level differences); False = the row-oriented band_solve
+        self.column_solve = True
         self.Vc_col = 0.0
 
     # ------------------------------------------------------------------ Poisson
@@ -201,6 +210,7 @@ class Device2D:
         u2, un, up = self._flat(g, np.repeat(u, g.nx), V_cathode)
         u2, A = self._newton(g, u2, un, up)
         self.u, self.LU_psi = u2, A
+        self._split_key = None  # LU set changed: band_split again
         self.n = np.exp(np.minimum(u2 - un + self.lnni, EXP_CLAMP))
         self.p = np.exp(np.minimum(up - u2 + self.lnni, EXP_CLAMP))
         nx = g.nx
@@ -248,75 +258,91 @@ class Device2D:
         band_lu(self.LU_n, w)
         self._cont(1, self.u, self.n, self.p, zero, self.LU_p, R, True)
         band_lu(self.LU_p, w)
+        self._split_key = None
+
+    def _gummel_args(self):
+        """Dark state, LUs and their column-major splits (computed once per LU set)."""
+        key = (id(self.LU_n), id(self.LU_p), id(self.LU_psi))
+        if getattr(self, "_split_key", None) != key:
+            w = self.g2.nx
+            self._split = (
+                band_split(self.LU_n, w)
+                + band_split(self.LU_p, w)
+                + band_split(self.LU_psi, w)
+            )
+            self._split_key = key
+        g = self.g2
+        return (
+            self.u,
+            self.n,
+            self.p,
+            self.D,
+            self.ion is not None,
+            *(self.ion if self.ion is not None else (_NO_ION,) * 4),
+            self.lnni,
+            self.lam,
+            self.ni,
+            self.taun,
+            self.taup,
+            self.kn_v,
+            self.kn_h,
+            self.kp_v,
+            self.kp_h,
+            g.hx,
+            g.hy,
+            g.dxd,
+            g.dyd,
+            g.nx,
+            g.ny,
+            float(self.n_bc[0]),
+            float(self.n_bc[1]),
+            float(self.p_bc[0]),
+            float(self.p_bc[1]),
+            self.LU_n,
+            self.LU_p,
+            self.LU_psi,
+            *self._split,
+            bool(self.column_solve),
+        )
+
+    def _gummel_result(self, I, I_direct, it, status, max_iter):
+        if status != 0:
+            raise EngineNotConverged(
+                f"Gummel did not converge in {max_iter} iterations"
+            )
+        self.gummel_iterations.append(int(it))
+        self.last_I_direct = float(
+            I_direct
+        )  # devsim's (edge-flux) evaluation, diagnostics
+        return float(I)
 
     def illuminated_current(self, G, tol=1e-10, tol_I=1e-9, max_iter=60):
         """Cathode current / q: devsim get_contact_current (edge fluxes only, no cathode-row
-        NodeVolume term), evaluated in the well-conditioned balanced form."""
-        g = self.g2
-        w, lnni = g.nx, self.lnni
-        u, n, p = self.u.copy(), self.n.copy(), self.p.copy()
-        R = np.empty(g.N)
-        F = np.empty(g.N)
-        dummy = np.empty((1, 1))
-        I_prev = None
-        for it in range(1, max_iter + 1):
-            self._cont(0, u, n, p, G, dummy, R, False)
-            n += band_solve(self.LU_n, w, -R)
-            self._cont(1, u, n, p, G, dummy, R, False)
-            p += band_solve(self.LU_p, w, -R)
-            np.maximum(n, 1e-300, out=n)
-            np.maximum(p, 1e-300, out=p)
-            un = u - (np.log(n) - lnni)
-            up = u + (np.log(p) - lnni)
-            self._poisson(
-                u,
-                un,
-                up,
-                lnni,
-                self.lam,
-                g.hx,
-                g.hy,
-                g.dxd,
-                g.dyd,
-                g.nx,
-                g.ny,
-                dummy,
-                F,
-                False,
-            )
-            du = band_solve(self.LU_psi, w, -F)
-            u += du
-            e = np.exp(du)
-            n *= e
-            p /= e
-            Ie, Ih = cathode_current_balanced(
-                u,
-                n,
-                p,
-                G,
-                self.ni,
-                self.taun,
-                self.taup,
-                self.kn_v,
-                self.kp_v,
-                g.hy,
-                g.dxd,
-                g.dyd,
-                g.nx,
-                g.ny,
-            )
-            I = Ie + Ih
-            if not math.isfinite(I):
-                break
-            dI = abs(I - I_prev) / abs(I) if I_prev is not None and I != 0 else math.inf
-            I_prev = I
-            if np.abs(du).max() < tol and dI < tol_I:
-                self.gummel_iterations.append(it)
-                Ie, Ih = cathode_current(
-                    u, n, p, self.kn_v, self.kp_v, g.hy, g.dxd, g.nx, g.ny
-                )
-                self.last_I_direct = (
-                    Ie + Ih
-                )  # devsim's (edge-flux) evaluation, for diagnostics
-                return I
-        raise EngineNotConverged(f"Gummel did not converge in {max_iter} iterations")
+        NodeVolume term), evaluated in the well-conditioned balanced form.
+
+        Gummel: electrons, holes, quasi-Fermi Poisson, each corrected with its dark-state
+        LU (chord), as one compiled loop (``kernels.gummel_illuminated``)."""
+        G = np.ascontiguousarray(G, dtype=float)
+        I, Id, it, st = gummel_illuminated(
+            G, *self._gummel_args(), float(tol), float(tol_I), int(max_iter)
+        )
+        return self._gummel_result(I, Id, it, st, max_iter)
+
+    def illuminated_currents(self, Gs, tol=1e-10, tol_I=1e-9, max_iter=60):
+        """``illuminated_current`` for each generation of Gs (S, N), solved concurrently
+        (threads over the GIL-free compiled loop, at most numba.get_num_threads(): one
+        thread inside microdosimetric_sweep workers). Same per-generation arithmetic, so
+        the same results as S sequential calls. Returns an (S,) array; gummel_iterations
+        and last_I_direct (of the last generation) are updated in order."""
+        Gs = np.ascontiguousarray(Gs, dtype=float)
+        args = self._gummel_args() + (float(tol), float(tol_I), int(max_iter))
+        solve = lambda G: gummel_illuminated(G, *args)  # noqa: E731
+        n_threads = min(len(Gs), numba.get_num_threads())
+        if n_threads > 1:
+            with ThreadPoolExecutor(n_threads) as pool:
+                out = list(pool.map(solve, Gs))
+        else:
+            out = [solve(G) for G in Gs]
+        return np.array(
+            [self._gummel_result(I, Id, it, st, max_iter) for I, Id, it, st in out]
+        )
