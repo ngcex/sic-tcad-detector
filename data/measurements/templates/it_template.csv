@@ -1,0 +1,12 @@
+# ETNA dark current vs temperature I(T) template (header only: no data). Columns and units: data/measurements/README.md
+# One row per (bias, temperature). Fill the metadata values after the colon (leave empty when unknown).
+# sample:
+# device:
+# operator:
+# date:
+# instrument:
+# source:
+# area_cm2:
+# bias_convention: reverse_negative
+# notes:
+V_V,T_K,I_pA,sigma_I_pA

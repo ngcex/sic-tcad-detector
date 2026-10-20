@@ -26,6 +26,7 @@ from app.workflows.batch_sweep import render as render_batch_sweep
 from app.workflows.run_all import render as render_run_all
 from app.workflows.export import render as render_export
 from app.workflows.figures import render as render_figures
+from app.workflows.measurements import render as render_measurements
 
 st.set_page_config(
     page_title="ETNA — SiC TCAD Simulator",
@@ -96,6 +97,12 @@ pages = [
     ),
     st.Page(
         render_export, title="Export", icon=":material/download:", url_path="export"
+    ),
+    st.Page(
+        render_measurements,
+        title="Measurements",
+        icon=":material/lab_profile:",
+        url_path="measurements",
     ),
 ]
 
