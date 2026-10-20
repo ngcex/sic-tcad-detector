@@ -24,6 +24,7 @@ Contents
 14. [Tests](#14-tests)
 15. [Development workflow](#15-development-workflow)
 16. [Troubleshooting](#16-troubleshooting)
+17. [Measurement inputs (`etna.measurements`)](#17-measurement-inputs-etnameasurements)
 
 ---
 
@@ -918,6 +919,7 @@ header carries solver, domain, config and version.
 | Microdosimetry          | `run_microdosimetry`                                                            | MC events CSV upload, SV thickness (10 µm) and width                                                                                                               | y·d(y), y_F / y_D, CSV. Independent of the sidebar                                                                                                                                                                                                                                                                                                                                                               |
 | Batch Sweep             | `ParametricSweep`                                                               | one of epi thickness, p+ thickness, N_A, N_D junction, N_D bulk, transition length, T, area; comma-separated values; facade (CCE vs bias, C-V, CCE vs temperature) | overlaid curves, bulk CSV, per-value failures listed                                                                                                                                                                                                                                                                                                                                                             |
 | Export                  | engineering files (section 10)                                                  | spec sheet (reuses the Run All report when it matches); profile bias (default -30 V); animation button                                                             | layout parameter file in use (upload an alternative TOML) with its PLACEHOLDER list; spec sheet JSON/CSV/Markdown/PDF; cross-section SVG/PNG; mesh/profile CSV, VTK and VTU (ParaView/VisIt/meshio); two 480p manim MP4s (needs `viz`); reference layout SVG and GDSII (needs `gdstk`) with the disclaimer "reference layout, not TCAD-validated; not a fabrication layout while any dimension is a PLACEHOLDER" |
+| Measurements            | owner-supplied C-V, SIMS/SRP, I(T) files vs the model (section 17)               | CSV upload per tab (header-only templates downloadable); C-V smoothing lambda; SIMS junction depth, knot spacing, resampling; I(T) prefactor exponent | validation messages (file line + column); measured-vs-model figure with residuals; donor-table JSON (C-V inversion or SIMS resampling), comparison / E_a JSON, Markdown report, PNG |
 
 Page details not in the table:
 
@@ -1316,3 +1318,146 @@ uv run pytest -n auto -q --durations=20           # slowest tests
 | Export page: "Animations are unavailable" / no GDSII button        | install `--extra viz` (macOS: `brew install pkgconf cairo pango` first). Note that a later plain `uv sync --extra dev` removes it again.                                                                                                                           |
 | A notebook overwrote `figures/*.png`                               | it ran from the repo root. Run from `notebooks/`, or set `ETNA_FIGURE_DIR`, then `git checkout figures/`.                                                                                                                                                          |
 | You want devsim's solver output                                    | `ETNA_DEVSIM_VERBOSE=1`.                                                                                                                                                                                                                                           |
+
+---
+
+## 17. Measurement inputs (`etna.measurements`)
+
+The owners (INFN-LNS, the foundry) will supply C-V to -100..-200 V, SIMS/SRP through the
+epi/n+ interface and I(T) (`.issues/TECH-DEBT-2026-10-18.md`, "data requests"). This module
+reads them as editable CSV inputs, validates them, compares them with the model and turns
+them into model inputs. It does not change the physics: the model side is `run_cv`,
+`run_cv_batch` and `run_dark_current` on a `DeviceConfig`. **The repository ships no
+measurement data**: `data/measurements/templates/` holds header-only templates and
+`data/measurements/README.md` lists every column, unit and metadata key. Every test uses
+synthetic data generated in the test from the model itself.
+
+File rules (all three kinds): units are in the column names (`C_pF`, `depth_nm`, `I_pA`,
+`T_K`); unknown names are refused with the accepted list; `# key: value` lines carry
+metadata (an empty value = not given); bias is in the ETNA sign (reverse negative) unless
+`# bias_convention: reverse_positive`. Every problem of a file is reported at once by one
+`MeasurementFileError` (a `ValueError`), each line naming the file line (1-based, counting
+comments and header) and the column, e.g. `line 4, column 'C_pF': 'abc' is not a finite
+number`. Every result has `to_json()` (with the data file's sha256 and the model's config
+hash, solver and ETNA version), `notes` and `limits`; `report_markdown(...)` writes one
+report; `etna.measurements.plots` draws the figures in the `etna.viz` style (export with
+`etna.viz.export_figure`).
+
+### C-V
+
+```python
+import etna, etna.measurements as M
+
+d = M.load_cv_csv("my_cv.csv")              # area: column > '# area_cm2:' > area_cm2=...
+cmp = M.compare_cv(d, etna.DeviceConfig())  # W = eps*A/C and C/A on the measured biases
+cmp.rms_W_um, cmp.rms_C_rel, cmp.notes
+dep = M.depletion_profile(d)                # differential N(W), depletion approximation
+inv = M.invert_cv(d, etna.DeviceConfig())   # -> inv.donor_table, inv.config
+open("donor_table.json", "w").write(inv.to_json())
+cfg = etna.DeviceConfig(donor_table=M.load_donor_table_json("donor_table.json"))
+```
+
+- Capacitance is stored per area (F/cm²); `W = EPS / (C/A)` with the model's permittivity,
+  so data and model are converted identically. The model area does not enter the
+  comparison (per-area C); a data area different from `config.area_cm2` is noted.
+- `compare_cv` runs `run_cv` from 0 V to the deepest measured bias. When the measured
+  biases lie on a uniform grid from 0 V the model is solved **at** them (exact); otherwise
+  on a 0.05 V grid and interpolated linearly (max interpolation error < 0.01 µm at the knee
+  of the default device, `step_V` to refine). The file's temperature replaces `config.T`
+  (`use_data_temperature=False` to keep it). Forward-bias points are kept in the data but
+  not compared.
+- `depletion_profile`: `N(W) = 2 / (q eps d(1/C'^2)/dV_rev)`, slope of a local linear fit
+  over `window` points. Model-free and approximate: it smears N over a Debye length,
+  is wrong where N changes fast (junction layer, n-/n+ rise) and diverges at full
+  depletion. It is the start of the inversion.
+- `invert_cv` is the `lab/cv_gap` knot method (`fitlib.fit_knots`, which produced the
+  19-knot `MEASURED_CV_TABLE`) on the public API: log10 N_D at fixed knots (default: the lab
+  knots scaled to the epi, dense at the junction and the epi end; `knots_um=` to choose),
+  log-linear between them, least squares on `(W_data - W_model)/sigma_W` plus
+  `lam * diff2(log10 N) / sqrt(knot spacing)` (`lam` = 1). Every trial is a full Poisson +
+  small-signal C solve on the batched engine; the knots are bounded to its validated table
+  range (5e12..5e16 cm⁻³), a device outside the engine box is refused. Without a sigma
+  column every point gets `default_sigma_W_um` = 0.02 µm and chi2 is relative. Runtime
+  10-40 s (one stacked engine batch per Jacobian; 241 points 0..-60 V: 36 s).
+- Round trip (tests/test_measurements_cv.py, noise-free synthetic curve from the 19-knot
+  preset, 121 points 0..-60 V, inverted on the default geometry): converged, rms W < 5 nm,
+  every knot inside the probed depth within 0.1 dex (measured: 0.03 dex at 241 points).
+  This is an inverse crime (same model, no noise, the true knots): it checks the
+  machinery, not the accuracy on a real device.
+
+Limits of the C-V route (also in every result's `limits`):
+
+- The C-V constrains N_D only between W at the least-reverse bias used (about W(0 V) =
+  1.7 µm on the dosimeter) and W at the deepest bias. Knots outside are set by the
+  regularisation (`inv.constrained`, `inv.probed_depth_um`). To see the epi/n+ interface the
+  sweep must reach full depletion and beyond; a curve that stops at the knee says nothing
+  about the epi end.
+- Depth resolution is about one Debye length (`inv.debye_um`: 0.37 µm at 1e14, 1.2 µm at
+  1e13 cm⁻³); finer knots are regularisation-driven (noted).
+- Area error and perimeter (fringe) capacitance are degenerate with doping: a 2.5 % area
+  change or a fringe charge reproduce the same -30 V shift (`lab/cv_gap/notes/LOG.md`).
+  Give the measured area and, ideally, guard-ring-connected C-V.
+- Quasi-static model: no frequency dispersion, no trap response, no series resistance. The
+  measurement frequency is recorded only.
+- Beyond `cross_checked_to_V` (100 V with the n+ layer) the engine is not cross-checked
+  against devsim; the -100..-200 V part of a new C-V is compared but flagged.
+
+### SIMS / SRP
+
+```python
+prof = M.load_sims_csv("my_sims.csv")        # depth from the SURFACE, N and/or Al in cm^-3
+tab = M.resample_profile(prof, etna.DeviceConfig(), spacing_um=0.25)
+tab.donor_table, tab.rel_uncertainty, tab.censored, tab.junction_source, tab.N_A_plateau
+cfg = tab.to_device_config(etna.DeviceConfig())   # table + p+ thickness (+ N_A plateau)
+M.profile_vs_model(tab, etna.DeviceConfig())["rms_log10"]
+```
+
+- Depth origin: `donor_table` depth is below the p+/n- junction. The junction is the
+  `junction_depth_um` argument, else the file's `# junction_depth_um:`, else the Al/N
+  crossing, else the model's p+ thickness (`tab.junction_source` says which). The table
+  stops at the epi end; the n+ substrate stays `N_D_nplus`.
+- Resampling: `method="bin_mean"` (default; mean of log10 N in the bin around each knot,
+  noise-robust, rounds structure narrower than a bin) or `"interp"` (log-linear
+  interpolation, exact on a noise-free profile). Per-knot relative uncertainty: the mean
+  measurement sigma in the bin (not divided by sqrt(n): SIMS calibration errors are
+  correlated) combined with the bin scatter / sqrt(n).
+- Detection limit (column or metadata): knots at or below it are `censored` and
+  `to_device_config` refuses them unless `allow_censored=True`, so a SIMS floor never
+  becomes the epi doping silently. Knots outside the measured depth are `extrapolated`
+  (edge value held).
+- Acceptors: `DeviceConfig` has a scalar `N_A` and a p+ thickness only, so the Al profile
+  is reported as data, the plateau (median Al above the junction) is offered as `N_A`, and
+  the Al tail into the epi is not modelled.
+- SIMS measures total atoms, SRP the net free-carrier density; the technique is recorded
+  and both are used as N_D.
+
+### I(T) and the activation energy
+
+```python
+it = M.load_it_csv("my_it.csv")              # one fit per bias (V_V column or '# bias_V:')
+an = M.analyze_it(it, etna.DeviceConfig(), T_power=0.0)
+for c in an.comparisons:
+    print(c.bias_V, c.data_fit.E_a_eV, c.data_fit.sigma_E_a_eV, c.model_fit.E_a_eV, c.z)
+```
+
+- Fit: `ln(|I|/T^p) = ln A - E_a/(k_B T)`, weighted least squares with `sigma_ln =
+  sigma_I/|I|` (absolute covariance and chi2/dof with file sigmas; residual-scaled
+  covariance and >= 3 temperatures without). `p` = `T_power` is a choice (0 = plain
+  Arrhenius, 1.5 = generation current, 2 or 3 as in parts of the SiC literature); E_a moves
+  by about k_B T per unit of p, so data and model are fitted with the same p.
+- Model E_a: `run_dark_current` at the data temperatures and bias, the same fit on
+  |I_model(T)|. Its T dependence is an assumption (`N_t(T) ~ n_i(T)`, i.e. E_a = E_g/2,
+  plus the T^1.5 of n_i, the Varshni E_g(T) and the Hurkx Gamma(T)): on the default device
+  at -30 V, 280-340 K, p = 0 the fitted model E_a is 1.69 eV against E_g/2 = 1.63 eV. The
+  comparison (`delta_eV`, `z` = delta / sigma of the data fit) tests that assumption; a
+  curved Arrhenius plot (see the residuals) means more than one mechanism.
+
+### Streamlit page
+
+**Measurements** (`app/workflows/measurements.py`): three tabs (C-V, SIMS / SRP, I(T)),
+each with the header-only template download, a file upload, the validation messages (line
+and column), and buttons that run the comparison / inversion / resampling / E_a fit against
+the sidebar device. A C-V file without an area uses the sidebar area, and the page says so.
+Outputs: figures (PNG), the comparison and E_a JSON, the donor-table JSON
+(`etna.donor_table/1`, readable by `load_donor_table_json`) and a Markdown report. Results
+are cached in the session and flagged when the file or the sidebar device changed.
