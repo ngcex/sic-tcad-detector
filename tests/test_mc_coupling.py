@@ -219,6 +219,7 @@ class TestProcessMCEnsemble:
             "event_lateral_factor",
             "event_lateral_distance_cm",
             "n_outside_lateral",
+            "event_kinetic_MeV",  # audit C-2 (None without an ekin_MeV column)
         }
         assert np.all(result["event_lateral_factor"] == 1.0)
         assert result["event_lateral_distance_cm"] is None

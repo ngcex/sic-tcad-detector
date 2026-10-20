@@ -1126,50 +1126,37 @@ md(
     """
 ## 6. Tissue-Equivalence Correction
 
-Apply the kappa = S_water / S_SiC correction to the planar baseline spectrum
-as a reference. The tissue-equivalent y*d(y) shows how the SiC detector
-response maps to tissue-relevant dosimetric quantities.
+Convert the planar baseline spectrum to tissue with the real NIST PSTAR
+lineal-energy factor kappa(E) = L_water / L_SiC (SiC by Bragg additivity of
+Si + C; `data/nist_star/`, downloaded 2026-10-20). Per micrometre SiC stops
+~2.6x more than water (3.21x denser, mass stopping ratio water/SiC 1.2-1.4),
+so kappa ~0.43 at 1 MeV -> 0.375 at 150 MeV and tissue lineal energies are
+LOWER than the SiC ones.
 
-Despite silicon's higher atomic number, water has the higher **mass**
-stopping power (Z/A 0.555 for water vs 0.499 for SiC; mean excitation energy
-I ~78 eV for water vs ~136 eV for SiC), so the physically correct kappa is
-**> 1** (NIST PSTAR: ~1.24 at 1 MeV, decreasing to ~1.13 at 100 MeV) --
-tissue-equivalent lineal energies should be **higher** than SiC-raw values.
+Before 2026-10-20 this cell used a fabricated flat kappa ~0.58
+(`source='legacy_unsafe'`). The warning text said the real kappa was > 1. That
+value was a mass ratio (a dose factor), not a lineal-energy factor.
 
-⚠️ **PLACEHOLDER DATA WARNING:** the real PSTAR/SRIM stopping-power
-tables (`data/srim/*.csv`) are not yet populated in this environment (see
-`data/srim/README.md`). The cell below deliberately opts into the legacy
-fabricated placeholder (`source='legacy_unsafe'`) purely to **illustrate the
-correction pipeline mechanics** -- every kappa/tissue number below is
-**FABRICATED and SIGN-INVERTED** (kappa ~0.58 instead of the real ~1.13-1.24).
-Do not use these numbers for any physics conclusion; see
-`.planning/PHYSICS_REVIEW_v6.md`.
+**Assumption:** the synthetic MC events have no kinetic-energy column, so the
+proton kappa at a nominal 62 MeV is applied to the whole field.
 """
 )
 
 code(
     """
-# [PLACEHOLDER PIPELINE ILLUSTRATION -- NOT REAL PHYSICS]
-# Real PSTAR/SRIM data is not yet available in this environment (see
-# data/srim/README.md). We explicitly opt into the fabricated, sign-inverted
-# legacy table (source='legacy_unsafe') solely to demonstrate the correction
-# pipeline mechanics below. The physically correct kappa is > 1 (~1.13-1.24);
-# these numbers are NOT that.
-kappa_table = compute_kappa_table(
-    water_csv_path='data/stopping_power_water.csv',
-    sic_csv_path='data/stopping_power_sic.csv',
-    source='legacy_unsafe',
-)
-print(f"[PLACEHOLDER] Kappa table: {len(kappa_table['energy_MeV'])} points, "
-      f"mean kappa = {kappa_table['kappa'].mean():.3f}  "
-      f"*** FABRICATED, SIGN-INVERTED -- real kappa is > 1 (~1.13-1.24) ***")
-
-# Apply tissue correction to planar spectrum (inherits the placeholder kappa)
+# Real kappa(E) (NIST PSTAR, LET ratio), applied at the particle KINETIC energy.
+# ASSUMPTION: the synthetic events carry no ekin_MeV, so a 62 MeV proton beam is
+# assumed for the whole field.
+E_BEAM_MEV = 62.0
+kappa_table = compute_kappa_table(source='bragg', particle='proton', tissue='water')
 y_tissue = tissue_equivalence_correction(
     spec_planar['y_values'],
-    result_planar['event_energies_keV'],
     kappa_table=kappa_table,
+    particle_energy_MeV=E_BEAM_MEV,
+    particle='proton',
 )
+k_beam = float(np.mean(y_tissue / spec_planar['y_values']))
+print(f"kappa({E_BEAM_MEV:.0f} MeV) = {k_beam:.4f}  (NIST PSTAR, Bragg-additivity SiC)")
 
 collected_tissue = y_tissue * l_bar
 spec_tissue = lineal_energy_spectrum(
@@ -1177,7 +1164,6 @@ spec_tissue = lineal_energy_spectrum(
     y_min=0.01, y_max=1e4, bins_per_decade=50,
 )
 
-# Plot SiC vs [PLACEHOLDER] tissue-equivalent for planar
 fig, ax = plt.subplots(figsize=(10, 6))
 
 ax.semilogx(spec_planar['bin_centers'],
@@ -1185,14 +1171,15 @@ ax.semilogx(spec_planar['bin_centers'],
             color='#2196F3', linewidth=1.8, label='Planar (SiC raw)')
 ax.semilogx(spec_tissue['bin_centers'],
             spec_tissue['bin_centers'] * spec_tissue['d_y'],
-            color='#E91E63', linewidth=1.8, label='Planar ("tissue-equiv." [PLACEHOLDER])')
+            color='#E91E63', linewidth=1.8,
+            label='Planar (tissue-equivalent, 62 MeV p kappa)')
 
 ax.axvline(spec_planar['y_D'], color='#2196F3', linestyle='--', alpha=0.5)
 ax.axvline(spec_tissue['y_D'], color='#E91E63', linestyle='--', alpha=0.5)
 
 ax.set_xlabel('Lineal energy $y$ (keV/$\\\\mu$m)')
 ax.set_ylabel('$y \\\\cdot d(y)$')
-ax.set_title('Tissue-equivalence correction: SiC vs [PLACEHOLDER] "tissue-equivalent" (planar)')
+ax.set_title('Tissue-equivalence correction: SiC vs tissue-equivalent (planar)')
 ax.legend(fontsize=11)
 ax.grid(True, alpha=0.3, which='both')
 
@@ -1200,15 +1187,16 @@ plt.tight_layout()
 plt.savefig(os.path.join(FIG_DIR, 'fig19_5_tissue_equivalence.png'), bbox_inches='tight')
 plt.show()
 
-print(f"\\n[PLACEHOLDER] SiC:    y_D = {spec_planar['y_D']:.3f} keV/um")
-print(f"[PLACEHOLDER] Tissue: y_D = {spec_tissue['y_D']:.3f} keV/um")
-print(f"[PLACEHOLDER] Kappa impact on y_D: {spec_tissue['y_D']/spec_planar['y_D']:.3f} ratio "
-      f"-- NOT REAL PHYSICS (real ratio should be > 1, not < 1). "
-      f"See .planning/PHYSICS_REVIEW_v6.md and data/srim/README.md.")
+print(f"\\nSiC:    y_D = {spec_planar['y_D']:.3f} keV/um")
+print(f"Tissue: y_D = {spec_tissue['y_D']:.3f} keV/um")
+print(f"y_D ratio tissue/SiC: {spec_tissue['y_D']/spec_planar['y_D']:.3f} "
+      f"(assumed 62 MeV protons; synthetic field)")
 """
 )
 
 # =============================================================================
+
+
 # Cell 20: Discussion
 # =============================================================================
 md(
@@ -1325,10 +1313,10 @@ md(
    bias points are accepted at 1e-6 relative and verified by the balanced
    contact-current residual printed with each result.
 
-5. **Tissue-equivalence correction pipeline** (Section 6) runs with PLACEHOLDER,
-   sign-inverted kappa data; the physically correct kappa = S_water/S_SiC is > 1
-   (~1.13-1.24, NIST PSTAR). Regenerate with `source='bragg'` once real data is in
-   `data/srim/`.
+5. **Tissue-equivalence correction** (Section 6) now uses real NIST PSTAR kappa(E)
+   (LET ratio SiC -> water, 0.378 at 62 MeV). The tissue spectrum still rests on an
+   assumption: one 62 MeV proton energy for the whole synthetic field, which has no
+   kinetic-energy truth. (Before 2026-10-20 this section used a fabricated flat 0.58.)
 
 **Next steps if these structures are pursued:** a surface-recombination / fixed-charge
 model for the mesa sidewall and the guard-ring gap; a dead-layer energy-loss model

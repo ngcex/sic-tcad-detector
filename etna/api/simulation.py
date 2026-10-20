@@ -27,6 +27,7 @@ from etna.core.batched import (
 )
 from etna.core.batched.material import EPS
 from etna.core.charge_collection import cce_vs_bias, cce_vs_fluence
+from etna.core.generation_profiles import ALPHA_RANGE_SIC_CM
 from etna.core.cv_analysis import cv_sweep
 from etna.core.dark_current import (
     DARK_ENGINE_LEGACY_MAX_V,
@@ -546,13 +547,13 @@ def _cce_batch(configs, v_start, v_stop, n_points, capture):
                     _reach_through_V(dark.W[:, j], bias_array, configs[i]),
                     bias_array,
                 )
-        # cce_vs_bias defaults: alpha range 15 um, peak generation 1e18 cm^-3 s^-1.
+        # cce_vs_bias defaults: NIST alpha range (ALPHA_RANGE_SIC_CM), peak 1e18 cm^-3 s^-1.
         epi_end = (
             sub + kws[0]["epi_thickness_cm"]
             if kws[0].get("nplus_thickness_cm")
             else None
         )
-        G = alpha_generation(x, sub, 15e-4, 1e18, epi_end=epi_end)
+        G = alpha_generation(x, sub, ALPHA_RANGE_SIC_CM, 1e18, epi_end=epi_end)
         # Local per-node mobility from the batch doping, as cce_vs_bias (A-03).
         res = cce_sweep(
             pb,
@@ -1276,7 +1277,8 @@ def run_cce_tilted_alpha(
     dead layer too (epi-only generation, the ``run_cce`` convention); with
     ``generation_in_p_plus=True`` the p+ pairs are generated and may be collected by
     electron diffusion (a sensitivity variant). None in the n+ (never reached).
-    ``shape``: "bragg" (QUALITATIVE Bragg curve, not ASTAR/SRIM data) or "box".
+    ``shape``: "bragg" (NIST ASTAR Bragg curve in SiC since 2026-10-20, depth-scaled to
+    ``alpha_range_um``), "bragg_powerlaw" (the former qualitative curve) or "box".
 
     Batched engine only (the devsim path has no custom generation): raises
     ``OutsideModelValidity`` for configs or bias grids outside the engine's validated
@@ -1285,7 +1287,7 @@ def run_cce_tilted_alpha(
     pairs generated in the epi (plus the p+ if ``generation_in_p_plus``). It does NOT
     model track plasma / columnar recombination, trapping within the shaping time,
     ballistic deficit or 2D edges. It does not reproduce the paper's Fig. 4b: with the
-    preset (N_D 1e14, W reaches the track end by -3 V) it is flat to 0.5 % from 0 V,
+    preset (N_D 1e14, W reaches the track end by -3 V) it is flat to 0.7 % from 0 V,
     while the data drop to 0.908 at 0 V and still rise 1 % from -20 to -50 V. No
     drift-diffusion variant (N_D 0.5e14-1.2e15, lifetimes x0.03-x3, dead layer, p+) fits
     (chi2 >= 228 for 6 points at sigma 1e-3); a field-dependent loss in the dense alpha
@@ -1689,7 +1691,7 @@ def _temperature_engine(config: DeviceConfig, temperatures, voltage, method):
         )
         return vals, res.converged[0]
     epi_end = sub + epi if kws[0].get("nplus_thickness_cm") else None
-    G = alpha_generation(x, sub, 15e-4, 1e18, epi_end=epi_end)
+    G = alpha_generation(x, sub, ALPHA_RANGE_SIC_CM, 1e18, epi_end=epi_end)
     res = cce_sweep(pb, [voltage], sub, G, T=temperatures)
     return res.cce[0], res.converged[0]
 

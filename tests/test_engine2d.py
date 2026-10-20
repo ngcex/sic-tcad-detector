@@ -212,7 +212,8 @@ def test_in_mesh_generation_fraction():
     from etna.core.charge_collection_2d import in_mesh_generation_fraction
 
     f5, f10, f20 = (in_mesh_generation_fraction(t) for t in (5e-4, 10e-4, 20e-4))
-    assert 0.40 < f5 < 0.43 and 0.81 < f10 < 0.85 and f20 > 0.999
+    # NIST ASTAR Bragg curve, 18.43 um (was 0.42 / 0.83 with the 15 um flat box)
+    assert 0.18 < f5 < 0.21 and 0.41 < f10 < 0.45 and f20 > 0.999
     r = lateral_cce_scan_2d(25.0, 20.0, n_lateral_points=3)
     assert r["in_mesh_generation_fraction"] == pytest.approx(f10, rel=1e-12)
     np.testing.assert_allclose(r["q_collected_over_deposited"], r["cce_values"] * f10)

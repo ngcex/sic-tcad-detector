@@ -3,7 +3,7 @@ id: B-10
 title: proton_generation_profile ignores E_MeV except to validate the range; the "30/70/150 MeV" profiles are identical curves
 severity: low
 category: docs
-status: open 2026-10-18 (presentation part done: dead _R_sic_mm removed earlier, 91194a5 docstring 'energy-independent by construction' + test G(30)==G(150)==G(62); open: notebook 03 still plots three identical 30/70/150 MeV curves and the PSTAR range entries are unverified; physics owner, see B-INDEX)
+status: fixed 2026-10-20 (PSTAR data in data/nist_star/; PROTON_RANGE_WATER_MM read from PSTAR (62 MeV: 32.81 mm, was 31.0); opt-in energy dependence: proton_generation_profile(..., fluence_rate_cm2_s=) uses L_SiC(E(x)) with CSDA residual energy, dose_medium='water' converts water dose with the PSTAR mass ratio; default SiC-dose mode unchanged and energy-independent by construction; notebook 03 now plots equal-fluence curves)
 location: etna/core/generation_profiles.py:255-304 (proton_generation_profile; `_R_sic_mm` noqa F841 at ~l.296), 29-35 (PROTON_RANGE_WATER_MM); notebooks/03_charge_collection.ipynb
 labels: [generation, documentation, dead-code, raw-F10]
 ---

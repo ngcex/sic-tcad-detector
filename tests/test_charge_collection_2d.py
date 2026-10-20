@@ -232,9 +232,12 @@ class TestCompareCCE2Dvs1D:
         assert result["cce_1d"] == pytest.approx(result["cce_2d_center"], abs=1e-3)
         # B-14: the centre key is the lateral scan's x = 0 point, not the full-area value
         assert result["cce_2d_center"] == result["lateral_scan"]["cce_values"][0]
+        # laterally uniform device; full-area uses UNIFORM epi generation, the scan the
+        # alpha depth profile: with the NIST Bragg curve (weighted toward the epi end)
+        # they differ by 7e-6 (agreed to < 1e-6 with the old flat box)
         assert result["cce_2d_full_area"] == pytest.approx(
-            result["cce_2d_center"], abs=1e-6
-        )  # laterally uniform device
+            result["cce_2d_center"], abs=2e-5
+        )
 
     @pytest.mark.slow
     def test_engine_2d_half_matches_devsim(self):

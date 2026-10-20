@@ -45,7 +45,11 @@ from etna.core.drift_diffusion import (
     solve_tier,
 )
 from etna.core.charge_collection import add_generation_to_dd
-from etna.core.generation_profiles import alpha_depth_shape, confine_generation_to_epi
+from etna.core.generation_profiles import (
+    ALPHA_RANGE_SIC_CM,
+    alpha_depth_shape,
+    confine_generation_to_epi,
+)
 from etna.core.devsim_reset import delete_device_and_mesh
 
 logger = logging.getLogger(__name__)
@@ -54,7 +58,7 @@ logger = logging.getLogger(__name__)
 Q = 1.602e-19  # C, elementary charge
 
 # Default alpha particle range in SiC
-_ALPHA_RANGE_CM = 15e-4  # 15 um
+_ALPHA_RANGE_CM = ALPHA_RANGE_SIC_CM  # 18.43 um, NIST ASTAR (was a hand-set 15 um)
 
 
 def in_mesh_generation_fraction(
@@ -63,12 +67,13 @@ def in_mesh_generation_fraction(
     """Fraction of the alpha's e-h pairs (depth profile) generated inside the simulated epi.
 
     The lateral scans generate pairs only between the junction and the cathode, i.e.
-    inside the epi; the alpha_depth_shape profile extends to ~alpha_range (15 um) and
+    inside the epi; the alpha_depth_shape profile extends to ~alpha_range (18.4 um) and
     beyond, so for a thinner epi part of the deposit is outside the mesh and is not
     counted in I_generated. CCE is therefore relative to in-epi generation. This
     returns int_0^epi shape / int_0^inf shape (1D quadrature on a dense grid, depth
     only: the lateral Gaussian stripe, which is also cut at x = half_width, is ignored).
-    ~0.42 / 0.83 / 1.00 for 5 / 10 / 20 um epi at the default 15 um range.
+    0.20 / 0.43 / 1.00 for 5 / 10 / 20 um epi with the default NIST Bragg curve and
+    18.43 um range (0.42 / 0.83 / 1.00 with the pre-2026-10-20 15 um flat box).
     """
     y_end = max(3.0 * alpha_range_cm, epi_thickness_cm)
     y = np.linspace(0.0, y_end, n)
@@ -311,7 +316,7 @@ def alpha_stripe_generation(
 
     G(x, y) = gen_rate * depth_shape(y - y_entry) * exp(-0.5 ((x - x_pos) / sigma)^2),
     the profile :func:`cce_lateral_scan` uses at every lateral position: the 1D alpha
-    depth shape (``alpha_depth_shape``, flat box + erfc roll-off, peak renormalised to
+    depth shape (``alpha_depth_shape``, NIST Bragg curve by default, peak renormalised to
     ``gen_rate``) below the junction, zero in the p+ layer, and zero beyond the epi end
     when the device has an n+ layer (``confine_generation_to_epi``). ``depth_from``
     overrides the entry depth (default: the junction, ``substrate_thickness_cm``). For
@@ -331,7 +336,7 @@ def alpha_stripe_generation(
     AUDIT Mj-5 (v5): the scan previously used a monotonically DECAYING exponential
     exp(-y/alpha), backwards for an alpha (energy loss per unit path RISES toward the
     end of range) and inconsistent with the 1D alpha profile; both now share
-    ``alpha_depth_shape`` (qualitative, not Bragg-peaked by default).
+    ``alpha_depth_shape`` (since 2026-10-20 the NIST ASTAR Bragg curve by default).
     """
     device = device_info["device_name"]
     region = device_info["region_name"]

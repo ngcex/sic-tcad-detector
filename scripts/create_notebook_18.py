@@ -10,7 +10,7 @@ Sections:
 3. Lineal energy computation (y = epsilon / l_bar)
 4. Figure 1: y*d(y) dose-weighted spectrum (SiC)
 5. Figure 2: y*f(y) frequency-weighted spectrum (SiC)
-6. Tissue-equivalence correction via kappa = S_water / S_SiC
+6. Tissue-equivalence correction via kappa(E) = L_water / L_SiC (real NIST PSTAR data)
 7. Figure 3: SiC vs tissue-equivalent overlay (2 panels)
 8. Figure 4: Comparison summary bar chart
 9. Conclusions
@@ -53,7 +53,7 @@ the 4H-SiC microdosimeter, following **ICRU Report 36** conventions:
 2. **Process through CCE(LET)** lookup to obtain collected energies
 3. **Compute lineal energy** y = epsilon / l_bar for the sensitive volume
 4. **Build f(y) and d(y)** distributions on log-spaced bins
-5. **Apply tissue-equivalence** correction via kappa = S_water / S_SiC
+5. **Apply tissue-equivalence** correction via kappa(E) = L_water / L_SiC (NIST PSTAR)
 6. **Plot y*d(y) and y*f(y)** spectra in publication-quality format
 
 The lineal energy y is the energy imparted per event divided by the mean chord
@@ -308,96 +308,104 @@ plt.show()
 # =============================================================================
 md(
     """
-## 5. Tissue-Equivalence Correction
+## 5. Tissue-Equivalence Correction (real NIST data)
 
-Silicon carbide is not tissue-equivalent: its stopping power differs from
-water (the standard tissue surrogate). The tissue-equivalence correction
-factor kappa converts SiC detector response to tissue-equivalent values:
+Silicon carbide is not tissue-equivalent. For a track crossing the sensitive
+volume the lineal energy is close to the LET, so the SiC -> tissue conversion
+factor is the ratio of LINEAR stopping powers at the particle's KINETIC energy:
 
-$$\\kappa(E) = \\frac{S_{\\text{water}}(E)}{S_{\\text{SiC}}(E)}$$
+$$\\kappa(E) = \\frac{L_{\\text{water}}(E)}{L_{\\text{SiC}}(E)}
+= \\frac{(S/\\rho)_{\\text{water}}\\,\\rho_{\\text{water}}}{(S/\\rho)_{\\text{SiC}}\\,\\rho_{\\text{SiC}}}$$
 
-where S is the mass stopping power at proton energy E. Despite silicon's
-higher atomic number, water has the higher **mass** stopping power (Z/A
-0.555 for water vs 0.499 for SiC; mean excitation energy I ~78 eV for water
-vs ~136 eV for SiC), so the physically correct kappa is **> 1** (NIST PSTAR:
-~1.24 at 1 MeV, decreasing to ~1.13 at 100 MeV) -- tissue-equivalent lineal
-energies are **higher** than SiC-raw values, not lower.
+**Data:** NIST PSTAR (protons) for liquid water, silicon and carbon, downloaded
+2026-10-20 (`data/nist_star/`, raw responses and SHA-256 kept). NIST has no SiC
+table, so SiC is composed by Bragg additivity (0.7004 Si + 0.2996 C by mass),
+which ignores chemical binding (roughly a few percent for protons above 1 MeV,
+an unverified literature estimate).
 
-&#9888;&#65039; **PLACEHOLDER DATA WARNING:** the real PSTAR/SRIM stopping-power
-tables (`data/srim/*.csv`) are not yet populated in this environment (see
-`data/srim/README.md`). The cells below deliberately opt into the legacy
-fabricated placeholder (`source='legacy_unsafe'`) purely to **illustrate the
-correction pipeline mechanics** -- every kappa/tissue number printed below is
-**FABRICATED and SIGN-INVERTED** (kappa ~0.58 instead of the real ~1.13-1.24).
-Do not use these numbers for any physics conclusion; see
-`.planning/PHYSICS_REVIEW_v6.md`.
+The water mass stopping power is higher than the SiC one (mass ratio 1.37 at
+1 MeV -> 1.20 at 150 MeV), but SiC is 3.21x denser, so per micrometre SiC
+stops ~2.6x more: kappa ~0.43 at 1 MeV -> ~0.375 at 150 MeV. Tissue lineal
+energies are therefore LOWER than the SiC ones. (This is the convention of the
+Si microdosimetry literature, where the Si -> muscle factor is ~0.58; the same
+NIST files give 0.584 at 10 MeV. The mass ratio is the dose conversion factor,
+not a lineal-energy factor.)
 
-The stopping power data comes from:
-- **Water:** PSTAR database (NIST)
-- **SiC:** Bethe-Bloch scaling from SRIM data (Bragg additivity from Si + C)
+**History.** Before 2026-10-20 this section used a fabricated flat table
+(kappa ~0.58, `source='legacy_unsafe'`). Its earlier warning text said the real
+kappa should be > 1 (~1.13-1.24). Both numbers were wrong: the flat 0.58 does
+not match the data, and the > 1 claim had a mass ratio where a lineal-energy
+factor was needed.
+
+**Limitation of this demo.** The Phase 22 synthetic events carry no
+kinetic-energy column, and the field is described as mixed proton + heavy ion.
+Below, the whole field is converted with the proton kappa at a nominal **62 MeV**
+(a stated assumption, not MC truth). A real Geant4 file should provide `ekin_MeV`
+(and `track_id`): then `process_mc_ensemble` returns `event_kinetic_MeV` for a
+per-event lookup. Heavy ions need their own stopping tables, which are not
+bundled.
 """
 )
 
 code(
     """
-# [PLACEHOLDER PIPELINE ILLUSTRATION -- NOT REAL PHYSICS]
-# Real PSTAR/SRIM data is not yet available in this environment (see
-# data/srim/README.md). We explicitly opt into the fabricated, sign-inverted
-# legacy table (source='legacy_unsafe') solely to demonstrate the correction
-# pipeline mechanics below. The physically correct kappa is > 1 (~1.13-1.24);
-# these numbers are NOT that.
-kappa_table = compute_kappa_table(
-    water_csv_path='data/stopping_power_water.csv',
-    sic_csv_path='data/stopping_power_sic.csv',
-    source='legacy_unsafe',
-)
+# Real kappa(E) from NIST PSTAR (SiC by Bragg additivity), LET-ratio convention
+kappa_table = compute_kappa_table(source='bragg', particle='proton', tissue='water')
+kappa_mass = compute_kappa_table(source='bragg', particle='proton', tissue='water',
+                                 ratio='mass')
 
-print("[PLACEHOLDER] Kappa Table (S_water / S_SiC) -- FABRICATED, SIGN-INVERTED")
-print("=" * 65)
-print("  *** NOT REAL PHYSICS -- real kappa is > 1 (~1.13-1.24), see C-1 ***")
-print(f"  Energy points:   {len(kappa_table['energy_MeV'])}")
-print(f"  Energy range:    {kappa_table['energy_MeV'].min():.2f} -- "
-      f"{kappa_table['energy_MeV'].max():.0f} MeV")
-print(f"  Kappa range:     {kappa_table['kappa'].min():.3f} -- "
-      f"{kappa_table['kappa'].max():.3f}  [PLACEHOLDER, physically wrong sign]")
-print(f"  Mean kappa:      {kappa_table['kappa'].mean():.3f}  [PLACEHOLDER]")
-print(f"")
-print("  Sample values (all PLACEHOLDER):")
-for i in range(0, len(kappa_table['energy_MeV']), 6):
-    print(f"    E = {kappa_table['energy_MeV'][i]:8.2f} MeV  ->  "
-          f"kappa = {kappa_table['kappa'][i]:.4f}  [PLACEHOLDER]")
+E_show = np.array([0.5, 1, 2, 5, 10, 30, 62, 100, 150, 250])
+k_show = np.exp(np.interp(np.log(E_show), np.log(kappa_table['energy_MeV']),
+                          np.log(kappa_table['kappa'])))
+m_show = np.exp(np.interp(np.log(E_show), np.log(kappa_mass['energy_MeV']),
+                          np.log(kappa_mass['kappa'])))
+print("kappa(E), protons, SiC -> water (NIST PSTAR, Bragg-additivity SiC)")
+print("=" * 60)
+print(f"{'E (MeV)':>10s} {'kappa (LET ratio)':>20s} {'mass ratio':>14s}")
+for e, k, m in zip(E_show, k_show, m_show):
+    print(f"{e:10.1f} {k:20.4f} {m:14.4f}")
+
+fig, ax = plt.subplots(figsize=(8, 4.5))
+ax.semilogx(kappa_table['energy_MeV'], kappa_table['kappa'], color='#2196F3',
+            label='kappa = L_water / L_SiC (used)')
+ax.set_xlim(0.1, 1000)
+ax.set_ylim(0.3, 0.5)
+ax.set_xlabel('Proton kinetic energy (MeV)')
+ax.set_ylabel('kappa')
+ax.set_title('SiC -> water lineal-energy factor (NIST PSTAR)')
+ax.grid(True, alpha=0.3, which='both')
+ax.legend()
+plt.tight_layout()
+plt.show()
 """
 )
 
 code(
     """
-# [PLACEHOLDER PIPELINE ILLUSTRATION -- NOT REAL PHYSICS]
-# Applies the fabricated kappa_table above; every y_tissue value inherits the
-# sign-inverted placeholder and must not be read as a physics result.
+# Apply kappa at the particle KINETIC energy (AUDIT C-2). The synthetic events
+# have no ekin_MeV column (event_kinetic_MeV is None), so a nominal 62 MeV proton
+# beam is ASSUMED for the whole field -- see the limitation note above.
+E_BEAM_MEV = 62.0
+print(f"event_kinetic_MeV in the MC result: {result['event_kinetic_MeV']}")
 y_tissue = tissue_equivalence_correction(
     spec_sic['y_values'],
-    result['event_energies_keV'],
     kappa_table=kappa_table,
+    particle_energy_MeV=E_BEAM_MEV,
+    particle='proton',
 )
 
-print("[PLACEHOLDER] Tissue-equivalence correction -- FABRICATED, SIGN-INVERTED")
-print(f"Correction applied to {len(y_tissue)} events (pipeline illustration only).")
+print(f"Tissue-equivalence correction at E = {E_BEAM_MEV:.0f} MeV (assumed beam energy)")
 print(f"  SiC y range:        {spec_sic['y_values'].min():.3f} -- "
       f"{spec_sic['y_values'].max():.1f} keV/um")
-print(f"  'Tissue' y range:   {y_tissue.min():.3f} -- "
-      f"{y_tissue.max():.1f} keV/um  [PLACEHOLDER]")
-print(f"  Mean shift factor:  {np.mean(y_tissue / spec_sic['y_values']):.3f}  "
-      f"[PLACEHOLDER -- real shift should be a factor > 1, not < 1]")
+print(f"  Tissue y range:     {y_tissue.min():.3f} -- {y_tissue.max():.1f} keV/um")
+print(f"  Shift factor:       {np.mean(y_tissue / spec_sic['y_values']):.4f}")
 """
 )
 
 code(
     """
-# [PLACEHOLDER PIPELINE ILLUSTRATION -- NOT REAL PHYSICS]
-# Recompute lineal energy spectrum with the (fabricated) tissue-equivalent
-# values above. We compute collected_tissue = y_tissue * l_bar to get
-# tissue-equivalent energies. Every number below inherits the sign-inverted
-# placeholder kappa and is NOT a physics result.
+# Recompute the lineal energy spectrum with the tissue-equivalent values
+# (collected_tissue = y_tissue * l_bar keeps the same chord length).
 collected_tissue_keV = y_tissue * l_bar
 
 spec_tissue = lineal_energy_spectrum(
@@ -408,23 +416,21 @@ spec_tissue = lineal_energy_spectrum(
     bins_per_decade=50,
 )
 
-print("[PLACEHOLDER] 'Tissue-Equivalent' Lineal Energy Spectrum -- NOT REAL PHYSICS")
-print("=" * 65)
-print(f"  y_F (tissue):         {spec_tissue['y_F']:.3f} keV/um  [PLACEHOLDER]")
-print(f"  y_D (tissue):         {spec_tissue['y_D']:.3f} keV/um  [PLACEHOLDER]")
-print(f"  y_D / y_F ratio:      {spec_tissue['y_D'] / spec_tissue['y_F']:.2f}  [PLACEHOLDER]")
+print("Tissue-equivalent lineal energy spectrum (62 MeV proton kappa)")
+print("=" * 60)
+print(f"  y_F (tissue):         {spec_tissue['y_F']:.3f} keV/um")
+print(f"  y_D (tissue):         {spec_tissue['y_D']:.3f} keV/um")
+print(f"  y_D / y_F ratio:      {spec_tissue['y_D'] / spec_tissue['y_F']:.2f}")
 print(f"  y_D >= y_F (Jensen):  {spec_tissue['y_D'] >= spec_tissue['y_F']}")
 print(f"")
-print("  Comparison with SiC raw (PLACEHOLDER tissue values):")
-print(f"    y_F: {spec_sic['y_F']:.3f} (SiC) -> {spec_tissue['y_F']:.3f} (tissue) [PLACEHOLDER]")
-print(f"    y_D: {spec_sic['y_D']:.3f} (SiC) -> {spec_tissue['y_D']:.3f} (tissue) [PLACEHOLDER]")
+print("  Comparison with SiC raw:")
+print(f"    y_F: {spec_sic['y_F']:.3f} (SiC) -> {spec_tissue['y_F']:.3f} (tissue)")
+print(f"    y_D: {spec_sic['y_D']:.3f} (SiC) -> {spec_tissue['y_D']:.3f} (tissue)")
 print(f"    Shift: {spec_tissue['y_F'] / spec_sic['y_F']:.3f} (y_F), "
-      f"{spec_tissue['y_D'] / spec_sic['y_D']:.3f} (y_D)  "
-      f"[PLACEHOLDER -- real shift should be > 1, not < 1]")
+      f"{spec_tissue['y_D'] / spec_sic['y_D']:.3f} (y_D)  (binning: ~1/50 decade)")
 
 integral_fy_tissue = np.sum(spec_tissue['f_y'] * spec_tissue['bin_widths'])
-print(f"\\n  Integral f(y)*dy:     {integral_fy_tissue:.4f} (should be ~1.0; "
-      f"this normalization check is valid regardless of the placeholder kappa)")
+print(f"\\n  Integral f(y)*dy:     {integral_fy_tissue:.4f} (should be ~1.0)")
 """
 )
 
@@ -435,13 +441,10 @@ md(
     """
 ## 6. Figure 3: SiC vs Tissue-Equivalent Spectra Overlay
 
-&#9888;&#65039; **PLACEHOLDER DATA WARNING (continued from Section 5):** the
-"tissue-equivalent" curve below is built from the fabricated, sign-inverted
-placeholder kappa (~0.58), not real PSTAR data. With the *correct* physical
-kappa (> 1, ~1.13-1.24), the tissue-equivalent spectrum should be shifted to
-**higher** lineal energies, not lower. The plot below shows the opposite
-(shifted lower) because it is illustrating the pipeline with fake data, not a
-physics result -- do not read direction or magnitude from this figure.
+The tissue-equivalent spectrum is the SiC spectrum shifted to LOWER lineal
+energy by kappa(62 MeV) = 0.378 (a rigid shift on the log axis, because a single
+assumed beam energy is used; with per-event MC kinetic energies the shift would
+vary event by event).
 
 **Top panel:** y*d(y) dose-weighted spectra
 **Bottom panel:** y*f(y) frequency-weighted spectra
@@ -461,11 +464,10 @@ plot_yd_spectrum(
 plot_yd_spectrum(
     spec_tissue['bin_centers'], spec_tissue['d_y'],
     y_F=spec_tissue['y_F'], y_D=spec_tissue['y_D'],
-    ax=ax1, label='Tissue-equivalent', color='#E91E63',
+    ax=ax1, label='Tissue-equivalent (62 MeV p kappa)', color='#E91E63',
 )
-ax1.set_title('Dose-weighted lineal energy spectrum: SiC vs [PLACEHOLDER] Tissue-Equivalent')
+ax1.set_title('Dose-weighted lineal energy spectrum: SiC vs tissue-equivalent')
 ax1.grid(True, alpha=0.3, which='both')
-# Rebuild legend to avoid duplicate vline labels
 handles, labels = ax1.get_legend_handles_labels()
 ax1.legend(handles, labels, fontsize=8, loc='upper right')
 
@@ -478,9 +480,9 @@ plot_yf_spectrum(
 plot_yf_spectrum(
     spec_tissue['bin_centers'], spec_tissue['f_y'],
     y_F=spec_tissue['y_F'],
-    ax=ax2, label='Tissue-equivalent', color='#E91E63',
+    ax=ax2, label='Tissue-equivalent (62 MeV p kappa)', color='#E91E63',
 )
-ax2.set_title('Frequency-weighted lineal energy spectrum: SiC vs [PLACEHOLDER] Tissue-Equivalent')
+ax2.set_title('Frequency-weighted lineal energy spectrum: SiC vs tissue-equivalent')
 ax2.grid(True, alpha=0.3, which='both')
 handles, labels = ax2.get_legend_handles_labels()
 ax2.legend(handles, labels, fontsize=8, loc='upper right')
@@ -497,50 +499,39 @@ md(
     """
 ## 7. Summary of Microdosimetric Quantities
 
-Comprehensive comparison of the frequency-mean and dose-mean lineal energies
-for both the SiC raw and tissue-equivalent spectra, along with the
-tissue-equivalence correction factor kappa.
-
-&#9888;&#65039; **The "Tissue-Eq." column and kappa values below are the
-PLACEHOLDER pipeline-illustration numbers from Section 5, not real physics.**
+Frequency-mean and dose-mean lineal energies for the SiC raw and
+tissue-equivalent spectra. The tissue column rests on two stated inputs: the
+real NIST kappa, and the ASSUMED 62 MeV proton energy for a synthetic field
+that has no kinetic-energy truth.
 """
 )
 
 code(
     """
-# [PLACEHOLDER PIPELINE ILLUSTRATION -- NOT REAL PHYSICS]
-# Summary table. The 'Tissue-Eq.' column and kappa row are FABRICATED,
-# SIGN-INVERTED placeholder numbers (see Section 5) -- real kappa is > 1
-# (~1.13-1.24), not the ~0.58 shown here.
+k62 = float(np.exp(np.interp(np.log(E_BEAM_MEV), np.log(kappa_table['energy_MeV']),
+                             np.log(kappa_table['kappa']))))
 print("=" * 70)
-print("  [PLACEHOLDER] Microdosimetric Quantities Summary -- NOT REAL PHYSICS")
+print("  Microdosimetric Quantities Summary")
 print("=" * 70)
-print(f"{'Quantity':30s} {'SiC Raw':>12s}  {'\"Tissue-Eq.\"':>14s}  {'Unit':>8s}")
+print(f"{'Quantity':30s} {'SiC Raw':>12s}  {'Tissue-Eq.':>12s}  {'Unit':>8s}")
 print("-" * 70)
 print(f"{'y_F (freq. mean)':30s} {spec_sic['y_F']:>12.3f}  "
-      f"{spec_tissue['y_F']:>12.3f}  {'keV/um':>8s}  [PLACEHOLDER]")
+      f"{spec_tissue['y_F']:>12.3f}  {'keV/um':>8s}")
 print(f"{'y_D (dose mean)':30s} {spec_sic['y_D']:>12.3f}  "
-      f"{spec_tissue['y_D']:>12.3f}  {'keV/um':>8s}  [PLACEHOLDER]")
+      f"{spec_tissue['y_D']:>12.3f}  {'keV/um':>8s}")
 print(f"{'y_D / y_F ratio':30s} {spec_sic['y_D']/spec_sic['y_F']:>12.2f}  "
-      f"{spec_tissue['y_D']/spec_tissue['y_F']:>12.2f}  {'-':>8s}  [PLACEHOLDER]")
+      f"{spec_tissue['y_D']/spec_tissue['y_F']:>12.2f}  {'-':>8s}")
 print(f"{'Events':30s} {spec_sic['n_events']:>12d}  "
       f"{spec_tissue['n_events']:>12d}  {'-':>8s}")
 print("-" * 70)
-print(f"{'Mean kappa':30s} {kappa_table['kappa'].mean():>12.3f}  {'':>14s}  "
-      f"{'-':>8s}  [PLACEHOLDER, sign-inverted -- real kappa is > 1]")
-print(f"{'Kappa range':30s} {kappa_table['kappa'].min():>5.3f} -- "
-      f"{kappa_table['kappa'].max():<5.3f}  {'':>14s}  {'-':>8s}  [PLACEHOLDER]")
+print(f"{'kappa(62 MeV), LET ratio':30s} {k62:>12.4f}  (NIST PSTAR, Bragg-additivity SiC)")
 print("=" * 70)
-print("*** None of the 'Tissue-Eq.' numbers above are real physics. See ***")
-print("*** .planning/PHYSICS_REVIEW_v6.md and data/srim/README.md.       ***")
+print("Tissue column: real kappa, ASSUMED 62 MeV protons for the whole synthetic field.")
 """
 )
 
 code(
     """
-# [PLACEHOLDER PIPELINE ILLUSTRATION -- NOT REAL PHYSICS]
-# Figure 4: Bar chart comparing y_F and y_D for SiC vs the PLACEHOLDER
-# 'tissue-equivalent' values (fabricated, sign-inverted kappa; see Section 5).
 fig, ax = plt.subplots(figsize=(10, 6))
 
 x = np.arange(2)
@@ -551,15 +542,11 @@ bar_tissue = [spec_tissue['y_F'], spec_tissue['y_D']]
 
 bars1 = ax.bar(x - width/2, bar_sic, width, label='SiC raw',
                color='#2196F3', edgecolor='white', linewidth=0.5)
-bars2 = ax.bar(x + width/2, bar_tissue, width, label='"Tissue-equivalent" [PLACEHOLDER]',
+bars2 = ax.bar(x + width/2, bar_tissue, width,
+               label='Tissue-equivalent (62 MeV p kappa)',
                color='#E91E63', edgecolor='white', linewidth=0.5)
 
-# Add value labels on bars
-for bar in bars1:
-    height = bar.get_height()
-    ax.text(bar.get_x() + bar.get_width()/2., height + 0.5,
-            f'{height:.2f}', ha='center', va='bottom', fontsize=11)
-for bar in bars2:
+for bar in list(bars1) + list(bars2):
     height = bar.get_height()
     ax.text(bar.get_x() + bar.get_width()/2., height + 0.5,
             f'{height:.2f}', ha='center', va='bottom', fontsize=11)
@@ -567,14 +554,12 @@ for bar in bars2:
 ax.set_xticks(x)
 ax.set_xticklabels(['$y_F$ (frequency mean)', '$y_D$ (dose mean)'], fontsize=13)
 ax.set_ylabel(r'Lineal energy (keV/$\\mu$m)')
-ax.set_title('Microdosimetric Quantities: SiC Raw vs [PLACEHOLDER] "Tissue-Equivalent"')
+ax.set_title('Microdosimetric Quantities: SiC Raw vs Tissue-Equivalent')
 ax.legend(fontsize=12)
 ax.grid(True, alpha=0.3, axis='y')
 
 plt.tight_layout()
 plt.show()
-print("[PLACEHOLDER] The 'Tissue-equivalent' bars use fabricated, sign-inverted")
-print("kappa (~0.58). Real kappa is > 1 (~1.13-1.24) -- see data/srim/README.md.")
 """
 )
 
@@ -585,42 +570,32 @@ md(
     """
 ## 8. Conclusions
 
-This notebook demonstrated the complete microdosimetric spectra pipeline for
-the 4H-SiC microdosimeter:
-
-**Key findings:**
-
 1. **Lineal energy spectra** were computed from 2000 synthetic MC events using
    ICRU Report 36 conventions. The f(y) normalization validates to within a few
    percent of unity, and Jensen's inequality (y_D >= y_F) is satisfied.
 
-2. **The tissue-equivalence correction pipeline** (kappa lookup -> per-event
-   scaling -> spectrum recompute) was demonstrated end-to-end, but with
-   **PLACEHOLDER, sign-inverted kappa data** (Section 5): real PSTAR/SRIM
-   proton stopping-power tables are not yet available in this environment
-   (`data/srim/README.md`). The physically correct kappa = S_water/S_SiC is
-   **> 1** (~1.13-1.24, NIST PSTAR), not the ~0.58 shown above -- water has the
-   higher *mass* stopping power despite SiC's higher atomic number. Do not use
-   any "Tissue-Eq." number in this notebook as a physics result; regenerate
-   this section with `source='bragg'` once real data is dropped into
-   `data/srim/` (see `.planning/PHYSICS_REVIEW_v6.md`).
+2. **Tissue equivalence** now uses real NIST PSTAR data (SiC by Bragg additivity
+   of Si + C). With the lineal-energy (LET-ratio) convention, kappa drops from
+   0.43 at 1 MeV to 0.375 at 150 MeV (~13% over the range, not flat), and
+   tissue lineal energies are lower than SiC ones by that factor.
 
-3. **The kappa factor**, once real data is in place, is expected to show
-   energy dependence across the proton energy range (0.1--1000 MeV) of order
-   10-30%, captured by the per-event interpolation approach rather than a
-   single constant value. This notebook's placeholder run does not exercise
-   that energy dependence meaningfully (the legacy table is a flat artefact).
+3. **What is still not a physics result here:** the input field is synthetic,
+   and it has no kinetic-energy truth, so a single 62 MeV proton energy was
+   assumed for all events, including the heavy-ion-like component. With a real
+   Geant4 file that has `ekin_MeV`, the per-event lookup
+   (`process_mc_ensemble(...)['event_kinetic_MeV']`) applies kappa(E_k)
+   correctly (audit C-2). Bragg additivity for SiC remains an approximation;
+   SRIM or ICRU-90 SiC tables would be the cross-check.
 
 4. **The bimodal mixed-field spectrum** (proton + heavy-ion components) produces
    physically reasonable microdosimetric distributions with clear separation
    between the low-y (proton) and high-y (heavy-ion) contributions.
-
-**Next steps (Phase 24):** Apply this pipeline to realistic Geant4 simulation
-data and optimize the SV geometry for microdosimetric performance.
 """
 )
 
 # =============================================================================
+
+
 # Write notebook
 # =============================================================================
 nb.cells = cells

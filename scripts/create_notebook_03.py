@@ -65,10 +65,14 @@ nb.cells.append(
         "\n"
         "Comparison of carrier generation profiles for different radiation sources:\n"
         "\n"
-        "- **Am-241 alpha particle** (5.486 MeV): Range ~15 um in SiC. "
-        "Peaked profile with Bragg-like energy deposition.\n"
-        "- **Proton beams** (30, 70, 150 MeV): Range >> detector thickness. "
-        "Approximately flat profile within the 10 um detector (entrance dose region)."
+        "- **Am-241 alpha particle** (5.486 MeV): CSDA range 18.4 um in SiC "
+        "(NIST ASTAR, SiC by Bragg additivity of Si + C). Bragg curve with "
+        "peak/entrance 2.49 near the end of range.\n"
+        "- **Proton beams** (30, 70, 150 MeV) at EQUAL FLUENCE RATE (1e9 cm^-2 s^-1): "
+        "range >> detector thickness, so each profile is flat in the 10 um detector, "
+        "but its level follows the NIST PSTAR LET in SiC (30 MeV is ~3.4x the "
+        "150 MeV level). At equal SiC DOSE rate (the `proton_generation_profile` "
+        "default) the three curves would be identical by construction (audit B-10)."
     )
 )
 
@@ -79,14 +83,16 @@ nb.cells.append(
         "x_cm = np.linspace(0, 20e-4, 500)  # 0 to 20 um\n"
         "\n"
         "# Alpha particle generation profile\n"
-        "G_alpha = alpha_generation_profile(x_cm, alpha_range_cm=15e-4)\n"
+        "G_alpha = alpha_generation_profile(x_cm)  # NIST ASTAR Bragg curve, 18.43 um\n"
         "# Scale to typical generation rate\n"
         "G_alpha_scaled = G_alpha * (1e18 / np.max(G_alpha)) if np.max(G_alpha) > 0 else G_alpha\n"
         "\n"
-        "# Proton generation profiles at therapeutic energies\n"
-        "G_30MeV = proton_generation_profile(x_cm, E_MeV=30, dose_rate_Gy_s=1.0)\n"
-        "G_70MeV = proton_generation_profile(x_cm, E_MeV=70, dose_rate_Gy_s=1.0)\n"
-        "G_150MeV = proton_generation_profile(x_cm, E_MeV=150, dose_rate_Gy_s=1.0)\n"
+        "# Proton generation profiles at therapeutic energies, equal fluence rate\n"
+        "# (NIST PSTAR LET in SiC; at equal SiC dose rate they would be identical)\n"
+        "PHI = 1e9  # protons cm^-2 s^-1\n"
+        "G_30MeV = proton_generation_profile(x_cm, E_MeV=30, fluence_rate_cm2_s=PHI)\n"
+        "G_70MeV = proton_generation_profile(x_cm, E_MeV=70, fluence_rate_cm2_s=PHI)\n"
+        "G_150MeV = proton_generation_profile(x_cm, E_MeV=150, fluence_rate_cm2_s=PHI)\n"
         "\n"
         "profiles = {\n"
         "    'Am-241 alpha (5.486 MeV)': G_alpha_scaled,\n"
@@ -199,7 +205,7 @@ nb.cells.append(
         "- Charge generated in the neutral (undepleted) region has incomplete "
         "collection via diffusion only\n"
         "- CCE should initially decrease with epi thickness as the depletion fraction drops\n"
-        "- For epi > alpha range (~15 um), CCE may increase as the generation profile "
+        "- For epi > alpha range (~18.4 um, NIST), CCE may increase as the generation profile "
         "shape changes (less concentrated near the surface)\n"
         "- At higher bias (e.g. -30V) all thicknesses are fully depleted and CCE ~ 1.0"
     )
@@ -233,7 +239,7 @@ nb.cells.append(
         "cce_arr = epi_data['cce_values']\n"
         "thin_exceeds_mid = cce_arr[0] > cce_arr[2]  # 5um > 10um\n"
         "print(f'\\nCCE(5um) > CCE(10um): {thin_exceeds_mid}  [{cce_arr[0]:.4f} vs {cce_arr[2]:.4f}]')\n"
-        "print(f'Note: Non-monotonic trend expected when epi approaches alpha range (~15um)')"
+        "print(f'Note: Non-monotonic trend expected when epi approaches alpha range (~18.4um)')"
     )
 )
 
@@ -263,7 +269,8 @@ nb.cells.append(
         "reflects the generation profile shape changing. At high bias (-30V) all "
         "thicknesses are fully depleted and CCE ~ 1.0.\n"
         "4. **Proton profiles are flat** within the thin detector for all "
-        "therapeutic energies, confirming the entrance-dose approximation."
+        "therapeutic energies (entrance plateau); at equal fluence their level "
+        "scales with the PSTAR LET, at equal SiC dose it does not depend on energy."
     )
 )
 

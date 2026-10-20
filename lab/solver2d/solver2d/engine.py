@@ -47,7 +47,7 @@ from .banded import band_lu, band_solve
 from .grid import Grid2D
 from .kernels import cathode_current, continuity_system, poisson_system
 
-ALPHA_RANGE_CM = 15e-4  # etna.core.charge_collection_2d._ALPHA_RANGE_CM
+from etna.core.charge_collection_2d import _ALPHA_RANGE_CM as ALPHA_RANGE_CM  # noqa: E402
 
 
 @dataclass

@@ -30,6 +30,7 @@ from devsim.python_packages.model_create import (
 import numpy as np
 
 from etna.core.generation_profiles import (
+    ALPHA_RANGE_SIC_CM,
     alpha_generation_profile,
     confine_generation_to_epi,
 )
@@ -450,7 +451,7 @@ def compute_cce_from_dd(device_info, generation_values, contact="cathode"):
 def cce_vs_bias(
     V_range,
     epi_thickness_cm=10e-4,
-    alpha_range_cm=15e-4,
+    alpha_range_cm=ALPHA_RANGE_SIC_CM,
     generation_rate=1e18,
     device_kwargs=None,
 ):
@@ -467,7 +468,7 @@ def cce_vs_bias(
     epi_thickness_cm : float
         Epitaxial layer thickness (cm). Default: 10 um.
     alpha_range_cm : float
-        Alpha particle range in SiC (cm). Default: 15 um.
+        Alpha particle range in SiC (cm). Default: ALPHA_RANGE_SIC_CM (18.43 um, NIST ASTAR).
     generation_rate : float
         Peak generation rate (cm^-3 s^-1). Default: 1e18.
         Low injection since N_D ~ 1e13-1e15.
@@ -651,7 +652,7 @@ def cce_vs_fluence(
     N_D_junction=_STACK["N_D_junction"],
     N_D_bulk=_STACK["N_D_bulk"],
     L_transition=_STACK["L_transition"],
-    alpha_range_cm=15e-4,
+    alpha_range_cm=ALPHA_RANGE_SIC_CM,
     generation_rate=1e18,
     energy_MeV=62.0,
     lifetime_model="linear",
@@ -688,7 +689,7 @@ def cce_vs_fluence(
     L_transition : float
         Doping transition length (cm). Default: DEFAULT_STACK (0.4638630 um).
     alpha_range_cm : float
-        Alpha particle range in SiC (cm). Default: 15 um.
+        Alpha particle range in SiC (cm). Default: ALPHA_RANGE_SIC_CM (18.43 um, NIST ASTAR).
     generation_rate : float
         Peak generation rate (cm^-3 s^-1). Default: 1e18.
     energy_MeV : float
@@ -938,7 +939,7 @@ def _cce_vs_fluence_multi(
     N_D_junction=_STACK["N_D_junction"],
     N_D_bulk=_STACK["N_D_bulk"],
     L_transition=_STACK["L_transition"],
-    alpha_range_cm=15e-4,
+    alpha_range_cm=ALPHA_RANGE_SIC_CM,
     generation_rate=1e18,
     energy_MeV=62.0,
     lifetime_model="linear",
@@ -1063,7 +1064,7 @@ def cce_vs_bias_at_fluence(
     N_D_junction=_STACK["N_D_junction"],
     N_D_bulk=_STACK["N_D_bulk"],
     L_transition=_STACK["L_transition"],
-    alpha_range_cm=15e-4,
+    alpha_range_cm=ALPHA_RANGE_SIC_CM,
     generation_rate=1e18,
     energy_MeV=62.0,
     lifetime_model="linear",
@@ -1091,7 +1092,7 @@ def cce_vs_bias_at_fluence(
     L_transition : float
         Doping transition length (cm). Default: DEFAULT_STACK (0.4638630 um).
     alpha_range_cm : float
-        Alpha particle range in SiC (cm). Default: 15 um.
+        Alpha particle range in SiC (cm). Default: ALPHA_RANGE_SIC_CM (18.43 um, NIST ASTAR).
     generation_rate : float
         Peak generation rate (cm^-3 s^-1). Default: 1e18.
     energy_MeV : float
@@ -1319,7 +1320,7 @@ def cce_post_anneal(
     t_anneal,
     V_bias=-40.0,
     epi_thickness_cm=10e-4,
-    alpha_range_cm=15e-4,
+    alpha_range_cm=ALPHA_RANGE_SIC_CM,
     generation_rate=1e18,
     energy_MeV=62.0,
     lifetime_model="linear",
@@ -1347,7 +1348,7 @@ def cce_post_anneal(
     epi_thickness_cm : float
         Epitaxial layer thickness (cm). Default 10 um.
     alpha_range_cm : float
-        Alpha particle range in SiC (cm). Default 15 um.
+        Alpha particle range in SiC (cm). Default ALPHA_RANGE_SIC_CM (18.43 um, NIST ASTAR).
     generation_rate : float
         Peak generation rate (cm^-3 s^-1). Default 1e18.
     energy_MeV : float
@@ -1544,7 +1545,7 @@ def cce_anneal_vs_temperature(
     t_anneal,
     V_bias=-40.0,
     epi_thickness_cm=10e-4,
-    alpha_range_cm=15e-4,
+    alpha_range_cm=ALPHA_RANGE_SIC_CM,
     generation_rate=1e18,
     energy_MeV=62.0,
     lifetime_model="linear",
@@ -1572,7 +1573,7 @@ def cce_anneal_vs_temperature(
     epi_thickness_cm : float
         Epitaxial layer thickness (cm). Default 10 um.
     alpha_range_cm : float
-        Alpha particle range (cm). Default 15 um.
+        Alpha particle range (cm). Default ALPHA_RANGE_SIC_CM (18.43 um, NIST ASTAR).
     generation_rate : float
         Peak generation rate (cm^-3 s^-1). Default 1e18.
     energy_MeV : float
@@ -1636,7 +1637,7 @@ def cce_anneal_vs_temperature(
 def cce_vs_epi_thickness(
     epi_range_cm,
     V_bias=-3.0,
-    alpha_range_cm=15e-4,
+    alpha_range_cm=ALPHA_RANGE_SIC_CM,
     generation_rate=1e18,
     device_kwargs=None,
 ):
@@ -1654,7 +1655,7 @@ def cce_vs_epi_thickness(
         Use a low bias where partial depletion occurs for the larger
         thicknesses to see the CCE-decreasing-with-thickness effect.
     alpha_range_cm : float
-        Alpha particle range in SiC (cm). Default: 15 um.
+        Alpha particle range in SiC (cm). Default: ALPHA_RANGE_SIC_CM (18.43 um, NIST ASTAR).
     generation_rate : float
         Peak generation rate (cm^-3 s^-1). Default: 1e18.
 

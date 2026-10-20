@@ -9,6 +9,8 @@ import uuid
 
 import devsim
 import numpy as np
+
+from etna.core.generation_profiles import ALPHA_RANGE_SIC_CM
 import pytest
 
 from etna.api.device import DeviceConfig, device_kwargs, legacy_config
@@ -71,8 +73,9 @@ def test_cce_with_nplus_matches_spike_and_stays_below_one():
     assert not r["truncated"]
     raw = np.asarray(r["I_collected"]) / r["I_generated"]
     assert np.all(raw < 1.0)
+    # NIST ASTAR Bragg-curve alpha profile (18.43 um) since 2026-10-20; 15 um flat box: 0.999296 0.999726 0.999816 0.999860 0.999887
     np.testing.assert_allclose(
-        raw, [0.999296, 0.999726, 0.999816, 0.999860, 0.999887], atol=2e-6
+        raw, [0.999210, 0.999702, 0.999802, 0.999850, 0.999878], atol=2e-6
     )
 
 
@@ -132,7 +135,8 @@ def test_device_kwargs_carry_nplus_explicitly():
 # generation (share 4.64e-4 with nplus_generation); now the injected generation only.
 # 0.9625666 (True) before the local per-node mobility in 2D (A-03: n+ holes at their own
 # 1e19 mobility, 76 instead of 124 cm2/Vs; the False case moves by < 2e-6).
-@pytest.mark.parametrize("gen_in_nplus, expected", [(False, 0.9997262), (True, 0.9625702)])
+# NIST ASTAR Bragg-curve alpha profile (18.43 um) since 2026-10-20; 15 um flat box: 0.9997262 / 0.9625702
+@pytest.mark.parametrize("gen_in_nplus, expected", [(False, 0.9997020), (True, 0.9442389)])
 def test_2d_cce_with_nplus(gen_in_nplus, expected):
     """2D devsim (hw 25, -20 V, n+ 1 um): balanced raw CCE <= 1, equal to the 1D value
     (0.999562, epi-only G), laterally flat; the direct contact current gives 1.0136 here."""
@@ -155,7 +159,7 @@ def test_2d_cce_with_nplus(gen_in_nplus, expected):
     try:
         y = np.array(devsim.get_node_model_values(device=info["device_name"], region="sic", name="y"))
         ye = y - info["junction_pos"]
-        G = alpha_depth_shape(np.clip(ye, 0.0, None), alpha_range_cm=15e-4)
+        G = alpha_depth_shape(np.clip(ye, 0.0, None), alpha_range_cm=ALPHA_RANGE_SIC_CM)
         G = 1e18 * G / G.max()
         G[ye < 0] = 0.0
         G = confine_generation_to_epi(info, y, G)
@@ -173,5 +177,6 @@ def test_2d_cce_with_nplus(gen_in_nplus, expected):
     assert raw < 1.0
     assert raw == pytest.approx(expected, abs=2e-6)
     np.testing.assert_allclose(scan["cce_values"], raw, atol=2e-6)
-    assert scan["in_mesh_generation_fraction"] == pytest.approx(0.8978 if gen_in_nplus else 0.8280, abs=1e-4)
+    # NIST Bragg curve, 18.43 um (15 um flat box: 0.8978 / 0.8280)
+    assert scan["in_mesh_generation_fraction"] == pytest.approx(0.4838 if gen_in_nplus else 0.4299, abs=1e-4)
 

@@ -9,6 +9,8 @@ import uuid
 
 import devsim
 import numpy as np
+
+from etna.core.generation_profiles import ALPHA_RANGE_SIC_CM
 import pytest
 
 from etna.api import simulation as sim
@@ -72,7 +74,7 @@ def test_nplus_cv_potential_and_cce_match_devsim():
     np.testing.assert_allclose(res.psi[-1, 0], psi_ref, atol=1e-9)
 
     c = cce_vs_bias(BIASES, device_kwargs=dict(GRADED, **NPLUS))
-    G = alpha_generation(x, SUB, 15e-4, 1e18, epi_end=SUB + EPI)
+    G = alpha_generation(x, SUB, ALPHA_RANGE_SIC_CM, 1e18, epi_end=SUB + EPI)
     # local per-node mobility from the batch doping, as the devsim builder (A-03)
     ce = cce_sweep(pb, BIASES, SUB, G)
     assert ce.converged.all()

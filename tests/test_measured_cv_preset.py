@@ -14,6 +14,8 @@ import uuid
 
 import devsim
 import numpy as np
+
+from etna.core.generation_profiles import ALPHA_RANGE_SIC_CM
 import pytest
 
 import etna
@@ -172,7 +174,7 @@ def test_engine_matches_devsim_with_buffer():
     np.testing.assert_allclose(res.W[:, 0], ref["depletion_widths"], rtol=1e-10)
     np.testing.assert_allclose(res.psi[-1, 0], psi_ref, atol=1e-9)
     c = cce_vs_bias(BIASES, device_kwargs=kw)
-    G = alpha_generation(x, SUB, 15e-4, 1e18, epi_end=SUB + EPI)
+    G = alpha_generation(x, SUB, ALPHA_RANGE_SIC_CM, 1e18, epi_end=SUB + EPI)
     ce = cce_sweep(pb, BIASES, SUB, G)
     assert ce.converged.all()
     np.testing.assert_allclose(ce.cce[:, 0], c["cce_values"], atol=1e-9)

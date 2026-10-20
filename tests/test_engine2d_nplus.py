@@ -134,9 +134,10 @@ def test_nplus_generation_counts_the_layer():
     b = lateral_cce_scan_2d(
         25.0, 30.0, n_lateral_points=2, nplus_generation=True, **NPLUS
     )
-    # holes generated in the n+ are partly lost: CCE drops by ~3.7 % (LOG.md), and the
-    # generating depth grows by the n+ thickness
-    assert 0.95 < b["cce_values"][0] < 0.97 < 0.999 < a["cce_values"][0]
+    # holes generated in the n+ are partly lost: CCE drops by ~5.6 % with the NIST
+    # Bragg-curve alpha (18.43 um, deposit peaks near the epi end; ~3.7 % with the old
+    # 15 um flat box, LOG.md), and the generating depth grows by the n+ thickness
+    assert 0.93 < b["cce_values"][0] < 0.96 < 0.999 < a["cce_values"][0]
     assert b["in_mesh_generation_fraction"] > a["in_mesh_generation_fraction"]
 
 
