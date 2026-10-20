@@ -22,7 +22,7 @@ with a different file or sensitive volume is flagged as stale.
 Unlike radiation_damage.py, this page has NO 1D-only dimensionality guard
 (run_microdosimetry is a config-independent pure pipeline that touches no
 devsim), NO NaN-tolerance handling (no partial-convergence failure mode),
-and NO kappa data-blocked banner (that is radiation-damage-specific). The
+and NO NIEL-normalisation banner (that is radiation-damage-specific). The
 y_F/y_D readout uses a plain st.caption line rather than metric tiles
 (plain caption, no metric tiles).
 """

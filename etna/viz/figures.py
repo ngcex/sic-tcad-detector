@@ -16,7 +16,8 @@ so simulated curves have no error band. What IS drawn, when the result carries i
 - results outside the engine/devsim cross-check box, truncated sweeps, dark-current
   points past reach-through, unsolved (fully compensated) damage points with their reason;
 - per-observable honesty notes (dark current = calibrated budget, FLASH = sensitivity
-  bound, kappa placeholder, tilted alpha does not reproduce the data, ...);
+  bound, kappa = Si-neq SR-NIEL with the SiC normalisation open, tilted alpha does not
+  reproduce the data, ...);
 - error bars on digitised measured points (their read-off uncertainty).
 
 Accepted inputs: a ``SimResult`` (any ``run_*`` facade, ``etna.viz.maps.carrier_state_2d``,
@@ -76,8 +77,8 @@ NOTES = {
         "physics not modelled."
     ),
     "damage": (
-        "kappa (NIEL hardness) is a data-blocked placeholder: absolute fluence "
-        "scale unvalidated."
+        "kappa (NIEL hardness): SR-NIEL proton NIEL, Si 1-MeV-neq convention; "
+        "SiC neutron normalisation still open, absolute SiC fluence scale unvalidated."
     ),
     "temperature": "CCE vs T: model trend, not validated against a T measurement.",
     "cce_let": (

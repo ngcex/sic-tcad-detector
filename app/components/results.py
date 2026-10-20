@@ -457,8 +457,9 @@ def to_csv_bytes(result: SimResult) -> bytes:
                 if "compensation_fluence" in result.metadata
                 else []
             ),
-            "# WARNING: kappa (NIEL hardness factor) is a data-blocked placeholder; "
-            "absolute Phi_crit numbers are unvalidated.",
+            "# WARNING: kappa (NIEL hardness factor) is SR-NIEL proton NIEL in the Si "
+            "1-MeV-neq convention; the SiC neutron normalisation is still open, so "
+            "absolute SiC Phi_crit numbers are unvalidated.",
         ]
     elif result.sim_type in ("dark_current", "dark_current_vs_T"):
         md = result.metadata

@@ -65,9 +65,14 @@ def test_kappa_banner_persistent(monkeypatch):
     assert at.exception == [], f"page crashed on boot: {at.exception}"
 
     warning_texts = [el.value for el in at.warning]
+    # SR-NIEL data since 2026-10-20 (B-07): the banner states the open SiC neutron
+    # normalisation (the old "data-blocked placeholder" wording is gone)
     assert any(
-        "data-blocked" in (w or "").lower() for w in warning_texts
-    ), f"kappa data-blocked banner not found in warnings: {warning_texts}"
+        "sic neutron normalisation is still open" in (w or "").lower()
+        and "sr-niel" in (w or "").lower()
+        for w in warning_texts
+    ), f"kappa NIEL-normalisation banner not found in warnings: {warning_texts}"
+    assert not any("data-blocked" in (w or "").lower() for w in warning_texts)
 
 
 def test_empty_state_guard(monkeypatch):

@@ -170,7 +170,7 @@ def test_damage_csv_columns_and_header():
 
     warning_lines = [ln for ln in text.splitlines() if ln.startswith("# WARNING:")]
     assert warning_lines, "missing '# WARNING:' header line"
-    assert "data-blocked" in warning_lines[0]
+    assert "SiC neutron normalisation is still open" in warning_lines[0]
 
     df = pd.read_csv(StringIO(text), comment="#")
     assert list(df.columns) == ["fluence_p_per_cm2", "CCE"]
