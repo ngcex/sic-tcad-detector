@@ -2145,7 +2145,8 @@ def _dark_result(
                 "reached_v_stop",
             )
         }
-        extra = {}
+        # per point: dark bias reached by the engine seed (True) or the ramp
+        extra = {"bias_seeded": np.asarray(result.get("bias_seeded", []), dtype=bool)}
     return SimResult(
         config=config,
         sim_type="dark_current",
@@ -2317,6 +2318,8 @@ def run_transient(
             # integrated contact current: anode with an n+ layer (the direct cathode
             # current on the n+ is round-off), cathode without (core docstring)
             "current_contact": df.attrs.get("contact", "cathode"),
+            # dark bias point: engine seed + strict solve (True) or the ramp
+            "bias_seeded": df.attrs.get("bias_seeded"),
             **_provenance(config, "devsim"),
         },
         mesh=None,

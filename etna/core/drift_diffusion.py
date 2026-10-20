@@ -863,8 +863,11 @@ _SEED_ENGINE_TOL = 1e-10
 SEED_BIAS = True
 # Optional physics the seed engine (static-doping flat-quasi-Fermi Poisson) does not
 # carry: node model present in the devsim region -> reason. A device holding one is
-# ramped, never seeded from an inconsistent model. The carrier-dependent ionization
-# (IonD0, device_info["incomplete_ionization"]) is checked in engine_seed_state.
+# ramped, unless the call site allows it (seeded_bias(allow=...): the engine state is
+# then only the Newton start of a strict solve that carries the model; the dark Auger
+# device of transient_cce_vs_dose_rate and the TAT / Hurkx dark sweep). The
+# carrier-dependent ionization (IonD0, device_info["incomplete_ionization"]) is
+# checked in engine_seed_state and never allowed.
 _SEED_UNSUPPORTED_MODELS = (
     ("UAuger", "Auger recombination"),
     ("U_TAT", "TAT / Hurkx dark-current model"),
@@ -1016,16 +1019,19 @@ def engine_seed_state(device_info, V_anode, V_cathode):
     }
 
 
-def _seed_bias(device_info, bias_name, contact, V_target):
+def _seed_bias(device_info, bias_name, contact, V_target, allow=(), pre_solve=None):
     """Try the engine seed + one strict solve; None on success, else the reason (the
-    device's solution and bias are then restored)."""
+    device's solution and bias are then restored). ``allow``: names of
+    ``_SEED_UNSUPPORTED_MODELS`` the caller accepts in the strict solve (see
+    ``seeded_bias``); ``pre_solve()`` runs after the seed state is loaded, before the
+    solve."""
     device = device_info["device_name"]
     region = device_info["region_name"]
     models = set(devsim.get_node_model_list(device=device, region=region))
     if device_info.get("auger_coefficients") is not None and "UAuger" not in models:
         models.add("UAuger")  # flag set by add_auger_recombination
     for model, what in _SEED_UNSUPPORTED_MODELS:
-        if model in models:
+        if model in models and model not in allow:
             return f"{what} active (not carried by the seed engine)"
     if "RadGenRate" in models:
         G = np.asarray(
@@ -1048,6 +1054,8 @@ def _seed_bias(device_info, bias_name, contact, V_target):
         devsim.set_node_values(
             device=device, region=region, name=name, values=values.tolist()
         )
+    if pre_solve is not None:
+        pre_solve()
     reason = None
     tier = solve_tier(0)
     if tier != 0:
@@ -1066,6 +1074,9 @@ def seeded_bias(
     V_step_max=None,
     *,
     seed=None,
+    allow=(),
+    pre_solve=None,
+    fallback=None,
 ):
     """Bring ``contact`` to ``V_target`` (V): engine seed + ONE strict DC solve, or
     ``ramp_bias`` when the seed is not applicable or does not converge.
@@ -1085,9 +1096,22 @@ def seeded_bias(
     non-zero RadGenRate (not a dark state), the contact-on-epi cathode past
     FIELD_ENGINE_MAX, and any physics the seed engine does not carry: Auger
     (add_auger_recombination), the TAT / Hurkx dark-current model (setup_tat_model)
-    and the opt-in carrier-dependent ionization (``_SEED_UNSUPPORTED_MODELS``).
+    and the opt-in carrier-dependent ionization (``_SEED_UNSUPPORTED_MODELS``),
+    unless listed in ``allow`` (below; never the ionization).
     ``seed=False`` always ramps; ``None`` (default) follows the module switch
     ``SEED_BIAS``.
+
+    ``allow`` (opt-in, per call site): node models of ``_SEED_UNSUPPORTED_MODELS``
+    ("UAuger", "U_TAT") that may be present. The engine state is then only the Newton
+    start: the strict solve carries the full model, so an accepted seed is the
+    full-model state at the bias (the ramp's target point is the same strict solve).
+    Used by the dark Auger device of transient_cce_vs_dose_rate and the TAT / Hurkx
+    dark-current sweep, whose dark reverse-bias state the flat-quasi-Fermi engine
+    reproduces up to the tiny Auger / TAT recombination-generation terms
+    (tests/test_seeded_bias.py). ``pre_solve()`` runs after the seed state is loaded,
+    before the strict solve (the TAT model refreshes its frozen field there).
+    ``fallback()`` replaces ``ramp_bias`` when the seed is not used (the dark sweep's
+    own field-refreshing ramp).
 
     Sets ``device_info["bias_seeded"]`` (bool) and ``["bias_seed_reason"]`` (None or
     why the ramp was used). Returns True.
@@ -1101,13 +1125,18 @@ def seeded_bias(
         seed = SEED_BIAS
     reason = "seed disabled"
     if seed:
-        reason = _seed_bias(device_info, bias_name, contact, V_target)
+        reason = _seed_bias(
+            device_info, bias_name, contact, V_target, allow=allow, pre_solve=pre_solve
+        )
         if reason is None:
             device_info["bias_seeded"], device_info["bias_seed_reason"] = True, None
             logger.debug(f"seeded_bias: {contact} -> {V_target:.3f}V (engine seed)")
             return True
         logger.debug(f"seeded_bias: ramping {contact} to {V_target:.3f}V ({reason})")
     device_info["bias_seeded"], device_info["bias_seed_reason"] = False, reason
+    if fallback is not None:
+        fallback()
+        return True
     return ramp_bias(device_info, V_target, contact, V_step, V_step_max)
 
 

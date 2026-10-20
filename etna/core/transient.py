@@ -32,7 +32,7 @@ from etna.core.drift_diffusion import (
     displacement_current,
     extract_contact_charge,
     extract_contact_current,
-    ramp_bias,
+    seeded_bias,
 )
 
 # set_generation (not add_generation_to_dd, which rewrites the SRH-only generation
@@ -57,7 +57,7 @@ logger = logging.getLogger(__name__)
 # Physical constants (CGS)
 Q_ELECTRON = 1.602e-19  # C (elementary charge)
 
-# DC solution variables of the 1D DD device: the complete state that ramp_bias leaves
+# DC solution variables of the 1D DD device: the complete state that seeded_bias leaves
 # (transient_cce_vs_dose_rate restores them per dose rate instead of rebuilding).
 _DARK_STATE_SOLUTIONS = ("Potential", "Electrons", "Holes")
 
@@ -723,7 +723,9 @@ def transient_cce_vs_dose_rate(
     df : pandas.DataFrame
         DataFrame with columns ["dose_rate_Gy_s", "transient_cce",
         "transient_cce_raw"] (the unclipped Q_collected / Q_generated; transient_cce
-        is it clipped to [0, 1]); ``df.attrs["contact"]`` is the integrated contact.
+        is it clipped to [0, 1]); ``df.attrs["contact"]`` is the integrated contact,
+        ``df.attrs["bias_seeded"]`` / ``["bias_seed_reason"]`` how the dark bias
+        point was reached (``seeded_bias``).
     """
     if dose_rates is None:
         dose_rates = np.array([20, 50, 100, 150, 200, 230], dtype=float)
@@ -758,8 +760,12 @@ def transient_cce_vs_dose_rate(
     region = device_info["region_name"]
     try:
         add_auger_recombination(device_info)
-        # Ramp bias via anode (reverse bias)
-        ramp_bias(device_info, V_bias, contact="anode")
+        # Bias via anode (reverse bias): engine seed + one strict solve with Auger in
+        # the equations (the zero-generation dark state; the seed is only the Newton
+        # start), else the 0.5 V ramp as before (seeded_bias, allow=UAuger).
+        seeded_bias(device_info, V_bias, contact="anode", allow=("UAuger",))
+        bias_seeded = device_info["bias_seeded"]
+        bias_seed_reason = device_info["bias_seed_reason"]
         dark_state = {
             name: list(
                 devsim.get_node_model_values(device=device, region=region, name=name)
@@ -823,4 +829,6 @@ def transient_cce_vs_dose_rate(
         }
     )
     df.attrs["contact"] = contact
+    df.attrs["bias_seeded"] = bias_seeded
+    df.attrs["bias_seed_reason"] = bias_seed_reason
     return df
