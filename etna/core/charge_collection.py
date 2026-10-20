@@ -496,7 +496,7 @@ def cce_vs_bias(
           in V_range, for comparison against the last entry of "voltages"
           when "truncated" is True
     """
-    from etna.core.drift_diffusion import create_dd_device, ramp_bias
+    from etna.core.drift_diffusion import create_dd_device, seeded_bias
 
     V_range = np.asarray(V_range, dtype=float)
 
@@ -574,7 +574,7 @@ def cce_vs_bias(
             cathode_V = -V_target  # e.g., V_target=-40 -> cathode_V=+40
 
             try:
-                ramp_bias(device_info, cathode_V, contact="cathode", V_step=0.5)
+                seeded_bias(device_info, cathode_V, contact="cathode", V_step=0.5)
             except RuntimeError as e:
                 # Outside model validity: the cathode is an ohmic contact on the
                 # n- epi (no n+ substrate); after reach-through (V_fd) the field
@@ -892,7 +892,7 @@ def _cce_fluence_engine(ref, damaged_list, V_bias, alpha_range_cm, generation_ra
 def _cce_fluence_devsim(dev_kw, damaged, V_bias, alpha_range_cm, generation_rate):
     """CCE of one damaged device at ``V_bias`` with devsim (staged creation)."""
     from etna.core.device import apply_damaged_params, create_sic_device
-    from etna.core.drift_diffusion import ramp_bias, setup_sic_drift_diffusion
+    from etna.core.drift_diffusion import seeded_bias, setup_sic_drift_diffusion
     from etna.core.poisson import setup_poisson, solve_equilibrium
 
     dev_name = f"fluence_sweep_{uuid.uuid4().hex[:8]}"
@@ -906,7 +906,7 @@ def _cce_fluence_devsim(dev_kw, damaged, V_bias, alpha_range_cm, generation_rate
         device_info["dd_initialized"] = True
 
         # Ramp bias (cathode voltage = -V_bias for reverse bias)
-        ramp_bias(device_info, -V_bias, contact="cathode", V_step=0.5, V_step_max=2.0)
+        seeded_bias(device_info, -V_bias, contact="cathode", V_step=0.5, V_step_max=2.0)
 
         x_nodes = np.array(
             devsim.get_node_model_values(
@@ -1137,7 +1137,7 @@ def cce_vs_bias_at_fluence(
     )
     dev_kw.update(device_kwargs or {})
     from etna.core.device import apply_damaged_params, create_sic_device
-    from etna.core.drift_diffusion import ramp_bias, setup_sic_drift_diffusion
+    from etna.core.drift_diffusion import seeded_bias, setup_sic_drift_diffusion
     from etna.core.poisson import setup_poisson, solve_equilibrium
     from etna.core.radiation_damage import compute_damaged_params
 
@@ -1247,7 +1247,7 @@ def cce_vs_bias_at_fluence(
             cathode_V = -V_target  # reverse bias convention
 
             try:
-                ramp_bias(
+                seeded_bias(
                     device_info,
                     cathode_V,
                     contact="cathode",
@@ -1382,7 +1382,7 @@ def cce_post_anneal(
     )
     dev_kw.update(device_kwargs or {})
     from etna.core.device import apply_damaged_params, create_sic_device
-    from etna.core.drift_diffusion import ramp_bias, setup_sic_drift_diffusion
+    from etna.core.drift_diffusion import seeded_bias, setup_sic_drift_diffusion
     from etna.core.poisson import setup_poisson, solve_equilibrium
     from etna.core.radiation_damage import compute_annealed_params
 
@@ -1478,7 +1478,7 @@ def cce_post_anneal(
 
         # Ramp bias
         cathode_V = -V_bias
-        ramp_bias(device_info, cathode_V, contact="cathode", V_step=0.5, V_step_max=2.0)
+        seeded_bias(device_info, cathode_V, contact="cathode", V_step=0.5, V_step_max=2.0)
 
         # Prepare generation profile
         x_nodes = np.array(
@@ -1683,7 +1683,7 @@ def cce_vs_epi_thickness(
     """
     from etna.core.drift_diffusion import (
         create_dd_device,
-        ramp_bias,
+        seeded_bias,
     )
 
     epi_range_cm = np.asarray(epi_range_cm, dtype=float)
@@ -1727,7 +1727,7 @@ def cce_vs_epi_thickness(
 
             # Ramp to bias (cathode voltage is -V_bias)
             cathode_V = -V_bias
-            ramp_bias(
+            seeded_bias(
                 device_info, cathode_V, contact="cathode", V_step=0.5, V_step_max=2.0
             )
 

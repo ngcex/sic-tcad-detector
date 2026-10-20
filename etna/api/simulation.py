@@ -44,7 +44,7 @@ from etna.core.device import (
     table_sensitive_end_doping,
 )
 from etna.core.devsim_reset import reset_devsim_fully, delete_device_and_mesh
-from etna.core.drift_diffusion import ramp_bias
+from etna.core.drift_diffusion import seeded_bias
 from etna.core.flash_recombination import cce_vs_dose_rate, flash_engine_reason
 from etna.core.mc_coupling import load_mc_events_csv
 from etna.core.microdosimetry import lineal_energy_spectrum, mean_chord_length
@@ -1015,7 +1015,7 @@ def run_field(config: DeviceConfig, bias_V: float = -50.0) -> SimResult:
         # with the exact cv_sweep sign/contact convention (cv_analysis.py:171,
         # "positive V on cathode = reverse bias for p+/n- diode"):
         # conventional-negative bias_V -> positive cathode voltage -bias_V.
-        ramp_bias(
+        seeded_bias(
             device_info, V_target=-bias_V, contact="cathode", V_step=0.5, V_step_max=2.0
         )
 

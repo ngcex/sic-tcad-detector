@@ -849,6 +849,268 @@ def ramp_bias(device_info, V_target, contact="anode", V_step=0.5, V_step_max=Non
     return True
 
 
+# ---------------------------------------------------------------------------
+# Engine-seeded bias: one strict devsim solve from the batched engine's state
+# ---------------------------------------------------------------------------
+# devsim rejects zero carrier densities; the engine's Boltzmann n/p underflow to 0 in
+# the depleted epi.
+SEED_CARRIER_FLOOR = 1e-300
+# Newton stop of the engine seed (max |delta psi| / V_t); the strict devsim solve that
+# follows polishes the state, this only has to put it in Newton's quadratic basin.
+_SEED_ENGINE_TOL = 1e-10
+# Default of seeded_bias(seed=None): True = engine seed where applicable ("auto"); set
+# False (e.g. monkeypatch in a test) to put every seeded_bias call site back on the ramp.
+SEED_BIAS = True
+# Optional physics the seed engine (static-doping flat-quasi-Fermi Poisson) does not
+# carry: node model present in the devsim region -> reason. A device holding one is
+# ramped, never seeded from an inconsistent model. The carrier-dependent ionization
+# (IonD0, device_info["incomplete_ionization"]) is checked in engine_seed_state.
+_SEED_UNSUPPORTED_MODELS = (
+    ("UAuger", "Auger recombination"),
+    ("U_TAT", "TAT / Hurkx dark-current model"),
+    ("IonD0", "carrier-dependent (incomplete) ionization"),
+)
+
+
+class _NoSeed(Exception):
+    """The engine cannot seed this device / bias (the message is the reason)."""
+
+
+def _contact_bias(device, contact):
+    try:
+        return devsim.get_parameter(
+            device=device, name=simple_physics.GetContactBiasName(contact)
+        )
+    except devsim.error:
+        return 0.0
+
+
+def _seed_column(device, region):
+    """Mesh column the engine solves and the map back to devsim's node order.
+
+    Returns (xc, net, n_i, V_t, to_devsim) where xc (cm) runs from the
+    anode to the cathode, net is NetDoping on it and ``to_devsim(col)`` spreads a
+    column array onto every devsim node. 1D: the sorted mesh, the contacts must be its
+    two end nodes. 2D: only laterally uniform tensor grids (``engine2d.grid``
+    assertions: full-row contacts, rectangular dual cells, y-only doping), where each
+    node equation is dx_dual times the 1-column equation. Raises _NoSeed.
+    """
+    from etna.core.batched.material import EPS
+
+    for other in devsim.get_region_list(device=device):
+        # equation-free regions (the 2D builder's contact-detection air buffers) are
+        # fine; a second solved region is not something the engine column represents
+        if other != region and "Potential" in devsim.get_node_model_list(
+            device=device, region=other
+        ):
+            raise _NoSeed(f"second solved region {other!r}")
+    if set(devsim.get_contact_list(device=device)) != {"anode", "cathode"}:
+        raise _NoSeed("contacts are not exactly anode + cathode")
+    get = lambda n: np.array(
+        devsim.get_node_model_values(device=device, region=region, name=n)
+    )
+    prm = {}
+    for name in ("n_i", "V_t", "Permittivity"):
+        try:
+            prm[name] = float(
+                devsim.get_parameter(device=device, region=region, name=name)
+            )
+        except devsim.error:
+            raise _NoSeed(f"region parameter {name} missing") from None
+    if abs(prm["Permittivity"] / EPS - 1.0) > 1e-12:
+        raise _NoSeed("permittivity differs from the engine's")
+    anode = _contact_node_indices(device, region, "anode")
+    cathode = _contact_node_indices(device, region, "cathode")
+    dim = devsim.get_dimension(device=device)
+    if dim == 1:
+        x = get("x")
+        order = np.argsort(x, kind="stable")
+        if anode != {int(order[0])} or cathode != {int(order[-1])}:
+            raise _NoSeed("1D contacts are not the two mesh ends (anode first)")
+        net = get("NetDoping")[order]
+
+        def to_devsim(col):
+            out = np.empty_like(col)
+            out[order] = col
+            return out
+
+        return x[order], net, prm["n_i"], prm["V_t"], to_devsim
+    if dim == 2:
+        from etna.core.engine2d.grid import NotLaterallyUniform, grid_from_arrays
+
+        if node_volume_model_name() != "NodeVolume":
+            raise _NoSeed("non-Cartesian (cylindrical) node volumes")
+        try:
+            grid = grid_from_arrays(
+                x=get("x"),
+                y=get("y"),
+                volume=get("NodeVolume"),
+                donors=get("Donors"),
+                acceptors=get("Acceptors"),
+                anode=np.array(sorted(anode)),
+                cathode=np.array(sorted(cathode)),
+            )
+        except NotLaterallyUniform as e:
+            raise _NoSeed(f"2D device not laterally uniform: {e}") from None
+        net = grid.donors - grid.acceptors
+        return (
+            grid.ys,
+            net,
+            prm["n_i"],
+            prm["V_t"],
+            lambda col: grid.to_devsim(np.repeat(col, grid.nx)),
+        )
+    raise _NoSeed(f"{dim}D device")
+
+
+def engine_seed_state(device_info, V_anode, V_cathode):
+    """Dark DC state of a devsim DD device at the contact biases (V), from the batched
+    1D engine (``etna.core.batched.poisson``: quasi-Fermi Poisson, flat phi_n =
+    V_cathode, phi_p = V_anode, devsim's discretisation and ohmic contact values).
+
+    Built from the live device's own node arrays (mesh, NetDoping, n_i, V_t), so mesh,
+    the legacy (static) p+ ionization and tabulated/buffer/n+ profiles match by
+    construction; the opt-in carrier-dependent ionization is refused (_NoSeed). Valid only in
+    reverse bias / equilibrium (V_cathode >= V_anode): forward bias carries currents the
+    flat-quasi-Fermi model does not represent. Returns {"Potential", "Electrons",
+    "Holes"} in devsim node order (carriers floored at SEED_CARRIER_FLOOR). Raises
+    _NoSeed with the reason when the engine cannot represent the device or bias.
+    """
+    from etna.core.batched.poisson import PoissonBatch
+    from etna.core.batched.sweeps import MAX_STEP_V, _Ramp
+
+    if not device_info.get("dd_initialized"):
+        raise _NoSeed("drift-diffusion not set up")
+    if device_info.get("incomplete_ionization") is not None:
+        raise _NoSeed("carrier-dependent (incomplete) ionization not carried by the seed")
+    V_rev = float(V_cathode) - float(V_anode)
+    if V_rev < 0.0:
+        raise _NoSeed("forward bias (engine is reverse-bias only)")
+    device = device_info["device_name"]
+    region = device_info["region_name"]
+    xc, net, n_i, V_t, to_devsim = _seed_column(device, region)
+    pb = PoissonBatch(xc, net[None, :], 0.0, n_i, V_t)
+    ramp = _Ramp(pb, _SEED_ENGINE_TOL, MAX_STEP_V)
+    res = ramp.to(V_rev) if V_rev > 0.0 else None
+    if not ramp.converged.all():
+        raise _NoSeed("engine Poisson did not converge")
+    if res is None:
+        res = pb.solve(ramp.psi, tol=_SEED_ENGINE_TOL)
+    psi = res.psi[0]
+    if not np.all(np.isfinite(psi)):
+        raise _NoSeed("engine state not finite")
+    if device_info.get("nplus_thickness_cm") is None:
+        # contact-on-epi cathode: devsim's ramp stops converging near this cathode-cell
+        # field (engine2d.scan.FIELD_ENGINE_MAX, a model-validity wall, not physics);
+        # keep the ramp's verdict there instead of seeding past it
+        from etna.core.engine2d.scan import FIELD_ENGINE_MAX
+
+        field = (psi[-1] - psi[-2]) / (xc[-1] - xc[-2])
+        if field > FIELD_ENGINE_MAX:
+            raise _NoSeed(f"cathode-cell field {field:.3g} V/cm past the devsim wall")
+    return {
+        # psi of (V_anode, V_cathode) = psi of (0, V_cathode - V_anode) + V_anode
+        "Potential": to_devsim(psi + float(V_anode)),
+        "Electrons": to_devsim(np.maximum(res.n[0], SEED_CARRIER_FLOOR)),
+        "Holes": to_devsim(np.maximum(res.p[0], SEED_CARRIER_FLOOR)),
+    }
+
+
+def _seed_bias(device_info, bias_name, contact, V_target):
+    """Try the engine seed + one strict solve; None on success, else the reason (the
+    device's solution and bias are then restored)."""
+    device = device_info["device_name"]
+    region = device_info["region_name"]
+    models = set(devsim.get_node_model_list(device=device, region=region))
+    if device_info.get("auger_coefficients") is not None and "UAuger" not in models:
+        models.add("UAuger")  # flag set by add_auger_recombination
+    for model, what in _SEED_UNSUPPORTED_MODELS:
+        if model in models:
+            return f"{what} active (not carried by the seed engine)"
+    if "RadGenRate" in models:
+        G = np.asarray(
+            devsim.get_node_model_values(
+                device=device, region=region, name="RadGenRate"
+            )
+        )
+        if np.any(G != 0.0):
+            return "generation present (not a dark state)"
+    V = {c: _contact_bias(device, c) for c in ("anode", "cathode")}
+    V_from = V[contact]
+    V[contact] = float(V_target)
+    try:
+        state = engine_seed_state(device_info, V["anode"], V["cathode"])
+    except _NoSeed as e:
+        return str(e)
+    snap = _snapshot_solution(device, region)
+    devsim.set_parameter(device=device, name=bias_name, value=float(V_target))
+    for name, values in state.items():
+        devsim.set_node_values(
+            device=device, region=region, name=name, values=values.tolist()
+        )
+    reason = None
+    tier = solve_tier(0)
+    if tier != 0:
+        reason = f"strict solve from the seed did not converge (tier {tier})"
+    if reason is not None:
+        _restore_solution(device, region, snap)
+        devsim.set_parameter(device=device, name=bias_name, value=V_from)
+    return reason
+
+
+def seeded_bias(
+    device_info,
+    V_target,
+    contact="anode",
+    V_step=0.5,
+    V_step_max=None,
+    *,
+    seed=None,
+):
+    """Bring ``contact`` to ``V_target`` (V): engine seed + ONE strict DC solve, or
+    ``ramp_bias`` when the seed is not applicable or does not converge.
+
+    Drop-in for ``ramp_bias`` (same arguments, same converged state, same errors). The
+    adaptive 0.5..2 V ramp from 0 V was 96 % of the 2D devsim time; the engine solves
+    the dark reverse-bias electrostatics in milliseconds. Seed: set the bias, copy
+    Potential / Electrons / Holes from ``engine_seed_state`` (carriers floored at
+    SEED_CARRIER_FLOOR) and run the strict tier of ``solve_tier`` -- the same solve the
+    ramp's target point ends with, so the converged state is the ramp's to solver
+    tolerance (parity: tests/test_seeded_bias.py). Accepted only if that strict solve
+    converges; anything else (relaxed / aggressive tier, failure) restores the solution
+    and the bias and ramps, so the fallback is the old behaviour bit for bit.
+
+    The seed is skipped (ramp) for: forward bias, 2D devices that are not laterally
+    uniform or use cylindrical volumes, more than one region / other contacts, a
+    non-zero RadGenRate (not a dark state), the contact-on-epi cathode past
+    FIELD_ENGINE_MAX, and any physics the seed engine does not carry: Auger
+    (add_auger_recombination), the TAT / Hurkx dark-current model (setup_tat_model)
+    and the opt-in carrier-dependent ionization (``_SEED_UNSUPPORTED_MODELS``).
+    ``seed=False`` always ramps; ``None`` (default) follows the module switch
+    ``SEED_BIAS``.
+
+    Sets ``device_info["bias_seeded"]`` (bool) and ``["bias_seed_reason"]`` (None or
+    why the ramp was used). Returns True.
+    """
+    device = device_info["device_name"]
+    bias_name = simple_physics.GetContactBiasName(contact)
+    if abs(float(V_target) - _contact_bias(device, contact)) < 1e-12:
+        device_info["bias_seeded"], device_info["bias_seed_reason"] = False, "no-op"
+        return True
+    if seed is None:
+        seed = SEED_BIAS
+    reason = "seed disabled"
+    if seed:
+        reason = _seed_bias(device_info, bias_name, contact, V_target)
+        if reason is None:
+            device_info["bias_seeded"], device_info["bias_seed_reason"] = True, None
+            logger.debug(f"seeded_bias: {contact} -> {V_target:.3f}V (engine seed)")
+            return True
+        logger.debug(f"seeded_bias: ramping {contact} to {V_target:.3f}V ({reason})")
+    device_info["bias_seeded"], device_info["bias_seed_reason"] = False, reason
+    return ramp_bias(device_info, V_target, contact, V_step, V_step_max)
+
+
 def iv_sweep(
     device_info,
     V_range,
