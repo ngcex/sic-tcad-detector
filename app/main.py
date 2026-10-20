@@ -4,7 +4,7 @@ Run with: streamlit run app/main.py
 
 Wires the device-config sidebar (renders on every page, before pg.run(),
 so device_config persists across navigation per UI-07) and registers
-Home + the 9 workflow pages (10 st.Page entries) via callable-based st.Page.
+Home + the 10 workflow pages (11 st.Page entries) via callable-based st.Page.
 """
 
 import sys
@@ -25,6 +25,7 @@ from app.workflows.microdosimetry import render as render_microdosimetry
 from app.workflows.batch_sweep import render as render_batch_sweep
 from app.workflows.run_all import render as render_run_all
 from app.workflows.export import render as render_export
+from app.workflows.figures import render as render_figures
 
 st.set_page_config(
     page_title="ETNA — SiC TCAD Simulator",
@@ -44,6 +45,12 @@ render_device_sidebar()
 pages = [
     st.Page(
         render_home, title="Home", icon=":material/home:", url_path="home", default=True
+    ),
+    st.Page(
+        render_figures,
+        title="Simulate → Figures",
+        icon=":material/insights:",
+        url_path="figures",
     ),
     st.Page(
         render_run_all,
