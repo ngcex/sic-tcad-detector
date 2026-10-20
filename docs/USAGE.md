@@ -437,6 +437,61 @@ t = run_transient(DeviceConfig())
 print(f.y.round(6), t.metadata["transient_cce_raw"].round(6))
 ```
 
+#### Transient terminal current (conduction + displacement)
+
+The transient drivers (`TransientSolver.simulate_pulse`, `simulate_pulse_train`,
+`single_particle.simulate_single_particle`) record three series per BDF1 step:
+
+| key                     | quantity                                                                                       |
+| ----------------------- | ---------------------------------------------------------------------------------------------- |
+| `currents`              | conduction current, `extract_contact_current` (continuity equations only)                      |
+| `currents_displacement` | displacement current, `displacement_current(Q_k, Q_k-1, dt_k)` of the Poisson contact charge `extract_contact_charge` |
+| `currents_total`        | terminal current = conduction + displacement: the physical I(t)                                 |
+
+- **CCE and Q are unchanged.** They still integrate `currents`. The displacement term
+  telescopes to `Q_contact_end - Q_contact_start`. So once the device is back in its dark
+  state, the total and the conduction current carry the same charge (`Q_induced` vs
+  `Q_collected`).
+- **The pulse shape comes from the total current.** `analyze_current_pulse(..., currents_total=...)`
+  takes `I_peak`, `t_peak` and `t_collection` from the total current. The conduction-only
+  values are kept as `*_conduction`.
+- **`t_collection` definition.** It is the time from the injection start at which the
+  cumulative charge first reaches 95 %, interpolated linearly inside the step.
+- **Validation.** The tests are in `tests/test_displacement_current.py`.
+  - Parallel plate: a 1e9 cm^-2 pair sheet in a fully depleted 10 µm n- gap (no n+,
+    -30 V) gives I = q N v / d within 3 %, both while both carriers drift and once only
+    the electrons do. The induced charge is q N to 2e-3.
+  - 1D Shockley-Ramo identity: at every step, total(anode) = -total(cathode) =
+    (1/L) ∫ (J_n + J_p) dx (`ramo_current_1d`).
+- **How large the correction is depends on the contact.**
+  - _Contact on depleted material_ (legacy no-n+ cathode at full depletion, the
+    parallel-plate test): the conduction current is ~0 until the carriers arrive, then
+    it spikes. Its peak is 17.1 A/cm^2 against the true 5.68.
+  - _Contact on a heavily doped ohmic layer_ (every current preset): conduction already
+    carries nearly all of the terminal current. The displacement share is only
+    significant on steps not long compared with the layer's dielectric relaxation time
+    (~0.1 ps for the p+). Default 2D device (hw 50 µm, 50 V, LET 10, anode), measured
+    2026-10-20:
+
+    | quantity          | displacement share or effect                                  |
+    | ----------------- | ------------------------------------------------------------- |
+    | 1 ps injection step | 5 % of the current                                          |
+    | later steps       | <= 0.3 %                                                      |
+    | I_peak            | 5.49e-5 total vs 5.42e-5 conduction A/cm                      |
+    | t_collection      | 0.11679 ns (new definition) vs 0.11739 ns (old step-end value) |
+    | CCE               | 0.999970 either way                                           |
+
+- **Old definition and the stale table column.** Before 2026-10-20, `t_collection` was the
+  end time of the BDF1 step that crossed 95 % of the conduction charge (`searchsorted` on
+  a cumulative sum that assumes it is monotonic). That made it quantised to the 10 %
+  step growth. The tracked `data/cce_let_table_100um.json` / `_300um.json` predate this
+  change.
+  - Their `t_collection_ns` column (0.208 ns for every LET) is stale: the 2026-10-18
+    rebuild gave 0.117 ns.
+  - No code reads that column: `load_cce_let_table` interpolates CCE only, and CCE is
+    unaffected.
+  - The tables were not regenerated (~40 min, `ETNA_REBUILD_CCE_TABLES=1` in notebook 16).
+
 ### `run_microdosimetry(config, mc_csv_path, sv_thickness_um=10.0, sv_width_um=150.0)`
 
 Pure data pipeline (no devsim). It reads Monte Carlo per-step depositions from a CSV
