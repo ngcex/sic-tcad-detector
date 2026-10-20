@@ -72,6 +72,10 @@ current code before it was changed or closed.
 
 Counts after this sync (`grep -h '^status:' A-[0-9]*.md`): 1 closed, 13 fixed, 1 open (A-02).
 
+2026-10-20: A-02 is now **mitigated (opt-in)**: carrier-dependent model behind
+`DeviceConfig(incomplete_ionization=True)`, default OFF (tabulated preset knee gate fails with
+it on). See the A-02 file, "Resolution 2026-10-20". The paragraph below is the 2026-10-18 state.
+
 ### Physics items left open
 
 **A-02 (incomplete ionization).** `_gibbs_ionization` returns `1/(1 + g_A exp(E_A/kT))`, the occupancy with E_F pinned at the valence-band edge. As a result, below about 1e18 cm^-3 the ionized Al fraction rises with doping, which is the reverse of the physical trend. Module vs charge neutrality with the same doping-dependent E_A, N_V = 2.49e19 and g = 4:
