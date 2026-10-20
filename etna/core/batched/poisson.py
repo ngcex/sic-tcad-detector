@@ -35,11 +35,27 @@ from etna.core.batched.material import EPS, Q
 EXP_CLAMP = 60.0  # exp(60) ~ 1e26 : above any physical n^/p^
 
 
+def use_prange(B, N, min_nodes):
+    """Run a per-device kernel in a numba parallel region only for a batch big enough:
+    a region (workqueue layer) costs ~0.1-0.2 ms to launch on an idle-ish 10-core M4,
+    more than one 1D solve (N = 684: Newton ~30 us, carrier solve ~12 us). The serial
+    and prange drivers run the same per-device code (identical results). One linear
+    solve per device (carrier solve, small-signal C) crosses over at B ~ 16-20 for
+    N = 684 (min_nodes ``LINEAR_PAR_NODES``); a Newton loop does a data-dependent
+    number of them (2-3 in a Gummel polish, tens from a cold start), so it goes
+    parallel from B = 4 (``NEWTON_PAR_NODES``)."""
+    return B >= 4 and B * N >= min_nodes
+
+
+NEWTON_PAR_NODES = 2000
+LINEAR_PAR_NODES = 12000
+
+
 @dataclass
 class PoissonResult:
     psi: np.ndarray  # (B, N) V
-    n: np.ndarray  # (B, N) cm^-3
-    p: np.ndarray  # (B, N) cm^-3
+    n: "np.ndarray | None"  # (B, N) cm^-3; None with solve(carriers=False)
+    p: "np.ndarray | None"  # (B, N) cm^-3; None with solve(carriers=False)
     iterations: int
     converged: np.ndarray  # (B,) bool
 
@@ -61,62 +77,88 @@ def contact_values(netdop_0, netdop_N, n_i, V_t, V_anode, V_cathode):
     return psi_a, psi_c
 
 
-@njit(cache=True, parallel=True)
-def _newton_batch(
+@njit(cache=True)
+def _newton_column(
+    bi, u, u_n, u_p, D, lnni, lam2, inv_h, v, tol, max_iter, clamp, iters, conv
+):
+    """The whole Newton loop of device bi (row bi of u, updated in place)."""
+    N = u.shape[1]
+    a = np.empty(N)
+    b = np.empty(N)
+    c = np.empty(N)
+    F = np.empty(N)
+    cp = np.empty(N)
+    dp = np.empty(N)
+    l2 = lam2[bi]
+    ln = lnni[bi]
+    converged = False
+    it = 0
+    for it in range(1, max_iter + 1):
+        # assembly (interior rows); boundary rows are identity with zero rhs
+        for i in range(1, N - 1):
+            ui = u[bi, i]
+            en = min(ui - u_n[bi, i] + ln, EXP_CLAMP)
+            ep = min(u_p[bi, i] - ui + ln, EXP_CLAMP)
+            n_hat = np.exp(en)
+            p_hat = np.exp(ep)
+            fl = (u[bi, i + 1] - ui) * inv_h[i]
+            fr = (ui - u[bi, i - 1]) * inv_h[i - 1]
+            F[i] = l2 * (fl - fr) + v[i] * (p_hat - n_hat + D[bi, i])
+            a[i] = l2 * inv_h[i - 1]
+            c[i] = l2 * inv_h[i]
+            b[i] = -l2 * (inv_h[i - 1] + inv_h[i]) - v[i] * (p_hat + n_hat)
+        F[0] = 0.0
+        F[N - 1] = 0.0
+        # Thomas on J delta = -F
+        cp[0] = 0.0
+        dp[0] = 0.0
+        for i in range(1, N - 1):
+            m = 1.0 / (b[i] - a[i] * cp[i - 1])
+            cp[i] = c[i] * m
+            dp[i] = (-F[i] - a[i] * dp[i - 1]) * m
+        upd = 0.0
+        dnext = 0.0  # delta at node N-1 is zero (Dirichlet)
+        for i in range(N - 2, 0, -1):
+            d = dp[i] - cp[i] * dnext
+            if d > clamp:
+                d = clamp
+            elif d < -clamp:
+                d = -clamp
+            dnext = dp[i] - cp[i] * dnext  # unclamped for the recursion
+            u[bi, i] += d
+            if abs(d) > upd:
+                upd = abs(d)
+        if upd < tol:
+            converged = True
+            break
+    iters[bi] = it
+    conv[bi] = converged
+
+
+@njit(cache=True)
+def _newton_seq(
     u, u_n, u_p, D, lnni, lam2, inv_h, v, tol, max_iter, clamp, iters, conv
 ):
+    for bi in range(u.shape[0]):
+        _newton_column(
+            bi, u, u_n, u_p, D, lnni, lam2, inv_h, v, tol, max_iter, clamp, iters, conv
+        )
+
+
+@njit(cache=True, parallel=True)
+def _newton_par(
+    u, u_n, u_p, D, lnni, lam2, inv_h, v, tol, max_iter, clamp, iters, conv
+):
+    for bi in prange(u.shape[0]):
+        _newton_column(
+            bi, u, u_n, u_p, D, lnni, lam2, inv_h, v, tol, max_iter, clamp, iters, conv
+        )
+
+
+def _newton_batch(u, *args):
+    """Newton for the B rows of u, serial or prange (``use_prange``), same arithmetic."""
     B, N = u.shape
-    for bi in prange(B):
-        a = np.empty(N)
-        b = np.empty(N)
-        c = np.empty(N)
-        F = np.empty(N)
-        cp = np.empty(N)
-        dp = np.empty(N)
-        l2 = lam2[bi]
-        ln = lnni[bi]
-        converged = False
-        it = 0
-        for it in range(1, max_iter + 1):
-            # assembly (interior rows); boundary rows are identity with zero rhs
-            for i in range(1, N - 1):
-                ui = u[bi, i]
-                en = min(ui - u_n[bi, i] + ln, EXP_CLAMP)
-                ep = min(u_p[bi, i] - ui + ln, EXP_CLAMP)
-                n_hat = np.exp(en)
-                p_hat = np.exp(ep)
-                fl = (u[bi, i + 1] - ui) * inv_h[i]
-                fr = (ui - u[bi, i - 1]) * inv_h[i - 1]
-                F[i] = l2 * (fl - fr) + v[i] * (p_hat - n_hat + D[bi, i])
-                a[i] = l2 * inv_h[i - 1]
-                c[i] = l2 * inv_h[i]
-                b[i] = -l2 * (inv_h[i - 1] + inv_h[i]) - v[i] * (p_hat + n_hat)
-            F[0] = 0.0
-            F[N - 1] = 0.0
-            # Thomas on J delta = -F
-            cp[0] = 0.0
-            dp[0] = 0.0
-            for i in range(1, N - 1):
-                m = 1.0 / (b[i] - a[i] * cp[i - 1])
-                cp[i] = c[i] * m
-                dp[i] = (-F[i] - a[i] * dp[i - 1]) * m
-            upd = 0.0
-            dnext = 0.0  # delta at node N-1 is zero (Dirichlet)
-            for i in range(N - 2, 0, -1):
-                d = dp[i] - cp[i] * dnext
-                if d > clamp:
-                    d = clamp
-                elif d < -clamp:
-                    d = -clamp
-                dnext = dp[i] - cp[i] * dnext  # unclamped for the recursion
-                u[bi, i] += d
-                if abs(d) > upd:
-                    upd = abs(d)
-            if upd < tol:
-                converged = True
-                break
-        iters[bi] = it
-        conv[bi] = converged
+    (_newton_par if use_prange(B, N, NEWTON_PAR_NODES) else _newton_seq)(u, *args)
 
 
 @njit(cache=True, inline="always")
@@ -140,114 +182,202 @@ def _ionized(n_hat, p_hat, dd, dr, ad, ar, bi, i):
     return Dp - Am, dD, dA
 
 
-@njit(cache=True, parallel=True)
-def _newton_batch_ii(
-    u, u_n, u_p, dd, dr, ad, ar, lnni, lam2, inv_h, v, tol, max_iter, clamp, iters, conv
+@njit(cache=True)
+def _newton_column_ii(
+    bi,
+    u,
+    u_n,
+    u_p,
+    dd,
+    dr,
+    ad,
+    ar,
+    lnni,
+    lam2,
+    inv_h,
+    v,
+    tol,
+    max_iter,
+    clamp,
+    iters,
+    conv,
 ):
     """_newton_batch with the carrier-dependent ionized doping (opt-in, audit-v7 A-02):
     D_i = sum_l dd/(1 + n^/dr) - sum_l ad/(1 + p^/ar), Jacobian diagonal
     -lap - v (p^ + n^ + dD + dA). (B, L, N) scaled level densities / references."""
-    B, N = u.shape
-    for bi in prange(B):
-        a = np.empty(N)
-        b = np.empty(N)
-        c = np.empty(N)
-        F = np.empty(N)
-        cp = np.empty(N)
-        dp = np.empty(N)
-        l2 = lam2[bi]
-        ln = lnni[bi]
-        converged = False
-        it = 0
-        for it in range(1, max_iter + 1):
-            for i in range(1, N - 1):
-                ui = u[bi, i]
-                en = min(ui - u_n[bi, i] + ln, EXP_CLAMP)
-                ep = min(u_p[bi, i] - ui + ln, EXP_CLAMP)
-                n_hat = np.exp(en)
-                p_hat = np.exp(ep)
-                D, dD, dA = _ionized(n_hat, p_hat, dd, dr, ad, ar, bi, i)
-                fl = (u[bi, i + 1] - ui) * inv_h[i]
-                fr = (ui - u[bi, i - 1]) * inv_h[i - 1]
-                F[i] = l2 * (fl - fr) + v[i] * (p_hat - n_hat + D)
-                a[i] = l2 * inv_h[i - 1]
-                c[i] = l2 * inv_h[i]
-                b[i] = -l2 * (inv_h[i - 1] + inv_h[i]) - v[i] * (
-                    p_hat + n_hat + dD + dA
-                )
-            F[0] = 0.0
-            F[N - 1] = 0.0
-            cp[0] = 0.0
-            dp[0] = 0.0
-            for i in range(1, N - 1):
-                m = 1.0 / (b[i] - a[i] * cp[i - 1])
-                cp[i] = c[i] * m
-                dp[i] = (-F[i] - a[i] * dp[i - 1]) * m
-            upd = 0.0
-            dnext = 0.0
-            for i in range(N - 2, 0, -1):
-                d = dp[i] - cp[i] * dnext
-                if d > clamp:
-                    d = clamp
-                elif d < -clamp:
-                    d = -clamp
-                dnext = dp[i] - cp[i] * dnext
-                u[bi, i] += d
-                if abs(d) > upd:
-                    upd = abs(d)
-            if upd < tol:
-                converged = True
-                break
-        iters[bi] = it
-        conv[bi] = converged
+    N = u.shape[1]
+    a = np.empty(N)
+    b = np.empty(N)
+    c = np.empty(N)
+    F = np.empty(N)
+    cp = np.empty(N)
+    dp = np.empty(N)
+    l2 = lam2[bi]
+    ln = lnni[bi]
+    converged = False
+    it = 0
+    for it in range(1, max_iter + 1):
+        for i in range(1, N - 1):
+            ui = u[bi, i]
+            en = min(ui - u_n[bi, i] + ln, EXP_CLAMP)
+            ep = min(u_p[bi, i] - ui + ln, EXP_CLAMP)
+            n_hat = np.exp(en)
+            p_hat = np.exp(ep)
+            D, dD, dA = _ionized(n_hat, p_hat, dd, dr, ad, ar, bi, i)
+            fl = (u[bi, i + 1] - ui) * inv_h[i]
+            fr = (ui - u[bi, i - 1]) * inv_h[i - 1]
+            F[i] = l2 * (fl - fr) + v[i] * (p_hat - n_hat + D)
+            a[i] = l2 * inv_h[i - 1]
+            c[i] = l2 * inv_h[i]
+            b[i] = -l2 * (inv_h[i - 1] + inv_h[i]) - v[i] * (p_hat + n_hat + dD + dA)
+        F[0] = 0.0
+        F[N - 1] = 0.0
+        cp[0] = 0.0
+        dp[0] = 0.0
+        for i in range(1, N - 1):
+            m = 1.0 / (b[i] - a[i] * cp[i - 1])
+            cp[i] = c[i] * m
+            dp[i] = (-F[i] - a[i] * dp[i - 1]) * m
+        upd = 0.0
+        dnext = 0.0
+        for i in range(N - 2, 0, -1):
+            d = dp[i] - cp[i] * dnext
+            if d > clamp:
+                d = clamp
+            elif d < -clamp:
+                d = -clamp
+            dnext = dp[i] - cp[i] * dnext
+            u[bi, i] += d
+            if abs(d) > upd:
+                upd = abs(d)
+        if upd < tol:
+            converged = True
+            break
+    iters[bi] = it
+    conv[bi] = converged
+
+
+@njit(cache=True)
+def _newton_batch_ii_seq(
+    u, u_n, u_p, dd, dr, ad, ar, lnni, lam2, inv_h, v, tol, max_iter, clamp, iters, conv
+):
+    for bi in range(u.shape[0]):
+        _newton_column_ii(
+            bi,
+            u,
+            u_n,
+            u_p,
+            dd,
+            dr,
+            ad,
+            ar,
+            lnni,
+            lam2,
+            inv_h,
+            v,
+            tol,
+            max_iter,
+            clamp,
+            iters,
+            conv,
+        )
 
 
 @njit(cache=True, parallel=True)
-def _dpsi_dvc_batch_ii(n_hat, p_hat, dd, dr, ad, ar, lam2, inv_h, v, out):
+def _newton_batch_ii_par(
+    u, u_n, u_p, dd, dr, ad, ar, lnni, lam2, inv_h, v, tol, max_iter, clamp, iters, conv
+):
+    for bi in prange(u.shape[0]):
+        _newton_column_ii(
+            bi,
+            u,
+            u_n,
+            u_p,
+            dd,
+            dr,
+            ad,
+            ar,
+            lnni,
+            lam2,
+            inv_h,
+            v,
+            tol,
+            max_iter,
+            clamp,
+            iters,
+            conv,
+        )
+
+
+def _newton_batch_ii(u, *args):
+    """``_newton_column_ii`` for every device, serial or prange (``use_prange``)."""
+    B, N = u.shape
+    par = use_prange(B, N, NEWTON_PAR_NODES)
+    (_newton_batch_ii_par if par else _newton_batch_ii_seq)(u, *args)
+
+
+@njit(cache=True)
+def _dpsi_dvc_column_ii(bi, n_hat, p_hat, dd, dr, ad, ar, lam2, inv_h, v, out):
     """_dpsi_dvc_batch with the carrier-dependent ionization (opt-in, A-02): Jacobian
     diagonal gains dD + dA, dF_i/du_c = v_i (n^_i + dD_i) (the donor occupancy follows
     phi_n = V_cathode), and the anode-conserved charge is p - N_A- (a neutral acceptor
     is a bound hole): out[b] = sum_i v_i (p^_i + dA_i) du_i."""
-    B, N = n_hat.shape
-    for bi in prange(B):
-        l2 = lam2[bi]
-        cp = np.empty(N)
-        dp = np.empty(N)
-        du = np.empty(N)
-        dAs = np.zeros(N)
-        cp[0] = 0.0
-        dp[0] = 0.0
-        for i in range(1, N - 1):
-            _, dD, dA = _ionized(
-                n_hat[bi, i], p_hat[bi, i], dd, dr, ad, ar, bi, i
-            )
-            dAs[i] = dA
-            a = l2 * inv_h[i - 1]
-            c = l2 * inv_h[i]
-            b = -l2 * (inv_h[i - 1] + inv_h[i]) - v[i] * (
-                p_hat[bi, i] + n_hat[bi, i] + dD + dA
-            )
-            r = -v[i] * (n_hat[bi, i] + dD)
-            if i == N - 2:
-                r -= c
-                c = 0.0
-            m = 1.0 / (b - a * cp[i - 1])
-            cp[i] = c * m
-            dp[i] = (r - a * dp[i - 1]) * m
-        du[N - 1] = 1.0
-        du[0] = 0.0
-        nxt = 0.0
-        for i in range(N - 2, 0, -1):
-            du[i] = dp[i] - cp[i] * nxt
-            nxt = du[i]
-        s = 0.0
-        for i in range(1, N - 1):
-            s += v[i] * (p_hat[bi, i] + dAs[i]) * du[i]
-        out[bi] = s
+    N = n_hat.shape[1]
+    l2 = lam2[bi]
+    cp = np.empty(N)
+    dp = np.empty(N)
+    du = np.empty(N)
+    dAs = np.zeros(N)
+    cp[0] = 0.0
+    dp[0] = 0.0
+    for i in range(1, N - 1):
+        _, dD, dA = _ionized(n_hat[bi, i], p_hat[bi, i], dd, dr, ad, ar, bi, i)
+        dAs[i] = dA
+        a = l2 * inv_h[i - 1]
+        c = l2 * inv_h[i]
+        b = -l2 * (inv_h[i - 1] + inv_h[i]) - v[i] * (
+            p_hat[bi, i] + n_hat[bi, i] + dD + dA
+        )
+        r = -v[i] * (n_hat[bi, i] + dD)
+        if i == N - 2:
+            r -= c
+            c = 0.0
+        m = 1.0 / (b - a * cp[i - 1])
+        cp[i] = c * m
+        dp[i] = (r - a * dp[i - 1]) * m
+    du[N - 1] = 1.0
+    du[0] = 0.0
+    nxt = 0.0
+    for i in range(N - 2, 0, -1):
+        du[i] = dp[i] - cp[i] * nxt
+        nxt = du[i]
+    s = 0.0
+    for i in range(1, N - 1):
+        s += v[i] * (p_hat[bi, i] + dAs[i]) * du[i]
+    out[bi] = s
+
+
+@njit(cache=True)
+def _dpsi_dvc_batch_ii_seq(n_hat, p_hat, dd, dr, ad, ar, lam2, inv_h, v, out):
+    for bi in range(n_hat.shape[0]):
+        _dpsi_dvc_column_ii(bi, n_hat, p_hat, dd, dr, ad, ar, lam2, inv_h, v, out)
 
 
 @njit(cache=True, parallel=True)
-def _dpsi_dvc_batch(n_hat, p_hat, lam2, inv_h, v, out):
+def _dpsi_dvc_batch_ii_par(n_hat, p_hat, dd, dr, ad, ar, lam2, inv_h, v, out):
+    for bi in prange(n_hat.shape[0]):
+        _dpsi_dvc_column_ii(bi, n_hat, p_hat, dd, dr, ad, ar, lam2, inv_h, v, out)
+
+
+def _dpsi_dvc_batch_ii(n_hat, *args):
+    """``_dpsi_dvc_column_ii`` for every device, serial or prange (``use_prange``)."""
+    B, N = n_hat.shape
+    par = use_prange(B, N, LINEAR_PAR_NODES)
+    (_dpsi_dvc_batch_ii_par if par else _dpsi_dvc_batch_ii_seq)(n_hat, *args)
+
+
+@njit(cache=True)
+def _dpsi_dvc_column(bi, n_hat, p_hat, lam2, inv_h, v, out):
     """Small-signal response du/du_c of a converged flat-quasi-Fermi Poisson state.
 
     Linearises F(u; u_n = u_c) = 0 in the cathode bias u_c = V_cathode/V_t (phi_n
@@ -255,35 +385,54 @@ def _dpsi_dvc_batch(n_hat, p_hat, lam2, inv_h, v, out):
     du_0 = 0 (anode) and du_{N-1} = 1 (cathode Dirichlet). J is the Newton Jacobian.
     Then out[b] = sum_i v_i p^_i du_i, the (scaled) hole charge removed per unit u_c.
     """
+    N = n_hat.shape[1]
+    l2 = lam2[bi]
+    cp = np.empty(N)
+    dp = np.empty(N)
+    du = np.empty(N)
+    cp[0] = 0.0
+    dp[0] = 0.0  # du_0 = 0
+    for i in range(1, N - 1):
+        a = l2 * inv_h[i - 1]
+        c = l2 * inv_h[i]
+        b = -l2 * (inv_h[i - 1] + inv_h[i]) - v[i] * (p_hat[bi, i] + n_hat[bi, i])
+        r = -v[i] * n_hat[bi, i]
+        if i == N - 2:
+            r -= c  # du_{N-1} = 1 moved to the rhs
+            c = 0.0
+        m = 1.0 / (b - a * cp[i - 1])
+        cp[i] = c * m
+        dp[i] = (r - a * dp[i - 1]) * m
+    du[N - 1] = 1.0
+    du[0] = 0.0
+    nxt = 0.0
+    for i in range(N - 2, 0, -1):
+        du[i] = dp[i] - cp[i] * nxt
+        nxt = du[i]
+    s = 0.0
+    for i in range(1, N - 1):
+        s += v[i] * p_hat[bi, i] * du[i]
+    out[bi] = s
+
+
+@njit(cache=True)
+def _dpsi_dvc_seq(n_hat, p_hat, lam2, inv_h, v, out):
+    for bi in range(n_hat.shape[0]):
+        _dpsi_dvc_column(bi, n_hat, p_hat, lam2, inv_h, v, out)
+
+
+@njit(cache=True, parallel=True)
+def _dpsi_dvc_par(n_hat, p_hat, lam2, inv_h, v, out):
+    for bi in prange(n_hat.shape[0]):
+        _dpsi_dvc_column(bi, n_hat, p_hat, lam2, inv_h, v, out)
+
+
+def _dpsi_dvc_batch(n_hat, *args):
+    """Small-signal response of each device (``_dpsi_dvc_column``, one linear solve:
+    the carrier-solve threshold), serial or prange (``use_prange``)."""
     B, N = n_hat.shape
-    for bi in prange(B):
-        l2 = lam2[bi]
-        cp = np.empty(N)
-        dp = np.empty(N)
-        du = np.empty(N)
-        cp[0] = 0.0
-        dp[0] = 0.0  # du_0 = 0
-        for i in range(1, N - 1):
-            a = l2 * inv_h[i - 1]
-            c = l2 * inv_h[i]
-            b = -l2 * (inv_h[i - 1] + inv_h[i]) - v[i] * (p_hat[bi, i] + n_hat[bi, i])
-            r = -v[i] * n_hat[bi, i]
-            if i == N - 2:
-                r -= c  # du_{N-1} = 1 moved to the rhs
-                c = 0.0
-            m = 1.0 / (b - a * cp[i - 1])
-            cp[i] = c * m
-            dp[i] = (r - a * dp[i - 1]) * m
-        du[N - 1] = 1.0
-        du[0] = 0.0
-        nxt = 0.0
-        for i in range(N - 2, 0, -1):
-            du[i] = dp[i] - cp[i] * nxt
-            nxt = du[i]
-        s = 0.0
-        for i in range(1, N - 1):
-            s += v[i] * p_hat[bi, i] * du[i]
-        out[bi] = s
+    par = use_prange(B, N, LINEAR_PAR_NODES)
+    (_dpsi_dvc_par if par else _dpsi_dvc_seq)(n_hat, *args)
 
 
 class PoissonBatch:
@@ -310,9 +459,7 @@ class PoissonBatch:
         self.N0 = np.abs(D).max(axis=1)  # (B,)
         self.donors = np.asarray(donors, dtype=float)
         # ionized acceptors (B, N), as devsim's Acceptors node model (local mobility)
-        self.acceptors = np.broadcast_to(
-            np.asarray(acceptors, dtype=float), D.shape
-        )
+        self.acceptors = np.broadcast_to(np.asarray(acceptors, dtype=float), D.shape)
         self.netdop = D
         self.lam2 = EPS * self.V_t / (Q * self.N0)  # (B,) cm^2
         self.log_ni_hat = np.log(self.n_i / self.N0)  # (B,)
@@ -356,26 +503,37 @@ class PoissonBatch:
         clamp=20.0,
         phi_n=None,
         phi_p=None,
+        carriers=True,
     ):
         """Newton-solve all B devices at biases V_anode/V_cathode ((B,) or scalar, V).
 
         phi_n/phi_p: optional nodal quasi-Fermi levels (B, N) in V (Gummel
         coupling); default flat at the contact biases. tol is on max |delta u|
-        in V_t units.
+        in V_t units. ``carriers=False`` skips the n/p of the result (None; the
+        Gummel loop only needs psi).
         """
         B, N = self.B, self.N
         V_a = np.broadcast_to(np.asarray(V_anode, dtype=float), (B,))
         V_c = np.broadcast_to(np.asarray(V_cathode, dtype=float), (B,))
         Vt = self.V_t[:, None]
-        u_n = np.ascontiguousarray(
-            np.broadcast_to((V_c[:, None] if phi_n is None else phi_n) / Vt, (B, N))
+        u_n = np.require(  # C-contiguous and writeable: one kernel signature
+            np.broadcast_to((V_c[:, None] if phi_n is None else phi_n) / Vt, (B, N)),
+            float,
+            ["C", "W"],
         )
-        u_p = np.ascontiguousarray(
-            np.broadcast_to((V_a[:, None] if phi_p is None else phi_p) / Vt, (B, N))
+        u_p = np.require(  # C-contiguous and writeable: one kernel signature
+            np.broadcast_to((V_a[:, None] if phi_p is None else phi_p) / Vt, (B, N)),
+            float,
+            ["C", "W"],
         )
-        psi_a, psi_c = contact_values(
-            self.netdop[:, 0], self.netdop[:, -1], self.n_i, self.V_t, V_a, V_c
-        )
+        # contact values of the last (V_a, V_c): constant along a Gummel loop
+        key = (V_a.tobytes(), V_c.tobytes())
+        if getattr(self, "_contact_key", None) != key:
+            self._contact = contact_values(
+                self.netdop[:, 0], self.netdop[:, -1], self.n_i, self.V_t, V_a, V_c
+            )
+            self._contact_key = key
+        psi_a, psi_c = self._contact
         u = np.ascontiguousarray(np.asarray(psi0, dtype=float) / Vt)
         u[:, 0] = psi_a / self.V_t
         u[:, -1] = psi_c / self.V_t
@@ -413,9 +571,11 @@ class PoissonBatch:
                 iters,
                 conv,
             )
-        lnni = self.log_ni_hat[:, None]
-        n = self.N0[:, None] * np.exp(np.minimum(u - u_n + lnni, EXP_CLAMP))
-        p = self.N0[:, None] * np.exp(np.minimum(u_p - u + lnni, EXP_CLAMP))
+        n = p = None
+        if carriers:
+            lnni = self.log_ni_hat[:, None]
+            n = self.N0[:, None] * np.exp(np.minimum(u - u_n + lnni, EXP_CLAMP))
+            p = self.N0[:, None] * np.exp(np.minimum(u_p - u + lnni, EXP_CLAMP))
         return PoissonResult(
             psi=u * Vt, n=n, p=p, iterations=int(iters.max()), converged=conv
         )

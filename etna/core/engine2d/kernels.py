@@ -20,7 +20,10 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
 from numba import njit
+
+from .banded import band_solve, band_solve_cols
 
 EXP_CLAMP = 60.0  # in ln(cm^-3): exp(60) ~ 1e26, above any physical density
 
@@ -321,3 +324,141 @@ def cathode_current_balanced(
         cl = dxd[i] / hy[j - 1]
         Ih += kpv[j - 1] * cl * (p[k] * bern(u[b] - u[k]) - p[b] * bern(u[k] - u[b]))
     return Ie, Ih
+
+
+@njit(cache=True)
+def _solve_neg(LU, Lt, Ut, dg, w, r, x, cols):
+    """x = (LU)^-1 (-r): ``band_solve`` (cols False, the reference) or ``band_solve_cols``."""
+    if cols:
+        for k in range(r.shape[0]):
+            x[k] = -r[k]
+        band_solve_cols(Lt, Ut, dg, w, x)
+    else:
+        x[:] = band_solve(LU, w, -r)
+
+
+@njit(cache=True, nogil=True)
+def gummel_illuminated(
+    G,
+    u0,
+    n0,
+    p0,
+    D,
+    has_ion,
+    dd,
+    dr,
+    ad,
+    ar,
+    lnni,
+    lam,
+    ni,
+    taun,
+    taup,
+    knv,
+    knh,
+    kpv,
+    kph,
+    hx,
+    hy,
+    dxd,
+    dyd,
+    nx,
+    ny,
+    n_lo,
+    n_hi,
+    p_lo,
+    p_hi,
+    LUn,
+    LUp,
+    LUpsi,
+    Ltn,
+    Utn,
+    dgn,
+    Ltp,
+    Utp,
+    dgp,
+    Ltpsi,
+    Utpsi,
+    dgpsi,
+    cols,
+    tol,
+    tol_I,
+    max_iter,
+):
+    """One illuminated Gummel solve (``Device2D.illuminated_current``) as one compiled
+    loop: electrons, holes, quasi-Fermi Poisson with the dark-state chord LUs, the
+    balanced cathode current and its convergence test, in the expression order of the
+    former Python loop. Returns (I, I_direct, iterations, status): status 0 converged,
+    1 non-finite current, 2 max_iter reached."""
+    w = nx
+    N = nx * ny
+    u = u0.copy()
+    n = n0.copy()
+    p = p0.copy()
+    R = np.empty(N)
+    F = np.empty(N)
+    d = np.empty(N)
+    un = np.empty(N)
+    up = np.empty(N)
+    dummy = np.empty((1, 1))
+    I_prev = 0.0
+    have_prev = False
+    for it in range(1, max_iter + 1):
+        continuity_system(
+            0, u, n, p, G, ni, taun, taup, knv, knh, hx, hy, dxd, dyd, nx, ny,
+            n_lo, n_hi, dummy, R, False,
+        )  # fmt: skip
+        _solve_neg(LUn, Ltn, Utn, dgn, w, R, d, cols)
+        for k in range(N):
+            n[k] += d[k]
+        continuity_system(
+            1, u, n, p, G, ni, taun, taup, kpv, kph, hx, hy, dxd, dyd, nx, ny,
+            p_lo, p_hi, dummy, R, False,
+        )  # fmt: skip
+        _solve_neg(LUp, Ltp, Utp, dgp, w, R, d, cols)
+        for k in range(N):
+            p[k] += d[k]
+        for k in range(N):
+            # np.maximum semantics (NaN propagates)
+            if n[k] < 1e-300:
+                n[k] = 1e-300
+            if p[k] < 1e-300:
+                p[k] = 1e-300
+            un[k] = u[k] - (math.log(n[k]) - lnni)
+            up[k] = u[k] + (math.log(p[k]) - lnni)
+        if has_ion:
+            poisson_system_ii(
+                u, un, up, dd, dr, ad, ar, lnni, lam, hx, hy, dxd, dyd, nx, ny,
+                dummy, F, False,
+            )  # fmt: skip
+        else:
+            poisson_system(
+                u, un, up, D, lnni, lam, hx, hy, dxd, dyd, nx, ny, dummy, F, False
+            )
+        _solve_neg(LUpsi, Ltpsi, Utpsi, dgpsi, w, F, d, cols)
+        dmax = 0.0
+        for k in range(N):
+            du = d[k]
+            u[k] += du
+            e = math.exp(du)
+            n[k] *= e
+            p[k] /= e
+            a = abs(du)
+            if a > dmax or a != a:
+                dmax = a
+        Ie, Ih = cathode_current_balanced(
+            u, n, p, G, ni, taun, taup, knv, kpv, hy, dxd, dyd, nx, ny
+        )
+        I = Ie + Ih
+        if not math.isfinite(I):
+            return I, math.nan, it, 1
+        if have_prev and I != 0:
+            dI = abs(I - I_prev) / abs(I)
+        else:
+            dI = math.inf
+        I_prev = I
+        have_prev = True
+        if dmax < tol and dI < tol_I:
+            Ie, Ih = cathode_current(u, n, p, knv, kpv, hy, dxd, nx, ny)
+            return I, Ie + Ih, it, 0
+    return I_prev, math.nan, max_iter, 2

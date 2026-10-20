@@ -8,6 +8,7 @@ diagonally dominant (Dirichlet rows are identity rows).
 
 from __future__ import annotations
 
+import numpy as np
 from numba import njit
 
 
@@ -28,6 +29,49 @@ def band_lu(A, w):
             off_k = w - k
             for c in range(k + 1, cmax + 1):
                 A[r, off_r + c] -= l * A[k, off_k + c]
+
+
+@njit(cache=True)
+def band_split(LU, w):
+    """Column-major copies of a band LU for the column-oriented solve ``band_solve_cols``:
+    Lt[k, m] = L[k+1+m, k] and Ut[c, m] = U[c-1-m, c] (zero outside the matrix), dg = diag U.
+    """
+    N = LU.shape[0]
+    Lt = np.zeros((N, w))
+    Ut = np.zeros((N, w))
+    dg = np.empty(N)
+    for k in range(N):
+        dg[k] = LU[k, w]
+        for m in range(w):
+            r = k + 1 + m
+            if r < N:
+                Lt[k, m] = LU[r, w + k - r]
+            c = k - 1 - m
+            if c >= 0:
+                Ut[k, m] = LU[c, w + k - c]
+    return Lt, Ut, dg
+
+
+@njit(cache=True)
+def band_solve_cols(Lt, Ut, dg, w, x):
+    """In-place (LU) x = b on x = b, column (axpy) oriented: the inner loops carry no
+    reduction, so they vectorise and do not serialise on the add latency (~4x faster
+    than ``band_solve`` at w ~ 50). The forward sweep subtracts in the same order as
+    ``band_solve`` (bit-identical); the backward sweep subtracts the U terms of a row
+    in decreasing column order (``band_solve``: increasing), i.e. the result differs
+    by rounding only."""
+    N = x.shape[0]
+    for k in range(N):
+        xk = x[k]
+        mm = min(w, N - 1 - k)
+        for m in range(mm):
+            x[k + 1 + m] -= Lt[k, m] * xk
+    for c in range(N - 1, -1, -1):
+        xc = x[c] / dg[c]
+        x[c] = xc
+        mm = min(w, c)
+        for m in range(mm):
+            x[c - 1 - m] -= Ut[c, m] * xc
 
 
 @njit(cache=True)

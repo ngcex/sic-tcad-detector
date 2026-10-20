@@ -408,17 +408,21 @@ def lateral_cce_scan_2d(
         x_positions = np.linspace(0, info["half_width_cm"], n_lateral_points)
         vol = grid.volume
         cce = np.empty(n_lateral_points)
-        for m, xp in enumerate(x_positions):
-            G = _generation(dev, xp, gen_rate, stripe_sigma_cm)
-            I = dev.illuminated_current(G)
+        Gs = [_generation(dev, xp, gen_rate, stripe_sigma_cm) for xp in x_positions]
+        if full_area:
+            Gs.append(_uniform_epi_generation(dev, gen_rate))
+        # the stripes are independent solves on one dark state: solved in parallel,
+        # each with the arithmetic of a single illuminated_current call
+        Is = dev.illuminated_currents(np.array(Gs)) if Gs else np.empty(0)
+        for m in range(n_lateral_points):
+            G, I = Gs[m], Is[m]
             I_gen = float(
                 np.sum(vol * G)
             )  # box rule over injected nodes, as compute_cce_2d
             cce[m] = float(np.clip(abs(I) / I_gen, 0.0, 1.0)) if I_gen > 0 else 0.0
         cce_full = None
         if full_area:
-            G = _uniform_epi_generation(dev, gen_rate)
-            I = dev.illuminated_current(G)
+            G, I = Gs[-1], Is[-1]
             I_gen = float(np.sum(vol * G))
             cce_full = float(np.clip(abs(I) / I_gen, 0.0, 1.0)) if I_gen > 0 else 0.0
     except EngineNotConverged as e:

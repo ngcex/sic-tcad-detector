@@ -24,6 +24,9 @@ import numpy as np
 from numba import njit, prange
 
 from etna.core.batched.material import Q
+from etna.core.batched.poisson import LINEAR_PAR_NODES, use_prange
+
+_NO_AUG = np.zeros((1, 1))  # placeholder ``aug`` when Auger is off
 
 
 @njit(cache=True, parallel=True)
@@ -60,6 +63,124 @@ def bernoulli(x):
     out[big] = 0.0
     out[neg] = -x[neg]
     return out
+
+
+@njit(cache=True, inline="always")
+def _bern(x):
+    """Scalar ``bernoulli`` (same branches and expressions)."""
+    if abs(x) < 1e-8:
+        return 1.0 - 0.5 * x
+    if x > 700.0:
+        return 0.0
+    if x < -700.0:
+        return -x
+    return x / np.expm1(x)
+
+
+@njit(cache=True)
+def _end_currents(psi_T, n_T, p_T, kn, kp, V_t):
+    """Jn on the anode edge and Jp on the cathode edge, (B,) each: the two entries of
+    ``ContinuityBatch.currents`` the Gummel loop uses, same expressions."""
+    N, B = psi_T.shape
+    Jn0 = np.empty(B)
+    JpL = np.empty(B)
+    for j in range(B):
+        d = (psi_T[0, j] - psi_T[1, j]) / V_t[j]
+        Jn0[j] = kn[0, j] * (n_T[1, j] * _bern(-d) - n_T[0, j] * _bern(d))
+        d = (psi_T[N - 2, j] - psi_T[N - 1, j]) / V_t[j]
+        JpL[j] = kp[N - 2, j] * (p_T[N - 2, j] * _bern(-d) - p_T[N - 1, j] * _bern(d))
+    return Jn0, JpL
+
+
+@njit(cache=True)
+def _carrier_column(
+    j, x, psi_T, n_other, G_T, denom, aug, has_aug, k, v, V_t, n_i, bc0, bc1, electrons
+):
+    """Assembly + Thomas solve of the linear SG continuity system of
+    ``ContinuityBatch._solve_carrier`` for device j in one pass, with the numpy
+    assembly's expressions and operation order; writes x[:, j]."""
+    N = psi_T.shape[0]
+    cp = np.empty(N)
+    dp = np.empty(N)
+    vt = V_t[j]
+    ni2 = n_i[j] ** 2
+    # row 0: identity (a = c = 0, b = 1), rhs = bc0
+    cp[0] = 0.0
+    dp[0] = bc0[j]
+    dl = (psi_T[0, j] - psi_T[1, j]) / vt  # edge i-1 of row i = 1
+    Bp_l = _bern(dl)
+    Bm_l = _bern(-dl)
+    for i in range(1, N - 1):
+        dr = (psi_T[i, j] - psi_T[i + 1, j]) / vt  # edge i
+        Bp_r = _bern(dr)
+        Bm_r = _bern(-dr)
+        kl = k[i - 1, j]
+        kr = k[i, j]
+        qv = Q * v[i]
+        srh_lin = qv * n_other[i, j] / denom[i, j]
+        srh_const = qv * ni2 / denom[i, j]
+        if has_aug:
+            srh_lin = srh_lin + qv * aug[i, j] * n_other[i, j]
+            srh_const = srh_const + qv * aug[i, j] * ni2
+        if electrons:
+            ci = kr * Bm_r
+            ai = kl * Bp_l
+            bi = -(kr * Bp_r + kl * Bm_l) - srh_lin
+            ri = -qv * G_T[i, j] - srh_const
+        else:
+            ci = -kr * Bp_r
+            ai = -kl * Bm_l
+            bi = (kr * Bm_r + kl * Bp_l) + srh_lin
+            ri = qv * G_T[i, j] + srh_const
+        inv = 1.0 / (bi - ai * cp[i - 1])
+        cp[i] = ci * inv
+        dp[i] = (ri - ai * dp[i - 1]) * inv
+        Bp_l = Bp_r
+        Bm_l = Bm_r
+    # row N-1: identity, rhs = bc1 (a = 0: dp = bc1 / (1 - 0 * cp) as thomas_batch)
+    inv = 1.0 / (1.0 - 0.0 * cp[N - 2])
+    dp[N - 1] = (bc1[j] - 0.0 * dp[N - 2]) * inv
+    x[N - 1, j] = dp[N - 1]
+    for i in range(N - 2, -1, -1):
+        x[i, j] = dp[i] - cp[i] * x[i + 1, j]
+
+
+@njit(cache=True)
+def _carrier_solve_seq(
+    psi_T, n_other, G_T, denom, aug, has_aug, k, v, V_t, n_i, bc0, bc1, electrons
+):
+    """``_carrier_column`` over the B devices, serially (small B: a parallel region's
+    launch costs more than the solves)."""
+    N, B = psi_T.shape
+    x = np.empty((N, B))
+    for j in range(B):
+        _carrier_column(
+            j, x, psi_T, n_other, G_T, denom, aug, has_aug, k, v, V_t, n_i, bc0, bc1,
+            electrons,
+        )  # fmt: skip
+    return x
+
+
+@njit(cache=True, parallel=True)
+def _carrier_solve_par(
+    psi_T, n_other, G_T, denom, aug, has_aug, k, v, V_t, n_i, bc0, bc1, electrons
+):
+    """``_carrier_column`` over the B devices, one prange iteration each."""
+    N, B = psi_T.shape
+    x = np.empty((N, B))
+    for j in prange(B):
+        _carrier_column(
+            j, x, psi_T, n_other, G_T, denom, aug, has_aug, k, v, V_t, n_i, bc0, bc1,
+            electrons,
+        )  # fmt: skip
+    return x
+
+
+def _carrier_solve_batch(psi_T, *args):
+    """Serial or prange over the devices (``poisson.use_prange``), identical arithmetic."""
+    N, B = psi_T.shape
+    par = use_prange(B, N, LINEAR_PAR_NODES)
+    return (_carrier_solve_par if par else _carrier_solve_seq)(psi_T, *args)
 
 
 @dataclass
@@ -110,6 +231,7 @@ class ContinuityBatch:
         self.tau_n, self.tau_p = bc(tau_n), bc(tau_p)
         self.h = np.diff(pb.x)[:, None]  # (N-1, 1)
         self.v = pb.v[:, None]  # (N, 1), ends unused
+        self._v = np.ascontiguousarray(pb.v, dtype=float)  # (N,)
         self.kn = (Q * self.mu_n * pb.V_t[None, :]) / self.h  # (N-1, B)
         self.kp = (Q * self.mu_p * pb.V_t[None, :]) / self.h
         D = pb.netdop
@@ -130,7 +252,37 @@ class ContinuityBatch:
         )
 
     def _solve_carrier(self, psi_T, n_other, which, G_T, denom, bc, aug=None):
-        """One linear SG continuity solve for electrons ('n') or holes ('p'); (N, B) arrays."""
+        """One linear SG continuity solve for electrons ('n') or holes ('p'); (N, B) arrays.
+
+        Interior row i (edges i-1, i; k = q mu V_t / h, Delta = (psi_i - psi_{i+1})/V_t):
+        SRH linearised in the solved carrier, U = (x * other - n_i^2)/denom; with Auger
+        (C_n n + C_p p)(n p - n_i^2) its prefactor ``aug`` is lagged (evaluated at the
+        previous iterate): linear in the solved carrier, same fixed point as devsim's
+        fully coupled Newton. Electrons: Jn_i - Jn_{i-1} - q v (U - G) = 0; holes:
+        Jp_i - Jp_{i-1} + q v (U - G) = 0. Assembly and Thomas sweep are one compiled
+        pass (``_carrier_solve_batch``); ``_solve_carrier_numpy`` is the reference.
+        """
+        pb = self.pb
+        k = self.kn if which == "n" else self.kp
+        has_aug = aug is not None
+        return _carrier_solve_batch(
+            np.ascontiguousarray(psi_T, dtype=float),
+            np.ascontiguousarray(n_other, dtype=float),
+            np.ascontiguousarray(G_T, dtype=float),
+            np.ascontiguousarray(denom, dtype=float),
+            np.ascontiguousarray(aug, dtype=float) if has_aug else _NO_AUG,
+            has_aug,
+            k,
+            self._v,
+            pb.V_t,
+            pb.n_i,
+            np.ascontiguousarray(bc[0], dtype=float),
+            np.ascontiguousarray(bc[1], dtype=float),
+            which == "n",
+        )
+
+    def _solve_carrier_numpy(self, psi_T, n_other, which, G_T, denom, bc, aug=None):
+        """numpy assembly + ``thomas_batch`` (the reference of ``_solve_carrier``)."""
         pb = self.pb
         N, B = psi_T.shape
         delta = (psi_T[:-1] - psi_T[1:]) / pb.V_t[None, :]  # (N-1, B)
@@ -142,23 +294,17 @@ class ContinuityBatch:
         rhs = np.zeros((N, B))
         n_i2 = (pb.n_i**2)[None, :]
         qv = Q * self.v[1:-1]
-        # SRH linearised in the solved carrier: U = (x * other - n_i^2)/denom
         srh_lin = qv * n_other[1:-1] / denom[1:-1]
         srh_const = qv * n_i2 / denom[1:-1]
         if aug is not None:
-            # Auger (C_n n + C_p p)(n p - n_i^2) with its prefactor ``aug`` lagged
-            # (evaluated at the previous iterate): linear in the solved carrier, same
-            # fixed point as devsim's fully coupled Newton
             srh_lin = srh_lin + qv * aug[1:-1] * n_other[1:-1]
             srh_const = srh_const + qv * aug[1:-1] * n_i2
         if which == "n":
-            # Jn_i - Jn_{i-1} - q v (U - G) = 0
             c[1:-1] = k[1:] * Bm[1:]
             a[1:-1] = k[:-1] * Bp[:-1]
             b[1:-1] = -(k[1:] * Bp[1:] + k[:-1] * Bm[:-1]) - srh_lin
             rhs[1:-1] = -qv * G_T[1:-1] - srh_const
         else:
-            # Jp_i - Jp_{i-1} + q v (U - G) = 0
             c[1:-1] = -k[1:] * Bp[1:]
             a[1:-1] = -k[:-1] * Bm[:-1]
             b[1:-1] = (k[1:] * Bm[1:] + k[:-1] * Bp[:-1]) + srh_lin
@@ -231,7 +377,11 @@ class ContinuityBatch:
         tau_n, tau_p = self.tau_n[None, :], self.tau_p[None, :]
         n1, p1 = self.n1[None, :], self.p1[None, :]
         C_n, C_p = self.C_n[None, :], self.C_p[None, :]
-        aug = (lambda nn, pp: C_n * nn + C_p * pp) if self.auger else (lambda nn, pp: None)
+        aug = (
+            (lambda nn, pp: C_n * nn + C_p * pp)
+            if self.auger
+            else (lambda nn, pp: None)
+        )
         G_opt = G_T
         converged = np.zeros(B, dtype=bool)
         J_prev = None
@@ -258,7 +408,9 @@ class ContinuityBatch:
             # cathode current of the continuity-consistent state (psi_T, n_new, p_new): it is a
             # tiny difference of two large SG terms, so it is NOT re-evaluated after the Poisson
             # update below
-            Jn, Jp = self.currents(psi_T, n_new, p_new)
+            Jn0, JpL = _end_currents(
+                np.ascontiguousarray(psi_T), n_new, p_new, self.kn, self.kp, pb.V_t
+            )  # psi_T is F-ordered after a Poisson update with B > 1: one signature
             # Balanced form (as devsim's extract_steady_state_current): summing the electron
             # equation over the interior nodes gives Jn(cathode edge) = Jn(anode edge) +
             # sum q v (U - G); both terms are well conditioned (electrons are minority at the
@@ -269,7 +421,7 @@ class ContinuityBatch:
             if self.auger:
                 U = U + (C_n * n_new + C_p * p_new) * (n_new * p_new - n_i**2)
             S = (Q * self.v[1:-1] * (U[1:-1] - G_T[1:-1])).sum(axis=0)
-            J = Jn[0] + S + Jp[-1]
+            J = Jn0 + S + JpL
             dJ = (
                 np.abs(J - J_prev) / (np.abs(J) + 1e-300)
                 if J_prev is not None
@@ -286,6 +438,7 @@ class ContinuityBatch:
                 tol=poisson_tol,
                 phi_n=phi_n.T,
                 phi_p=phi_p.T,
+                carriers=False,
             )
             psi_new = res.psi.T
             dpsi = np.abs(psi_new - psi_T).max(axis=0) / pb.V_t
