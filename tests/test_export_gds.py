@@ -23,9 +23,6 @@ from etna.export import layout_params as lp
 ROOT = Path(__file__).resolve().parents[1]
 DOC = ROOT / "deliverables" / "DIMENSIONS-provenance.md"
 
-pytestmark = pytest.mark.filterwarnings(
-    "ignore::etna.export.layout_params.PlaceholderDimensionWarning"
-)
 
 
 def _polygon_area_um2(points) -> float:

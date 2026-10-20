@@ -33,11 +33,6 @@ from etna.export import (
 from etna.export.labels import analytic_vfd
 from etna.export.layout_params import PlaceholderDimensionWarning, load_layout_params
 
-# the default layout parameter file still has PLACEHOLDER values: asserted in the
-# tests below and in tests/test_export_gds.py, silenced elsewhere
-pytestmark = pytest.mark.filterwarnings(
-    "ignore::etna.export.layout_params.PlaceholderDimensionWarning"
-)
 
 LABEL = (
     "simulation output, validated against devsim reference; "

@@ -1,4 +1,8 @@
-"""Export page: spec sheet, cross-section, node profile (CSV / VTK), schematic layout.
+"""Export page: spec sheet, cross-section, node profile (CSV / VTK / VTU), reference layout.
+
+The layout / mask dimensions come from the layout parameter file
+(``data/foundry/layout_params.toml`` or an uploaded alternative), shared by the spec
+sheet, the cross-section and the layout; its PLACEHOLDER values are shown as warnings.
 
 All files come from ``etna.export`` (pure builders) and carry the validation label.
 The spec sheet reads an ``etna.run_all`` Report (the Run All page's one is reused when
@@ -10,12 +14,43 @@ AppTest mocks reach them.
 from __future__ import annotations
 
 import tempfile
+import tomllib
 
 import streamlit as st
 
 import etna
 from etna import export as ex
 from app.components.page_utils import require_config, show_error, show_stale_warning
+
+
+def _layout_params_block():
+    """Layout parameter file in use (default or uploaded), with its placeholders."""
+    st.subheader("Layout / mask dimensions")
+    up = st.file_uploader(
+        "Alternative layout parameter file (TOML, same schema as "
+        "data/foundry/layout_params.toml)",
+        type=["toml"],
+        key="ex_layout_params_upload",
+    )
+    params = None
+    if up is not None:
+        try:
+            params = ex.parse_layout_params(
+                tomllib.loads(up.getvalue().decode("utf-8")), source=up.name
+            )
+        except Exception as e:
+            show_error(e)
+    if params is None:
+        try:
+            params = ex.load_layout_params()
+        except Exception as e:
+            show_error(e)
+            return None
+    st.caption(f"Dimensions from {params.display_path}")
+    for device in params.devices:
+        if params.placeholders(device):
+            st.warning(params.placeholder_note(device))
+    return params
 
 
 def _reusable_report(cfg):
@@ -26,7 +61,7 @@ def _reusable_report(cfg):
     return rep if set(ex.SPEC_SECTIONS) <= names else None
 
 
-def _spec_block(cfg) -> None:
+def _spec_block(cfg, params=None) -> None:
     st.subheader("Spec sheet")
     st.write(
         "Layers (incl. the graded epi profile), area, both full-depletion numbers with "
@@ -46,7 +81,7 @@ def _spec_block(cfg) -> None:
     if rep is None:
         return
     show_stale_warning(rep.config, cfg)
-    spec = ex.build_spec(rep.config, rep)
+    spec = ex.build_spec(rep.config, rep, layout_params=params)
     md = ex.spec_to_markdown(spec)
     with st.expander("Preview", expanded=False):
         st.markdown(md)
@@ -57,21 +92,27 @@ def _spec_block(cfg) -> None:
     c[1].download_button("CSV", ex.spec_to_csv(spec), "etna_spec.csv", "text/csv")
     c[2].download_button("Markdown", md, "etna_spec.md", "text/markdown")
     c[3].download_button(
-        "PDF", ex.spec_to_pdf(spec, rep.config), "etna_spec.pdf", "application/pdf"
+        "PDF",
+        ex.spec_to_pdf(spec, rep.config, layout_params=params),
+        "etna_spec.pdf",
+        "application/pdf",
     )
 
 
-def _cross_section_block(cfg) -> None:
+def _cross_section_block(cfg, params=None) -> None:
     st.subheader("Cross-section")
     st.caption(
-        "Depth to scale; lateral extent schematic (only the active area is known, not the "
-        "die shape, guard ring or pads)."
+        "Depth to scale; lateral extent schematic, lateral dimensions quoted from the "
+        "layout parameter file with their class (PLACEHOLDER values are drawing values)."
     )
-    png = ex.cross_section_png(cfg)
+    png = ex.cross_section_png(cfg, layout_params=params)
     st.image(png)
     c = st.columns(2)
     c[0].download_button(
-        "SVG", ex.cross_section_svg(cfg), "etna_cross_section.svg", "image/svg+xml"
+        "SVG",
+        ex.cross_section_svg(cfg, layout_params=params),
+        "etna_cross_section.svg",
+        "image/svg+xml",
     )
     c[1].download_button("PNG", png, "etna_cross_section.png", "image/png")
 
@@ -79,9 +120,9 @@ def _cross_section_block(cfg) -> None:
 def _profile_block(cfg) -> None:
     st.subheader("Mesh / profile export")
     st.write(
-        "Net doping, potential and |E| per mesh node at one bias (1D or 2D, as in the "
-        "sidebar), as CSV or legacy ASCII VTK (ParaView / VisIt), for cross-checking "
-        "with other TCAD tools."
+        "Net doping, potential, |E| and the electron / hole densities per mesh node at "
+        "one bias (1D or 2D, as in the sidebar), as CSV, legacy ASCII VTK or XML VTU "
+        "(ParaView / VisIt / meshio), for cross-checking with other TCAD tools."
     )
     bias = st.number_input(
         "Bias (V, negative = reverse)",
@@ -106,10 +147,13 @@ def _profile_block(cfg) -> None:
         f"{res.mesh.x_coords.size} nodes at {res.metadata.get('bias_V'):g} V; solver "
         f"{res.metadata.get('solver')}"
     )
-    c = st.columns(2)
+    c = st.columns(3)
     c[0].download_button("CSV", ex.profile_to_csv(res), "etna_profile.csv", "text/csv")
     c[1].download_button(
         "VTK", ex.profile_to_vtk(res), "etna_profile.vtk", "text/plain"
+    )
+    c[2].download_button(
+        "VTU", ex.profile_to_vtu(res), "etna_profile.vtu", "application/xml"
     )
 
 
@@ -160,34 +204,36 @@ def _animation_block(cfg) -> None:
         )
 
 
-def _layout_block() -> None:
-    st.subheader("Reference layout (schematic, REFERENCE-NOT-FAB)")
+def _layout_block(params=None) -> None:
+    st.subheader("Reference layout (not TCAD-validated; REFERENCE-NOT-FAB)")
     st.warning(ex.LAYOUT_DISCLAIMER)
     st.write(
-        "Labelled schematic of the dosimeter (2 x 2 mm active, die 2.7 +- 0.15 mm, "
-        "periphery as one termination zone, corner pad SIZE UNKNOWN) and of the "
-        "microdosimeter (5 x 5 mm active; die size MISSING). Every polygon carries its "
-        "class (DOCUMENTED / MEASURED-FROM-FIGURE / PLACEHOLDER) and source "
-        "(deliverables/DIMENSIONS-provenance.md). No rings, dicing street or pad size: "
-        "they are not documented and are not invented."
+        "Labelled reference layout of the dosimeter and the microdosimeter: active p+ "
+        "square, guard ring(s), corner bond pad, die outline and dicing street, drawn "
+        "from the layout parameter file above. Every polygon carries its class "
+        "(DOCUMENTED / MEASURED_FROM_FIGURE / PLACEHOLDER) and source; the top cell "
+        "keeps REFERENCE-NOT-FAB while any PLACEHOLDER is left."
     )
+    if params is None:
+        st.info("No valid layout parameter file: layout unavailable.")
+        return
     ok, why = ex.gds_available()
     if not ok:
         st.info(f"GDSII download unavailable: {why}. The SVG preview still works.")
-    for device in ("dosimeter", "microdosimeter"):
+    for device in params.devices:
         c = st.columns(2)
         c[0].download_button(
             f"SVG ({device})",
-            ex.layout_svg(device),
-            f"etna_{device}_REFERENCE-NOT-FAB.svg",
+            ex.layout_svg(device, params),
+            f"etna_{device}_reference_layout.svg",
             "image/svg+xml",
             key=f"ex_layout_svg_{device}",
         )
         if ok:
             c[1].download_button(
                 f"GDSII ({device})",
-                ex.layout_gds(device),
-                f"etna_{device}_REFERENCE-NOT-FAB.gds",
+                ex.layout_gds(device, params),
+                f"etna_{device}_reference_layout.gds",
                 "application/octet-stream",
                 key=f"ex_layout_gds_{device}",
             )
@@ -197,12 +243,20 @@ def render() -> None:
     st.title("Export")
     st.info(ex.VALIDATION_LABEL)
     cfg = require_config()
-    _spec_block(cfg)
+    params = _layout_params_block()
     st.divider()
-    _cross_section_block(cfg)
+    if params is None:
+        st.info(
+            "Spec sheet and cross-section need a valid layout parameter file (see the "
+            "error above)."
+        )
+    else:
+        _spec_block(cfg, params)
+        st.divider()
+        _cross_section_block(cfg, params)
     st.divider()
     _profile_block(cfg)
     st.divider()
     _animation_block(cfg)
     st.divider()
-    _layout_block()
+    _layout_block(params)

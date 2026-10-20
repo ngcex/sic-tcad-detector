@@ -8,7 +8,6 @@ session caching, and the main-script navigation.
 from __future__ import annotations
 
 import numpy as np
-import pytest
 from streamlit.testing.v1 import AppTest
 
 import etna
@@ -17,11 +16,6 @@ from etna.api.run_all import Report, SectionResult
 
 LABEL_START = "simulation output, validated against devsim reference"
 
-# the default layout parameter file has PLACEHOLDER values; the page shows them as
-# st.warning (asserted below), the Python warning is silenced here
-pytestmark = pytest.mark.filterwarnings(
-    "ignore::etna.export.layout_params.PlaceholderDimensionWarning"
-)
 
 
 def _page():
@@ -205,3 +199,20 @@ def test_layout_block_shows_disclaimer_and_degrades_without_gdstk(monkeypatch):
     at = _start(monkeypatch, [])
     assert any("GDSII download unavailable" in i.value for i in at.info)
     assert ex.LAYOUT_DISCLAIMER in [w.value for w in at.warning]
+
+
+def test_layout_params_placeholders_shown_and_invalid_file_reported(
+    monkeypatch, tmp_path
+):
+    at = _start(monkeypatch, [])
+    warns = [w.value for w in at.warning]
+    assert any("PLACEHOLDER dimensions (dosimeter)" in w for w in warns)
+    assert any("PLACEHOLDER dimensions (microdosimeter)" in w for w in warns)
+    assert any("data/foundry/layout_params.toml" in c.value for c in at.caption)
+    bad = tmp_path / "bad.toml"
+    bad.write_text("schema_version = 1\n")
+    monkeypatch.setenv("ETNA_LAYOUT_PARAMS", str(bad))
+    at = _start(monkeypatch, [])
+    assert any("missing device table" in e.value for e in at.error)
+    assert any("need a valid layout parameter file" in i.value for i in at.info)
+    assert any("layout unavailable" in i.value for i in at.info)
