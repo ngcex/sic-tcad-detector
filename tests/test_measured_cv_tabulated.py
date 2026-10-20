@@ -73,7 +73,7 @@ def test_default_stack_unchanged_and_preset_record():
         1.0,
         1e19,
     )
-    assert c.N_t == S["N_t"] == 2.849219e12 and c.E_t == 0.67
+    assert c.N_t == S["N_t"] == 1.356120e12 and c.E_t == 0.67
     # informative doping fields = the table's junction value and minimum
     assert (
         c.N_D_junction == MEASURED_CV_TABLE[0][1] == pytest.approx(5.927e15, rel=1e-3)

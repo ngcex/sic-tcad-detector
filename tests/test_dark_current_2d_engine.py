@@ -4,7 +4,9 @@ Inside the 2D engine's scope the device is laterally uniform, so its dark curren
 1D twin's J times the full SV area. The 1D and 2D models differ only in the discretised
 node field of f_depl (1D: mean of the adjacent edge |E|; 2D: |grad psi| from devsim's node
 gradient): measured 2.4e-7 (hw 25 um, N_D_bulk 8.5e13) and 3.3e-7 (nb20 baseline, hw
-50 um, default doping) at 50 V.
+50 um, default doping) at 50 V before 2026-10-20. Since the Hurkx (1 + Gamma(E))
+enhancement (audit-v7 B-08) the node-field difference also enters through the steep
+Gamma(E): measured 2.3e-5 and 5.0e-6, so the gate is 5e-5 (was 1e-6).
 """
 
 import pytest
@@ -16,7 +18,7 @@ from etna.core.optimization import (
     get_dark_current_2d,
 )
 
-GATE_2D = 1e-6
+GATE_2D = 5e-5
 
 
 @pytest.mark.slow

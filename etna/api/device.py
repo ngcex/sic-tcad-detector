@@ -283,7 +283,7 @@ def measured_cv_config(**overrides) -> DeviceConfig:
 
 # PREVIOUS DEFAULT preset (2026-10-17 .. 2026-10-18; etna.core.device.NPLUS_CALIBRATION): the
 # n+ stack with the exponential epi calibrated on three C-V points (0 / -10 V exact, L held
-# 0.987 um) and an ABRUPT 1e19 n+ step at the epi end (no graded transition), N_t 2.805336e12.
+# 0.987 um) and an ABRUPT 1e19 n+ step at the epi end (no graded transition), N_t 1.343970e12 (2.805336e12 before the Hurkx Gamma, 2026-10-20).
 # Reproduces the numbers of that period bit for bit (tests/test_nplus_calibration.py).
 NPLUS_CALIBRATED_PRESET = {
     "substrate_thickness_um": _um(NPLUS_CALIBRATION["substrate_thickness_cm"]),

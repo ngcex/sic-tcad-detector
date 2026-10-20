@@ -23,7 +23,11 @@ from etna.core.drift_diffusion import (
     create_dd_device,
     ramp_bias,
 )
+from etna.core.radiation_damage import get_hardness_factor
 from etna.core.sic_material import SiC4H_Parameters, intrinsic_concentration
+
+# SR-NIEL kappa since 2026-10-20: earlier fluence pins x 0.35 / kappa(62) = same neq fluence
+_KS = 0.35 / get_hardness_factor(62.0)
 
 
 # ---------------------------------------------------------------------------
@@ -72,78 +76,100 @@ def srh_only_device():
 
 
 class TestGammaEnhancement:
-    """Test the field-enhancement factor Gamma behavior."""
+    """Hurkx (1992) trap-assisted-tunnelling field enhancement (audit-v7 B-08):
+    Gamma = 2 sqrt(3 pi) (F/F_Gamma) exp[(F/F_Gamma)^2], tau -> tau / (1 + Gamma).
+    These fail on the pre-2026-10-20 Kt branch (Gamma == 1 below ~4.5 MV/cm,
+    discontinuous and < 1 for 1.1 < Kt < 4)."""
 
-    def test_low_field_gamma_near_unity(self, tat_device_equilibrium):
-        """At equilibrium (0V), Gamma should be ~1 everywhere.
+    def test_hand_computed_value_and_F_gamma(self):
+        from etna.core.dark_current import hurkx_gamma, tat_constants
 
-        At SiC detector fields (~1e4-1e5 V/cm), Kt >> 4 so Gamma = 1.
-        The Hurkx field enhancement requires MV/cm fields (Kt < 4).
-        """
+        params = SiC4H_Parameters()
+        c = tat_constants(300.0, 1.0, 3.26, params)
+        # F_Gamma = sqrt(24 m_t m0 (kT)^3) / (q hbar), m_t = 0.25, kT = 0.025851 eV
+        kT = 8.617e-5 * 300.0 * 1.602e-19
+        F_g = np.sqrt(24 * 0.25 * 9.109e-31 * kT**3) / (1.602e-19 * 1.0546e-34) / 100
+        assert c["F_gamma"] == pytest.approx(F_g, rel=1e-12)
+        assert c["F_gamma"] == pytest.approx(3.688e5, rel=1e-3)
+        f = 1e5 / F_g
+        assert hurkx_gamma(1e5, F_g) == pytest.approx(
+            2 * np.sqrt(3 * np.pi) * f * np.exp(f * f), rel=1e-12
+        )
+        assert hurkx_gamma(1e5, F_g) == pytest.approx(1.792, abs=2e-3)
+        # F_Gamma ~ T^1.5
+        assert tat_constants(150.0, 1.0, 3.26, params)["F_gamma"] == pytest.approx(
+            F_g / 2**1.5, rel=1e-12
+        )
+
+    def test_continuous_monotonic_and_vanishing_at_zero_field(self):
+        from etna.core.dark_current import hurkx_gamma
+
+        E = np.linspace(0.0, 1.2e6, 20001)
+        G = hurkx_gamma(E, 3.688e5)
+        assert G[0] == 0.0 and np.all(G >= 0.0)
+        assert np.all(np.diff(G) > 0)  # strictly increasing, no jump
+        # continuity: on a 60 V/cm grid the relative step stays small above 1e4 V/cm
+        m = E[1:-1] > 1e4
+        rel = np.diff(G)[1:][m] / G[1:-1][m]
+        assert rel.max() < 0.01
+        # Hurkx integral a int_0^1 exp(a u - K u^1.5) du vs the closed form (u* < 1)
+        from etna.core.dark_current import tat_constants
+
+        c = tat_constants(300.0, 1.0, 3.26, SiC4H_Parameters())
+        a = SiC4H_Parameters().E_t / (8.617e-5 * 300.0)
+        u = np.linspace(0.0, 1.0, 400001)
+        # measured (300 K): closed form / integral = 1.30 at 5e4, 1.32 at 1e5, 1.26 at
+        # 1.7e5, 1.13 at 3e5, 1.04 at 5e5 V/cm (saddle point improves as Gamma grows)
+        for F, ratio in ((5e4, 1.30), (1e5, 1.32), (1.7e5, 1.26), (3e5, 1.13), (5e5, 1.04)):
+            K = c["Kt_numerator"] / (c["Kt_denom_const"] * F)
+            exact = a * np.trapezoid(np.exp(a * u - K * u**1.5), u)
+            assert hurkx_gamma(F, c["F_gamma"]) / exact == pytest.approx(ratio, abs=0.01)
+        # sign of the field does not matter
+        assert hurkx_gamma(-2e5, 3.688e5) == hurkx_gamma(2e5, 3.688e5)
+
+    def test_validity_limit(self):
+        from etna.core.dark_current import tat_constants
+
+        params = SiC4H_Parameters()
+        c = tat_constants(300.0, 1.0, 3.26, params)
+        # u* = (2 E_t / (3 kT Kt))^2 = 1 at E_hurkx_max
+        kT_eV = 8.617e-5 * 300.0
+        Kt = c["Kt_numerator"] / (c["Kt_denom_const"] * c["E_hurkx_max"])
+        assert (2 * params.E_t / (3 * kT_eV * Kt)) ** 2 == pytest.approx(1.0, rel=1e-12)
+        assert 1e6 < c["E_hurkx_max"] < 1.2e6
+
+    def test_equilibrium_gamma_small(self, tat_device_equilibrium):
+        """At 0 V the built-in field gives Gamma of order 1 at the junction and ~0 in
+        the neutral regions."""
         dev = tat_device_equilibrium
-        device = dev["device_name"]
-        region = dev["region_name"]
-
         Gamma = np.array(
-            devsim.get_node_model_values(device=device, region=region, name="Gamma_n")
+            devsim.get_node_model_values(
+                device=dev["device_name"], region=dev["region_name"], name="Gamma_n"
+            )
         )
-        assert np.all(Gamma == pytest.approx(1.0, abs=0.01)), (
-            f"Gamma at equilibrium should be ~1.0, got range "
-            f"[{Gamma.min():.4f}, {Gamma.max():.4f}]"
-        )
+        assert Gamma.min() < 0.05
+        assert Gamma.max() < 5.0
 
-    def test_high_field_gamma_remains_unity_at_moderate_bias(self, tat_device_reverse):
-        """At -30V, Gamma stays ~1 because SiC fields are below MV/cm.
+    def test_reverse_bias_gamma_is_active(self, tat_device_reverse):
+        """At -30 V the depletion field (~1e5 V/cm) gives Gamma ~ 1: the enhancement
+        is NOT inert any more (it was identically 1 before 2026-10-20)."""
+        from etna.core.dark_current import hurkx_gamma
 
-        For Z1/2 (E_t=0.65 eV, m_t=0.25 m0), Kt < 4 requires E > 4.5 MV/cm.
-        At -30V the max field is ~100 kV/cm, giving Kt >> 4 so Gamma = 1.
-        This is expected physics: field enhancement is negligible at these
-        voltages, and the effective generation term dominates dark current.
-        """
         dev = tat_device_reverse
-        device = dev["device_name"]
-        region = dev["region_name"]
-
+        device, region = dev["device_name"], dev["region_name"]
         Gamma = np.array(
             devsim.get_node_model_values(device=device, region=region, name="Gamma_n")
         )
-        # At moderate reverse bias, Gamma stays ~1 for SiC
-        assert np.all(
-            Gamma == pytest.approx(1.0, abs=0.01)
-        ), f"Gamma at -30V should be ~1.0 for SiC fields, got max {Gamma.max():.4f}"
-
-    def test_gamma_calculation_at_extreme_field(self):
-        """Verify Gamma formula produces enhancement at very high fields."""
-        # Test the Schenk approximation directly
-        # For Kt = 1 (very high field): Gamma = sqrt(pi)/(2*1) * exp(1/4) = 1.14
-        # For Kt = 0.5: Gamma = sqrt(pi)/(2*0.5) * exp(1) = 4.81
-        from etna.core.dark_current import _compute_gamma_factors
-
-        dev = create_dark_current_device(device_name=_unique_name("gamma_ext"))
-        device = dev["device_name"]
-        region = dev["region_name"]
-
-        # Set Kt_TAT to test values manually
-        n_nodes = len(
-            devsim.get_node_model_values(device=device, region=region, name="x")
+        E = np.array(
+            devsim.get_node_model_values(device=device, region=region, name="E_field_node")
         )
-        # Set a range of Kt values: some high field (Kt < 4), some low field
-        Kt_test = np.full(n_nodes, 1.0)  # Kt=1 everywhere
-        devsim.node_model(device=device, region=region, name="Kt_TAT", equation="1.0")
-        devsim.set_node_values(
-            device=device, region=region, name="Kt_TAT", values=Kt_test.tolist()
+        F_g = devsim.get_parameter(device=device, region=region, name="F_gamma_TAT")
+        np.testing.assert_allclose(Gamma, hurkx_gamma(E, F_g), rtol=1e-14)
+        assert Gamma.max() > 1.0
+        Gp = np.array(
+            devsim.get_node_model_values(device=device, region=region, name="Gamma_p")
         )
-
-        _compute_gamma_factors(device, region)
-
-        Gamma = np.array(
-            devsim.get_node_model_values(device=device, region=region, name="Gamma_n")
-        )
-        # Gamma at Kt=1: sqrt(pi)/(2) * exp(0.25) = 0.886 * 1.284 = 1.137
-        expected = (np.sqrt(np.pi) / 2.0) * np.exp(0.25)
-        assert Gamma[0] == pytest.approx(
-            expected, rel=0.01
-        ), f"Gamma at Kt=1 should be {expected:.3f}, got {Gamma[0]:.3f}"
+        np.testing.assert_array_equal(Gamma, Gp)
 
 
 # ---------------------------------------------------------------------------
@@ -534,7 +560,7 @@ class TestDarkCurrentPostAnneal:
     def test_dark_current_post_anneal_returns_dict(self):
         """dark_current_post_anneal should return dict with expected keys."""
         result = dark_current_post_anneal(
-            fluence=1e13,
+            fluence=1e13 * _KS,
             T_anneal=873.15,  # 600C
             t_anneal=3600.0,  # 1 hour
             V_bias=-30.0,
@@ -566,7 +592,7 @@ class TestDarkCurrentPostAnneal:
         component (~1e-14 A) is the physically relevant indicator of
         annealing recovery for dark current.
         """
-        fluence = 1e13
+        fluence = 1e13 * _KS
 
         # Damaged dark current (no annealing)
         damaged_result = dark_current_vs_fluence(

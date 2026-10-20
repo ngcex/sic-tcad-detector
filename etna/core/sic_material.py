@@ -72,9 +72,10 @@ class SiC4H_Parameters:
     # cm^-3/s, eff. generation rate. CALIBRATION INPUT, not a prediction: fitted so that
     # the model leakage at 300 K, -60 V, 4 mm2 equals the experimental UPPER BOUND
     # "< 18 pA up to -60 V" (conservative: bound used as equality). The bias
-    # shape is the f_depl = min(E/3.5e4, 1) heuristic (dark_current.py), not saturation
-    # past full depletion; "TAT" is an effective field-weighted generation (Hurkx Gamma
-    # = 1 below ~4.5 MV/cm); the SRH/TAT/SRV split is not physically meaningful; and
+    # shape is the f_depl = min(E/3.5e4, 1) heuristic (dark_current.py) times the Hurkx
+    # (1 + Gamma(E)) enhancement, not saturation past full depletion; "TAT" is an
+    # effective field-weighted generation; the SRH/TAT/SRV split is not physically
+    # meaningful; and
     # N_t(T) ∝ n_i(T) is an assumption (dark_current.nt_temperature_scale).
     # (The earlier 2.2e13 was fitted on a path with a stale TAT field, B-01; leakage is
     # linear in N_t, 2.2e13 gave 141 pA on the corrected path.)
@@ -87,7 +88,11 @@ class SiC4H_Parameters:
     # profile (graded n-/n+ transition; DEFAULT_STACK in etna/core/device.py): the old value
     # gives 17.724 pA there, the linear rescale 18.000 pA (lab/buffer_profile/bench/
     # nt_refit.py). 2.805336e12 stays with the previous default (NPLUS_CALIBRATION).
-    N_t: float = 2.849024e12
+    # 2026-10-20: 2.849024e12 -> 1.355575e12 with the Hurkx field enhancement (1 + Gamma)
+    # (audit-v7 B-08; Gamma was inert before): the old value gives 37.831 pA at -60 V,
+    # the refit 18.000000 pA (devsim, 31-point 0..-60 V sweep). The bias shape is now
+    # f_depl x (1 + Gamma(E)).
+    N_t: float = 1.355575e12
     S_n: float = 1e3  # cm/s, electron surface recombination velocity
     S_p: float = 1e3  # cm/s, hole surface recombination velocity
 

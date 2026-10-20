@@ -3,19 +3,22 @@ FLASH CCE (SRH + Auger) on the numba 1D engine.
 
 Same equations as the devsim path, term by term (no reformulation):
 
-* dark current (etna.core.dark_current.setup_tat_model): SRH with the Z1/2 trap level,
-  U_SRH = (n p - n_i^2) / (tau_p (n + n1_tat Gamma) + tau_n (p + p1_tat Gamma)), and the
-  effective generation G = G0 Gamma min(E_node / E_ref, 1) (times step(epi_end - x) with
-  an n+ layer), G0 = N_t n_i(T)/n_i(300). E_node is the 1D node field of
+* dark current (etna.core.dark_current.setup_tat_model): SRH with the Z1/2 trap level
+  and the Hurkx lifetimes tau / (1 + Gamma),
+  U_SRH = (1 + Gamma) (n p - n_i^2) / (tau_p (n + n1_tat) + tau_n (p + p1_tat)), and the
+  effective generation G = G0 (1 + Gamma) min(E_node / E_ref, 1) (times step(epi_end - x)
+  with an n+ layer), G0 = N_t n_i(T)/n_i(300), Gamma = hurkx_gamma(E_node, F_gamma). E_node is the 1D node field of
   ``_compute_node_efield`` (end nodes: their edge; interior: mean of the two adjacent
   |E|; floored at 1e3 V/cm). The devsim path iterates the frozen field to its fixed point
   E_node = E(state) (``_resolve_self_consistent``); here G is re-evaluated from the
   present potential at every Gummel iteration, which converges to that same fixed point.
   Extraction as ``extract_dark_current_components``: J_total in the balanced form,
   J_SRH / J_TAT as trapezoid integrals over all nodes, J_SRV at the cathode node.
-  The Hurkx Gamma is 1 below ~4.5 MV/cm (above the breakdown field); a device whose
-  field would make Gamma != 1 is reported as not converged (the caller falls back to
-  devsim), so the engine never runs a regime it was not cross-checked in.
+  Both (1 + Gamma) factors are re-evaluated from the present potential at every Gummel
+  iteration (ContinuityBatch.solve G_fn / srh_scale_fn). A device whose field exceeds
+  the Hurkx closed-form validity limit E_hurkx_max is reported as not converged
+  (``hurkx_invalid``; the caller falls back to devsim, which logs the extrapolation), so
+  the engine never runs a regime it was not cross-checked in.
 * FLASH (etna.core.flash_recombination.cce_vs_dose_rate): midgap SRH plus Auger
   (C_n n + C_p p)(n p - n_i^2) with a proton generation profile; CCE = |J| / (q trapz G).
 
@@ -57,7 +60,7 @@ class DarkResult:
     J_TAT: np.ndarray  # (K, B)
     J_SRV: np.ndarray  # (K, B)
     converged: np.ndarray  # (K, B) bool, cumulative along the sweep
-    gamma_active: np.ndarray  # (K, B) bool: Gamma != 1 somewhere (outside the engine)
+    hurkx_invalid: np.ndarray  # (K, B) bool: |E| > E_hurkx_max somewhere (outside the engine)
 
 
 def _col(a, B):
@@ -67,30 +70,33 @@ def _col(a, B):
 class TATGeneration:
     """G(psi) of the TAT model for a batch on mesh x: ``__call__(psi_T)`` -> (N, B)."""
 
-    def __init__(self, x, G0, Kt_numerator, Kt_denom_const, E_ref, gen_mask):
-        from etna.core.dark_current import gamma_from_kt, node_field_1d
+    def __init__(self, x, G0, F_gamma, E_hurkx_max, E_ref, gen_mask):
+        from etna.core.dark_current import hurkx_gamma, node_field_1d
 
         self._node_field = node_field_1d
-        self._gamma = gamma_from_kt
+        self._gamma = hurkx_gamma
         self.h = np.diff(np.asarray(x, dtype=float))[:, None]  # (N-1, 1)
         self.G0 = np.asarray(G0, dtype=float)[None, :]  # (1, B)
-        self.Kt_num = np.asarray(Kt_numerator, dtype=float)[None, :]
-        self.Kt_den = np.asarray(Kt_denom_const, dtype=float)[None, :]
+        self.F_gamma = np.asarray(F_gamma, dtype=float)[None, :]
+        self.E_max = np.asarray(E_hurkx_max, dtype=float)[None, :]
         self.E_ref = float(E_ref)
         self.mask = np.asarray(gen_mask, dtype=float)[:, None]  # (N, 1)
-        self.gamma_active = None
+        self.hurkx_invalid = None
 
     def field(self, psi_T):
         """Node field (N, B), V/cm, as _compute_node_efield (1D)."""
         abs_E = np.abs((psi_T[:-1] - psi_T[1:]) / self.h)  # (N-1, B)
         return self._node_field(abs_E.T).T
 
+    def enhancement(self, psi_T):
+        """Hurkx (1 + Gamma) at the nodes (N, B): the SRH scale of ContinuityBatch."""
+        return 1.0 + self._gamma(self.field(psi_T), self.F_gamma)
+
     def __call__(self, psi_T):
         E = self.field(psi_T)
-        Kt = self.Kt_num / (self.Kt_den * E)
-        Gamma = self._gamma(Kt)
-        self.gamma_active = np.any(Gamma != 1.0, axis=0)
-        G = self.G0 * Gamma * np.minimum(E / self.E_ref, 1.0)
+        Gamma = self._gamma(E, self.F_gamma)
+        self.hurkx_invalid = np.any(E > self.E_max, axis=0)
+        G = self.G0 * (1.0 + Gamma) * np.minimum(E / self.E_ref, 1.0)
         return G * self.mask
 
 
@@ -109,8 +115,8 @@ def dark_sweep(
     n1,
     p1,
     G0,
-    Kt_numerator,
-    Kt_denom_const,
+    F_gamma,
+    E_hurkx_max,
     E_ref,
     epi_end=None,
     S_n=0.0,
@@ -125,7 +131,8 @@ def dark_sweep(
 
     ``donors`` / ``acceptors`` (B, N): the doping the devsim device carries (acceptors
     ionized, as devsim's Acceptors model); ``T``, ``N_A`` (total, for the local mobility),
-    ``n_i``, ``tau_n``, ``tau_p``, ``n1``, ``p1``, ``G0``, ``Kt_*``: scalar or (B,)
+    ``n_i``, ``tau_n``, ``tau_p``, ``n1``, ``p1``, ``G0``, ``F_gamma``, ``E_hurkx_max``:
+    scalar or (B,)
     (``etna.core.dark_current.tat_constants``). ``epi_end`` (n+ layer present): the
     effective generation is confined to x <= epi_end (step(epi_end - x), step(0) = 1).
     ``S_n``/``S_p`` (cm/s): the post-solve SRV diagnostic at the cathode (0 = off).
@@ -146,7 +153,7 @@ def dark_sweep(
     cb = ContinuityBatch(pb, mu_n, mu_p, _col(tau_n, B), _col(tau_p, B), n1=n1, p1=p1)
     mask = np.ones(N) if epi_end is None else (epi_end - x >= 0).astype(float)
     gen = TATGeneration(
-        x, _col(G0, B), _col(Kt_numerator, B), _col(Kt_denom_const, B), E_ref, mask
+        x, _col(G0, B), _col(F_gamma, B), _col(E_hurkx_max, B), E_ref, mask
     )
     S_n, S_p = _col(S_n, B), _col(S_p, B)
     ramp = _Ramp(pb, tol, max_step_V)
@@ -165,15 +172,19 @@ def dark_sweep(
             max_iter=max_iter,
             poisson_tol=tol,
             G_fn=gen,
+            srh_scale_fn=gen.enhancement,
         )
         n, p, G = tr.n, tr.p, tr.G
-        # extract_dark_current_components: U_SRH_only (Z1/2 level, no Gamma) and the
-        # effective generation, trapezoid over all nodes, contact-current sign
+        # extract_dark_current_components: U_SRH_only (Z1/2 level, no Gamma) and
+        # J_TAT = integral(U_TAT - U_SRH_only), U_TAT = (1 + Gamma) U_SRH_only - G (the
+        # Hurkx share of the SRH term is booked as TAT), trapezoid over all nodes,
+        # contact-current sign
         U_srh = (n * p - ni2[:, None]) / (
             tau_p_c * (n + n1[:, None]) + tau_n_c * (p + p1[:, None])
         )
+        gamma = gen.enhancement(tr.psi.T).T - 1.0
         out["J_SRH"].append(-Q * np.trapezoid(U_srh, x, axis=1))
-        out["J_TAT"].append(-Q * np.trapezoid(-G, x, axis=1))
+        out["J_TAT"].append(-Q * np.trapezoid(gamma * U_srh - G, x, axis=1))
         n_c, p_c = n[:, -1], p[:, -1]
         with np.errstate(divide="ignore", invalid="ignore"):
             srv = -Q * (n_c * p_c - ni2) / ((n_c + n_i) / S_p + (p_c + n_i) / S_n)
@@ -182,7 +193,7 @@ def dark_sweep(
         # leaving at the cathode; extract_steady_state_current's sign is the opposite
         # (positive under reverse bias): measured, not assumed (identical magnitudes)
         out["J_total"].append(-tr.J_cathode)
-        g_act = np.asarray(gen.gamma_active, dtype=bool)
+        g_act = np.asarray(gen.hurkx_invalid, dtype=bool)
         ok = ok & ramp.converged & tr.converged & ~g_act & np.isfinite(tr.J_cathode)
         conv.append(ok.copy())
         gam.append(g_act)
@@ -190,7 +201,7 @@ def dark_sweep(
         voltages,
         *(np.array(out[k]) for k in _KEYS),
         converged=np.array(conv),
-        gamma_active=np.array(gam),
+        hurkx_invalid=np.array(gam),
     )
 
 

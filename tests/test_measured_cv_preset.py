@@ -95,7 +95,7 @@ def test_preset_record_and_validation():
         1.0,
         1e19,
     )
-    assert c.N_t == M["N_t"] == 2.849024e12 and c.E_t == 0.67
+    assert c.N_t == M["N_t"] == 1.355575e12 and c.E_t == 0.67
     assert measured_cv_config(T=310.0).T == 310.0
     assert etna.MEASURED_CV_PRESET["buffer_end_doping"] == M["buffer_end_doping"]
     with pytest.raises(ValueError, match="together"):

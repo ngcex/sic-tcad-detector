@@ -30,7 +30,11 @@ from etna.core.dark_current import (
     sensitivity_sweep,
 )
 from etna.core.devsim_reset import delete_device_and_mesh, reset_devsim_fully
+from etna.core.radiation_damage import get_hardness_factor
 from etna.core.temperature_sweep import sweep_iv_vs_temperature
+
+# SR-NIEL kappa since 2026-10-20: earlier fluence pins x 0.35 / kappa(62) = same neq fluence
+KS = 0.35 / get_hardness_factor(62.0)
 
 GATE = 1e-9
 
@@ -160,7 +164,7 @@ def test_fluence_path_matches_devsim(cfg_fn, V_bias):
     """Damaged doping and lifetimes (donor removal + lifetime degradation)."""
     kw = device_kwargs(cfg_fn())
     epi = kw.pop("epi_thickness_cm")
-    fl = np.array([0.0, 1e11, 1e12, 5e12])
+    fl = KS * np.array([0.0, 1e11, 1e12, 5e12])
     args = dict(V_bias=V_bias, epi_thickness_cm=epi, device_kwargs=kw)
     e = dark_current_vs_fluence(fl, solver="engine", **args)
     d = dark_current_vs_fluence(fl, solver="devsim", **args)

@@ -2,11 +2,16 @@
 
 Implements, in the DD equations:
 1. Modified SRH recombination with Z1/2 deep-level n1/p1 (not midgap)
-2. An effective, field-weighted generation G_eff = N_t * Gamma * f_depl, with
+2. An effective, field-weighted generation G_eff = N_t * (1 + Gamma) * f_depl, with
    f_depl = min(E / 3.5e4 V/cm, 1). This is what is called "TAT" here.
-3. A Hurkx/Schenk field-enhancement factor Gamma -- INACTIVE at detector fields:
-   Gamma = 1 unless Kt < 4, i.e. E > ~4.5 MV/cm, far above any field in these
-   devices. Gamma does not shape the bias dependence.
+3. The Hurkx (1992) trap-assisted-tunnelling field enhancement Gamma (since
+   2026-10-20, audit-v7 B-08): lifetimes tau -> tau / (1 + Gamma), i.e. the Z1/2 SRH
+   term and the effective generation are both multiplied by (1 + Gamma), with the
+   low-field closed form Gamma = 2 sqrt(3 pi) (F / F_Gamma) exp[(F / F_Gamma)^2],
+   F_Gamma = sqrt(24 m_t (kT)^3) / (q hbar) (3.69e5 V/cm at 300 K, m_t = 0.25).
+   Gamma ~ 1.8 at 1e5 V/cm and 3.5 at the 1.7e5 V/cm peak of the default device at
+   300 K, so it now shapes the bias dependence together with f_depl. (Before
+   2026-10-20 a Schenk-like branch in Kt gave Gamma = 1 below ~4.5 MV/cm: inert.)
 4. Surface recombination velocity at contacts (post-solve diagnostic
    decomposition only, not a solver boundary condition — see
    setup_surface_recombination() docstring)
@@ -14,15 +19,18 @@ Implements, in the DD equations:
 What the numbers mean (read before quoting any leakage value):
     Standard midgap SRH in 4H-SiC gives ~1e-49 A because n_i ~ 5e-9 cm^-3, so
     the real leakage (perimeter, surface states, defects) is not predicted here.
-    N_t (SiC4H_Parameters.N_t, 2.849024e12 cm^-3 s^-1 on the default measured-C-V
-    stack) is FITTED so that the model equals the experimental UPPER BOUND
+    N_t (SiC4H_Parameters.N_t on the default measured-C-V stack, refitted with the
+    Hurkx Gamma on 2026-10-20) is FITTED so that the model equals the experimental
+    UPPER BOUND
     "< 18 pA up to -60 V" at -60 V, 300 K on the 4 mm2 dosimeter
     (AREA_DOSIMETER_CM2 = 0.04 cm2): I = 18.000 pA there by construction. A
     calibration input, not a prediction or a validation. Currents scale with the
     area passed in: e.g. a 0.05 cm2 area gives 1.25 x the 4 mm2 value (22.5 pA at
     -60 V), which is not a violation of the bound. The bias shape comes
     from the f_depl = min(E/3.5e4, 1) heuristic (current rises until E > E_ref
-    everywhere in the generating region, not "saturation at full depletion").
+    everywhere in the generating region, not "saturation at full depletion") and,
+    since 2026-10-20, from the Hurkx field enhancement (1 + Gamma(E)) (m_t = 0.25 m0
+    is an assumed tunnelling mass, not fitted).
     The SRH / TAT / SRV split is a bookkeeping of model terms and is not
     physically meaningful. The temperature dependence N_t(T) = N_t * n_i(T) /
     n_i(300) is an ASSUMPTION (E_a = E_g/2), not fitted to data; it gives ~x15
@@ -31,8 +39,8 @@ What the numbers mean (read before quoting any leakage value):
 All units CGS (cm, cm^-3, A/cm^2, V) per devsim convention.
 
 References:
-    - Hurkx et al., IEEE TED 39(2), 1992
-    - Schenk, SSE 35(11), 1992 (Gamma approximation)
+    - Hurkx, Klaassen, Knuvers, IEEE TED 39(2), 331, 1992 (trap-assisted tunnelling,
+      Gamma closed form)
     - Kimoto & Cooper, "Fundamentals of Silicon Carbide Technology"
 """
 
@@ -101,8 +109,10 @@ def tat_constants(T, n_i, E_g, params, E_t=None, m_t=None, N_t=None):
     devsim model and the batched engine).
 
     Returns a dict: ``n1_tat`` / ``p1_tat`` (Z1/2 SRH trap densities, cm^-3), ``G0``
-    (= N_t * nt_temperature_scale(T), cm^-3 s^-1), ``T_scale``, ``Kt_numerator`` /
-    ``Kt_denom_const`` (Kt = Kt_numerator / (Kt_denom_const * E_node)), ``E_ref`` and the
+    (= N_t * nt_temperature_scale(T), cm^-3 s^-1), ``T_scale``, ``F_gamma`` (Hurkx
+    field, V/cm), ``E_hurkx_max`` (V/cm, validity limit of the closed form, see
+    hurkx_gamma), ``Kt_numerator`` / ``Kt_denom_const`` (Kt = Kt_numerator /
+    (Kt_denom_const * E_node), the Hurkx K_n of the trap depth E_t), ``E_ref`` and the
     resolved ``E_t``, ``m_t``, ``N_t``. ``n_i`` / ``E_g`` are the device's (cm^-3, eV).
     """
     E_t = params.E_t if E_t is None else E_t
@@ -113,6 +123,9 @@ def tat_constants(T, n_i, E_g, params, E_t=None, m_t=None, N_t=None):
     E_t_J = E_t * _Q_SI
     E_t_from_midgap = E_g / 2.0 - E_t
     T_scale = nt_temperature_scale(T, params)
+    Kt_numerator = (4.0 / 3.0) * np.sqrt(2.0 * m_tunnel_kg) * E_t_J**1.5
+    Kt_denom_const = _Q_SI * _HBAR_SI * 100.0
+    kT_J = kT_eV * _Q_SI
     return {
         "E_t": E_t,
         "m_t": m_t,
@@ -121,8 +134,13 @@ def tat_constants(T, n_i, E_g, params, E_t=None, m_t=None, N_t=None):
         "p1_tat": n_i * np.exp(-E_t_from_midgap / kT_eV),
         "T_scale": T_scale,
         "G0": N_t * T_scale,
-        "Kt_numerator": (4.0 / 3.0) * np.sqrt(2.0 * m_tunnel_kg) * E_t_J**1.5,
-        "Kt_denom_const": _Q_SI * _HBAR_SI * 100.0,
+        "Kt_numerator": Kt_numerator,
+        "Kt_denom_const": Kt_denom_const,
+        # Hurkx F_Gamma = sqrt(24 m_t (kT)^3) / (q hbar), V/m -> V/cm
+        "F_gamma": np.sqrt(24.0 * m_tunnel_kg * kT_J**3) / (_Q_SI * _HBAR_SI) / 100.0,
+        # closed form valid while the integrand maximum u* = (2 E_t / (3 kT K_n))^2 <= 1,
+        # K_n = Kt: E <= 3 kT Kt_numerator / (2 E_t Kt_denom_const)
+        "E_hurkx_max": 3.0 * kT_J * Kt_numerator / (2.0 * E_t_J * Kt_denom_const),
         "E_ref": E_REF_TAT,
     }
 
@@ -139,18 +157,34 @@ def node_field_1d(abs_E_edge):
     return np.maximum(E_node, E_NODE_FLOOR)
 
 
-def gamma_from_kt(Kt):
-    """Hurkx/Schenk field-enhancement factor (see _compute_gamma_factors): 1 for
-    Kt >= 4, sqrt(pi)/(2 Kt) exp(1/(4 Kt^2)) below (Kt clamped at 0.05)."""
-    Kt = np.asarray(Kt, dtype=float)
-    Gamma = np.ones_like(Kt)
-    high_field = Kt < 4.0
-    if np.any(high_field):
-        Kt_hf = np.maximum(Kt[high_field], 0.05)
-        Gamma[high_field] = (np.sqrt(np.pi) / (2.0 * Kt_hf)) * np.exp(
-            1.0 / (4.0 * Kt_hf**2)
-        )
-    return Gamma
+# exp() argument cap of hurkx_gamma (overflow guard; exp(700) ~ 1e304). Reaching it is
+# far outside the closed form's validity (E_hurkx_max), which the callers log / flag.
+_HURKX_EXP_CAP = 700.0
+
+
+def hurkx_gamma(E, F_gamma):
+    """Hurkx (1992) trap-assisted-tunnelling field-enhancement factor, low-field
+    closed form: Gamma = 2 sqrt(3 pi) (|E| / F_gamma) exp[(E / F_gamma)^2].
+
+    It is the saddle-point (Laplace) evaluation of Hurkx's integral
+    Gamma = a int_0^1 exp(a u - K u^1.5) du, a = Delta E / kT, K = (4/3) sqrt(2 m_t)
+    Delta E^1.5 / (q hbar F): maximum at u* = (2a / 3K)^2, exponent 4 a^3 / (27 K^2) =
+    (F / F_gamma)^2, Gaussian width giving the prefactor sqrt(12 pi) F / F_gamma; it is
+    independent of Delta E while u* <= 1 (the validity limit below). At the fields of
+    these devices the saddle point is only approximate: against the integral with
+    Delta E = E_t (0.67 eV) the closed form is 1.30 / 1.32 / 1.26 / 1.13 x higher at
+    5e4 / 1e5 / 1.7e5 / 3e5 V/cm (300 K; tests/test_dark_current.py). The closed form is
+    used as the Hurkx model; the absolute scale is absorbed by the N_t fit, the bias
+    shape carries that ~30 % approximation.
+
+    Enters as tau -> tau / (1 + Gamma) (see setup_tat_model). Continuous, >= 0,
+    monotonically increasing, Gamma -> 0 as E -> 0. ``E`` and ``F_gamma`` in V/cm
+    (``tat_constants(...)["F_gamma"]``, 3.69e5 V/cm at 300 K for m_t = 0.25 m0). The
+    closed form holds while E <= ``tat_constants(...)["E_hurkx_max"]`` (~1.1e6 V/cm at
+    300 K, ~5e5 V/cm at 150 K); the exponent is capped at 700 (overflow guard).
+    """
+    f = np.abs(np.asarray(E, dtype=float)) / F_gamma
+    return 2.0 * np.sqrt(3.0 * np.pi) * f * np.exp(np.minimum(f * f, _HURKX_EXP_CAP))
 
 
 def nt_temperature_scale(T, params=None):
@@ -202,14 +236,15 @@ def setup_tat_model(device_info, E_t=None, m_t=None, N_t=None):
     Replaces the existing SRH-only ElectronGeneration/HoleGeneration with
     a combined model:
     1. SRH recombination with Z1/2 trap-level n1/p1
-    2. Effective generation G_eff = N_t * Gamma * min(E/E_ref, 1), E_ref = 3.5e4 V/cm
+    2. Effective generation G_eff = N_t * (1 + Gamma) * min(E/E_ref, 1),
+       E_ref = 3.5e4 V/cm
+    3. Hurkx field enhancement: both terms use tau / (1 + Gamma), Gamma = hurkx_gamma(E)
 
     The N_t parameter (cm^-3 s^-1) is the calibration knob: an effective
     volumetric generation rate lumping all real leakage mechanisms (perimeter,
     surface states, defects). "TAT" here means this field-weighted effective
-    generation; the Hurkx Gamma is 1 below ~4.5 MV/cm, i.e. inactive at the
-    fields of these devices, so the bias dependence is the min(E/E_ref, 1)
-    heuristic.
+    generation with the Hurkx (1 + Gamma) trap-assisted-tunnelling enhancement; the
+    bias dependence is min(E/E_ref, 1) (heuristic) times (1 + Gamma(E)).
 
     Parameters
     ----------
@@ -245,10 +280,13 @@ def setup_tat_model(device_info, E_t=None, m_t=None, N_t=None):
     # --- Step 1: Node-averaged electric field ---
     _compute_node_efield(device, region)
 
-    # --- Step 2: Kt and Gamma from Hurkx model ---
-    Kt_expr = f"{c['Kt_numerator']} / ({c['Kt_denom_const']} * E_field_node)"
-    CreateNodeModel(device, region, "Kt_TAT", Kt_expr)
-
+    # --- Step 2: Hurkx Gamma from the node field (frozen node values) ---
+    devsim.set_parameter(
+        device=device, region=region, name="F_gamma_TAT", value=c["F_gamma"]
+    )
+    devsim.set_parameter(
+        device=device, region=region, name="E_hurkx_max_TAT", value=c["E_hurkx_max"]
+    )
     _compute_gamma_factors(device, region)
 
     # --- Step 3: Trap-level n1, p1 for Z1/2 ---
@@ -266,7 +304,7 @@ def setup_tat_model(device_info, E_t=None, m_t=None, N_t=None):
     #   where n1, p1 are for Z1/2 trap (not midgap n_i)
     #
     # Part B: Effective generation (always negative = generation)
-    #   G_eff = -N_t * Gamma * f_depl
+    #   G_eff = -N_t * (1 + Gamma) * f_depl
     #   where f_depl identifies the depletion region using E-field:
     #   f_depl = E_field_node / E_ref, clamped to [0, 1]
     #   This gives ~1 in depletion, ~0 in quasi-neutral regions.
@@ -274,8 +312,8 @@ def setup_tat_model(device_info, E_t=None, m_t=None, N_t=None):
     # The contact current from devsim captures the net effect of both.
     #
     # Reference field E_REF_TAT (heuristic, not physics): built-in field at junction is
-    # ~70 kV/cm; use half as reference. f_depl sets the whole bias dependence of the
-    # leakage (Gamma = 1 at these fields).
+    # ~70 kV/cm; use half as reference. f_depl and the Hurkx (1 + Gamma) set the bias
+    # dependence of the leakage.
     E_ref = c["E_ref"]
 
     # AUDIT C8: temperature-dependent effective generation, ASSUMED to follow
@@ -296,15 +334,16 @@ def setup_tat_model(device_info, E_t=None, m_t=None, N_t=None):
     )
     CreateNodeModel(device, region, "U_SRH_only", U_SRH_tat)
 
-    # Full generation model: SRH_trap + effective generation
-    # f_depl = min(E_field_node / E_ref, 1.0) — larger in high-field depletion region
-    # G_eff = -N_t * Gamma_n * f_depl (negative = net generation)
-    # U_TAT = U_SRH_tat + G_eff
+    # Full generation model (Hurkx 1992): tau_n,p -> tau_n,p / (1 + Gamma_n,p) in the
+    # Z1/2 SRH term, and the effective generation (an SRH-type depletion generation
+    # n_i / tau_g in spirit) enhanced by the same (1 + Gamma); Gamma_n = Gamma_p (one
+    # tunnelling mass). f_depl = min(E_field_node / E_ref, 1.0).
+    # U_TAT = U_SRH_tat(tau / (1 + Gamma)) - G0 (1 + Gamma) f_depl
     U_TAT = (
         f"(Electrons * Holes - {ni2}) / "
-        f"(taup * (Electrons + n1_tat * Gamma_n) + "
-        f"taun * (Holes + p1_tat * Gamma_p)) - "
-        f"G0_TAT * Gamma_n * min(E_field_node / E_ref_TAT, 1.0)"
+        f"(taup / (1 + Gamma_p) * (Electrons + n1_tat) + "
+        f"taun / (1 + Gamma_n) * (Holes + p1_tat)) - "
+        f"G0_TAT * (1 + Gamma_n) * min(E_field_node / E_ref_TAT, 1.0)"
     )
     if device_info.get("nplus_thickness_cm") is not None:
         # The effective generation is a fitted proxy for the epi leakage; its f_depl floor
@@ -387,34 +426,39 @@ def _compute_node_efield(device, region):
 
 
 def _compute_gamma_factors(device, region):
-    """Compute Gamma_n and Gamma_p field-enhancement factors numerically.
-
-    Uses the Schenk approximation:
-        Kt < 4: Gamma = sqrt(pi)/(2*Kt) * exp(1/(4*Kt^2))
-        Kt >= 4: Gamma = 1 (low field, no enhancement)
-
-    For simplicity, Gamma_n = Gamma_p (same trap, symmetric tunneling).
-
-    Known defect (audit-v7 B-08, open, physics owner): the Kt < 4 branch is
-    discontinuous at Kt = 4 (Gamma drops from 1 to 0.226) and is below 1 for about
-    1.1 < Kt < 4, i.e. it would SUPPRESS generation. It is unreachable here: Kt < 4
-    needs |E| > ~4.5 MV/cm, above the 4H-SiC breakdown field, so Gamma = 1 at every
-    reachable bias.
-    """
-    Kt = np.array(
-        devsim.get_node_model_values(device=device, region=region, name="Kt_TAT")
+    """Set the Hurkx field-enhancement node values Gamma_n = Gamma_p =
+    hurkx_gamma(E_field_node, F_gamma_TAT) (frozen node values, refreshed with the
+    field). Logs a warning once per device if the field exceeds the closed form's
+    validity limit E_hurkx_max_TAT (Gamma is still the closed form there)."""
+    E = np.array(
+        devsim.get_node_model_values(device=device, region=region, name="E_field_node")
     )
+    F_gamma = devsim.get_parameter(device=device, region=region, name="F_gamma_TAT")
+    E_max = devsim.get_parameter(device=device, region=region, name="E_hurkx_max_TAT")
+    Gamma = hurkx_gamma(E, F_gamma)
+    if E.max() > E_max and (device, region) not in _WARNED_HURKX:
+        _WARNED_HURKX.add((device, region))
+        logger.warning(
+            "dark current: |E| = %.3g V/cm exceeds the Hurkx closed-form validity "
+            "limit %.3g V/cm (Gamma = %.3g there); the TAT enhancement is "
+            "extrapolated",
+            E.max(),
+            E_max,
+            Gamma.max(),
+        )
 
-    Gamma = gamma_from_kt(Kt)
-
-    devsim.node_model(device=device, region=region, name="Gamma_n", equation="1.0")
+    devsim.node_model(device=device, region=region, name="Gamma_n", equation="0.0")
     devsim.set_node_values(
         device=device, region=region, name="Gamma_n", values=Gamma.tolist()
     )
-    devsim.node_model(device=device, region=region, name="Gamma_p", equation="1.0")
+    devsim.node_model(device=device, region=region, name="Gamma_p", equation="0.0")
     devsim.set_node_values(
         device=device, region=region, name="Gamma_p", values=Gamma.tolist()
     )
+
+
+# (device, region) pairs already warned about by _compute_gamma_factors
+_WARNED_HURKX: set = set()
 
 
 def _refresh_and_resolve(device, region):
@@ -1001,8 +1045,8 @@ def dark_current_engine(
         n1=col("n1_tat"),
         p1=col("p1_tat"),
         G0=col("G0"),
-        Kt_numerator=col("Kt_numerator"),
-        Kt_denom_const=col("Kt_denom_const"),
+        F_gamma=col("F_gamma"),
+        E_hurkx_max=col("E_hurkx_max"),
         E_ref=E_REF_TAT,
         epi_end=epi_ends.pop(),
         S_n=[i["params"].S_n if S_n is None else S_n for i in infos],
