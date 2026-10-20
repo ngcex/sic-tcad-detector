@@ -81,8 +81,8 @@ NOTES = {
     ),
     "temperature": "CCE vs T: model trend, not validated against a T measurement.",
     "cce_let": (
-        "Committed table (built with the device model of its build date, not the "
-        "current default); differs ~6e-6 from fresh builds, regeneration pending."
+        "Committed table: the JSON records geometry and bias, not the solver or device "
+        "model; it differs ~6e-6 from fresh builds (regeneration pending)."
     ),
     "microdosimetry": "Spectrum from the supplied MC events; depends only on them and the SV.",
 }
@@ -170,7 +170,7 @@ def figure_for(
             _cce_let(fig, obj, notes)
             g = obj.get("geometry", {})
             prov = provenance(
-                solver="devsim 2D transient (table)", source=obj.get("_source", "table")
+                solver="not recorded in the table (build_cce_let_table: devsim 2D transient)", source=obj.get("_source", "table")
             )
             notes.insert(
                 0,

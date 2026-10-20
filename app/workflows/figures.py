@@ -21,6 +21,7 @@ from __future__ import annotations
 import io
 import tempfile
 import zipfile
+from pathlib import Path
 
 import numpy as np
 import plotly.graph_objects as go
@@ -36,6 +37,7 @@ from app.components import results as R
 CACHE_KEY = "figures_cache"
 ORDER_KEY = "figures_last_run"
 ANIM_KEY = "figures_animation"
+BYTES_KEY = "figures_bytes"
 
 PRESETS = {
     "Sidebar configuration": None,
@@ -83,8 +85,8 @@ OBSERVABLES = {
         "CCE vs LET (committed single-particle table)",
         "any",
         False,
-        "Committed table, built with the device model of its build date; ~6e-6 off "
-        "fresh builds, regeneration pending.",
+        "Committed table: solver and device model are not recorded in the file; ~6e-6 "
+        "off fresh builds, regeneration pending.",
     ),
     "val_tilted": (
         "Validation: tilted-alpha shape vs Micro Fig. 4b (microdosimeter preset)",
@@ -103,9 +105,10 @@ OBSERVABLES = {
 }
 DEFAULT_1D = ("cv", "field", "cce", "dark")
 DEFAULT_2D = ("maps",)
-LET_TABLES = {
-    "100 um half-width": "data/cce_let_table_100um.json",
-    "300 um half-width": "data/cce_let_table_300um.json",
+_REPO = Path(__file__).resolve().parents[2]
+LET_TABLES = {  # resolved against the repo root: the app may be launched from anywhere
+    "100 um half-width": _REPO / "data" / "cce_let_table_100um.json",
+    "300 um half-width": _REPO / "data" / "cce_let_table_300um.json",
 }
 
 
@@ -289,9 +292,17 @@ def _plotly(obj, kind):
     return _generic_plotly(obj, kind)
 
 
-def _fig_bytes(obj, kind, fmt, dpi, size, ck) -> bytes:
-    """Publication figure bytes, cached per (result, kind, fmt, dpi, size)."""
-    cache = st.session_state.setdefault("figures_bytes", {})
+def _bytes_cache() -> dict:
+    """The session's figure-bytes cache, fetched at render time (script thread)."""
+    return st.session_state.setdefault(BYTES_KEY, {})
+
+
+def _fig_bytes(cache: dict, obj, kind, fmt, dpi, size, ck) -> bytes:
+    """Publication figure bytes, cached in ``cache`` per (result, kind, fmt, dpi, size).
+
+    Touches no ``st.*``: download callables run it when the file is requested, possibly
+    outside the script-run context, so the cache dict is passed in explicitly.
+    """
     key = (ck, kind, fmt, dpi, size)
     if key not in cache:
         cache[key] = etna.viz.export_figure(
@@ -311,13 +322,14 @@ def _csv(obj) -> "bytes | None":
         return None
 
 
-def _zip_all(entries, fmt, dpi, size) -> bytes:
+def _zip_all(cache: dict, entries, fmt, dpi, size) -> bytes:
+    """All figures (every kind) + data CSVs + verdicts as one zip; no ``st.*``."""
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
         for obs, ck, obj in entries:
             for kind in etna.viz.kinds_for(obj):
                 z.writestr(
-                    f"{obs}/{kind}.{fmt}", _fig_bytes(obj, kind, fmt, dpi, size, ck)
+                    f"{obs}/{kind}.{fmt}", _fig_bytes(cache, obj, kind, fmt, dpi, size, ck)
                 )
             data = _csv(obj)
             if data is not None:
@@ -341,6 +353,7 @@ def _show_one(obs, ck, obj, fmt, dpi, size) -> None:
             st.caption(f"Carrier maps: {obj.metadata['carrier_note']}")
         if obj.metadata.get("verdict"):
             st.warning(obj.metadata["verdict"])
+    cache = _bytes_cache()
     kinds = etna.viz.kinds_for(obj)
     kind = st.selectbox(
         "Figure", kinds, format_func=lambda k: etna.viz.KINDS[k], key=f"fig_kind_{obs}"
@@ -349,11 +362,11 @@ def _show_one(obs, ck, obj, fmt, dpi, size) -> None:
     if pfig is not None:
         st.plotly_chart(pfig, key=f"fig_plotly_{obs}_{kind}")
     if st.toggle("Publication preview", value=pfig is None, key=f"fig_prev_{obs}"):
-        st.image(_fig_bytes(obj, kind, "png", 150, size, ck))
+        st.image(_fig_bytes(cache, obj, kind, "png", 150, size, ck))
     c = st.columns(2)
     c[0].download_button(
         f"Figure ({fmt.upper()}, {dpi} dpi)",
-        data=lambda: _fig_bytes(obj, kind, fmt, dpi, size, ck),
+        data=lambda: _fig_bytes(cache, obj, kind, fmt, dpi, size, ck),
         file_name=f"etna_{obs}_{kind}.{fmt}",
         mime={"png": "image/png", "svg": "image/svg+xml", "pdf": "application/pdf"}[
             fmt
@@ -562,9 +575,10 @@ def render() -> None:
             )
         good = [e for e in entries if not isinstance(e[2], BaseException)]
         if good:
+            bcache = _bytes_cache()
             st.download_button(
                 f"Download all figures ({fmt.upper()}) + data CSVs (zip)",
-                data=lambda: _zip_all(good, fmt, dpi, size),
+                data=lambda: _zip_all(bcache, good, fmt, dpi, size),
                 file_name="etna_figures.zip",
                 mime="application/zip",
                 key="fig_zip",

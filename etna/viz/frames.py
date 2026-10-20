@@ -184,7 +184,7 @@ def render_frames(
     t0 = time.perf_counter()
     images = []
     with mpl.rc_context(S.RC):
-        fig = Figure(figsize=(size_px[0] / dpi, size_px[1] / dpi), dpi=dpi)
+        fig = Figure(figsize=(size_px[0] / dpi, size_px[1] / dpi), dpi=dpi, layout="none")
         canvas = FigureCanvasAgg(fig)
         for _ in gen(fig, data):
             canvas.draw()

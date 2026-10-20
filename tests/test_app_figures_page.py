@@ -186,39 +186,41 @@ def test_publication_preview_and_zip(monkeypatch):
     assert all(len(b) > 2000 for b in cached.values())
 
 
-def test_zip_contains_figures_and_csv(monkeypatch):
+def test_download_callables_need_no_script_context():
+    """The lazy download callables (figure, zip) run in a plain thread: no st.* inside."""
     import io
+    import threading
     import zipfile
 
     from app.workflows import figures as F
 
-    def script():
-        import streamlit as st
+    res = _fake_cv(DeviceConfig())
+    ck = F.cache_key(DeviceConfig(), "cv", dict(v_stop=-60.0, n_points=7))
+    cache, out = {}, {}
 
-        import etna
-        from app.workflows import figures as F
+    def worker():
+        try:
+            out["fig"] = F._fig_bytes(cache, res, "cv", "pdf", 150, "single", ck)
+            out["zip"] = F._zip_all(cache, [("cv", ck, res)], "svg", 150, "single")
+        except Exception as e:  # pragma: no cover - reported below
+            out["err"] = e
 
-        done = F.run_observables(
-            etna.DeviceConfig(),
-            ["cv"],
-            dict(v_stop=-60.0, n_points=7, bias=-30.0, let_table="100 um half-width"),
-        )
-        entries = [(o, k, st.session_state[F.CACHE_KEY][k]) for o, k, _ in done]
-        st.session_state["zip"] = F._zip_all(entries, "svg", 150, "single")
+    t = threading.Thread(target=worker)
+    t.start()
+    t.join(120)
+    assert "err" not in out, out.get("err")
+    assert out["fig"][:5] == b"%PDF-"
+    names = zipfile.ZipFile(io.BytesIO(out["zip"])).namelist()
+    assert {"cv/cv.svg", "cv/depletion.svg", "cv/mott_schottky.svg", "cv/stack.svg", "cv/cv_data.csv"} <= set(names)
+    assert len(cache) == 5  # pdf + 4 svg kinds, reused on the next click
 
-    monkeypatch.setattr(etna, "run_cv", _fake_cv)
-    at = AppTest.from_function(script, default_timeout=TIMEOUT)
-    at.run()
-    assert at.exception == [], at.exception
-    names = zipfile.ZipFile(io.BytesIO(at.session_state["zip"])).namelist()
-    assert {
-        "cv/cv.svg",
-        "cv/depletion.svg",
-        "cv/mott_schottky.svg",
-        "cv/stack.svg",
-        "cv/cv_data.csv",
-    } <= set(names)
-    assert F.OBSERVABLES["cv"][1] == "1D"
+
+def test_let_tables_resolve_from_any_cwd(monkeypatch, tmp_path):
+    from app.workflows import figures as F
+
+    monkeypatch.chdir(tmp_path)
+    t = F._run("cce_let", DeviceConfig(), {"let_table": "100 um half-width"})
+    assert t["_source"].startswith("cce_let_table_100um.json")
 
 
 def test_2d_device_maps(monkeypatch):

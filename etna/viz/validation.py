@@ -35,15 +35,14 @@ def _read_csv(path: Path) -> np.ndarray:
     return np.asarray(rows, dtype=float)
 
 
-def tilted_alpha_shape(config=None, n_points: int = 51) -> SimResult:
+def tilted_alpha_shape(config=None) -> SimResult:
     """Normalised tilted-alpha CCE(V) of the microdosimeter preset vs Micro Fig. 4b."""
     import etna
 
     cfg = config if config is not None else etna.microdosimeter_config()
     d = _read_csv(MICRO_FIG4B)
-    r = etna.run_cce_tilted_alpha(
-        cfg, v_start=0.0, v_stop=-60.0, n_points=int(n_points)
-    )
+    # the facade's defaults: 0..-60 V, 61 points (1 V grid: every data bias is solved)
+    r = etna.run_cce_tilted_alpha(cfg)
     x = np.asarray(r.x, dtype=float)
     y = np.asarray(r.y, dtype=float)
     o = np.argsort(x)
