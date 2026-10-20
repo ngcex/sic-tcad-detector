@@ -15,13 +15,19 @@ from etna.core.cv_analysis import cv_at_fluence
 from etna.core.radiation_damage import (
     RadiationDamageParams,
     cce_uncertainty_envelope,
+    get_hardness_factor,
     make_single_defect_params,
 )
+
+# SR-NIEL hardness factors since 2026-10-20 (audit C-5 / B-07): kappa(62 MeV) 0.35 -> 1.942.
+# Fluences below are the pre-2026-10-20 pins times KS = 0.35 / kappa(62), i.e. the SAME
+# 1-MeV-neq fluence (identical damaged devices); compensation at 62 MeV: 1.93e13 -> 3.48e12.
+KS = 0.35 / get_hardness_factor(62.0)
 
 # default stack (measured-C-V profile since 2026-10-18, N_D_bulk 3.38e13): compensation at
 # 1.93e13 p/cm2 (62 MeV); 1.8e13: near compensation; 3e13: NaN. (Previous default,
 # N_D_bulk 8.25e13: 0 / 1e11 / 3e12 / 2e13 / 3.5e13 / 5e13.)
-FLUENCES = [0.0, 1e11, 3e12, 1e13, 1.8e13, 3e13]
+FLUENCES = [KS * f for f in (0.0, 1e11, 3e12, 1e13, 1.8e13, 3e13)]
 
 
 def _same_cce(a, b, tol=1e-9):
@@ -45,12 +51,9 @@ def test_cce_vs_fluence_engine_matches_devsim(V_bias, single):
 
 def test_cce_vs_fluence_legacy_geometry_matches_devsim():
     kw = dict(nplus_thickness_cm=None, substrate_thickness_cm=1e-4, buffer_thickness_cm=None, buffer_end_doping=None)
-    eng = cce_vs_fluence(
-        [0.0, 1e12, 1e13], V_bias=-40.0, device_kwargs=kw, solver="engine"
-    )
-    dev = cce_vs_fluence(
-        [0.0, 1e12, 1e13], V_bias=-40.0, device_kwargs=kw, solver="devsim"
-    )
+    fl = [0.0, KS * 1e12, KS * 1e13]
+    eng = cce_vs_fluence(fl, V_bias=-40.0, device_kwargs=kw, solver="engine")
+    dev = cce_vs_fluence(fl, V_bias=-40.0, device_kwargs=kw, solver="devsim")
     _same_cce(eng, dev)  # asserts NaN pattern, validity and |dCCE| < 1e-9
     assert eng["solver"] == ["batched"] * 3 and dev["solver"] == ["devsim"] * 3
     assert all(eng["valid"])
@@ -83,14 +86,14 @@ def test_unconverged_engine_points_fall_back_to_devsim(monkeypatch):
         return cce, conv
 
     monkeypatch.setattr(cc, "_cce_fluence_engine", half_converged)
-    fl = [0.0, 1e12, 1e13]
+    fl = [0.0, KS * 1e12, KS * 1e13]
     r = cce_vs_fluence(fl, V_bias=-40.0)
     assert r["solver"] == ["devsim", "batched", "devsim"]
     _same_cce(r, cce_vs_fluence(fl, V_bias=-40.0, solver="devsim"))
 
 
 def test_envelope_equals_per_set_sweeps():
-    fl = np.array([1e11, 5e12, 4e13])  # default N_D_bulk 3.38e13 since 2026-10-18 (was 1e13)
+    fl = KS * np.array([1e11, 5e12, 4e13])  # default N_D_bulk 3.38e13 since 2026-10-18 (was 1e13)
     env = cce_uncertainty_envelope(fl, V_bias=-40.0)
     nominal = cce_vs_fluence(fl, V_bias=-40.0, damage_params=RadiationDamageParams())
     # batch composition moves the Gummel stop by a few ulp
@@ -104,8 +107,8 @@ def test_envelope_equals_per_set_sweeps():
 @pytest.mark.parametrize(
     "fluence, V_range",
     [
-        (5e12, np.linspace(-100, 0, 41)),  # starts deep, as notebook 12
-        (1.2e13, [0.0, -1.0, -5.0, -20.0, -40.0]),  # was 2e13 (compensated on the new default)
+        (KS * 5e12, np.linspace(-100, 0, 41)),  # starts deep, as notebook 12
+        (KS * 1.2e13, [0.0, -1.0, -5.0, -20.0, -40.0]),  # was 2e13 (compensated on the new default)
     ],
 )
 def test_cv_at_fluence_engine_matches_devsim(fluence, V_range):

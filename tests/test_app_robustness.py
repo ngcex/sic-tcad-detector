@@ -325,10 +325,11 @@ def test_reach_through_found_with_nplus(epi):
 def test_run_radiation_damage_forwards_valid_and_reason():
     cfg = DeviceConfig()
     phi_c = sim.compensation_fluence(cfg, 62)
-    # N_D_bulk / (eta 5 * kappa(62 MeV)): 3.382506e13 -> 1.93e13 on the measured-C-V default
+    # N_D_bulk / (eta 5 * kappa(62 MeV)): 3.382506e13 / (5 * 1.942) = 3.48e12 with the
+    # SR-NIEL kappa (2026-10-20; 1.93e13 with the 0.35 placeholder) on the measured-C-V default
     # (2026-10-18; previous default 8.252732e13 -> 4.72e13, legacy 8.82e13 -> 5.04e13;
     # 6.335936e13 -> 3.62e13 before the 2026-10-17 small-signal C recalibration)
-    assert 1.9e13 < phi_c < 1.96e13
+    assert 3.45e12 < phi_c < 3.51e12
     res = sim.run_radiation_damage(
         cfg, fluences=np.array([0.5 * phi_c, 2.0 * phi_c]), V_bias=-20.0,
         proton_energy_MeV=62,

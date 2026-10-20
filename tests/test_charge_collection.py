@@ -24,8 +24,14 @@ from etna.core.charge_collection import (
 )
 from etna.core.radiation_damage import (
     cce_uncertainty_envelope,
+    get_hardness_factor,
     radiation_hardness_sweep,
 )
+
+# SR-NIEL hardness factors since 2026-10-20 (audit C-5 / B-07): kappa(62 MeV) 0.35 -> 1.942.
+# Damaged-device fluences below are the earlier pins times KS = 0.35 / kappa(62), the same
+# 1-MeV-neq fluence (identical damaged devices).
+KS = 0.35 / get_hardness_factor(62.0)
 
 
 class TestHechtEquation:
@@ -520,7 +526,7 @@ class TestCCEPostAnneal:
     def test_cce_post_anneal_returns_dict(self):
         """cce_post_anneal should return dict with all expected keys."""
         result = cce_post_anneal(
-            fluence=1e13,
+            fluence=KS * 1e13,
             T_anneal=873.15,  # 600C
             t_anneal=3600.0,  # 1 hour
             V_bias=-40.0,
@@ -546,7 +552,7 @@ class TestCCEPostAnneal:
         This is the core ANNL-02 test: annealing partially recovers CCE.
         EH4 and EH67 defects anneal out at 600C, improving lifetimes.
         """
-        fluence = 1e13
+        fluence = KS * 1e13
 
         # Damaged CCE (no annealing)
         damaged_result = cce_vs_fluence(np.array([fluence]), V_bias=-40.0)
@@ -575,7 +581,7 @@ class TestCCEPostAnneal:
         not anneal at 600C (f_Z12 ~ 0).
         """
         anneal_result = cce_post_anneal(
-            fluence=1e13,
+            fluence=KS * 1e13,
             T_anneal=873.15,
             t_anneal=3600.0,
             V_bias=-40.0,
@@ -611,7 +617,7 @@ class TestCCEPostAnneal:
         """
         T_range = np.array([673.15, 773.15, 873.15, 1073.15])  # 400-800C
         result = cce_anneal_vs_temperature(
-            fluence=1e13,
+            fluence=KS * 1e13,
             T_anneal_range=T_range,
             t_anneal=3600.0,
             V_bias=-40.0,

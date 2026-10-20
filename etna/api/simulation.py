@@ -1396,16 +1396,18 @@ def run_radiation_damage(
         it are normally NaN with a reason - the 3x point always - to show where the
         model ends: compensation_fluence is a lower bound on the mesh threshold).
         Before 2026-10-18 the default was a fixed 1e13..1e16 grid, which lies
-        beyond the compensation fluence of the default stack (1.35e13 at 5.6 MeV)
-        and of the tabulated preset (5.2e12): 6 of 6 points were NaN.
+        beyond the compensation fluence of the default stack (1.35e13 at 5.6 MeV
+        with the placeholder kappa 0.5; 1.0e12 with the SR-NIEL kappa 6.67) and of
+        the tabulated preset: 6 of 6 points were NaN.
     V_bias : float
         Reverse bias (V, conventional-negative sign). Default -40.0.
     proton_energy_MeV : float
         Incident proton energy (MeV) used for the NIEL damage model.
-        Default 5.6. CAUTION: the NIEL hardness table covers 30-150 MeV only, so
-        5.6 MeV uses kappa(30 MeV) (edge value, logged); the result is that of a
-        30 MeV hardness factor labelled 5.6 MeV (audit-v7 B-07, open: physics
-        owner). Pass 30-150 MeV for an in-table energy.
+        Default 5.6. The SR-NIEL hardness table covers 1-1000 MeV (kappa(5.6 MeV)
+        = 6.67, Si-normalised 1-MeV-neq); outside it get_hardness_factor raises
+        ValueError (audit-v7 B-07; before 2026-10-20 a 30-150 MeV placeholder table
+        silently gave kappa(30 MeV) = 0.5 here). At 5.6 MeV NIEL scaling is known to
+        overpredict measured Si proton damage by tens of percent (data/niel/README.md).
 
     Returns
     -------
@@ -1420,12 +1422,14 @@ def run_radiation_damage(
 
     Warning
     -------
-    The NIEL kappa hardness factors in
-    `etna.core.radiation_damage` are DATA-BLOCKED placeholders, so the
-    absolute critical-fluence (Phi_crit) numbers produced here are
-    UNVALIDATED. Do NOT present these outputs as validated radiation-hardness
-    predictions — they are a relative sensitivity shape only until real
-    NIEL/damage-coefficient data replaces the placeholders.
+    The NIEL kappa hardness factors in `etna.core.radiation_damage` are SR-NIEL
+    proton NIEL data (data/niel/) in the Si-normalised 1-MeV-neq convention of the
+    introduction-rate source (Burin et al.). The SiC/Si NIEL ratio of the reactor
+    neutrons behind that calibration is NOT available, so the SiC-specific
+    normalisation is unvalidated (kappa may overstate the SiC damage per proton by
+    r_n / r_p); the defect introduction rates themselves are literature values with
+    a wide spread. Absolute critical-fluence (Phi_crit) numbers are therefore not
+    validated radiation-hardness predictions.
     """
     _require_1d(config, "run_radiation_damage")
 
