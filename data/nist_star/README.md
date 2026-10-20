@@ -46,7 +46,7 @@ A SRIM-2013 or ICRU-73/90 SiC table would be the natural cross-check (not done).
 | quantity | value | where |
 | -------- | ----- | ----- |
 | alpha 5.5 MeV CSDA range, Si | 6.487e-3 g/cm2 = 27.84 um | `astar_si.csv` (NIST column) |
-| proton 62 MeV CSDA range, water | 3.285 g/cm2 = 32.85 mm | `pstar_water.csv` (interp.) |
+| proton 62 MeV CSDA range, water | 3.281 g/cm2 = 32.81 mm (log-log between the 60 and 65 MeV rows) | `pstar_water.csv` |
 | alpha 5.486 MeV CSDA range, SiC (rho 3.21) | 18.43 um | integrated, Bragg additivity |
 | alpha 5.486 MeV in SiC, peak/entrance S_e | 2.49 (Bohr straggling 0.165 um) | `alpha_bragg_summary()` |
 | Si -> muscle linear stopping ratio, 10 MeV p | 0.584 | cf. the 0.58 Si->muscle factor of the Si microdosimetry literature |

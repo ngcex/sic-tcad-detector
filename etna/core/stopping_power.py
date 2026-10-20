@@ -246,7 +246,14 @@ def _csda_table(particle, material, n=200001):
 
 
 def csda_range_cm(particle, material, energy_MeV):
-    """CSDA range (cm) from integrating 1/S_tot of the (composed) table."""
+    """CSDA range (cm): NIST's own column (log-log interpolated) for NIST materials,
+    integration of 1/S_tot of the Bragg-composed table for ``"sic"``."""
+    if material != "sic":
+        t = load_star(particle, material)
+        _check_energy(energy_MeV, t["energy_MeV"], particle)
+        return _loglog(energy_MeV, t["energy_MeV"], t["csda_range_g_cm2"]) / density(
+            material
+        )
     e, r = _csda_table(particle, material)
     _check_energy(energy_MeV, e, particle)
     return np.interp(energy_MeV, e, r) / density(material)

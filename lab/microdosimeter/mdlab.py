@@ -84,11 +84,12 @@ def path_stopping(
     E_pk (ASTAR-Si-like orders of magnitude for a 5.5 MeV alpha: ~2.3 at ~0.75 MeV),
     straggling sigma = 2 % R. QUALITATIVE: no ASTAR/SRIM table offline
     (data/srim/README.md); the values are literature orders of magnitude, not data.
-    shape='box': etna's alpha_depth_shape (flat to 0.8 R, erfc roll-off), along the path.
+    shape='box': etna's legacy alpha_depth_shape box (bragg_peak_ratio=None: flat to
+    0.8 R, erfc roll-off), along the path. (etna's default is now the NIST ASTAR curve.)
     """
     s = np.asarray(s_cm, dtype=float)
     if shape == "box":
-        return alpha_depth_shape(s, alpha_range_cm=R_cm)
+        return alpha_depth_shape(s, alpha_range_cm=R_cm, bragg_peak_ratio=None)
     return _bragg_curve(s, R_cm, ratio, E_pk, q_low, straggle_frac)
 
 

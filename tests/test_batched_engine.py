@@ -12,6 +12,7 @@ from etna.core.batched import (
     reverse_sweep,
 )
 from etna.core.cv_analysis import cv_sweep
+from etna.core.generation_profiles import ALPHA_RANGE_SIC_CM
 from etna.core.device import create_sic_device
 from etna.core.drift_diffusion import create_dd_device
 
@@ -120,7 +121,7 @@ def test_cce_matches_devsim():
     assert not ref["truncated"]
     x = node_positions(EPI, SUB)
     pb = make_batch(x, SUB, 1e19, 2.9e15, 8.5e13, 1e-4, nplus=None, buffer=None)
-    G = alpha_generation(x, SUB, 15e-4, 1e18)
+    G = alpha_generation(x, SUB, ALPHA_RANGE_SIC_CM, 1e18)  # = cce_vs_bias default
     # local per-node mobility from the batch doping, as the devsim builder (A-03)
     res = cce_sweep(pb, volts, SUB, G)
     assert res.converged.all()

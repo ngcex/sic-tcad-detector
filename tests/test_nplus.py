@@ -9,6 +9,8 @@ import uuid
 
 import devsim
 import numpy as np
+
+from etna.core.generation_profiles import ALPHA_RANGE_SIC_CM
 import pytest
 
 from etna.api.device import DeviceConfig, device_kwargs, legacy_config
@@ -155,7 +157,7 @@ def test_2d_cce_with_nplus(gen_in_nplus, expected):
     try:
         y = np.array(devsim.get_node_model_values(device=info["device_name"], region="sic", name="y"))
         ye = y - info["junction_pos"]
-        G = alpha_depth_shape(np.clip(ye, 0.0, None), alpha_range_cm=15e-4)
+        G = alpha_depth_shape(np.clip(ye, 0.0, None), alpha_range_cm=ALPHA_RANGE_SIC_CM)
         G = 1e18 * G / G.max()
         G[ye < 0] = 0.0
         G = confine_generation_to_epi(info, y, G)

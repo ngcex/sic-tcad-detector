@@ -67,14 +67,15 @@ def test_integrated_csda_reproduces_nist_silicon(particle, E):
     nist = np.exp(
         np.interp(np.log(E), np.log(t["energy_MeV"]), np.log(t["csda_range_g_cm2"]))
     )
-    ours = sp.csda_range_cm(particle, "si", E) * sp.density("si")
+    e, r = sp._csda_table(particle, "si")  # the integration path used for SiC
+    ours = np.interp(E, e, r)
     assert ours == pytest.approx(nist, rel=2e-3)
 
 
 def test_proton_62MeV_range_in_water():
-    """PSTAR water: 62 MeV CSDA range 3.285 g/cm^2 (the old 31.0 mm table entry was wrong)."""
+    """PSTAR water: 62 MeV CSDA range 3.281 g/cm^2 (log-log between the 60/65 MeV rows; the old 31.0 mm table entry was wrong)."""
     assert sp.csda_range_cm("proton", "water", 62.0) * 10 == pytest.approx(
-        32.85, abs=0.05
+        32.81, abs=0.01
     )
 
 

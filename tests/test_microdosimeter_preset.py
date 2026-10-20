@@ -10,7 +10,11 @@ import pytest
 import etna
 from etna.api.device import DEFAULT_STACK, MICRODOSIMETER_N_D, DeviceConfig
 from etna.api.simulation import _ENGINE_BOX, OutsideModelValidity
-from etna.core.generation_profiles import alpha_path_stopping, tilted_alpha_generation
+from etna.core.generation_profiles import (
+    ALPHA_RANGE_SIC_CM,
+    alpha_path_stopping,
+    tilted_alpha_generation,
+)
 
 
 def test_preset_fields_and_default_stack_untouched():
@@ -56,20 +60,20 @@ def test_tilted_generation_geometry():
     assert lost == 0.0
     # ends at 18 cos65 = 7.61 um (straggling sigma 0.15 um projected)
     assert np.trapezoid(G[x > 8e-4], x[x > 8e-4]) < 1e-4 * pairs
-    assert 6.0e-4 < x[np.argmax(G)] < 7.0e-4  # Bragg peak before the end
+    assert 6.5e-4 < x[np.argmax(G)] < 7.3e-4  # Bragg peak before the end (NIST: 6.99 um)
     G2, lost2 = tilted_alpha_generation(x, dead_layer_cm=0.3e-4)
     assert 0.0 < lost2 < 0.05
     assert np.trapezoid(G2, x) == pytest.approx(pairs * (1 - lost2), rel=2e-3)
     s = np.linspace(0, 23e-4, 20001)
     f = alpha_path_stopping(s)
-    assert 1.9 < f.max() / f[0] < 2.3  # qualitative peak/entrance after straggling
+    assert 2.4 < f.max() / f[0] < 2.6  # NIST ASTAR (SiC) peak/entrance: 2.49
     with pytest.raises(ValueError):
         tilted_alpha_generation(x, theta_deg=90.0)
 
 
-def test_tilted_cce_normal_incidence_box_matches_run_cce():
-    """theta=0, box, 15 um, no p+ generation ~ run_cce (differs only by the 0.3 um p+
-    origin shift of the profile)."""
+def test_tilted_cce_normal_incidence_bragg_matches_run_cce():
+    """theta=0, NIST Bragg curve at the run_cce range, no p+ generation ~ run_cce
+    (differs by the 0.3 um p+ origin shift and the 5.5 vs 5.486 MeV curve)."""
     c = etna.microdosimeter_config()
     a = etna.run_cce(c, -10.0, -40.0, 7)
     b = etna.run_cce_tilted_alpha(
@@ -78,8 +82,8 @@ def test_tilted_cce_normal_incidence_box_matches_run_cce():
         -40.0,
         7,
         theta_deg=0.0,
-        alpha_range_um=15.0,
-        shape="box",
+        alpha_range_um=ALPHA_RANGE_SIC_CM * 1e4,
+        shape="bragg",
         generation_in_p_plus=False,
     )
     assert a.metadata["solver"] == b.metadata["solver"] == "batched"
@@ -91,23 +95,24 @@ def test_tilted_cce_vs_bias_pins_lab_numbers():
     V = np.round(r.x, 6)
     n = r.y / r.y[V == -50.0][0]
     at = lambda v: n[V == v][0]
-    # default: epi-only generation (p+ = dead layer), bragg shape, no metal. N_D 1e14:
+    # default: epi-only generation (p+ = dead layer), NIST bragg shape (since
+    # 2026-10-20; the qualitative curve gave 0.9945 / 0.9689 / 0.9845), no metal. N_D 1e14:
     # W(0 V) = 5.4 um, the depletion edge passes the track end (7.6 um) by -3 V, so the
-    # steady-state DD curve is flat to 0.6 % from 0 V. Fig. 4b (0.908 at 0 V, +1 % from
+    # steady-state DD curve is flat to 0.7 % from 0 V. Fig. 4b (0.908 at 0 V, +1 % from
     # -20 to -50 V) is NOT reproduced by the DD model at any doping (LOG.md section 9).
-    assert at(0.0) == pytest.approx(0.9945, abs=5e-4)
+    assert at(0.0) == pytest.approx(0.9928, abs=5e-4)
     assert at(-10.0) == pytest.approx(0.9998, abs=3e-4)
     assert at(-20.0) > 0.999
     assert np.all(np.diff(r.y) >= -1e-6)
     assert r.y[V == -50.0][0] == pytest.approx(0.9999, abs=2e-4)
-    # relative to E0/E_pair: the 3.1 % deposited in the 0.3 um p+ is lost
-    assert r.metadata["cce_vs_E0"][V == -50.0][0] == pytest.approx(0.9689, abs=5e-4)
+    # relative to E0/E_pair: the 2.7 % deposited in the 0.3 um p+ is lost
+    assert r.metadata["cce_vs_E0"][V == -50.0][0] == pytest.approx(0.9731, abs=5e-4)
     assert r.metadata["projected_end_um"] == pytest.approx(7.607, abs=1e-3)
     assert r.metadata["reach_through_V"] == pytest.approx(9.0, abs=0.05)
     p = etna.run_cce_tilted_alpha(
         etna.microdosimeter_config(), -50.0, -50.0, 1, generation_in_p_plus=True
     )
-    assert p.y[0] == pytest.approx(0.9845, abs=5e-4)  # p+ pairs: electron L_n ~ 0.3 um
+    assert p.y[0] == pytest.approx(0.9863, abs=5e-4)  # p+ pairs: electron L_n ~ 0.3 um
 
 
 def test_old_30V_fit_doping_is_still_simulable_but_not_the_preset():
@@ -117,7 +122,7 @@ def test_old_30V_fit_doping_is_still_simulable_but_not_the_preset():
     r = etna.run_cce_tilted_alpha(c, 0.0, -50.0, 11)
     assert r.metadata["reach_through_V"] == pytest.approx(30.0, abs=0.05)
     n = r.y / r.y[-1]
-    assert n[0] == pytest.approx(0.9668, abs=5e-4)
+    assert n[0] == pytest.approx(0.9622, abs=5e-4)  # 0.9668 with the qualitative curve
     assert n[2] > 0.999  # -10 V
 
 

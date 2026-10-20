@@ -1,15 +1,16 @@
 """Radiation generation rate profiles for 4H-SiC detector simulation.
 
 Provides analytical models for carrier generation from:
-- Alpha particles (Am-241, 5.486 MeV) with smooth spatial profile
-- Proton Bragg peak beams (30-150 MeV therapeutic energies)
+- Alpha particles (Am-241, 5.486 MeV): by default the real Bragg curve in SiC from
+  NIST ASTAR (Si + C, Bragg additivity), legacy flat box as opt-out
+- Proton beams (30-150 MeV therapeutic energies): dose-rate (energy-independent) or,
+  opt-in, water-dose or fluence-rate input with the NIST PSTAR energy dependence
 - Dose rate to generation rate conversion
 
 All units in CGS (cm, cm^-3, eV, s) per devsim convention.
 
 References:
-    - NIST PSTAR database for proton CSDA ranges in water
-    - Bortfeld 1997, Med Phys 24(12) for Bragg curve analytical model
+    - NIST PSTAR / ASTAR (data/nist_star/, downloaded 2026-10-20)
     - Ioffe NSM Archive for 4H-SiC material properties
 """
 
@@ -21,18 +22,29 @@ from scipy.special import erfc
 # ---------------------------------------------------------------------------
 
 from etna.core.sic_material import SiC4H_Parameters
+from etna.core.stopping_power import (
+    AM241_ALPHA_E0_MEV,
+    alpha_bragg_curve_sic,
+    csda_range_cm,
+    linear_stopping,
+    mass_stopping,
+    residual_energy_MeV,
+)
 
 _params = SiC4H_Parameters()
 RHO_SIC = _params.rho  # g/cm^3, 4H-SiC density
 E_PAIR_SIC_EV = _params.E_pair_eV  # eV, electron-hole pair creation energy in 4H-SiC
 
-# NIST PSTAR CSDA ranges in water (mm)
+# NIST PSTAR CSDA ranges in water (mm), read from data/nist_star/pstar_water.csv
+# (downloaded 2026-10-20). The 62 MeV entry was a hand-typed 31.0 before (PSTAR, log-log interpolated: 32.81).
 PROTON_RANGE_WATER_MM = {
-    30: 8.85,
-    62: 31.0,
-    70: 40.8,
-    150: 157.7,
+    E: round(float(csda_range_cm("proton", "water", float(E))) * 10.0, 3)
+    for E in (30, 62, 70, 150)
 }
+
+# CSDA range of a 5.486 MeV (Am-241) alpha in 4H-SiC, NIST ASTAR Si + C by Bragg
+# additivity (18.43 um). Was a hand-set 15 um before 2026-10-20.
+ALPHA_RANGE_SIC_CM = float(csda_range_cm("alpha", "sic", AM241_ALPHA_E0_MEV))
 
 
 # ---------------------------------------------------------------------------
@@ -73,15 +85,22 @@ def dose_rate_to_generation(dose_rate_Gy_s, rho_g_cm3=RHO_SIC, E_pair_eV=E_PAIR_
 # ---------------------------------------------------------------------------
 
 
-def alpha_depth_shape(x_cm, alpha_range_cm=15e-4, bragg_peak_ratio=None):
+def _nist_alpha_curve_unit(E0_MeV=AM241_ALPHA_E0_MEV):
+    """NIST (ASTAR, SiC by Bragg additivity) alpha ionization curve on a unit depth axis.
+
+    Returns ``(u, f)`` with ``u = depth / CSDA range`` (uniform, 0..1.3) and ``f`` the
+    electronic dE/dx normalised to 1.0 at the entrance, Bohr range straggling included.
+    """
+    s, f, R, _ = alpha_bragg_curve_sic(E0_MeV)
+    return s / R, f / f[0]
+
+
+def alpha_depth_shape(x_cm, alpha_range_cm=ALPHA_RANGE_SIC_CM, bragg_peak_ratio="nist"):
     """Unnormalized spatial shape of the alpha e-h pair generation profile.
 
-    Approximately uniform (or, if `bragg_peak_ratio` is set, linearly
-    rising) from 0 to ~0.8*range, then smooth erfc roll-off (width
-    ~0.1*range) to avoid numerical ringing in the DD solver. Pure
-    function of `x_cm` — no normalization, no assumption that `x_cm` is
-    sorted or evenly spaced, safe to evaluate on unordered mesh node
-    arrays (e.g. a 2D device's node coordinates).
+    Pure function of `x_cm` — no normalization, no assumption that `x_cm` is sorted or
+    evenly spaced, safe to evaluate on unordered mesh node arrays (e.g. a 2D device's
+    node coordinates).
 
     Parameters
     ----------
@@ -89,50 +108,47 @@ def alpha_depth_shape(x_cm, alpha_range_cm=15e-4, bragg_peak_ratio=None):
         Depth positions in SiC (cm), measured from detector entrance.
         Values are NOT required to be sorted.
     alpha_range_cm : float
-        Alpha particle range in SiC (cm). Default: 15e-4 (15 um).
-    bragg_peak_ratio : float or None
-        If given, linearly ramps the flat region from 1.0 (entrance) to
-        this ratio (just before the erfc roll-off), approximating the
-        real Bragg-curve rise in stopping power near end-of-range instead
-        of a flat box. Default None (flat box, original behavior).
-
-        QUALITATIVE shape correction, not a calibrated physical value: a
-        real peak/entrance stopping-power ratio for a 5.486 MeV alpha in
-        4H-SiC requires ASTAR/SRIM data this project does not have
-        offline access to (same constraint as the kappa(E) NIST PSTAR
-        data gap — see `data/srim/README.md`). Order-of-magnitude
-        literature reasoning (Bethe-Bloch shape) suggests ~2.5-3x, well
-        below a therapeutic proton's Bragg ratio (~30-50x, per Bortfeld
-        1997) since an Am-241 alpha starts already well up its own
-        stopping-power curve. Do NOT treat any specific value as
-        validated — if precision matters, source a real ASTAR-Si or
-        SRIM-4H-SiC stopping power table first (audit finding Mj-5,
-        PHYSICS_AUDIT_v5.md).
+        Alpha particle range in SiC (cm). Default: ``ALPHA_RANGE_SIC_CM``, the CSDA
+        range of a 5.486 MeV (Am-241) alpha in 4H-SiC from NIST ASTAR Si + C by Bragg
+        additivity (18.43 um; it was a hand-set 15 um before 2026-10-20).
+    bragg_peak_ratio : "nist" (default), None or float
+        - ``"nist"``: the REAL Bragg curve. Electronic stopping power S_e(E(x)) of a
+          5.486 MeV alpha along its CSDA path in SiC (NIST ASTAR Si + C, Bragg
+          additivity), with the computed Bohr range straggling (0.165 um), depth axis
+          scaled so the CSDA range equals ``alpha_range_cm``. Entrance = 1.0, peak =
+          2.49 at 0.92 R (data-derived, see ``stopping_power.alpha_bragg_summary``).
+        - ``None``: opt-out, the pre-2026-10 flat box (1.0 to 0.8 R, erfc roll-off of
+          width 0.1 R; no Bragg peak).
+        - float: opt-out, the old qualitative linear ramp from 1.0 to this ratio over
+          0..0.8 R, then the erfc roll-off.
 
     Returns
     -------
     shape : ndarray
-        Unnormalized profile shape, same length as x_cm. Peaks at 1.0
-        (bragg_peak_ratio=None) or bragg_peak_ratio (otherwise); callers
-        normalize as needed (to total deposited energy, to a peak
-        generation rate, etc.).
+        Unnormalized profile shape, same length as x_cm, 1.0 at the entrance; callers
+        normalize as needed (to total deposited energy, to a peak generation rate,
+        etc.).
     """
     x = np.asarray(x_cm, dtype=float)
     R = alpha_range_cm
 
-    # Transition region parameters
+    if isinstance(bragg_peak_ratio, str):
+        if bragg_peak_ratio != "nist":
+            raise ValueError(
+                f"bragg_peak_ratio must be 'nist', None or a float (got {bragg_peak_ratio!r})"
+            )
+        u, f = _nist_alpha_curve_unit()
+        return np.interp(x / R, u, f, left=1.0, right=0.0)
+
+    # Transition region parameters (legacy box / ramp shapes)
     x_flat = 0.8 * R  # flat/rising region ends at 80% of range
     sigma = 0.1 * R  # roll-off width (10% of range)
 
     if bragg_peak_ratio is None:
-        # Flat-box shape (default: see docstring on why a calibrated peak
-        # shape isn't available offline).
         shape_factor = np.ones_like(x)
     else:
-        # Linear ramp from 1.0 (entrance) to bragg_peak_ratio (end of the
-        # flat/rising region, just before the erfc roll-off) — a
-        # QUALITATIVE stand-in for the real (nonlinear) Bragg-Kleeman rise
-        # in stopping power near end-of-range. See docstring: not calibrated.
+        # Linear ramp from 1.0 (entrance) to bragg_peak_ratio (end of the flat/rising
+        # region, just before the erfc roll-off) -- qualitative legacy option.
         shape_factor = 1.0 + (bragg_peak_ratio - 1.0) * np.clip(x / x_flat, 0.0, 1.0)
 
     # Smooth roll-off to zero beyond the flat/rising region.
@@ -144,10 +160,10 @@ def alpha_depth_shape(x_cm, alpha_range_cm=15e-4, bragg_peak_ratio=None):
 
 def alpha_generation_profile(
     x_cm,
-    alpha_range_cm=15e-4,
+    alpha_range_cm=ALPHA_RANGE_SIC_CM,
     total_energy_eV=5.486e6,
     E_pair_eV=E_PAIR_SIC_EV,
-    bragg_peak_ratio=None,
+    bragg_peak_ratio="nist",
 ):
     """Spatial e-h pair generation profile for Am-241 alpha particles in SiC.
 
@@ -167,15 +183,14 @@ def alpha_generation_profile(
         Must be sorted (ascending or descending) for the trapezoidal
         normalization integral to be meaningful.
     alpha_range_cm : float
-        Alpha particle range in SiC (cm). Default: 15e-4 (15 um).
+        Alpha particle range in SiC (cm). Default: ``ALPHA_RANGE_SIC_CM`` (18.43 um,
+        NIST-derived, see `alpha_depth_shape`).
     total_energy_eV : float
         Total kinetic energy of alpha particle (eV). Default: 5.486e6 (Am-241).
     E_pair_eV : float
         Electron-hole pair creation energy (eV). Default: 7.8 (4H-SiC).
-    bragg_peak_ratio : float or None
-        See `alpha_depth_shape`. Default None (flat box, original
-        behavior — kept as default; see that function's docstring for
-        why a calibrated peak shape isn't available offline).
+    bragg_peak_ratio : "nist" (default), None or float
+        See `alpha_depth_shape` (None = legacy flat box, opt-out).
 
     Returns
     -------
@@ -185,13 +200,11 @@ def alpha_generation_profile(
 
     Notes
     -----
-    The profile is normalized so that integral(G(x) dx) = total_energy_eV / E_pair_eV,
-    giving the total number of e-h pairs generated per alpha particle,
-    REGARDLESS of `bragg_peak_ratio` — a local peak/entrance ratio changes
-    the SHAPE, not the total charge. This matters for depth-dependent
-    quantities (track containment near end-of-range, depth-resolved
-    collection efficiency) but is a second-order correction for
-    integrated CCE in a fully-depleted, uniform-collection detector.
+    The profile is normalized so that integral(G(x) dx) = total_energy_eV / E_pair_eV
+    over the given ``x_cm`` grid, REGARDLESS of the shape — the shape changes where the
+    pairs are, not how many. If ``x_cm`` stops before the end of the track, the full
+    pair count is redistributed over the grid (the historical convention; for the
+    in-epi fraction see ``charge_collection_2d.in_mesh_generation_fraction``).
     """
     x = np.asarray(x_cm, dtype=float)
     profile = alpha_depth_shape(x, alpha_range_cm, bragg_peak_ratio)
@@ -214,14 +227,13 @@ def alpha_generation_profile(
 # Tilted alpha track (microdosimeter alpha test, Petringa 2025 Phys. Med. 140)
 # ---------------------------------------------------------------------------
 
-# Qualitative Bragg-curve parameters for a 5.5 MeV alpha (see alpha_path_stopping).
-ALPHA_PEAK_TO_ENTRANCE = (
-    2.3  # S(E_peak)/S(E0): ASTAR-Si-like ORDER OF MAGNITUDE, not data
-)
-ALPHA_E_PEAK_EV = (
-    0.75e6  # eV, energy of the stopping-power maximum (order of magnitude)
-)
-ALPHA_STRAGGLE_FRAC = 0.02  # range straggling sigma / range
+# Parameters of the LEGACY qualitative two-power-law curve (shape="bragg_powerlaw").
+# They were literature orders of magnitude, not data; the NIST ASTAR curve used by the
+# default shape="bragg" gives S_e peak/entrance 2.50 (5.5 MeV, before straggling) and
+# the stopping maximum at ~0.50 MeV (stopping_power.alpha_bragg_summary).
+ALPHA_PEAK_TO_ENTRANCE = 2.3  # legacy, not data
+ALPHA_E_PEAK_EV = 0.75e6  # eV, legacy, not data
+ALPHA_STRAGGLE_FRAC = 0.02  # legacy range straggling sigma / range (NIST+Bohr: 0.009)
 
 
 def alpha_path_stopping(
@@ -238,21 +250,27 @@ def alpha_path_stopping(
     ``s_cm`` must be a uniform, ascending grid starting at 0 (the convolution below
     assumes it). The result integrates to ``E0_eV`` when the grid covers the track.
 
-    shape="bragg": two-power-law stopping power S(E) ~ (E/E_pk)^-a above E_pk and
-    ~ (E/E_pk)^0.5 below, with a fixed by ``peak_to_entrance`` = S(E_pk)/S(E0);
-    s(E) = int_E^E0 dE'/S scaled to ``alpha_range_cm``; Gaussian range straggling
-    (sigma = straggle_frac * range) smears the track end. QUALITATIVE: the 2.3 ratio
-    and 0.75 MeV peak are literature orders of magnitude for alphas in Si, not a
-    tabulated ASTAR/SRIM 4H-SiC curve (none is available offline; data/srim/README.md).
-    After smoothing the peak/entrance ratio is ~2.1.
-    shape="box": ``alpha_depth_shape`` (flat to 0.8 R, erfc roll-off) along the path,
-    the profile ``run_cce`` uses at normal incidence.
+    shape="bragg" (default): the REAL curve, electronic S_e(E(s)) of an ``E0_eV``
+    alpha along its CSDA path in 4H-SiC from NIST ASTAR Si + C (Bragg additivity),
+    with the computed Bohr range straggling, path axis scaled so the CSDA range equals
+    ``alpha_range_cm`` (NIST: 18.50 um at 5.5 MeV; the API default 18 um compresses it
+    by 3%). Peak/entrance ~2.49. ``peak_to_entrance``/``E_peak_eV``/``straggle_frac``
+    are ignored.
+    shape="bragg_powerlaw": the legacy QUALITATIVE curve (before 2026-10-20): S(E) ~
+    (E/E_pk)^-a above E_pk and ~ (E/E_pk)^0.5 below, a fixed by ``peak_to_entrance``,
+    Gaussian straggling sigma = straggle_frac * range; peak/entrance ~2.1 after
+    smoothing. Not data.
+    shape="box": the legacy flat box (``alpha_depth_shape(..., bragg_peak_ratio=None)``,
+    flat to 0.8 R, erfc roll-off) along the path.
     """
     s = np.asarray(s_cm, dtype=float)
     R = float(alpha_range_cm)
     if shape == "box":
-        f = alpha_depth_shape(s, alpha_range_cm=R)
+        f = alpha_depth_shape(s, alpha_range_cm=R, bragg_peak_ratio=None)
     elif shape == "bragg":
+        u, g = _nist_alpha_curve_unit(E0_eV / 1e6)
+        f = np.interp(s / R, u, g, right=0.0)
+    elif shape == "bragg_powerlaw":
         a = np.log(peak_to_entrance) / np.log(E0_eV / E_peak_eV)
         E = np.geomspace(1.0, E0_eV, 20001)
         S = np.where(E > E_peak_eV, (E / E_peak_eV) ** (-a), (E / E_peak_eV) ** 0.5)
@@ -277,7 +295,9 @@ def alpha_path_stopping(
             padded = np.concatenate([np.full(m, f[0]), f, np.zeros(m)])
             f = np.convolve(padded, ker, mode="valid")
     else:
-        raise ValueError(f"shape must be 'bragg' or 'box' (got {shape!r})")
+        raise ValueError(
+            f"shape must be 'bragg', 'bragg_powerlaw' or 'box' (got {shape!r})"
+        )
     total = np.trapezoid(f, s)
     return f * (E0_eV / total) if total > 0 else f
 
@@ -363,57 +383,77 @@ def _interpolate_proton_range_water(E_MeV):
     return float(R_water_mm)
 
 
-def proton_generation_profile(x_cm, E_MeV, dose_rate_Gy_s=1.0):
+def proton_generation_profile(
+    x_cm, E_MeV, dose_rate_Gy_s=1.0, *, dose_medium="sic", fluence_rate_cm2_s=None
+):
     """Carrier generation rate profile for proton beams in SiC detector.
 
-    For therapeutic proton energies (30-150 MeV), the CSDA range far
-    exceeds the thin SiC detector (~10 um), so the generation profile
-    within the detector is approximately flat (entrance dose region,
-    well before the Bragg peak).
+    Three input conventions (audit-v7 B-10):
 
-    Energy-independent by construction: at equal dose rate the profile is the same
-    for every E_MeV, which is only validated against the supported range (audit-v7
-    B-10). Curves "at 30/70/150 MeV" at equal dose rate are therefore identical.
+    - default, ``dose_medium="sic"``: ``dose_rate_Gy_s`` is the dose rate IN SiC. The
+      generation G = D' rho / E_pair is then flat and ENERGY-INDEPENDENT by
+      construction (at equal SiC dose rate, 30/70/150 MeV give the same G); ``E_MeV``
+      is only validated against the 30-150 MeV range. Unchanged since v1.
+    - ``dose_medium="water"`` (opt-in): ``dose_rate_Gy_s`` is the dose rate to WATER
+      (the clinical quantity). It is converted to SiC dose with the NIST PSTAR mass
+      electronic stopping-power ratio (S/rho)_SiC/(S/rho)_water at ``E_MeV``
+      (Bragg-Gray, no secondary-electron transport; 0.823 at 62 MeV, 0.815 at 30 MeV,
+      0.831 at 150 MeV). Flat in depth.
+    - ``fluence_rate_cm2_s`` given (opt-in): proton fluence rate (cm^-2 s^-1); then
+      G(x) = Phi' L_e,SiC(E(x)) / E_pair with E(x) the residual CSDA energy at depth x
+      (NIST PSTAR Si + C, Bragg additivity) and G = 0 beyond the CSDA range. This
+      carries the full energy dependence (L_SiC is ~3.4x larger at 30 MeV than at
+      150 MeV) and the depth dependence for low-energy protons. ``dose_rate_Gy_s`` and
+      ``dose_medium`` are ignored.
+
+    For the two opt-in modes ``E_MeV`` may be anywhere in the PSTAR grid
+    (1 keV - 10 GeV).
 
     Parameters
     ----------
     x_cm : array_like
         Depth positions in SiC (cm), relative to detector entrance.
     E_MeV : float
-        Proton kinetic energy (MeV). Supported range: 30-150 MeV.
-        Values between tabulated energies are interpolated.
+        Proton kinetic energy at the detector entrance (MeV).
     dose_rate_Gy_s : float
-        Dose rate at detector entrance (Gy/s). Default: 1.0.
+        Dose rate at detector entrance (Gy/s), in the medium ``dose_medium``.
+    dose_medium : {"sic", "water"}
+        Medium of ``dose_rate_Gy_s``.
+    fluence_rate_cm2_s : float, optional
+        Proton fluence rate; selects the fluence mode.
 
     Returns
     -------
     G : ndarray
         Generation rate (cm^-3 s^-1) at each position.
-
-    Notes
-    -----
-    Proton ranges in SiC are scaled from water via density ratio:
-    R_SiC = R_water * (rho_water / rho_SiC).
-
-    For all therapeutic energies, range >> detector thickness,
-    so the profile is essentially uniform within the detector.
     """
     x = np.asarray(x_cm, dtype=float)
 
-    # The range lookup only validates E_MeV (raises outside the tabulated energies). The
-    # SiC range (R_water * rho_water / rho_SiC, first order) is not used: the profile
-    # below is the flat entrance-region value for every energy (audit B-10, open:
-    # energy independence of this profile).
+    if fluence_rate_cm2_s is not None:
+        E = residual_energy_MeV("proton", "sic", float(E_MeV), x)
+        L = np.zeros_like(E)
+        alive = E > 1e-3  # PSTAR grid starts at 1 keV
+        L[alive] = linear_stopping("proton", "sic", E[alive], "electronic")  # MeV/cm
+        return float(fluence_rate_cm2_s) * L * 1e6 / E_PAIR_SIC_EV
+
+    if dose_medium == "water":
+        ratio = float(
+            mass_stopping("proton", "sic", float(E_MeV))
+            / mass_stopping("proton", "water", float(E_MeV))
+        )
+        return np.full_like(
+            x, dose_rate_to_generation(dose_rate_Gy_s * ratio), dtype=float
+        )
+    if dose_medium != "sic":
+        raise ValueError(f"dose_medium must be 'sic' or 'water' (got {dose_medium!r})")
+
+    # Default: SiC dose rate. The range lookup only validates E_MeV (raises outside the
+    # 30-150 MeV table); the profile is the flat entrance-region value for every energy.
     if E_MeV not in PROTON_RANGE_WATER_MM:
         _interpolate_proton_range_water(E_MeV)
 
-    # Convert dose rate to generation rate
     G_entrance = dose_rate_to_generation(dose_rate_Gy_s)
-
-    # For entrance region (x << range), profile is flat
-    G = np.full_like(x, G_entrance, dtype=float)
-
-    return G
+    return np.full_like(x, G_entrance, dtype=float)
 
 
 def confine_generation_to_epi(device_info, depth, generation):
