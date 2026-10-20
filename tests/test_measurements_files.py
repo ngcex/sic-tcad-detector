@@ -1,5 +1,8 @@
 """etna.measurements file validation: bad files are refused with messages naming the
-file line and column; the committed templates are header-only (no numbers)."""
+file line and column; the committed templates are header-only (no numbers).
+
+Every inline CSV literal below is SYNTHETIC test input (made-up numbers to exercise the
+validator), not a measurement."""
 
 from __future__ import annotations
 
@@ -60,7 +63,16 @@ def _issues(loader, text, **kw):
             "# area_cm2: 0.04\nV_V,C_pF\n0,200\n-1\n",
             "line 4: 1 cells, the header has 2 columns",
         ),
-        ("# area_cm2: 0.04\nV_V,C_pF\n1,200\n2,90\n", "every bias is forward"),
+        ("# area_cm2: 0.04\nV_V,C_pF\n1,200\n2,90\n", "2 forward vs 0 reverse points"),
+        # reverse-positive file without the convention line, one small negative point
+        (
+            "# area_cm2: 0.04\nV_V,C_pF\n-0.5,300\n0,200\n5,60\n10,50\n",
+            "2 forward vs 1 reverse",
+        ),
+        (
+            "# area_cm2: 0.04\nV_V,C_pF\n4,300\n0,200\n-5,60\n-10,50\n",
+            "forward bias up to 4 V",
+        ),
         (
             "# area_cm2: 0.04\n# bias_convention: sideways\nV_V,C_pF\n0,1\n",
             "bias_convention must be one of",
@@ -144,7 +156,7 @@ def test_sims_file_problems(text, expected):
             "T 300 K repeats line 2 at bias -10 V",
         ),
         ("T_K,T_C,I_pA\n300,27,1\n", "are exclusive"),
-        ("V_V,T_K,I_pA\n10,300,1\n10,310,2\n", "every bias is forward"),
+        ("V_V,T_K,I_pA\n10,300,1\n10,310,2\n", "2 row(s) with forward bias"),
         ("T_K,I_pA,sigma_I_pA\n300,1,-1\n", "column 'sigma_I_pA': must be >= 0"),
     ],
 )
@@ -178,14 +190,7 @@ def test_templates_are_header_only_and_valid(name, loader):
     assert len(msgs) == 1 and "no data rows" in msgs[0]
 
 
-def test_no_measurement_data_committed():
-    root = TEMPLATES.parent
-    files = sorted(
-        p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file()
-    )
-    assert files == [
-        "README.md",
-        "templates/cv_template.csv",
-        "templates/it_template.csv",
-        "templates/sims_template.csv",
-    ]
+def test_templates_directory_holds_only_the_three_templates():
+    """templates/ is header-only (real, sourced measurement files may live elsewhere)."""
+    files = sorted(p.name for p in TEMPLATES.iterdir() if p.is_file())
+    assert files == ["cv_template.csv", "it_template.csv", "sims_template.csv"]

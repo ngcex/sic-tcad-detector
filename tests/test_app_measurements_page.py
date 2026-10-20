@@ -4,6 +4,7 @@ validation messages, model overlay, results cached for the downloads.
 The C-V inversion is wrapped to a few iterations (max_nfev=4) through the
 ``etna.measurements`` module attribute the page calls, so the page path runs end to end
 without the full fit; the other analyses run for real (batched engine, < 1 s each).
+The inline bad-file literal is a made-up SYNTHETIC input, not a measurement.
 """
 
 from __future__ import annotations

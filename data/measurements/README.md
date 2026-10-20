@@ -25,8 +25,9 @@ value,value,...
   **column**; all problems of a file are reported at once.
 - Bias sign: ETNA convention, **reverse bias negative**. A file with reverse bias
   positive adds `# bias_convention: reverse_positive` (V is then negated on load).
-  Mixed-sign files are allowed (forward points are kept but not compared with the
-  model); an all-forward file is refused as a probable sign error.
+  C-V files may contain a forward segment (kept, not compared with the model) up to
+  3 V and fewer forward than reverse points; beyond that, and for any forward bias in
+  an I(T) file, the file is refused as a probable sign error.
 - Free-text metadata keys (kept in the provenance of every output): `sample`, `device`,
   `operator`, `date`, `instrument`, `source`, `notes` (SIMS: `lab` instead of
   `operator`/`device`).

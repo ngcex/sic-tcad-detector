@@ -56,6 +56,10 @@ def test_junction_from_the_al_n_crossing_and_acceptor_plateau():
     new = t.to_device_config(cfg)
     assert new.N_A == pytest.approx(1e19, rel=1e-3)
     assert new.substrate_thickness_um == pytest.approx(t.junction_depth_um)
+    # p+ 0.27 um (< 0.3) and N_A 1e19 + 1e12 (> 1e19): outside the engine box, said so
+    assert t.domain_reason is not None
+    assert any("outside the batched engine" in n for n in t.notes)
+    assert t.epi_end_from_data_um == pytest.approx(10.0, abs=0.05)
 
 
 def test_bin_mean_with_noise_recovers_the_profile_within_its_uncertainty():
@@ -123,3 +127,23 @@ def test_json_round_trip_and_figure(tmp_path):
     fig = plots.profile_figure(prof, t, config=cfg)
     assert export_figure(fig, "png", dpi=60)[:4] == b"\x89PNG"
     assert "SIMS/SRP profile" in M.report_markdown(profile_table=t)
+
+
+def test_epi_end_seen_in_the_data_before_the_config_epi_end():
+    """SYNTHETIC profile whose n+ rise starts at 9.0 um, config epi 10 um."""
+    cfg = etna.nplus_calibrated_config()  # abrupt epi/n+ at 10 um
+    depth = np.arange(0.0, 12.0, 0.01)
+    z = depth - XJ
+    N = np.where(z < 9.0, M.model_donor_profile(cfg, np.clip(z, 0, None)), 1e19)
+    prof = M.load_sims_csv(sims_csv(depth, N, meta=[f"# junction_depth_um: {XJ}"]))
+    t = M.resample_profile(prof, cfg)
+    assert t.epi_end_from_data_um == pytest.approx(9.0, abs=0.02)
+    assert any("resample with epi_thickness_um ~ 9" in n for n in t.notes)
+    assert (
+        t.N_D.max() >= 1e18
+    )  # the table holds n+-level values: refused by DeviceConfig
+    with pytest.raises(ValueError, match="N_A"):
+        t.to_device_config(cfg)
+    t9 = M.resample_profile(prof, etna.nplus_calibrated_config(epi_thickness_um=8.99))
+    assert not any("resample with" in n for n in t9.notes)
+    assert t9.N_D.max() < 1e16

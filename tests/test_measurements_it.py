@@ -1,5 +1,6 @@
 """etna.measurements I(T): Arrhenius fit and model E_a, on SYNTHETIC data generated
-in-test (an analytic Arrhenius law, or the ETNA dark-current model itself)."""
+in-test (an analytic Arrhenius law, or the ETNA dark-current model itself; the small
+inline CSV literals are made-up SYNTHETIC numbers, not measurements)."""
 
 from __future__ import annotations
 

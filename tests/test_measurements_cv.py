@@ -204,3 +204,10 @@ def test_inversion_figure_and_fast_path(inversion):
     assert not any("slow path" in n for n in inv.notes)
     fig = plots.inversion_figure(inv, M.depletion_profile(d))
     assert export_figure(fig, "png", dpi=60)[:4] == b"\x89PNG"
+
+
+def test_inversion_flags_biases_beyond_the_cross_check():
+    r = etna.run_cv(TRUTH(), 0.0, -120.0, 121)
+    d = M.load_cv_csv(cv_csv(r.x, r.y))
+    inv = M.invert_cv(d, etna.DeviceConfig(), max_nfev=2)  # notes only, not the fit
+    assert any("beyond cross_checked_to_V = 100 V" in n for n in inv.notes)

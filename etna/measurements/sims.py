@@ -261,6 +261,8 @@ class ProfileTable:
     acceptor_cm3: "np.ndarray | None"
     data_provenance: dict
     method: str = "bin_mean"
+    epi_end_from_data_um: "float | None" = None  # where N reaches the n+ level (data)
+    domain_reason: "str | None" = None  # set by to_device_config (engine box check)
     notes: list = field(default_factory=list)
 
     @property
@@ -309,7 +311,18 @@ class ProfileTable:
             kw["substrate_thickness_um"] = float(self.junction_depth_um)
         if use_acceptor and self.N_A_plateau is not None:
             kw["N_A"] = float(self.N_A_plateau)
-        return replace(base, **kw)
+        cfg = replace(base, **kw)
+        from etna.api.simulation import validated_domain_reason
+
+        self.domain_reason = validated_domain_reason(cfg)
+        if self.domain_reason is not None:
+            note = (
+                f"device config outside the batched engine's validated box "
+                f"({self.domain_reason}): runs use devsim (slower, no engine cross-check)"
+            )
+            if note not in self.notes:
+                self.notes.append(note)
+        return cfg
 
     def to_dict(self, config=None) -> dict:
         return {
@@ -328,6 +341,8 @@ class ProfileTable:
             "junction_depth_um": self.junction_depth_um,
             "junction_source": self.junction_source,
             "epi_thickness_um": self.epi_thickness_um,
+            "epi_end_from_data_um": self.epi_end_from_data_um,
+            "domain_reason": self.domain_reason,
             "acceptor": {
                 "N_A_plateau_cm3": self.N_A_plateau,
                 "depth_from_surface_um": self.acceptor_depth_um,
@@ -442,6 +457,32 @@ def resample_profile(
         if mk.any() and np.any(N[mk] <= 0):
             cens[k] = True
     ND = 10.0**logN
+    # where the data reach the n+ level (the epi/n+ interface as measured)
+    n_level = 0.1 * (
+        config.N_D_nplus if config.nplus_thickness_um is not None else 1e19
+    )
+    epi_data = None
+    above = np.where((z > 0) & good & (N >= n_level))[0]
+    if above.size:
+        i = int(above[0])
+        if i > 0 and good[i - 1] and z[i - 1] > 0:
+            l0, l1 = np.log10(N[i - 1]), np.log10(N[i])
+            t_ = (np.log10(n_level) - l0) / (l1 - l0) if l1 != l0 else 1.0
+            epi_data = float(z[i - 1] + t_ * (z[i] - z[i - 1]))
+        else:
+            epi_data = float(z[i])
+        dk = float(np.max(np.diff(knots)))
+        if abs(epi_data - epi) > dk:
+            notes.append(
+                f"the data reach the n+ level ({n_level:.2g} cm^-3) at {epi_data:.3g} um "
+                f"below the junction, the config's epi ends at {epi:g} um: resample with "
+                f"epi_thickness_um ~ {epi_data:.3g} (the table now holds n+-level values)"
+            )
+    elif z.max() >= epi:
+        notes.append(
+            f"the data never reach the n+ level ({n_level:.2g} cm^-3) within the "
+            "measured depth: the epi/n+ interface is not seen"
+        )
     if extra.any():
         notes.append(
             f"{int(extra.sum())} knot(s) outside the measured depth "
@@ -501,6 +542,7 @@ def resample_profile(
         acceptor_cm3=acm,
         data_provenance=profile.provenance(),
         method=method,
+        epi_end_from_data_um=epi_data,
         notes=notes,
     )
 

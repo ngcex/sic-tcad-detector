@@ -121,7 +121,7 @@ def _cv_tab(cfg) -> None:
     if c3.button("Invert to a donor_table", key="meas_cv_invert"):
         try:
             with st.spinner(
-                "Inverting the C-V (one batched solve per knot and iteration)..."
+                "Inverting the C-V (about 10-60 s; longer for long non-uniform sweeps)..."
             ):
                 st.session_state["meas_cv_inv"] = M.invert_cv(data, cfg, lam=float(lam))
                 st.session_state["meas_cv_dep"] = M.depletion_profile(data)
@@ -269,12 +269,17 @@ def _sims_tab(cfg) -> None:
             "extrapolated": tab.extrapolated,
         }
     )
-    _notes(tab.notes)
     try:
         tab.to_device_config(cfg)
         st.caption("The table builds a valid DeviceConfig on the sidebar geometry.")
+        if tab.domain_reason:
+            st.warning(
+                "That DeviceConfig lies outside the batched engine's validated box "
+                f"({tab.domain_reason}): simulations of it run on devsim (slower)."
+            )
     except ValueError as e:
         st.warning(f"Not usable as a DeviceConfig as is: {e}")
+    _notes(tab.notes)
     d1, d2, d3 = st.columns(3)
     d1.download_button(
         "donor_table JSON",

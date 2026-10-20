@@ -110,6 +110,9 @@ CV_META = {
     "notes": str,
 }
 BIAS_CONVENTIONS = ("reverse_negative", "reverse_positive")
+# More forward bias than this (about the 4H-SiC built-in voltage) or more forward than
+# reverse points: refused as a probable sign-convention error.
+MAX_FORWARD_V = 3.0
 
 # lab/cv_gap/fitlib.py KNOTS_UM, written for the 10 um epi; scaled to the epi thickness.
 LAB_KNOTS_10UM = (
@@ -249,12 +252,19 @@ def load_cv_csv(src, area_cm2: "float | None" = None) -> CVData:
             f"line {lines[order][k + 1]}, column '{names['V']}': bias {Vs[k + 1]:g} V "
             f"repeats line {lines[order][k]}"
         )
-    if conv in BIAS_CONVENTIONS and len(V) and np.all(V > 0):
-        issues.append(
-            f"column '{names['V']}': every bias is forward in the {conv} convention; if "
-            "reverse bias is positive in this file add '# bias_convention: "
-            "reverse_positive' (or flip the sign)"
-        )
+    if conv in BIAS_CONVENTIONS and len(V):
+        n_fwd, n_rev = int(np.sum(V > 0)), int(np.sum(V < 0))
+        why = None
+        if n_fwd and n_fwd >= n_rev:
+            why = f"{n_fwd} forward vs {n_rev} reverse points"
+        elif V.max() > MAX_FORWARD_V:
+            why = f"forward bias up to {V.max():g} V (> {MAX_FORWARD_V:g} V)"
+        if why:
+            issues.append(
+                f"column '{names['V']}': {why} in the {conv} convention, probably a sign "
+                "error; if reverse bias is positive in this file add '# bias_convention: "
+                "reverse_positive' (or flip the sign)"
+            )
     # area: column > metadata > argument
     area_col = constant_column(raw, "area", issues)
     area_meta = raw.meta.get("area_cm2")
@@ -805,6 +815,7 @@ def invert_cv(
     use_data_temperature: bool = True,
     max_nfev: int = 100,
     tol: float = 1e-4,
+    max_grid_points: int = 801,
 ) -> CVInversion:
     """Invert a measured C-V into a log-linear ``donor_table`` on ``config``'s geometry.
 
@@ -819,8 +830,10 @@ def invert_cv(
     which). Every trial is a batched-engine solve: the K+1 Jacobian columns in one stacked
     batch (``_stacked_W``, used only after it reproduced ``etna.run_cv`` on the start
     profile to 1e-9 um), the reported fit by ``etna.run_cv_batch``; a devsim fallback
-    raises RuntimeError. Runtime ~0.3-0.7 s per iteration for 120-240 bias points, a
-    10-40 s fit (a 241-point 0..-60 V curve: 36 s, 71 evaluations).
+    raises RuntimeError. Cost scales with the model grid: data on a uniform grid from
+    0 V are solved at their own biases (241 points 0..-60 V: 36 s; 401 points 0..-200 V:
+    30 s); other data use a ``step_V`` grid capped at ``max_grid_points`` (801 by
+    default; a 4001-point grid took 600 s).
     """
     from scipy.optimize import least_squares
 
@@ -842,6 +855,14 @@ def invert_cv(
     sigma_given = sW is not None and np.all(sW[rev] > 0)
     sig = sW[rev] if sigma_given else np.full(len(V), float(default_sigma_W_um))
     n, exact = bias_grid(V, step_V)
+    grid_note = None
+    if not exact and n > max_grid_points:
+        n = int(max_grid_points)
+        grid_note = (
+            f"data not on a uniform grid from 0 V: model grid capped at {n} points "
+            f"({abs(V.min()) / (n - 1):.3g} V step, linear interpolation; cost scales with "
+            "the grid, raise max_grid_points for a finer knee)"
+        )
     vmin = float(V.min())
     lo, hi = np.log10(ENGINE_TABLE_N_D[0]) + 1e-3, np.log10(ENGINE_TABLE_N_D[1]) - 1e-3
     hi = min(hi, np.log10(cfg.N_A) - 0.5)
@@ -925,7 +946,15 @@ def invert_cv(
     )
     p = r.x
     fitted = table_config(cfg, knots, p)
-    Wfit = _batch_W([fitted], n, vmin, V, exact)[0]
+    import etna
+
+    rfit = etna.run_cv(fitted, v_start=0.0, v_stop=vmin, n_points=n)
+    if rfit.metadata.get("solver") != "batched":
+        raise RuntimeError("invert_cv: the final fit did not run on the batched engine")
+    Wfit = _pick(
+        np.asarray(rfit.metadata["W_from_C"], float) * 1e4, rfit.x, n, vmin, V, exact
+    )
+    cross_checked = rfit.metadata.get("cross_checked_to_V")
     res = (Wd - Wfit) / sig
     chi2 = float(np.sum(res**2))
     dof = int(len(V) - K)
@@ -942,7 +971,12 @@ def invert_cv(
     T = fitted.T
     eps = _eps()
     LD = np.sqrt(eps * K_B_EV * T / (Q * 10.0**p)) * 1e4
-    notes = list(notes_fast)
+    notes = list(notes_fast) + ([grid_note] if grid_note else [])
+    if cross_checked is not None and np.any(-V > cross_checked):
+        notes.append(
+            f"{int(np.sum(-V > cross_checked))} point(s) beyond cross_checked_to_V = "
+            f"{cross_checked:g} V (engine not cross-checked against devsim there)"
+        )
     if not sigma_given:
         notes.append(
             f"no sigma in the file: every W weighted with {default_sigma_W_um:g} um; chi2 "

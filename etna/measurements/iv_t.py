@@ -181,11 +181,11 @@ def load_it_csv(src) -> ITData:
                 + ("" if V is None else f" at bias {V[i]:g} V")
             )
         seen.setdefault(key, ln)
-    if V is not None and np.all(V > 0):
+    if V is not None and np.any(V > 0):
         issues.append(
-            "every bias is forward in the "
-            f"{conv} convention; add '# bias_convention: reverse_positive' if reverse is "
-            "positive in this file"
+            f"{int(np.sum(V > 0))} row(s) with forward bias (up to {V.max():g} V) in the "
+            f"{conv} convention: a dark current is measured in reverse; add "
+            "'# bias_convention: reverse_positive' if reverse is positive in this file"
         )
     if issues:
         raise MeasurementFileError(source, issues)

@@ -1335,7 +1335,9 @@ synthetic data generated in the test from the model itself.
 File rules (all three kinds): units are in the column names (`C_pF`, `depth_nm`, `I_pA`,
 `T_K`); unknown names are refused with the accepted list; `# key: value` lines carry
 metadata (an empty value = not given); bias is in the ETNA sign (reverse negative) unless
-`# bias_convention: reverse_positive`. Every problem of a file is reported at once by one
+`# bias_convention: reverse_positive`. A C-V with more forward than reverse points, or
+forward bias above 3 V, and an I(T) with any forward bias, are refused as probable sign
+errors. Every problem of a file is reported at once by one
 `MeasurementFileError` (a `ValueError`), each line naming the file line (1-based, counting
 comments and header) and the column, e.g. `line 4, column 'C_pF': 'abc' is not a finite
 number`. Every result has `to_json()` (with the data file's sha256 and the model's config
@@ -1377,8 +1379,18 @@ cfg = etna.DeviceConfig(donor_table=M.load_donor_table_json("donor_table.json"))
   `lam * diff2(log10 N) / sqrt(knot spacing)` (`lam` = 1). Every trial is a full Poisson +
   small-signal C solve on the batched engine; the knots are bounded to its validated table
   range (5e12..5e16 cm⁻³), a device outside the engine box is refused. Without a sigma
-  column every point gets `default_sigma_W_um` = 0.02 µm and chi2 is relative. Runtime
-  10-40 s (one stacked engine batch per Jacobian; 241 points 0..-60 V: 36 s).
+  column every point gets `default_sigma_W_um` = 0.02 µm and chi2 is relative.
+- Runtime scales with the model grid. Data on a uniform grid from 0 V are solved at their
+  own biases: 241 points 0..-60 V 36 s, 401 points 0..-200 V 30 s (synthetic, M4).
+  Non-uniform data use a 0.05 V grid capped at `max_grid_points` = 801 (noted); an
+  uncapped 4001-point grid (0..-200 V) took 600 s.
+- Solver path (a deliberate deviation from "public API only"): `run_cv_batch` solves one
+  donor table per group, so the K+1 Jacobian columns would be K+1 separate solves. The
+  inversion stacks them into one `etna.core.batched` PoissonBatch built with the same calls
+  as the facade (`device_kwargs` -> `make_batch` -> `reverse_sweep`), used only after it
+  reproduced `run_cv` on the start profile to 1e-9 µm (otherwise the public path is used,
+  noted); the reported fit is a `run_cv` call. Pinned by
+  `test_stacked_batch_matches_run_cv_per_table`.
 - Round trip (tests/test_measurements_cv.py, noise-free synthetic curve from the 19-knot
   preset, 121 points 0..-60 V, inverted on the default geometry): converged, rms W < 5 nm,
   every knot inside the probed depth within 0.1 dex (measured: 0.03 dex at 241 points).
@@ -1389,9 +1401,12 @@ Limits of the C-V route (also in every result's `limits`):
 
 - The C-V constrains N_D only between W at the least-reverse bias used (about W(0 V) =
   1.7 µm on the dosimeter) and W at the deepest bias. Knots outside are set by the
-  regularisation (`inv.constrained`, `inv.probed_depth_um`). To see the epi/n+ interface the
-  sweep must reach full depletion and beyond; a curve that stops at the knee says nothing
-  about the epi end.
+  regularisation (`inv.constrained`, `inv.probed_depth_um`). Minimum bias range: the
+  deepest probed depth is W at the deepest bias. On the 19-knot preset (synthetic)
+  eps*A/C = 9.26 / 9.53 / 9.74 / 9.89 / 9.99 / 10.01 µm at -5 / -10 / -30 / -60 / -100 /
+  -200 V: the bulk (2-9 µm) needs only -5 V, the n-/n+ rise (9.25-10 µm) is probed between
+  -10 and -100 V, and -100..-200 V adds about 20 nm at the epi end (where the rise reaches
+  the 5e16 table bound). A curve that stops at the knee says nothing about the epi end.
 - Depth resolution is about one Debye length (`inv.debye_um`: 0.37 µm at 1e14, 1.2 µm at
   1e13 cm⁻³); finer knots are regularisation-driven (noted).
 - Area error and perimeter (fringe) capacitance are degenerate with doping: a 2.5 % area
@@ -1415,7 +1430,14 @@ M.profile_vs_model(tab, etna.DeviceConfig())["rms_log10"]
 - Depth origin: `donor_table` depth is below the p+/n- junction. The junction is the
   `junction_depth_um` argument, else the file's `# junction_depth_um:`, else the Al/N
   crossing, else the model's p+ thickness (`tab.junction_source` says which). The table
-  stops at the epi end; the n+ substrate stays `N_D_nplus`.
+  stops at the config's epi end; the n+ substrate stays `N_D_nplus`.
+- Epi end as measured: `tab.epi_end_from_data_um` is the depth below the junction where
+  N reaches the n+ level (0.1 x `N_D_nplus`). When it differs from the config's epi by
+  more than a knot spacing a note says so (the table then holds n+-level values, which
+  `DeviceConfig` refuses above N_A or runs on devsim above 5e16): resample with
+  `epi_thickness_um` set to it.
+- `to_device_config` checks the result against the engine box (`tab.domain_reason`,
+  noted): e.g. a junction shallower than 0.3 µm or an Al plateau above 1e19 runs on devsim.
 - Resampling: `method="bin_mean"` (default; mean of log10 N in the bin around each knot,
   noise-robust, rounds structure narrower than a bin) or `"interp"` (log-linear
   interpolation, exact on a noise-free profile). Per-knot relative uncertainty: the mean
