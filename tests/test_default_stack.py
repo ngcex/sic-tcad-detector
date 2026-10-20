@@ -36,7 +36,7 @@ from etna.core.sic_material import SiC4H_Parameters
 def test_one_source_of_truth():
     c = DeviceConfig()
     # 2026-10-18 flip: the default is the measured-C-V fit (was NPLUS_CALIBRATION:
-    # 2.958237e15 / 8.252732e13 / 0.987 um, abrupt n+, N_t 2.805336e12)
+    # 2.958237e15 / 8.252732e13 / 0.987 um, abrupt n+, N_t 1.343970e12; 2.805336e12 before the Hurkx refit)
     assert core_device.MEASURED_CV_STACK is DEFAULT_STACK
     assert NPLUS_CALIBRATION is not DEFAULT_STACK
     assert c == measured_cv_config()
