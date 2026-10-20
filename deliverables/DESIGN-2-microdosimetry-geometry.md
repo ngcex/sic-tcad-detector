@@ -107,7 +107,8 @@ Specifically NOT provided and to be supplied/measured by the fab:
 - **Dark current / leakage: not specified.** Our p-n leakage is a calibration
   input (N_t fitted so the model equals the upper bound "< 18 pA up to −60 V" at
   −60 V, 4 mm², 300 K; heuristic bias shape; effective "TAT" generation with the
-  Hurkx enhancement inactive below ~4.5 MV/cm; assumed n_i(T) temperature scaling)
+  Hurkx (1 + Γ) field enhancement with an assumed tunnelling mass; assumed n_i(T)
+  temperature scaling)
   and does not apply to a Schottky/JBS junction. The fab must measure leakage for
   its junction type.
 - **No rated breakdown / max voltage.** No breakdown model. (The ~−50 V convergence

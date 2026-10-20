@@ -198,7 +198,8 @@ to be handed to a foundry (ST / FBK) as a feasibility study — not mask layouts
 
 Each states explicitly what is a validated model target vs. what the foundry must
 supply. The Markdown files are the source; the PDFs were regenerated from them on
-2026-10-18, after the default-stack flip. `deliverables/DIMENSIONS-provenance.md`
+2026-10-21 (`pandoc X.md -o X.pdf --pdf-engine=xelatex -V mainfont="Arial Unicode MS"
+-V geometry:margin=2cm`, run in `deliverables/`). `deliverables/DIMENSIONS-provenance.md`
 classifies every layout dimension as DOCUMENTED, MEASURED-FROM-FIGURE or PLACEHOLDER.
 
 ---
@@ -263,10 +264,11 @@ built-in-voltage difference; <1 % with V_bi matched), not a validation of this d
   (including the graded transition); pass `nplus_thickness_cm=None,
 buffer_thickness_cm=None, buffer_end_doping=None, substrate_thickness_cm=1e-4` (or
   `device_kwargs(legacy_config())`) for the legacy geometry.
-- 🔧 **Data-blocked (machinery ready, real data needed):**
-  - NIEL hardness factors: SR-NIEL proton NIEL (`data/niel/`, 1-1000 MeV) in the Si
-    1-MeV-neq convention of the defect rates; the SiC neutron normalisation is
-    not available (registered SR-NIEL calculator), so the SiC-specific factor is open.
+- 🔧 **Real data, one normalisation open:**
+  - NIEL hardness factors: SR-NIEL proton NIEL data (`data/niel/`, 1-1000 MeV, since
+    2026-10-20; the 30-150 MeV placeholders are gone) in the Si 1-MeV-neq convention of
+    the defect rates. The SiC neutron normalisation is still open (SR-NIEL's SiC neutron
+    calculator needs a login), so the absolute SiC fluence scale is unvalidated.
 - **Stopping powers (real data since 2026-10-20):** tissue-equivalence κ(E) and the
   alpha Bragg curve use NIST PSTAR/ASTAR tables (`data/nist_star/`, raw responses and
   provenance kept). NIST has no SiC table, so SiC is built by Bragg additivity of Si + C,
