@@ -24,7 +24,6 @@ References:
 """
 
 import numpy as np
-from scipy.special import erfc
 
 # ---------------------------------------------------------------------------
 # Module-level constants
@@ -163,6 +162,8 @@ def alpha_depth_shape(x_cm, alpha_range_cm=ALPHA_RANGE_SIC_CM, bragg_peak_ratio=
     # Smooth roll-off to zero beyond the flat/rising region.
     # erfc((x - x_flat) / (sqrt(2) * sigma)) transitions from 2 to 0.
     # Divide by 2 to get transition from 1 to 0.
+    from scipy.special import erfc  # lazy: keeps `import etna` light
+
     rolloff = 0.5 * erfc((x - x_flat) / (np.sqrt(2) * sigma))
     return shape_factor * rolloff
 

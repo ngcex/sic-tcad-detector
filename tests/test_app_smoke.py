@@ -122,7 +122,7 @@ def test_field_map_page_default_run():
     _click_run(at)
     res = at.session_state["field_result"]
     assert res.metadata["bias_V"] == -50.0
-    assert "Solver: devsim" in _captions(at)
+    assert "Solver: batched" in _captions(at)  # 1D field on the engine since 2026-10-21
 
 
 def test_run_all_page_default_run():
@@ -212,7 +212,7 @@ def test_export_page_default_run():
     next(b for b in at.button if b.key == "ex_field_btn").click()
     at.run()
     assert at.exception == [] and len(at.error) == 0
-    assert at.session_state["export_field"].metadata["solver"] == "devsim"
+    assert at.session_state["export_field"].metadata["solver"] == "batched"
 
 
 def test_export_page_without_config():

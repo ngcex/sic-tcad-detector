@@ -26,7 +26,6 @@ import uuid
 
 import devsim
 import numpy as np
-import pandas as pd
 
 from etna.core.drift_diffusion import (
     create_dd_device,
@@ -813,6 +812,8 @@ def transient_cce_vs_dose_rate(
             delete_device_and_mesh(device)
         except Exception:
             pass
+
+    import pandas as pd  # lazy: keeps `import etna` light
 
     df = pd.DataFrame(
         {

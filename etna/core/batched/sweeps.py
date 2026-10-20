@@ -134,7 +134,9 @@ def make_batch(
             )
             fields.append(f)
         ionization = (fields, netdop)
-    pb = PoissonBatch(x, donors, acceptors, n_i, thermal_voltage(T), ionization=ionization)
+    pb = PoissonBatch(
+        x, donors, acceptors, n_i, thermal_voltage(T), ionization=ionization
+    )
     if model is not None:
         # mobility total doping: Acceptors carry the model's ionized p+ value (A-02)
         pb.acceptor_scales = np.array(
@@ -268,6 +270,49 @@ def alpha_generation(x, junction_pos, alpha_range_cm, generation_rate, epi_end=N
     return G
 
 
+def srh_continuity(pb, T, N_A):
+    """ContinuityBatch of the devsim DD builders (create_dd_device): local Caughey-Thomas
+    edge mobility at the batch doping (``material.edge_mobilities``), midgap SRH with
+    ``srh_lifetime(T)``. Shared by ``cce_sweep`` and ``dark_carriers``."""
+    T = np.broadcast_to(np.asarray(T, dtype=float), (pb.B,))
+    N_A = np.broadcast_to(np.asarray(N_A, dtype=float), (pb.B,))
+    mu_n, mu_p = edge_mobilities(
+        pb.donors, pb.acceptors, N_A, T, getattr(pb, "acceptor_scales", None)
+    )
+    return ContinuityBatch(
+        pb,
+        mu_n,
+        mu_p,
+        _per_device(lambda t: srh_lifetime(t, "electron", PARAMS), T),
+        _per_device(lambda t: srh_lifetime(t, "hole", PARAMS), T),
+    )
+
+
+# Gummel stop of dark_carriers (relative change of the cathode current, and of psi / n /
+# p floored at 2 * poisson_tol): 2-3 iterations; n, p agree with devsim's DD Electrons /
+# Holes to <= ~1.5e-10 relative at every node (tests/test_field_engine_1d.py).
+DARK_CARRIER_GUMMEL_TOL = 1e-10
+
+
+def dark_carriers(pb, psi, V_cathode, T, N_A, tol=1e-8):
+    """Dark drift-diffusion carriers (n, p) at a converged reverse-bias Poisson state.
+
+    ``psi`` (B, N) is a flat-quasi-Fermi solution at ``V_cathode`` (``reverse_sweep``);
+    a dark Gummel solve (``srh_continuity``) gives the minority tails that the flat
+    quasi-Fermi levels miss (e.g. electrons at the p+ anode, n_i^2 / N_A there instead of
+    ~0). Returns the TransportResult; its ``psi`` moves by ~1e-14 V and is not meant to
+    replace the Poisson one.
+    """
+    cb = srh_continuity(pb, T, N_A)
+    return cb.solve(
+        psi,
+        V_cathode=V_cathode,
+        tol=DARK_CARRIER_GUMMEL_TOL,
+        max_iter=200,
+        poisson_tol=tol,
+    )
+
+
 @serialized
 def cce_sweep(
     pb,
@@ -295,18 +340,7 @@ def cce_sweep(
     devices; the Gummel solve runs only at the requested biases.
     """
     voltages = _check_voltages(voltages)
-    T = np.broadcast_to(np.asarray(T, dtype=float), (pb.B,))
-    N_A = np.broadcast_to(np.asarray(N_A, dtype=float), (pb.B,))
-    mu_n, mu_p = edge_mobilities(
-        pb.donors, pb.acceptors, N_A, T, getattr(pb, "acceptor_scales", None)
-    )
-    cb = ContinuityBatch(
-        pb,
-        mu_n,
-        mu_p,
-        _per_device(lambda t: srh_lifetime(t, "electron", PARAMS), T),
-        _per_device(lambda t: srh_lifetime(t, "hole", PARAMS), T),
-    )
+    cb = srh_continuity(pb, T, N_A)
     J_gen = Q * np.trapezoid(G, pb.x)
     ramp = _Ramp(pb, tol, max_step_V)
     cce, J, conv = [], [], []

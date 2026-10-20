@@ -211,7 +211,13 @@ def test_download_callables_need_no_script_context():
     assert "err" not in out, out.get("err")
     assert out["fig"][:5] == b"%PDF-"
     names = zipfile.ZipFile(io.BytesIO(out["zip"])).namelist()
-    assert {"cv/cv.svg", "cv/depletion.svg", "cv/mott_schottky.svg", "cv/stack.svg", "cv/cv_data.csv"} <= set(names)
+    assert {
+        "cv/cv.svg",
+        "cv/depletion.svg",
+        "cv/mott_schottky.svg",
+        "cv/stack.svg",
+        "cv/cv_data.csv",
+    } <= set(names)
     assert len(cache) == 5  # pdf + 4 svg kinds, reused on the next click
 
 
@@ -319,7 +325,9 @@ def test_animation_button(monkeypatch, tmp_path):
 
     def fake_animate(data, scene, fmt, engine="auto", out_dir=None):
         p = Path(out_dir) / f"{scene}.{fmt}"
-        __import__("PIL.Image", fromlist=["Image"]).new("RGB", (8, 8)).save(p, format="GIF")
+        __import__("PIL.Image", fromlist=["Image"]).new("RGB", (8, 8)).save(
+            p, format="GIF"
+        )
         seen["args"] = (scene, fmt, engine)
         return p, 0.1, "matplotlib"
 
@@ -364,7 +372,7 @@ def test_real_default_run_cv_and_field():
     assert len(at.error) == 0
     cache = at.session_state["figures_cache"]
     solvers = {v.metadata["solver"] for v in cache.values()}
-    assert solvers == {"batched", "devsim"}
+    assert solvers == {"batched"}  # C-V and (since 2026-10-21) the 1D field
     at.toggle(key="fig_prev_field").set_value(True)
     at.run()
     assert at.exception == [] and len(at.get("imgs")) == 1

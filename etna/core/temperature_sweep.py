@@ -13,7 +13,6 @@ import logging
 import uuid
 
 import numpy as np
-import pandas as pd
 
 from etna.core.sic_material import (
     SiC4H_Parameters,
@@ -144,6 +143,8 @@ def sweep_iv_vs_temperature(
                 delete_device_and_mesh(dev_name)
             except Exception:
                 pass
+
+    import pandas as pd  # lazy: keeps `import etna` light
 
     df = pd.DataFrame(records)
     df.attrs["solver"] = solvers
@@ -379,6 +380,8 @@ def sweep_cce_vs_temperature(
                 logger.warning(f"sweep_cce(dd): failed at T={T:.1f}K: {e}")
     else:
         raise ValueError(f"method must be 'hecht' or 'dd', got '{method}'")
+
+    import pandas as pd  # lazy: keeps `import etna` light
 
     return pd.DataFrame(records, columns=["T", "V", "CCE", "truncated"])
 

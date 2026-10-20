@@ -395,12 +395,17 @@ r = run_cce_tilted_alpha(microdosimeter_config())
 print(r.metadata["projected_end_um"], r.metadata["reach_through_V"])  # ~7.61 um, 9.0 V
 ```
 
-### `run_field(config, bias_V=-50.0)`
+### `run_field(config, bias_V=-50.0, solver="auto")`
 
 Returns the field and potential at one reverse bias.
 
 - **1D**: `x` is depth (µm), `y` is |E| (V/cm). Metadata holds `potential` (V) and
-  `net_doping` (cm^-3). 1D always runs on **devsim** (about 0.3 s).
+  `net_doping` (cm^-3). 1D runs on the **batched engine** inside its box (the run_cv
+  box, |bias| up to `cross_checked_to_V` = 40 V without n+ / 100 V with it, static
+  ionization; about 5 ms, `metadata["solver"] == "batched"`): same mesh and keys as devsim,
+  potential within 1.5e-14 V, |E| within 4.5e-12 of max E, Electrons / Holes within 2e-9
+  relative (`tests/test_field_engine_1d.py`). Otherwise, or with `solver="devsim"`, devsim
+  (about 0.3 s). `solver="engine"` raises where no engine serves the call.
 - **2D** (`half_width_um` set): `x` and `y` are **empty**. Use `mesh.x_coords`
   (lateral, cm), `mesh.y_coords` (depth, cm) and `mesh.node_values["ElectricField"]`.
   The 2D engine serves configs inside its box (about 0.5 s); otherwise devsim runs.
@@ -762,7 +767,7 @@ Which solver runs:
 - **Incomplete ionization** (`incomplete_ionization=True`, §5.3): the 1D C-V/CCE engine
   and the 2D engine solve it; dark current, FLASH, fluence and C-V-at-fluence go to
   devsim (`metadata["domain_note"]` / the engine reason names `incomplete_ionization`).
-- **devsim only**: 1D `run_field`, `run_transient`, `dark_current_sweep(device_info)` (a
+- **devsim only**: `run_transient`, `dark_current_sweep(device_info)` (a
   devsim device you built), and any engine fallback.
 - **Fluence sweeps**: `run_radiation_damage` (through the core `cce_vs_fluence`) uses the
   batched engine where its box allows (`tests/test_fluence_engine.py`) and devsim

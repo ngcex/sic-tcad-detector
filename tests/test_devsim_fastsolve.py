@@ -30,7 +30,7 @@ pytestmark = pytest.mark.skipif(
 def _field():
     from etna import DeviceConfig, run_field
 
-    return run_field(DeviceConfig(), -10.0).metadata["potential"]
+    return run_field(DeviceConfig(), -10.0, solver="devsim").metadata["potential"]
 
 
 def test_installed_on_import_and_survives_reset():

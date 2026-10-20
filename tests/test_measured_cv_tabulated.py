@@ -493,9 +493,12 @@ def test_batches_group_by_table_and_mix_with_the_default():
         single = sim.run_cv(c, 0.0, -40.0, 9)
         np.testing.assert_allclose(r.y, single.y, rtol=1e-12)
     assert not np.allclose(batch[0].y, batch[2].y, rtol=1e-3, atol=0.0)
-    # 1D field map (devsim path) and the 2D dark state (engine2d) take the table
+    # 1D field map (batched engine and devsim) and the 2D dark state (engine2d) take the
+    # table
     f = sim.run_field(tab, -30.0)
-    assert f.metadata["solver"] == "devsim" and np.max(f.y) > 5e4
+    assert f.metadata["solver"] == "batched" and np.max(f.y) > 5e4
+    fd = sim.run_field(tab, -30.0, solver="devsim")
+    np.testing.assert_allclose(f.y, fd.y, rtol=0, atol=5e-12 * fd.y.max())
     f2 = sim.run_field(dataclasses.replace(tab, half_width_um=50.0), -30.0)
     assert f2.metadata["solver"] == "engine2d"
     nd = np.asarray(f2.mesh.node_values["NetDoping"])

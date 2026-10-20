@@ -15,6 +15,7 @@ JSON, so manim never runs inside the caller's process (e.g. Streamlit). Low qual
 from __future__ import annotations
 
 import json
+import logging
 import os
 import subprocess
 import sys
@@ -27,6 +28,8 @@ import numpy as np
 from etna.export.cross_section import stack_layers
 from etna.export.labels import VALIDATION_LABEL
 
+logger = logging.getLogger(__name__)
+
 SCENES = ("StackScene", "DepletionScene")
 DEFAULT_BIASES = tuple(float(v) for v in np.linspace(0.0, -60.0, 13))  # 5 V steps
 _SCENES_FILE = Path(__file__).with_name("_scenes.py")
@@ -37,14 +40,23 @@ _INSTALL_HINT = (
 
 
 def manim_available() -> "tuple[bool, str]":
-    """(True, '') if manim imports (cairo / pango work), else (False, reason)."""
+    """(True, '') if the manim package is installed, else (False, reason).
+
+    ``importlib.util.find_spec`` only: no import (``import manim`` costs ~9 s cold, and
+    Streamlit pages call this on every rerun). manim itself runs only in the render
+    subprocess (on click); a broken cairo / pango build shows up there as
+    render_animation's RuntimeError, and ``animate(engine="auto")`` then falls back to
+    the matplotlib frames.
+    """
+    import importlib.util
+
     try:
-        import manim  # noqa: F401
-    except Exception as e:  # ImportError, or a broken pycairo / manimpango build
-        return (
-            False,
-            f"manim is not importable ({type(e).__name__}: {e}); {_INSTALL_HINT}",
-        )
+        spec = importlib.util.find_spec("manim")
+        err = "No module named 'manim'"
+    except (ImportError, ValueError) as e:  # ValueError: sys.modules['manim'] is None
+        spec, err = None, f"{type(e).__name__}: {e}"
+    if spec is None:
+        return False, f"manim is not importable ({err}); {_INSTALL_HINT}"
     return True, ""
 
 
@@ -94,7 +106,10 @@ def animation_data(config, biases=DEFAULT_BIASES, max_points: int = 400) -> dict
     peaks = [fr["peak_E_V_per_cm"] for fr in frames if fr["peak_E_V_per_cm"]]
     from etna.viz.provenance import footer_text, provenance
 
-    prov = provenance(config=config, solver=f"W: {cv.metadata.get('solver', '')}, E(x): {frames[0]['solver']}")
+    prov = provenance(
+        config=config,
+        solver=f"W: {cv.metadata.get('solver', '')}, E(x): {frames[0]['solver']}",
+    )
     return dict(
         label=VALIDATION_LABEL,
         provenance=footer_text(prov),
@@ -202,7 +217,15 @@ def animate(
         engine == "auto" and fmt == "mp4" and manim_available()[0]
     )
     if use_manim:
-        path, wall = render_animation(data, scene, out_dir=out_dir)
-        return path, wall, "manim"
+        try:
+            path, wall = render_animation(data, scene, out_dir=out_dir)
+            return path, wall, "manim"
+        except RuntimeError:
+            if engine == "manim":
+                raise
+            # installed but not working (e.g. a broken cairo build): frames instead
+            logger.warning(
+                "manim render failed; using the matplotlib frames", exc_info=True
+            )
     path, wall = render_frames(data, scene, fmt=fmt, out_dir=out_dir)
     return path, wall, "matplotlib"

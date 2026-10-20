@@ -5,8 +5,10 @@ The render test skips cleanly when manim (optional extra ``viz``) is not install
 
 from __future__ import annotations
 
-import builtins
+import subprocess
+import sys
 import time
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -70,18 +72,57 @@ def test_animation_data_rejects_2d_and_forward_bias():
 
 
 def test_manim_unavailable_gives_reason(monkeypatch):
-    real_import = builtins.__import__
+    import importlib.util
 
-    def no_manim(name, *a, **k):
-        if name == "manim" or name.startswith("manim."):
-            raise ImportError("No module named 'manim'")
-        return real_import(name, *a, **k)
-
-    monkeypatch.setattr(builtins, "__import__", no_manim)
+    real_find = importlib.util.find_spec
+    monkeypatch.setattr(
+        importlib.util,
+        "find_spec",
+        lambda name, *a: None if name == "manim" else real_find(name, *a),
+    )
     ok, why = manim_available()
     assert not ok and "uv sync --extra dev --extra viz" in why and "pkgconf" in why
     with pytest.raises(RuntimeError, match="extra viz"):
         render_animation({}, "StackScene")
+    # an import-blocked manim (sys.modules entry None) is unavailable too
+    monkeypatch.setattr(importlib.util, "find_spec", real_find)
+    monkeypatch.setitem(sys.modules, "manim", None)
+    ok, why = manim_available()
+    assert not ok and "extra viz" in why
+
+
+def test_manim_available_does_not_import_manim():
+    code = (
+        "import sys; from etna.viz import manim_available; manim_available(); "
+        "print('LOADED=' + str('manim' in sys.modules))"
+    )
+    out = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=True
+    )
+    (line,) = [ln for ln in out.stdout.splitlines() if ln.startswith("LOADED=")]
+    assert line == "LOADED=False"
+
+
+def test_animate_auto_falls_back_when_manim_render_fails(monkeypatch, tmp_path):
+    import etna.viz.animations as A
+
+    monkeypatch.setattr(A, "manim_available", lambda: (True, ""))
+
+    def broken(*a, **k):
+        raise RuntimeError("manim render of X failed (exit 1): cairo")
+
+    monkeypatch.setattr(A, "render_animation", broken)
+    seen = {}
+
+    def frames(data, scene, fmt, out_dir=None):
+        seen["fmt"] = fmt
+        return Path(tmp_path) / "x.mp4", 0.1
+
+    monkeypatch.setattr("etna.viz.frames.render_frames", frames)
+    _, _, engine = A.animate({}, "StackScene", "mp4", out_dir=tmp_path)
+    assert engine == "matplotlib" and seen["fmt"] == "mp4"
+    with pytest.raises(RuntimeError, match="cairo"):
+        A.animate({}, "StackScene", "mp4", engine="manim", out_dir=tmp_path)
 
 
 def test_render_rejects_unknown_scene():
@@ -92,7 +133,7 @@ def test_render_rejects_unknown_scene():
 def test_real_render_both_scenes(tmp_path):
     pytest.importorskip("manim")
     data = animation_data(DeviceConfig(), biases=(0.0, -10.0, -30.0))
-    assert {f["solver"] for f in data["frames"]} == {"devsim"}
+    assert {f["solver"] for f in data["frames"]} == {"batched"}
     t0 = time.perf_counter()
     for scene in SCENES:
         path, wall = render_animation(data, scene, out_dir=tmp_path / scene)

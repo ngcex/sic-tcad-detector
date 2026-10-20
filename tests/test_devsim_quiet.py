@@ -12,7 +12,7 @@ from etna.core.devsim_lock import VERBOSE_ENV, quiet_devsim
 
 
 def _field(capsys):
-    res = run_field(DeviceConfig(), bias_V=-20.0)
+    res = run_field(DeviceConfig(), bias_V=-20.0, solver="devsim")
     return res, capsys.readouterr().out
 
 

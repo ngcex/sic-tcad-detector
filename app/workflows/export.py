@@ -22,6 +22,36 @@ import etna
 from etna import export as ex
 from app.components.page_utils import require_config, show_error, show_stale_warning
 
+# Session cache of the page's file bytes (Streamlit reruns the whole script on every
+# widget change): the cross-section PNG (0.1-0.5 s) and SVG are keyed by config / layout
+# parameter hashes; the spec PDF (~0.7 s), the profile files (2D: ~0.3 s each) and the
+# GDSII are built lazily on click (download_button data callables) and kept per object.
+BYTES_KEY = "export_bytes_cache"
+_BYTES_MAX = 32
+
+
+def _bytes_cache() -> dict:
+    """The session's bytes cache, fetched at render time (script thread)."""
+    return st.session_state.setdefault(BYTES_KEY, {})
+
+
+def _memo(cache: dict, key, build, keep=None):
+    """``build()`` cached in ``cache[key]``. Touches no st.*: it also runs inside lazy
+    download callables, outside the script-run context. ``keep`` (the source object of
+    an ``id()``-based key) is stored with the bytes so the id cannot be reused."""
+    hit = cache.get(key)
+    if hit is None:
+        if len(cache) >= _BYTES_MAX:
+            cache.clear()
+        hit = cache[key] = (keep, build())
+    return hit[1]
+
+
+def _hash(obj) -> "str | None":
+    from etna.viz.provenance import config_hash
+
+    return None if obj is None else config_hash(obj, 64)
+
 
 def _layout_params_block():
     """Layout parameter file in use (default or uploaded), with its placeholders."""
@@ -91,11 +121,18 @@ def _spec_block(cfg, params=None) -> None:
     )
     c[1].download_button("CSV", ex.spec_to_csv(spec), "etna_spec.csv", "text/csv")
     c[2].download_button("Markdown", md, "etna_spec.md", "text/markdown")
+    cache = _bytes_cache()
     c[3].download_button(
         "PDF",
-        ex.spec_to_pdf(spec, rep.config, layout_params=params),
+        lambda: _memo(
+            cache,
+            ("spec_pdf", id(rep), _hash(params)),
+            lambda: ex.spec_to_pdf(spec, rep.config, layout_params=params),
+            keep=rep,
+        ),
         "etna_spec.pdf",
         "application/pdf",
+        on_click="ignore",
     )
 
 
@@ -105,12 +142,22 @@ def _cross_section_block(cfg, params=None) -> None:
         "Depth to scale; lateral extent schematic, lateral dimensions quoted from the "
         "layout parameter file with their class (PLACEHOLDER values are drawing values)."
     )
-    png = ex.cross_section_png(cfg, layout_params=params)
+    cache = _bytes_cache()
+    key = (_hash(cfg), _hash(params))
+    png = _memo(
+        cache,
+        ("xs_png",) + key,
+        lambda: ex.cross_section_png(cfg, layout_params=params),
+    )
     st.image(png)
     c = st.columns(2)
     c[0].download_button(
         "SVG",
-        ex.cross_section_svg(cfg, layout_params=params),
+        _memo(
+            cache,
+            ("xs_svg",) + key,
+            lambda: ex.cross_section_svg(cfg, layout_params=params),
+        ),
         "etna_cross_section.svg",
         "image/svg+xml",
     )
@@ -148,13 +195,24 @@ def _profile_block(cfg) -> None:
         f"{res.metadata.get('solver')}"
     )
     c = st.columns(3)
-    c[0].download_button("CSV", ex.profile_to_csv(res), "etna_profile.csv", "text/csv")
-    c[1].download_button(
-        "VTK", ex.profile_to_vtk(res), "etna_profile.vtk", "text/plain"
-    )
-    c[2].download_button(
-        "VTU", ex.profile_to_vtu(res), "etna_profile.vtu", "application/xml"
-    )
+    cache = _bytes_cache()
+    for col, (label, fn, name, mime) in zip(
+        c,
+        (
+            ("CSV", ex.profile_to_csv, "etna_profile.csv", "text/csv"),
+            ("VTK", ex.profile_to_vtk, "etna_profile.vtk", "text/plain"),
+            ("VTU", ex.profile_to_vtu, "etna_profile.vtu", "application/xml"),
+        ),
+    ):
+        col.download_button(
+            label,
+            lambda fn=fn, label=label: _memo(
+                cache, ("profile", label, id(res)), lambda: fn(res), keep=res
+            ),
+            name,
+            mime,
+            on_click="ignore",
+        )
 
 
 def _animation_block(cfg) -> None:
@@ -230,12 +288,18 @@ def _layout_block(params=None) -> None:
             key=f"ex_layout_svg_{device}",
         )
         if ok:
+            cache = _bytes_cache()
             c[1].download_button(
                 f"GDSII ({device})",
-                ex.layout_gds(device, params),
+                lambda device=device: _memo(
+                    cache,
+                    ("gds", device, _hash(params)),
+                    lambda: ex.layout_gds(device, params),
+                ),
                 f"etna_{device}_reference_layout.gds",
                 "application/octet-stream",
                 key=f"ex_layout_gds_{device}",
+                on_click="ignore",
             )
 
 

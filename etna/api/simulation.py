@@ -26,6 +26,7 @@ from etna.core.batched import (
     reverse_sweep,
 )
 from etna.core.batched.material import EPS
+from etna.core.batched.sweeps import dark_carriers
 from etna.core.charge_collection import cce_vs_bias, cce_vs_fluence
 from etna.core.generation_profiles import ALPHA_RANGE_SIC_CM
 from etna.core.cv_analysis import cv_sweep
@@ -38,7 +39,6 @@ from etna.core.dark_current import (
     dark_reference,
 )
 from etna.core.device import (
-    DEFAULT_N_D,
     donor_table_spec,
     table_sensitive_end_cm,
     table_sensitive_end_doping,
@@ -106,6 +106,7 @@ def validated_domain_reason(config: DeviceConfig) -> "str | None":
     Results for devices outside it come from devsim alone and have no engine
     cross-check.
     """
+    config.validate()  # C-03: a config mutated after construction raises here
     if config.half_width_um is not None:
         from etna.core.engine2d import (
             ENGINE2D_DARK_BOX,
@@ -147,7 +148,7 @@ def validated_domain_reason(config: DeviceConfig) -> "str | None":
             L_transition_um=config.L_transition_um,
         )
     else:
-        checks["N_D_uniform"] = DEFAULT_N_D if config.N_D is None else config.N_D
+        checks["N_D_uniform"] = config.N_D  # required with "uniform" (C-12)
     for name, value in checks.items():
         lo, hi = _ENGINE_BOX[name]
         if not lo <= value <= hi:
@@ -253,7 +254,7 @@ def _debye_length_epi_end(config: DeviceConfig) -> float:
             donor_table_spec(config.epi_thickness_um * 1e-4, config.donor_table)
         )
     elif config.doping_profile == "uniform":
-        nd = DEFAULT_N_D if config.N_D is None else config.N_D
+        nd = config.N_D
     else:
         L = config.L_transition_um * 1e-4
         nd = config.N_D_bulk + (config.N_D_junction - config.N_D_bulk) * np.exp(
@@ -373,7 +374,9 @@ def _engine_batch(kws):
         buffer = (epi_end, col("buffer_thickness_cm"), col("buffer_end_doping"))
     # tabulated epi profile: one table for the whole group (_engine_groups)
     table = donor_table_spec(kws[0]["epi_thickness_cm"], kws[0].get("donor_table"))
-    nd = np.array([DEFAULT_N_D if k["N_D"] is None else k["N_D"] for k in kws], float)
+    # N_D is set exactly for the uniform devices (C-12); graded ones (None -> nan) never
+    # reach the np.where below
+    nd = np.array([k["N_D"] for k in kws], float)
     uniform = np.array([k["doping_profile"] == "uniform" for k in kws])
     # A uniform profile is a flat graded one; L_transition only has to be > 0.
     pb = make_batch(
@@ -808,19 +811,52 @@ def _engine2d_cathode_field(config: DeviceConfig, bias_V: float) -> "float | Non
         return None
 
 
+_DELAUNAY_CACHE: "dict" = {}  # key -> scipy Delaunay, insertion order = age
+_DELAUNAY_CACHE_MAX = 8
+
+
+def _delaunay(key, points_fn):
+    """Delaunay triangulation of ``points_fn()``, memoized on ``key`` (a few entries).
+
+    The triangulation depends only on the point coordinates, which repeat across
+    run_field calls on one mesh (every bias, both solvers); building it is ~0.17 s
+    per call for the 18k-node default 2D mesh. Same points -> same qhull result, so
+    the interpolated field is bit-identical (tests/test_node_field_2d_cache.py).
+    """
+    from scipy.spatial import Delaunay
+
+    tri = _DELAUNAY_CACHE.pop(key, None)
+    if tri is None:
+        tri = Delaunay(points_fn())
+    _DELAUNAY_CACHE[key] = tri
+    while len(_DELAUNAY_CACHE) > _DELAUNAY_CACHE_MAX:
+        _DELAUNAY_CACHE.pop(next(iter(_DELAUNAY_CACHE)))
+    return tri
+
+
 def _node_field_2d(x_coords, y_coords, potential):
     """Node-aligned |E| (V/cm) for a 2D mesh, the plotting2d.py pattern: interpolate
     Potential onto a regular 100 x 200 grid, gradient, interpolate |E| back onto the
-    nodes, NaN -> 0. Shared by the devsim and engine paths of ``run_field``."""
+    nodes, NaN -> 0. Shared by the devsim and engine paths of ``run_field``. The two
+    triangulations (mesh nodes, regular grid) are cached by their coordinates."""
+    import hashlib
+
     from scipy.interpolate import LinearNDInterpolator
 
     n_x = 100
     n_y = 200
+    x_coords = np.asarray(x_coords, dtype=float)
+    y_coords = np.asarray(y_coords, dtype=float)
     x_reg = np.linspace(x_coords.min(), x_coords.max(), n_x)
     y_reg = np.linspace(y_coords.min(), y_coords.max(), n_y)
     X_reg, Y_reg = np.meshgrid(x_reg, y_reg)
 
-    interp = LinearNDInterpolator(list(zip(x_coords, y_coords)), potential)
+    h = hashlib.blake2b(digest_size=16)
+    h.update(np.ascontiguousarray(x_coords).tobytes())
+    h.update(np.ascontiguousarray(y_coords).tobytes())
+    mesh_key = ("mesh", x_coords.size, h.hexdigest())
+    tri_mesh = _delaunay(mesh_key, lambda: list(zip(x_coords, y_coords)))
+    interp = LinearNDInterpolator(tri_mesh, potential)
     V_grid = interp(X_reg, Y_reg)
 
     dy = y_reg[1] - y_reg[0]
@@ -828,10 +864,10 @@ def _node_field_2d(x_coords, y_coords, potential):
     Ey, Ex = np.gradient(-V_grid, dy, dx)
     E_mag_grid = np.sqrt(Ex**2 + Ey**2)
 
-    E_interp = LinearNDInterpolator(
-        list(zip(X_reg.ravel(), Y_reg.ravel())),
-        E_mag_grid.ravel(),
-    )
+    # the regular grid depends only on the bounding box (and n_x, n_y)
+    grid_key = ("grid", n_x, n_y, x_reg[0], x_reg[-1], y_reg[0], y_reg[-1])
+    tri_grid = _delaunay(grid_key, lambda: list(zip(X_reg.ravel(), Y_reg.ravel())))
+    E_interp = LinearNDInterpolator(tri_grid, E_mag_grid.ravel())
     field_nodes = E_interp(x_coords, y_coords)
     nan_mask = np.isnan(field_nodes)
     if np.any(nan_mask):
@@ -907,8 +943,108 @@ def _run_field_2d_engine(config: DeviceConfig, bias_V: float) -> SimResult:
     )
 
 
+def _field_1d_engine_reason(config: DeviceConfig, bias_V: float) -> "str | None":
+    """Why the batched engine cannot serve a 1D ``run_field`` (None = it can).
+
+    The validated box and bias checks of run_cv / run_cce, plus: |bias_V| within the
+    engine-vs-devsim cross-check depth (40 V without n+, 100 V with it), so the
+    legacy model keeps devsim's documented non-convergence beyond it; and the legacy
+    (static) ionization model only (the dark Gummel carriers are not cross-checked with
+    incomplete ionization).
+    """
+    if config.half_width_um is not None:
+        return "2D device"
+    if device_kwargs(config).get("incomplete_ionization") is not None:
+        return "incomplete_ionization (dark carriers not cross-checked on the engine)"
+    reason = _engine_unsupported_reason(config, np.array([float(bias_V)]))
+    if reason is not None:
+        return reason
+    if abs(bias_V) > _cross_checked_to_V(config):
+        return f"|bias| above the cross-checked {_cross_checked_to_V(config):g} V"
+    return None
+
+
+def _run_field_1d_engine(config: DeviceConfig, bias_V: float) -> SimResult:
+    """1D ``run_field`` on the batched engine, packaged exactly like the devsim path.
+
+    Potential: the reverse-bias quasi-Fermi Poisson solution (devsim's DD potential to
+    ~1e-14 V); ElectricField: devsim's edge model (V0 - V1) / EdgeLength of it,
+    interpolated onto the nodes as the devsim path; Electrons / Holes: a dark Gummel
+    solve on top (``dark_carriers``; the flat quasi-Fermi carriers miss the minority
+    tails). Same mesh, node order, region name and contacts as the devsim device.
+    Raises RuntimeError if either solve does not converge (the caller falls back).
+    """
+    kw = device_kwargs(config)
+    pb, x = _engine_batch([kw])
+    sub, epi = kw["substrate_thickness_cm"], kw["epi_thickness_cm"]
+    sw = reverse_sweep(
+        pb, np.array([float(bias_V)]), sub, epi, keep_psi=True, capacitance=False
+    )
+    if not sw.converged[-1, 0]:
+        raise RuntimeError("batched Poisson did not converge")
+    psi = sw.psi[-1]
+    if bias_V == 0.0:
+        # equilibrium: the flat quasi-Fermi carriers are exact (and the Gummel current
+        # test has no scale, J = 0)
+        tr = pb.solve(psi, tol=1e-8)
+    else:
+        tr = dark_carriers(pb, psi, -float(bias_V), [kw["T"]], [kw["N_A"]])
+    if not tr.converged[0]:
+        raise RuntimeError("batched dark Gummel did not converge")
+    potential = psi[0].copy()
+    net_doping = pb.netdop[0].copy()
+    x_centers = 0.5 * (x[:-1] + x[1:])
+    field_nodes = np.abs(
+        np.interp(x, x_centers, (potential[:-1] - potential[1:]) / np.diff(x))
+    )
+    total_length = sub + epi + (kw.get("nplus_thickness_cm") or 0.0)
+    mesh = MeshData(
+        x_coords=x.copy(),
+        y_coords=None,
+        node_values={
+            "NetDoping": net_doping,
+            "Potential": potential,
+            "ElectricField": field_nodes,
+            "Electrons": tr.n[0].copy(),
+            "Holes": tr.p[0].copy(),
+        },
+        regions=[
+            {
+                "name": "sic",  # create_sic_device's region name
+                "x_min": float(x.min()),
+                "x_max": float(x.max()),
+                "y_min": None,
+                "y_max": None,
+            }
+        ],
+        contacts=[
+            {"name": "anode", "position": 0.0},
+            {"name": "cathode", "position": float(total_length)},
+        ],
+    )
+    note = validated_domain_reason(config)
+    return SimResult(
+        config=config,
+        sim_type="field",
+        x=x * 1e4,
+        y=field_nodes,
+        metadata={
+            "bias_V": bias_V,
+            "potential": potential,
+            "net_doping": net_doping,
+            "solver": "batched",
+            "validated_domain": note is None,
+            "domain_note": note,
+            "cross_checked_to_V": _cross_checked_to_V(config),
+        },
+        mesh=mesh,
+    )
+
+
 @serialized
-def run_field(config: DeviceConfig, bias_V: float = -50.0) -> SimResult:
+def run_field(
+    config: DeviceConfig, bias_V: float = -50.0, solver: str = "auto"
+) -> SimResult:
     """Ramp a device to a fixed reverse bias and return a field/potential SimResult.
 
     Builds a DD-initialized devsim device from `config` (1D or 2D, dispatched
@@ -963,12 +1099,22 @@ def run_field(config: DeviceConfig, bias_V: float = -50.0) -> SimResult:
     are solved by the numba 2D engine instead of devsim, with identical node
     arrays and ordering; ``metadata["solver"]`` is "engine2d" or "devsim".
 
+    1D devices inside the batched engine's box (``_field_1d_engine_reason``: the
+    run_cv / run_cce box, |bias_V| up to ``cross_checked_to_V`` = 40 V without n+ /
+    100 V with it, static ionization) are solved by the batched engine (since
+    2026-10-21; ~5 ms instead of ~0.5 s): same mesh and keys, Potential within
+    1.5e-14 V, ElectricField within 1.1e-12 of max E, Electrons / Holes within ~1e-9
+    relative of devsim (tests/test_field_engine_1d.py); ``metadata["solver"]`` is
+    "batched". ``solver="devsim"`` forces the devsim path (1D and 2D),
+    ``solver="engine"`` raises ValueError where no engine serves the call.
+
     Warning
     -------
-    On the devsim path (1D, or 2D outside the engine envelope / engine fallback)
-    this function deletes all devsim devices currently in the
-    process, not just those created by etna. The engine path builds and deletes
-    only its own mesh-only device and does not reset devsim. The devsim path calls
+    On the devsim path (1D outside the engine box, or 2D outside the engine envelope /
+    engine fallback) this function deletes all devsim devices currently in the
+    process, not just those created by etna. The 1D engine path does not touch devsim;
+    the 2D engine path builds (or reuses) only its own mesh-only device and does not
+    reset devsim. The devsim path calls
     `reset_devsim_fully()` before building its device (see
     `etna.core.devsim_reset`), which enumerates and deletes every
     device registered with devsim in the process — devsim state is
@@ -977,18 +1123,43 @@ def run_field(config: DeviceConfig, bias_V: float = -50.0) -> SimResult:
     unrelated code sharing the process) across a `run_field()` call, that
     device will be silently deleted.
     """
+    if solver not in ("auto", "devsim", "engine"):
+        raise ValueError(
+            f"solver must be 'auto', 'devsim' or 'engine' (got {solver!r})"
+        )
     fallback_reason = None
+    if config.half_width_um is None and solver != "devsim":
+        # 1D inside the engine box: batched Poisson + dark Gummel (~5 ms, no devsim);
+        # anything else, or a non-converged engine solve, goes to devsim below.
+        reason = _field_1d_engine_reason(config, bias_V)
+        if reason is None:
+            try:
+                return _run_field_1d_engine(config, bias_V)
+            except Exception as e:
+                reason = f"batched engine failed: {e}"
+                fallback_reason = reason
+        if solver == "engine":
+            raise ValueError(f"run_field(solver='engine'): {reason}")
+        logger.info("run_field: using devsim (%s)", reason)
     if config.half_width_um is not None:
         # Laterally uniform default-family 2D devices in the validated box get the
         # numba engine (no devsim device with equations, no reset); anything else, or
         # any engine decline/error, falls through to the devsim path below -- except
         # the clear model-validity failure, which devsim is known not to survive.
-        reason = _field_engine_unsupported_reason(config, bias_V)
+        reason = (
+            "solver='devsim'"
+            if solver == "devsim"
+            else _field_engine_unsupported_reason(config, bias_V)
+        )
+        if solver == "engine" and reason is not None:
+            raise ValueError(f"run_field(solver='engine'): {reason}")
         if reason is None:
             try:
                 return _run_field_2d_engine(config, bias_V)
             except Exception as e:  # Engine2DFallback or an engine error
                 fallback_reason = f"2D engine declined: {e}"
+                if solver == "engine":
+                    raise
                 field = _engine2d_cathode_field(config, bias_V)
                 if field is not None and field > _field_nan_min():
                     raise OutsideModelValidity(
@@ -1099,6 +1270,8 @@ def run_field(config: DeviceConfig, bias_V: float = -50.0) -> SimResult:
         else:
             note = validated_domain_reason(config)
             metadata.update(validated_domain=note is None, domain_note=note)
+            if fallback_reason:  # the batched engine was tried and failed
+                metadata["fallback_reason"] = fallback_reason
 
         if is_2d:
             # SimResult.x/.y are not a valid depth profile for 2D devices:
@@ -1534,7 +1707,7 @@ def compensation_fluence(config: DeviceConfig, proton_energy_MeV: float) -> floa
     if config.donor_table is not None:
         nd_min = min(n for _, n in config.donor_table)
     elif config.doping_profile == "uniform":
-        nd_min = DEFAULT_N_D if config.N_D is None else config.N_D
+        nd_min = config.N_D
     else:
         nd_min = min(config.N_D_junction, config.N_D_bulk)
     eta = RadiationDamageParams().eta_removal
@@ -2236,7 +2409,9 @@ def run_microdosimetry(
         if not (np.isfinite(value) and value > 0):
             raise ValueError(f"{name} must be finite and > 0 (got {value!r})")
     if chord_model not in ("cauchy", "slab"):
-        raise ValueError(f"chord_model must be 'cauchy' or 'slab' (got {chord_model!r})")
+        raise ValueError(
+            f"chord_model must be 'cauchy' or 'slab' (got {chord_model!r})"
+        )
 
     # Bucket-c: no TCAD solve at all. Load per-step events, aggregate to
     # per-event collected energy (this sum-by-event_id has no core analog).
