@@ -14,7 +14,8 @@ def test_cce_vs_bias_at_fluence_keeps_the_converged_prefix(monkeypatch):
     import etna.core.drift_diffusion as dd
     from etna.core.charge_collection import cce_vs_bias_at_fluence
 
-    real_ramp = dd.ramp_bias
+    # the sweep brings each bias up with seeded_bias (engine seed, else ramp_bias)
+    real_ramp = dd.seeded_bias
     calls = []
 
     def ramp(device_info, V_target, **kw):
@@ -23,7 +24,7 @@ def test_cce_vs_bias_at_fluence_keeps_the_converged_prefix(monkeypatch):
             raise RuntimeError("ramp_bias: failed to converge (test)")
         return real_ramp(device_info, V_target, **kw)
 
-    monkeypatch.setattr(dd, "ramp_bias", ramp)
+    monkeypatch.setattr(dd, "seeded_bias", ramp)
     result = cce_vs_bias_at_fluence(np.array([-20.0, -10.0]), fluence=1e12)
     assert result["truncated"] is True
     assert result["requested_v_stop"] == -20.0

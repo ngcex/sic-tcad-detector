@@ -41,7 +41,7 @@ from etna.core.drift_diffusion import (
     node_volume_model_name,
     _restore_solution,
     _snapshot_solution,
-    ramp_bias,
+    seeded_bias,
     solve_tier,
 )
 from etna.core.charge_collection import add_generation_to_dd
@@ -227,7 +227,7 @@ def create_2d_dd_device(
 
     # Ramp cathode to reverse bias (positive V on cathode = reverse bias
     # for p+/n- diode, same convention as Phase 19 validation)
-    ramp_bias(
+    seeded_bias(
         device_info, V_target=V_bias, contact="cathode", V_step=0.5, V_step_max=5.0
     )
     logger.info(
@@ -805,7 +805,7 @@ def compare_cce_2d_vs_1d(
         )
 
         # Ramp 1D bias (anode, negative for reverse bias)
-        ramp_bias(device_info_1d, V_target=-V_bias, contact="anode", V_step=0.5)
+        seeded_bias(device_info_1d, V_target=-V_bias, contact="anode", V_step=0.5)
 
         # 1D generation: uniform in epi
         device_1d = device_info_1d["device_name"]

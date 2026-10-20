@@ -409,7 +409,7 @@ def cce_vs_dose_rate(
         - "N_D_bulk": bulk doping used
         - "L_transition": transition length used
     """
-    from etna.core.drift_diffusion import create_dd_device, ramp_bias
+    from etna.core.drift_diffusion import create_dd_device, seeded_bias
 
     if solver not in ("auto", "engine", "devsim"):
         raise ValueError(
@@ -474,7 +474,10 @@ def cce_vs_dose_rate(
 
         # Ramp to bias (cathode voltage is -V_bias for reverse bias)
         cathode_V = -V_bias
-        ramp_bias(device_info, cathode_V, contact="cathode", V_step=0.5, V_step_max=2.0)
+        # (Auger is active: seeded_bias falls back to ramp_bias here)
+        seeded_bias(
+            device_info, cathode_V, contact="cathode", V_step=0.5, V_step_max=2.0
+        )
 
         # Get mesh nodes
         x_nodes = np.array(
@@ -528,7 +531,7 @@ def cce_vs_dose_rate(
     try:
         # No Auger -- just SRH
         cathode_V = -V_bias
-        ramp_bias(
+        seeded_bias(
             device_info2, cathode_V, contact="cathode", V_step=0.5, V_step_max=2.0
         )
 

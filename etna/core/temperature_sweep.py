@@ -73,7 +73,11 @@ def sweep_iv_vs_temperature(
         by the area for a current.
     """
 
-    from etna.core.drift_diffusion import create_dd_device, extract_steady_state_current, ramp_bias
+    from etna.core.drift_diffusion import (
+        create_dd_device,
+        extract_steady_state_current,
+        seeded_bias,
+    )
     from etna.core.dark_current import create_dark_current_device, dark_current_sweep
 
     temperatures = np.asarray(temperatures, dtype=float)
@@ -126,7 +130,7 @@ def sweep_iv_vs_temperature(
             else:
                 # Ramp to reverse bias: cathode voltage = -V_reverse
                 cathode_V = -V_reverse
-                ramp_bias(device_info, cathode_V, contact="cathode", V_step=0.5)
+                seeded_bias(device_info, cathode_V, contact="cathode", V_step=0.5)
                 I_total = extract_steady_state_current(device_info, contact="cathode")
 
             records.append(_iv_record(T, I_total, kwargs, params))
