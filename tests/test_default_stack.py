@@ -123,15 +123,17 @@ def test_legacy_preset_reproduces_the_pre_flip_numbers():
     # N_D_bulk (was DEFAULT_N_D 1.07e15) since 2026-10-17: 0.9636306340 0.9962744523
     # 0.9978247277 0.9983467119 0.9985384182 before; local per-node mobility (p+ at its
     # own 1e19, A-03) since 2026-10-18: 0.9636418771662469 0.9962794936625294
-    # 0.9978281262365173 0.9983493034607709 0.998540520801036 before
+    # 0.9978281262365173 0.9983493034607709 0.998540520801036 before; NIST ASTAR Bragg-curve alpha profile (18.43 um) since 2026-10-20
+    # (15 um flat box): 0.9636400757290315 0.9962782971599875 0.9978271896050328
+    # 0.9983485188030706 0.9985398378691338 before
     np.testing.assert_allclose(
         cce.y,
         [
-            0.9636400757290315,
-            0.9962782971599875,
-            0.9978271896050328,
-            0.9983485188030706,
-            0.9985398378691338,
+            0.9537785951754784,
+            0.9951297431119173,
+            0.9971594444190746,
+            0.9978396446611936,
+            0.9980866440000702,
         ],
         rtol=1e-9,
     )
@@ -170,7 +172,8 @@ def test_default_numbers_are_the_measured_cv_record():
     )
     assert cv.metadata["reach_through_V"] == pytest.approx(3.1)
     cce = sim.run_cce(c, -10.0, -50.0, 3)
-    np.testing.assert_allclose(cce.y, [0.9994734, 0.9998111, 0.9998832], atol=1e-7)
+    # NIST ASTAR Bragg-curve alpha profile (18.43 um) since 2026-10-20; 15 um flat box: 0.9994734 / 0.9998111 / 0.9998832
+    np.testing.assert_allclose(cce.y, [0.9994291, 0.9997970, 0.9998749], atol=1e-7)
     d = sim.run_dark_current(c, 0.0, -60.0, 7)  # default area: 4 mm2
     np.testing.assert_allclose(
         d.y[[1, 3, 6]] * 1e12, [6.296, 15.763, 18.000], atol=1e-3
@@ -198,7 +201,8 @@ def test_previous_default_numbers_are_the_calibration_record():
     # hole mobility at the epi doping since 2026-10-17 (was N_A, audit-v7 A-03): 0.998899 / 0.999707 / 0.999820 before;
     # both mobilities at N_D_bulk (was DEFAULT_N_D 1.07e15) since 2026-10-17: 0.999303 / 0.999812 / 0.999884 before;
     # local per-node mobility (A-03) since 2026-10-18: 0.999316 / 0.999816 / 0.999887 before
-    np.testing.assert_allclose(cce.y, [0.9993150, 0.9998155, 0.9998862], atol=1e-7)
+    # NIST ASTAR Bragg-curve alpha profile (18.43 um) since 2026-10-20; 15 um flat box: 0.9993150 / 0.9998155 / 0.9998862
+    np.testing.assert_allclose(cce.y, [0.9992348, 0.9998014, 0.9998782], atol=1e-7)
     d = sim.run_dark_current(c, 0.0, -60.0, 7)  # default area: 4 mm2
     np.testing.assert_allclose(
         d.y[[1, 3, 6]] * 1e12, [6.077, 14.720, 18.000], atol=1e-3
