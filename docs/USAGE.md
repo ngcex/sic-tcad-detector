@@ -657,6 +657,24 @@ flat to 0.5 % from 0 V. The data drop to 0.908 at 0 V and rise 1 % from -20 to -
 drift-diffusion variant fits (chi2 >= 228). A field-dependent columnar-recombination loss
 does fit, but it is lab-only (`lab/microdosimeter/notes/LOG.md` §9).
 
+**Validation variants as figures** (`etna.viz.validation`, run 2026-10-20, pinned in
+`tests/test_viz_figures.py`). Both use existing solvers only; the reference points are in
+`data/validation/` with their source and uncertainty in the file header. "Micro Fig. 4b"
+(alpha CCE, microdosimeter paper) and "Photons Fig. 4b" (C-V, dosimeter paper) are different
+figures.
+
+- `tilted_alpha_shape()`: `run_cce_tilted_alpha(microdosimeter_config())` at its defaults,
+  normalised at -50 V, against the digitised Micro Fig. 4b points (read-off estimates,
+  ±0.0005). Shape only, nothing tuned. Result: model 0.9945 at 0 V vs data 0.9083; rise
+  -20 -> -50 V +0.0001 (model) vs +0.0096 (data); rms 0.036. Not reproduced, as stated above.
+- `w_creep(config=DeviceConfig())`: `run_cv` (batched) W(V), depletion edge and eps*A/C,
+  against the Photons Fig. 4b W labels 1.68 / 9.52 / 9.73 µm (±0.005 rounding). Result on
+  the default stack (graded epi + 1.14 µm n-/n+ transition): eps*A/C 1.655 / 9.519 / 9.750
+  µm; creep -10 -> -30 V +0.232 µm (eps*A/C) and +0.256 µm (edge) vs +0.21 µm in the labels.
+  The default doping is a fit to this C-V curve, so this is a regression of the fit, not an
+  independent validation. (The lab numbers in `lab/microdosimeter/notes/LOG.md` §4 were for
+  the older default without the transition.)
+
 **Not modelled:**
 
 - high injection or plasma (FLASH)
@@ -705,6 +723,7 @@ header carries solver, domain, config and version.
 | page                    | purpose                                                                         | inputs                                                                                                                                                             | outputs                                                                                                                                                                                                                                                                                          |
 | ----------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Home                    | orientation, current config summary                                             | none                                                                                                                                                               |                                                                                                                                                                                                                                                                                                  |
+| Simulate → Figures      | one workflow: device -> observables -> figures, data, animation (`etna.viz`)     | device (sidebar or a preset: default, microdosimeter, tabulated, previous calibrated, legacy); observables (C-V, field, CCE, dark current, FLASH, temperature, transient (slow, devsim), tilted alpha, CCE(LET) table, two validation variants; 2D: maps incl. carriers); sweep V_stop / points, single bias; figure format, DPI, size | engine-box badge, progress bar, session cache, per-observable Plotly + solver / validity / honesty notes, publication figure preview, PNG/SVG/PDF per figure, zip of all figures + CSVs, animation (manim or matplotlib, mp4/gif) with st.video |
 | Run All                 | every section for the sidebar device (`etna.run_all`)                           | section multiselect (the 2D-engine sweep is opt-in)                                                                                                                | summary table (status, solver, key figures, reason, wall time), a curve per section, JSON/CSV                                                                                                                                                                                                    |
 | C-V Analysis            | `run_cv`                                                                        | max reverse bias (default -50 V), points (40)                                                                                                                      | C-V, Mott-Schottky, eps*A/C and depletion edge vs V, full-depletion marker, CSV                                                                                                                                                                                                                  |
 | Charge Collection (CCE) | `run_cce`                                                                       | V_start (-10), V_stop (-40), points (30); reverse bias only                                                                                                        | CCE vs bias, CSV                                                                                                                                                                                                                                                                                 |
@@ -716,6 +735,13 @@ header carries solver, domain, config and version.
 | Export                  | engineering files (section 10)                                                  | spec sheet (reuses the Run All report when it matches); profile bias (default -30 V); animation button                                                             | spec sheet JSON/CSV/Markdown/PDF; cross-section SVG/PNG; mesh/profile CSV and VTK (ParaView/VisIt); two 480p manim MP4s (needs `viz`); schematic layout SVG and GDSII (needs `gdstk`) with the disclaimer "schematic, not a fabrication layout; missing dimensions must come from the mask data" |
 
 Page details not in the table:
+
+- Simulate → Figures caches every result in the session under (config hash, observable,
+  inputs): pressing _Run_ again with the same device and inputs recomputes nothing, and a
+  changed V_stop only reruns the sweeps. Figure bytes are built when a download is clicked
+  (and cached); the preview toggle renders a 150 dpi PNG. Results for another device are
+  flagged as stale. A 2D device the engine does not serve falls back to `run_field`, without
+  carrier maps (the page says why).
 
 - The Field Map viewer draws the anode/cathode contacts (`MeshData.contacts`) as lines at
   their depth and, in 2D, outlines the region (`MeshData.regions`).
@@ -756,9 +782,56 @@ layout = ex.layout_svg("dosimeter")                  # REFERENCE-NOT-FAB; layout
 print(len(md) > 0, pdf[:4], ex.gds_available()[0])
 ```
 
-Animations (`etna.viz`, needs `viz`): `etna.viz.animation_data(cfg)`, then
-`render_animation(data, scene, out_dir)` for `scene in etna.viz.SCENES`
-(`StackScene`, `DepletionScene`). Check `etna.viz.manim_available()` first.
+### Publication figures and animations (`etna.viz`)
+
+`figure_for(obj, kind=None, size="single")` turns a finished result into a matplotlib figure
+in one house style (Okabe-Ito colours, inward ticks, 8 pt text, units on every axis: pF,
+µm, kV/cm, A, Gy/s) and `export_figure(fig, "png" | "svg" | "pdf", dpi=300, size=None)`
+returns the bytes (`save_figure(fig, path)` writes them). Sizes: `"single"` 89 x 70 mm,
+`"double"` 183 x 105 mm, `"slide"` 254 x 143 mm, or `(w_mm, h_mm)`. The canvas is exact (no
+tight bbox): a PNG is int(w·dpi) x int(h·dpi) pixels; SVG/PDF keep the text as text. The
+style is applied with `rc_context`, so global matplotlib settings are untouched.
+
+```python
+import etna
+from etna.viz import figure_for, export_figure, kinds_for, save_figure
+
+cfg = etna.DeviceConfig()
+cv = etna.run_cv(cfg, 0.0, -60.0, 61)
+print(kinds_for(cv))                        # ['cv', 'depletion', 'mott_schottky', 'stack']
+save_figure(figure_for(cv, "depletion"), "W_vs_V.pdf")
+png = export_figure(figure_for(etna.run_field(cfg, -30.0)), "png", dpi=600, size="double")
+```
+
+Kinds (`etna.viz.KINDS`): `cv`, `mott_schottky`, `depletion`, `field` (E and psi vs depth
+over the layer bands), `cce` (also the tilted-alpha result), `cce_let` (from
+`etna.viz.load_let_table("data/cce_let_table_100um.json")`), `dark_current`, `flash`,
+`transient`, `temperature`, `damage`, `microdosimetry`, `map_potential` / `map_field` /
+`map_doping` / `map_electrons` / `map_holes` (2D, filled contours plus labelled contour
+lines), `stack` (any result or a `DeviceConfig`), `tilted_alpha_shape`, `w_creep`.
+
+Every figure carries a footer: etna version, solver, the 12-hex config hash
+(`etna.viz.config_hash(cfg)`, sha256 of the sorted config), UTC date, the validation label,
+and the notes that apply. No solver returns an uncertainty and the engine/devsim parity is
+far too small to draw, so curves have **validity bands, not error bands**: |V| beyond
+`cross_checked_to_V` hatched, the reach-through voltage dotted, outside-box / truncation /
+fallback notes, dark-current points past reach-through open, unsolved damage points marked
+with their reason, and the honesty notes (dark current = budget estimate, FLASH = sensitivity
+bound, kappa placeholder, CCE(LET) table ~6e-6 off fresh builds). Error bars appear only on
+digitised data (section 8).
+
+2D carrier maps: `etna.viz.maps.carrier_state_2d(cfg, bias_V)` runs the 2D engine and also
+returns n and p (`run_field` does not). Against devsim Electrons / Holes on the same device
+the relative difference is <= 1.5e-13 wherever the density is >= 1e2 cm^-3 (half-width 50 µm
+at -30 V and 25 µm at -10 V); below that both are at their numerical floor and the map clips.
+Configurations outside the engine (or the legacy model) raise `CarrierMapUnavailable`.
+
+Animations: `data = etna.viz.animation_data(cfg)` (real run_cv W and run_field E(x) at 0 to
+-60 V), then `etna.viz.animate(data, scene, fmt="mp4" | "gif", engine="auto")` for `scene in
+etna.viz.SCENES` (`StackScene`, `DepletionScene`). `auto` uses manim (`render_animation`,
+needs `viz`) for mp4 when it imports, otherwise `render_frames`, the matplotlib fallback:
+one frame per solved bias, no interpolation; mp4 through ffmpeg (H.264, yuv420p), gif through
+Pillow (no ffmpeg needed); 2.4-2.8 s per scene measured on a heavily loaded M4.
 
 ---
 
