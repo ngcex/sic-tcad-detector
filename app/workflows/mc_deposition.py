@@ -41,7 +41,7 @@ def _mods():
     return mt, mr, mx
 
 
-def spectrum_with_errors(edep_keV, l_bar_um, bins_per_decade=20):
+def spectrum_with_errors(edep_keV, l_bar_um, bins_per_decade=40):
     """y d(y) on log bins with the Poisson standard error of each bin (pure)."""
     from etna.core.microdosimetry import lineal_energy_spectrum
 
@@ -56,6 +56,14 @@ def spectrum_with_errors(edep_keV, l_bar_um, bins_per_decade=20):
     with np.errstate(divide="ignore", invalid="ignore"):
         err = np.where(counts > 0, yd / np.sqrt(counts), 0.0)
     return dict(y=sp["bin_centers"], yd=yd, err=err, counts=counts, edges=sp["bin_edges"])
+
+
+def csda_range_um(particle, E_MeV, material):
+    """CSDA range (µm) from the sampler's own stopping tables (pure)."""
+    mt, _, _ = _mods()
+    tb = mt.projectile_tables(particle, material)
+    lnE = tb.lnE0 + tb.dlnE * np.arange(len(tb.range_cm))
+    return float(np.interp(np.log(E_MeV), lnE, tb.range_cm)) * 1e4
 
 
 def _sample(p):
@@ -114,8 +122,8 @@ def _inputs():
         "may leave the SV. Off: all loss local (Landau/Vavilov-like).",
     )  # fmt: skip
     surround = c[1].number_input(
-        "SiC surround (µm)", 0.0, 2000.0, 0.0, key="mc_surround",
-        help="Material around the SV: delta rays made there can enter it, and it degrades "
+        "Surround of SV material (µm)", 0.0, 2000.0, 0.0, key="mc_surround",
+        help="Layer of the SV material around the SV: delta rays made there can enter it, and it degrades "
         "the beam. 0 = bare SV in vacuum, which loses delta-ray energy (62 MeV p, 10 µm: "
         "0.914 of the mean); 100-300 µm restores it (USAGE, issue #7). Tracks start on the "
         "surround's outer face, so only a fraction ~ (SV face / box face) hits the SV.",
@@ -154,7 +162,7 @@ def _spectrum_plot(sp, title):
         x=sp["y"], y=sp["yd"], mode="lines+markers", line_shape="hvh",
         error_y=dict(type="data", array=sp["err"], visible=True), name="y d(y)"))  # fmt: skip
     fig.update_layout(xaxis_type="log", xaxis_title="Lineal energy y (keV/µm)",
-                      yaxis_title="y d(y) (dimensionless)", title=title)  # fmt: skip
+                      yaxis_title="y·d(y)", title=title)  # fmt: skip
     return fig
 
 
@@ -205,14 +213,19 @@ def _pulse_heights(out, p, tok):
         from etna.core.single_particle import load_cce_let_table
 
         interp, _ = load_cce_let_table(data_path(CCE_TABLES[table]))
+    # only events that deposited energy in the SV make a pulse (a track missing the SV
+    # gives no signal, not a noise-only pulse)
+    hit = np.asarray(out["edep_keV"]) > 0
+    chord = out.get("chord_um")
     ph = mr.pulse_heights(
-        out["edep_keV"], out.get("chord_um"), interp, sv_thickness_um=p["t"], W_eV=float(W),
-        fano=float(fano) or None, enc_electrons=float(enc), threshold_keV=float(thr), seed=p["seed"],
+        np.asarray(out["edep_keV"])[hit], None if chord is None else np.asarray(chord)[hit],
+        interp, sv_thickness_um=p["t"], W_eV=float(W), fano=float(fano) or None,
+        enc_electrons=float(enc), threshold_keV=float(thr), seed=p["seed"],
     )  # fmt: skip
     m = ph["measured_keV"][ph["triggered"]]
     n_tot = len(ph["measured_keV"])
     st.caption(
-        f"{ph['n_triggered']} of {n_tot} sampled events above threshold"
+        f"{ph['n_triggered']} of {n_tot} events with a deposit above threshold"
         + (f"; {ph['n_clamped']} events outside the table's LET range (clamped)" if ph["n_clamped"] else "")
         + ". PREDICTED (model chain: deposit → pairs → CCE(LET) → noise → threshold)."
     )
@@ -241,7 +254,7 @@ def _pulse_heights(out, p, tok):
     st.download_button(
         "Download pulse heights CSV (per event)",
         P.table_csv_bytes("pulse heights (mc_response.pulse_heights)",
-                          {"edep_keV": out["edep_keV"], "LET_keV_per_um": ph["LET_keV_um"],
+                          {"edep_keV": np.asarray(out["edep_keV"])[hit], "LET_keV_per_um": ph["LET_keV_um"],
                            "CCE": ph["CCE"], "charge_e": ph["charge_e"],
                            "measured_keV": ph["measured_keV"], "triggered": ph["triggered"]},
                           [f"cce_table: {table}", f"fano: {fano}", f"W_eV: {W}",
@@ -360,6 +373,17 @@ def render() -> None:
     tok = P.token(None, p)
     if st.button("Run Monte Carlo", key="mc_run", type="primary"):
         try:
+            rng_um = csda_range_um(p["particle"], p["E"], p["material"])
+        except Exception:  # pragma: no cover - range is a convenience check only
+            rng_um = None
+        if rng_um is not None and p["surround"] > 0 and rng_um <= p["surround"]:
+            st.error(
+                f"A {p['E']:g} MeV {p['particle']} has a CSDA range of {rng_um:.3g} µm in "
+                f"{p['material']}, less than the {p['surround']:g} µm surround: no track "
+                "reaches the SV. Reduce the surround or raise the energy."
+            )
+            st.stop()
+        try:
             with st.spinner("Sampling tracks (the first run compiles, ~10 s)..."):
                 st.session_state["mc_result"] = P.cached_run("mc", tok, lambda: _sample(p))
             st.session_state["mc_tok"] = tok
@@ -382,7 +406,11 @@ def render() -> None:
             m[0].metric("y_F (keV/µm)", f"{out['y_F']:.4g} ± {out['se_y_F']:.2g}")
             m[1].metric("y_D (keV/µm)", f"{out['y_D']:.4g} ± {out['se_y_D']:.2g}")
             m[2].metric("Mean chord l̄ (µm)", f"{out['l_bar_um']:.4g}")
-            m[3].metric("Events with deposit / sampled", f"{out['n']} / {out['n_events']}")
+            m[3].metric(
+                "Events with a deposit", f"{out['n']:,}",
+                help=f"Of {out['n_events']:,} sampled tracks (those missing the SV deposit nothing).",
+            )  # fmt: skip
+            st.caption(f"{out['n']:,} of {out['n_events']:,} sampled events deposited energy in the SV.")
             if out.get("converged") is False:
                 st.warning("The target relative error was not reached within the maximum events.")
             st.caption(

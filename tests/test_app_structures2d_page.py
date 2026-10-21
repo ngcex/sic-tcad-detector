@@ -111,3 +111,17 @@ def test_solver_failure_is_reported(monkeypatch):
     at.run()
     assert at.exception == []
     assert any("did not converge" in e.value for e in at.error)
+
+
+def test_flat_scan_range_and_publication_figures_build():
+    from app.workflows.structures2d import _pub, _scan_plot, _y_range
+
+    p = dict(kind="mesa", geometry={}, epi_um=10.0, T=300.0, V=10.0, n=5, depth_mesh="graded")
+    r = _fake_solve(p)
+    r["scans"]["anode"]["cce_values"] = 0.963 + 1e-14 * np.arange(5)  # round-off only
+    lo, hi = _y_range(r)
+    assert abs(hi - lo - 0.01) < 1e-12  # round-off is not drawn as structure
+    assert tuple(_scan_plot(r, p).layout.yaxis.range) == (lo, hi)
+    for what in ("scan", "map"):
+        fig = _pub(r, p, what)("single")
+        assert fig.etna_provenance["solver"].startswith("etna.core.fv2d")

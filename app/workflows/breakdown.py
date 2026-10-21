@@ -268,13 +268,16 @@ def _breakdown_tab(cfg, mkw):
         st.error(md.get("error", "No breakdown found."))
         return
     m = st.columns(4)
-    m[0].metric("V_BD (1D, predicted upper bound)", f"{md['V_BD']:.1f} V")
+    m[0].metric(
+        "V_BD (V)", f"{md['V_BD']:.1f}",
+        help="1D parallel-plane breakdown voltage: a PREDICTED upper bound of the real device's.",
+    )  # fmt: skip
     m[1].metric(
-        "Mesh error", "not computed" if md.get("mesh_error_V") is None else f"{md['mesh_error_V']:.3g} V",
+        "Mesh error (V)", "not computed" if md.get("mesh_error_V") is None else f"{md['mesh_error_V']:.3g}",
         help="|V_BD(h) - V_BD(h/2)|; the base value lies within ~2x this of the converged one.",
     )  # fmt: skip
-    m[2].metric("Quadrature error", f"{md['quadrature_error_V']:.2g} V")
-    m[3].metric("E_max at breakdown", f"{md['E_max_at_breakdown'] / 1e6:.3f} MV/cm")
+    m[2].metric("Quadrature error (V)", f"{md['quadrature_error_V']:.2g}")
+    m[3].metric("E_max at V_BD (MV/cm)", f"{md['E_max_at_breakdown'] / 1e6:.3f}")
     st.warning(
         f"PREDICTED, not validated: {md['note']}. The value lies far beyond the "
         "|V| ≤ 40-100 V where the batched engine is cross-checked against devsim."

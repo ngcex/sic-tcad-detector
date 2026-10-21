@@ -120,7 +120,7 @@ def _simulate_tab(cfg):
     prot = _protocol("tk")
     c = st.columns(4)
     V_max = c[0].number_input("Max reverse bias |V| (V)", 1.0, 1000.0, 40.0, key="tk_Vmax")
-    n = c[1].number_input("Bias points", 3, 200, 21, key="tk_n")
+    n = c[1].number_input("Bias points", 3, 200, 41, key="tk_n")
     freq = c[2].number_input("Test frequency (Hz)", 10.0, 1e7, 1e5, format="%.0f", key="tk_freq")
     tol = c[3].selectbox(
         "Time-step tolerance", [1e-2, 1e-3, 1e-4], index=1, key="tk_tol",
@@ -168,6 +168,7 @@ def _simulate_tab(cfg):
     fig2.update_layout(xaxis_title="Depletion width ε/C (µm)", yaxis_title="Apparent N_eff (cm⁻³)",
                        yaxis_type="log", title="Apparent N_eff = 2 / (q ε d(1/C²)/d|V|)")  # fmt: skip
     st.plotly_chart(fig, key="tk_cv_plot")
+    fig2.update_yaxes(exponentformat="power")
     st.plotly_chart(fig2, key="tk_neff_plot")
 
     def draw(f):
@@ -214,18 +215,31 @@ def downsample(data, n_max):
     )  # fmt: skip
 
 
+BAD_FIT_RCHI2 = 3.0
+
+
 def _show_calibration(cal, label):
-    st.success(f"{cal.label.upper()} {label}")
+    red = cal.reduced_chi2 if cal.dof > 0 else float("nan")
+    if cal.dof > 0 and red > BAD_FIT_RCHI2:
+        st.error(
+            f"{cal.label.upper()} {label}, but the fit is POOR: χ²/dof = {red:.3g}. The model "
+            "does not describe these data, so the scales and their σ are not meaningful. Check "
+            "the sidebar device (epi thickness, pristine doping, area, temperature), the "
+            "fluences and the test frequency; fit the pristine C-V first."
+        )
+    else:
+        st.success(f"{cal.label.upper()} {label}")
     rows = []
     for j, g in enumerate(cal.groups):
         rows.append({
             "parameter": g, "best fit": f"{cal.scales[j]:.4g}",
-            "1σ (data σ)": f"{cal.sigma[j]:.3g}", "1σ x √(χ²/dof)": f"{cal.sigma_scaled[j]:.3g}",
+            "1σ (data σ)": f"{cal.sigma[j]:.3g}", "1σ x √(χ²/dof)": f"{cal.sigma_scaled[j]:.3g}" if cal.dof > 0 else "n/a (dof = 0)",
             "identifiable": bool(cal.identifiable[j]),
         })  # fmt: skip
     st.table(rows)
     c = st.columns(3)
-    c[0].metric("χ² / dof", f"{cal.chi2:.3g} / {cal.dof}")
+    c[0].metric("χ² / dof", f"{cal.chi2:.3g} / {cal.dof}",
+                help="Reduced χ² well above 1: the model or the data σ are inadequate.")  # fmt: skip
     c[1].metric("Data points", f"{cal.n_points}")
     c[2].metric("Model evaluations", f"{cal.nfev}")
     if len(cal.groups) > 1:
@@ -379,7 +393,7 @@ def _removal_tab():
                 source="entered on the Trap kinetics page",
             )  # fmt: skip
             _, _, tp = _mods()
-            with st.spinner("Fitting (P + 2 kinetic sweeps per observation, ~5-30 s)..."):
+            with st.spinner("Fitting (P + 2 kinetic sweeps per observation, ~5-30 s on an idle machine)..."):
                 cal = tc.calibrate_removal([obs], tuple(params), base_model=tp.trap_preset(model))
             st.session_state["rm_result"] = cal
         except Exception as e:

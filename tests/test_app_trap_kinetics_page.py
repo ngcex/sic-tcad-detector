@@ -169,3 +169,23 @@ def test_downsample_keeps_reverse_points_and_ends():
     s = downsample(d, 5)
     assert len(s.V) == 5 and s.V[0] == d.V[0] and s.V[-1] == d.V[-1]
     assert downsample(d, 100) is d
+
+
+def test_poor_fit_is_flagged_not_reported_as_success(monkeypatch):
+    from etna.core import trap_calibration as tc
+
+    at = _start(monkeypatch)
+
+    def bad_fit(config, datasets, **kw):
+        return dataclasses.replace(_cal(kw["groups"]), chi2=7.1e5, dof=21)
+
+    import dataclasses
+
+    monkeypatch.setattr(tc, "calibrate_cv", bad_fit)
+    at.file_uploader(key="cal_files").set_value(("cv_a.csv", _csv(), "text/csv"))
+    at.run()
+    at.button(key="cal_run").click()
+    at.run()
+    assert at.exception == [], at.exception
+    assert any("the fit is POOR" in e.value for e in at.error)
+    assert not any("CALIBRATED" in s.value for s in at.success)

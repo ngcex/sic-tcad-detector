@@ -95,7 +95,7 @@ def _event_tab(cfg):
     tok = P.token(cfg, inputs)
     if st.button("Run track event", key="tr_run", type="primary"):
         _run("tr", tok, lambda: etna.run_track_event(cfg, float(let), float(V), **phys),
-             "Solving the track transient (2-15 s; the first run also compiles)...")  # fmt: skip
+             "Solving the track transient (2-15 s on an idle machine, longer under load; the first run also compiles)...")  # fmt: skip
     r = st.session_state.get("tr_result")
     if r is None:
         return
@@ -122,6 +122,9 @@ def _event_tab(cfg):
     fig.update_layout(xaxis_type="log", yaxis_type="log", xaxis_title="Time (ns)",
                       yaxis_title="|Cathode signal current| (nA)",
                       title=f"Track transient, LET {md['LET_keV_um']:g} keV/µm, {md['V_bias']:g} V")  # fmt: skip
+    # powers of ten, not SI prefixes ("1µ ns" would read as a unit)
+    fig.update_xaxes(exponentformat="power")
+    fig.update_yaxes(exponentformat="power")
     st.plotly_chart(fig, key="tr_plot")
 
     def draw(f):

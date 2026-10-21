@@ -115,7 +115,7 @@ def test_fixed_mode_pulse_heights_with_table_and_threshold(monkeypatch):
     at.run()
     assert at.exception == [], at.exception
     cap = " ".join(c.value for c in at.caption)
-    assert "sampled events above threshold" in cap
+    assert "events with a deposit above threshold" in cap
 
 
 def test_too_few_deposits_is_an_error_not_a_crash(monkeypatch):
@@ -156,3 +156,23 @@ def test_fields_zip_bytes_real_1d_field():
     names = zipfile.ZipFile(io.BytesIO(data)).namelist()
     assert {"etna_efield.init", "etna_doping.init", "etna_weighting.init"} <= set(names)
     assert "ElectricFieldReader" in info["config_snippet"]
+
+
+def test_surround_thicker_than_the_range_is_refused_before_sampling(monkeypatch):
+    from app.workflows.mc_deposition import csda_range_um
+
+    assert abs(csda_range_um("alpha", 5.486, "sic") - 18.43) < 0.05  # NIST ASTAR CSDA
+    _patch(monkeypatch)
+    calls = []
+    from etna.core import mc_response
+
+    monkeypatch.setattr(mc_response, "adaptive_lineal_energy", lambda *a, **k: calls.append(1))
+    at = _start()
+    at.selectbox(key="mc_particle").set_value("alpha")
+    at.number_input(key="mc_surround").set_value(300.0)
+    at.run()
+    at.button(key="mc_run").click()
+    at.run()
+    assert at.exception == []
+    assert any("no track reaches the SV" in e.value for e in at.error)
+    assert calls == []

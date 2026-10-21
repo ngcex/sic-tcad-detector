@@ -126,7 +126,9 @@ def figure_block(key: str, stem: str, build, tok=None, prov_hint: str = "") -> N
         if prov_hint:
             st.caption(prov_hint)
         if st.toggle("Show preview (150 dpi PNG)", value=False, key=f"{key}_prev"):
-            st.image(figure_bytes(build, "png", 150, size))
+            png = figure_bytes(build, "png", 150, size)
+            # 150 dpi preview at about its print size (single column ~ 525 px)
+            st.image(png, width=int(min(900, S.size_inches(size)[0] * 150)))
         store = st.session_state.setdefault("pubfig_bytes", {})
 
         def _data(build=build, fmt=fmt, dpi=int(dpi), size=size):

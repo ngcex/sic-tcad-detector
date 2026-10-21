@@ -158,7 +158,22 @@ def _scan_plot(r, p):
         )
     fig.update_layout(xaxis_title=xlab, yaxis_title="CCE (collected / generated in the mesh)",
                       title="CCE vs alpha-stripe position")  # fmt: skip
+    lo, hi = _y_range(r)
+    if lo is not None:
+        fig.update_yaxes(range=[lo, hi])
     return fig
+
+
+def _y_range(r):
+    """A y range of at least 0.01 so round-off (~1e-14 on a flat scan) is not drawn as
+    structure; (None, None) when the data span more than that."""
+    allv = np.concatenate(
+        [np.asarray(s["cce_values"], float) for s in r["scans"].values()]
+    )
+    if allv.size and np.ptp(allv) < 1e-3:
+        m = float(np.mean(allv))
+        return m - 0.005, m + 0.005
+    return None, None
 
 
 def _map_plot(r, what):
@@ -171,13 +186,24 @@ def _map_plot(r, what):
             "Plasma",
         ),
     }[what]
+    kw = {}
+    if what.startswith("|E|"):
+        # the junction-edge peaks dominate the scale: clip it at the 99th percentile
+        kw = dict(zmin=0.0, zmax=float(np.nanpercentile(z, 99.0)))
     fig = go.Figure(
         go.Heatmap(
-            x=r["xs_um"], y=r["ys_um"], z=z, colorscale=cs, colorbar=dict(title=title)
+            x=r["xs_um"],
+            y=r["ys_um"],
+            z=z,
+            colorscale=cs,
+            colorbar=dict(title=title),
+            **kw,
         )
     )
     fig.update_layout(xaxis_title="Lateral x / radius r (µm)", yaxis_title="Depth y (µm)",
-                      yaxis_autorange="reversed", title=what)  # fmt: skip
+                      yaxis_autorange="reversed",
+                      title=what + (f" (colour scale clipped at the 99th percentile, max "
+                                    f"{np.nanmax(z):.0f} kV/cm)" if kw else ""))  # fmt: skip
     return fig
 
 
@@ -194,17 +220,28 @@ def _pub(r, p, what):
                 ax.plot(r["x_scan_um"], s["cce_values"], "o-", ms=2, label=c)
             ax.set_xlabel(xlab)
             ax.set_ylabel("CCE")
+            lo, hi = _y_range(r)
+            if lo is not None:
+                ax.set_ylim(lo, hi)
+                ax.ticklabel_format(axis="y", useOffset=False)
             ax.legend()
         else:
             ax = fig.add_subplot()
             im = ax.pcolormesh(
-                r["xs_um"], r["ys_um"], r["E"] * 1e-3, shading="nearest", cmap="viridis"
-            )
+                r["xs_um"], r["ys_um"], r["E"] * 1e-3, shading="nearest", cmap="viridis",
+                vmin=0.0, vmax=float(np.nanpercentile(r["E"] * 1e-3, 99.0)),
+            )  # fmt: skip
             ax.invert_yaxis()
             ax.set_xlabel(xlab)
             ax.set_ylabel(r"Depth ($\mu$m)")
-            fig.colorbar(im, ax=ax, label="|E| (kV/cm)")
+            ax.grid(False)
+            fig.colorbar(im, ax=ax, label="|E| (kV/cm)", extend="max")
 
+    if what != "scan":
+        notes.append(
+            f"Colour scale clipped at the 99th percentile of |E| (max "
+            f"{np.nanmax(r['E']) * 1e-3:.0f} kV/cm)."
+        )
     return lambda size: P.publication_figure(draw, prov, notes, size)
 
 
