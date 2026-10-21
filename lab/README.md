@@ -20,6 +20,12 @@ not from the GPU: the MLX/Metal float32 path worked and was validated (1e-6 in W
 never beat numba at any batch size (B = 1..10 000). Closed negative result for the GPU;
 the numba path was promoted to `etna/core/batched/` (run_cv / run_cce and the batch sweeps).
 
+## `lab/neutron_niel`
+
+SiC neutron NIEL normalisation (2026-10-21): NJOY HEATR on ENDF/B-VIII.0, checks against
+ASTM E722 / Griffin, an independent elastic integration, the ENDF/B-VII.1 carbon spread
+and the spectrum sensitivity of r_n. Data in `data/niel/`, numbers in `notes/LOG.md`.
+
 ## `lab/solver2d`
 
 2D numba engine spike (2026-10-16), promoted to `etna/core/engine2d/`; production parity

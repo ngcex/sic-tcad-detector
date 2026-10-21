@@ -96,4 +96,10 @@ Metadata: `bias_V` (when there is no `V_V` column), `bias_convention`, `area_cm2
 - E_a JSON (`etna.measurements.activation_energy`), C-V comparison JSON, a Markdown
   report (`report_markdown`) and PNG/SVG/PDF figures (`etna.measurements.plots`).
 
+Unit / plausibility checks: every loader also refuses obvious unit mix-ups (F in a
+`C_pF` column, nm in `depth_um`, m^-3 in `N_cm3`, pA in `I_A`, impossible areas) and
+warns on unusual values (`etna.measurements.plausibility`). Worked SYNTHETIC examples of
+all three files with a round-trip script: `examples/measurements/`. What to ask for:
+`docs/DATA_REQUEST_CHECKLIST.md`.
+
 Methods, limits and examples: `docs/USAGE.md`, section "Measurement inputs".

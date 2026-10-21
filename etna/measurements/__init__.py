@@ -14,6 +14,9 @@ ships header-only templates (``data/measurements/templates/``, columns and units
   and junction depth), ``ProfileTable.to_device_config``.
 - I(T) (``etna.measurements.iv_t``): ``load_it_csv`` -> ``ITData``, ``fit_arrhenius``,
   ``analyze_it`` (data E_a per bias vs the model's E_a by the same fit).
+- Unit / plausibility checks (``etna.measurements.plausibility``): obvious unit
+  mix-ups are refused with a hint, unusual values warned
+  (``MeasurementPlausibilityWarning``, ``plausibility_report``).
 - Outputs: ``to_json()`` on every result, ``load_donor_table_json``,
   ``report_markdown``, figures in ``etna.measurements.plots``.
 """
@@ -46,6 +49,10 @@ from etna.measurements.iv_t import (
     load_it_csv,
     model_current_vs_T,
 )
+from etna.measurements.plausibility import (
+    MeasurementPlausibilityWarning,
+    plausibility_report,
+)
 from etna.measurements.sims import (
     DepthProfile,
     ProfileTable,
@@ -57,6 +64,8 @@ from etna.measurements.sims import (
 
 __all__ = [
     "MeasurementFileError",
+    "MeasurementPlausibilityWarning",
+    "plausibility_report",
     "CVData",
     "CVComparison",
     "CVInversion",

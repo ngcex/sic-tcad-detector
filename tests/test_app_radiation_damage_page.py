@@ -65,11 +65,12 @@ def test_kappa_banner_persistent(monkeypatch):
     assert at.exception == [], f"page crashed on boot: {at.exception}"
 
     warning_texts = [el.value for el in at.warning]
-    # SR-NIEL data since 2026-10-20 (B-07): the banner states the open SiC neutron
-    # normalisation (the old "data-blocked placeholder" wording is gone)
+    # SR-NIEL data since 2026-10-20 (B-07); since 2026-10-21 the SiC neutron NIEL is
+    # computed (NJOY): the banner states r_n and the opt-in sic-damage convention
     assert any(
-        "sic neutron normalisation is still open" in (w or "").lower()
+        "r_n = 1.069" in (w or "").lower()
         and "sr-niel" in (w or "").lower()
+        and "sic-damage" in (w or "").lower()
         for w in warning_texts
     ), f"kappa NIEL-normalisation banner not found in warnings: {warning_texts}"
     assert not any("data-blocked" in (w or "").lower() for w in warning_texts)
@@ -253,3 +254,49 @@ def test_charged_traps_checkbox_opt_in(monkeypatch):
         1e16 / get_hardness_factor(62), rel=1e-2
     )
     assert any("semi-insulating" in (i.value or "") for i in at.info)
+
+
+def test_neutron_sic_damage_choices_reach_the_facade(monkeypatch):
+    """The opt-in particle / NIEL-convention selectors are passed to
+    run_radiation_damage (default runs pass neither: byte-identical calls)."""
+    seen = {}
+
+    def fake(cfg, **kwargs):
+        seen.update(kwargs)
+        r = _fake_run_radiation_damage(cfg, **kwargs)
+        r.metadata.update(particle=kwargs.get("particle", "proton"))
+        return r
+
+    monkeypatch.setattr(etna, "run_radiation_damage", fake)
+    at = AppTest.from_function(_run_radiation_damage_page)
+    at.session_state["device_config"] = DeviceConfig()
+    at.run()
+    at.radio(key="rad_particle").set_value("neutron").run()
+    at.selectbox(key="rad_niel_convention").set_value("sic-damage").run()
+    assert at.exception == []
+    assert any("neutron" in (c.value or "") and "sic-damage" in (c.value or "")
+               for c in at.caption)
+    at.button[0].click()
+    at.run()
+    assert at.exception == []
+    assert seen["particle"] == "neutron"
+    assert seen["niel_convention"] == "sic-damage"
+    assert seen["proton_energy_MeV"] == pytest.approx(1.0)
+    assert "damage_result" in at.session_state
+
+
+def test_default_run_passes_no_niel_keywords(monkeypatch):
+    seen = {}
+
+    def fake(cfg, **kwargs):
+        seen.update(kwargs)
+        return _fake_run_radiation_damage(cfg, **kwargs)
+
+    monkeypatch.setattr(etna, "run_radiation_damage", fake)
+    at = AppTest.from_function(_run_radiation_damage_page)
+    at.session_state["device_config"] = DeviceConfig()
+    at.run()
+    at.button[0].click()
+    at.run()
+    assert at.exception == []
+    assert "particle" not in seen and "niel_convention" not in seen

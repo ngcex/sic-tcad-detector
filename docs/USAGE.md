@@ -67,8 +67,9 @@ What ETNA is **not**:
   - **Not reproduced / open**. The microdosimeter's measured alpha CCE-vs-bias shape is
     not reproduced by any drift-diffusion variant (section 8). FLASH plasma recombination
     is not implemented. The NIEL hardness factors are SR-NIEL data in the Si
-    1-MeV-neq convention, with the SiC neutron normalisation unavailable
-    (`data/niel/README.md`). The tissue-equivalence kappa(E) uses real NIST
+    1-MeV-neq convention by default; the SiC neutron NIEL is computed with NJOY
+    (r_n = 1.069, opt-in `niel_convention="sic-damage"`; `data/niel/README.md`),
+    the introduction rates remain unvalidated. The tissue-equivalence kappa(E) uses real NIST
     PSTAR/ASTAR data (SiC by Bragg additivity, `data/nist_star/`).
     SIMS is unavailable, so the epi/n+ position comes from the C-V fit.
 
@@ -510,11 +511,11 @@ log-log interpolation) over the ASTM 95 MeV mb normalisation: 6.67 at 5.6 MeV, 2
 30, 1.94 at 62, 1.82 at 70, 1.12 at 150 MeV (the old placeholders were 0.50 / 0.35 /
 0.33 / 0.22 at 30-150 MeV and 5.6 MeV was silently clamped to 0.5). Energies outside
 1-1000 MeV raise `ValueError`. This is the 1-MeV-neq convention of the defect
-introduction rates (Burin et al., fitted to reactor data labelled in Si neq). Open: the
-SiC/Si NIEL ratio of the reactor neutrons is not available (SR-NIEL's SiC neutron
-calculator needs a login), so the SiC-specific normalisation is unvalidated; if that
-ratio exceeds the proton one (0.94 at 5.6 MeV, 0.85 at 62 MeV:
-`radiation_damage.niel_ratio_sic_si`), kappa overstates the SiC damage per proton. At
+introduction rates (Burin et al., fitted to reactor data labelled in Si neq). The
+SiC/Si NIEL ratio of fission neutrons is now computed (r_n = 1.069, see "Neutron NIEL
+and NIEL conventions" below); it exceeds the proton one (0.94 at 5.6 MeV, 0.85 at
+62 MeV: `radiation_damage.niel_ratio_sic_si`), so this default kappa overstates the SiC
+damage per proton by r_n/r_p; the opt-in `niel_convention="sic-damage"` removes it. At
 5.6 MeV NIEL scaling is also known to overpredict measured Si damage by tens of percent.
 Data and provenance: `data/niel/` (raw SR-NIEL pages, CSVs, fetch script, README). The
 Radiation Damage page offers 30, 62, 70 and 150 MeV only.
@@ -528,6 +529,49 @@ cfg = DeviceConfig()
 phi_c = compensation_fluence(cfg, 5.6)                       # 1.01e12 p/cm2
 r = run_radiation_damage(cfg, fluences=np.geomspace(1e9, 0.9 * phi_c, 5), V_bias=-40.0)
 print(f"{phi_c:.3g}", r.metadata["valid"].all(), np.round(r.y, 4))
+```
+
+#### Neutron NIEL and NIEL conventions (opt-in, `particle=`, `niel_convention=`)
+
+The SiC neutron NIEL is computed (2026-10-21) with NJOY2016 HEATR on ENDF/B-VIII.0
+(Lindhard/Robinson partition, E_d 21/21 eV; `scripts/build_neutron_niel.py`, data and
+checks in `data/niel/README.md`, code `etna.core.neutron_niel`). Checks: Si at 1 MeV is
+0.998 x the ASTM 95 MeV mb; the Si fission average is +0.7 % vs the Griffin
+(SAND92-0094) damage function; an independent Python elastic integration matches HEATR
+to 2e-4. Results: NIEL_n,SiC(1 MeV) = 2.299e-3 MeV cm^2/g; SiC/Si for a Watt fission
+spectrum r_n = 1.069. No published SiC neutron NIEL value was found to compare with, and
+r_n depends on the (unknown) calibration reactor spectrum: 1.02-1.20 for plausible
+shapes.
+
+`etna.core.radiation_damage.hardness_table(particle, convention)` gives the factor
+(neq per particle); `run_radiation_damage`, `compensation_fluence`,
+`trap_compensation_fluence` and `default_fluence_grid` take `particle=` and
+`niel_convention=` (keywords), and the core functions take `niel_table=`:
+
+| convention | kappa | 62 MeV proton |
+| ---------- | ----- | ------------- |
+| `si-neq` (default, unchanged) | NIEL_x,Si(E) / NIEL_n,Si(1 MeV, ASTM) | 1.942 |
+| `sic-damage` | NIEL_x,SiC(E) / (r_n NIEL_n,Si(1 MeV)): same SiC damage as the Si-labelled reactor neq of the rates | 1.552 |
+| `sic-1mev` | NIEL_x,SiC(E) / NIEL_n,SiC(1 MeV): SiC-native neq | 1.470 |
+
+`particle="neutron"` reads the fluences as neutrons and the energy as the neutron energy
+(bin-averaged NJOY table, 1/20 decade bins, ~1e-5 to 18.9 MeV, no extrapolation; 1 MeV:
+0.953 in `si-neq`, because the resonant damage function is averaged over the bin; 14 MeV:
+1.89, +4-5 % above Griffin). The default stays `si-neq`; with the fission r_n the
+default overstates the SiC damage per proton by r_n/r_p (x1.13 at 5.6 MeV, x1.25 at 62,
+x1.30 at 150 MeV), which is the factor `sic-damage` removes. Bench:
+`uv run python lab/neutron_niel/bench.py` (0.05 s).
+
+```python
+from etna import DeviceConfig, run_radiation_damage
+from etna.api.simulation import compensation_fluence
+
+cfg = DeviceConfig()
+compensation_fluence(cfg, 62.0)                                  # 3.48e12 p/cm2
+compensation_fluence(cfg, 62.0, niel_convention="sic-damage")    # 4.36e12 p/cm2
+r = run_radiation_damage(cfg, proton_energy_MeV=14.0, particle="neutron",
+                         niel_convention="sic-damage")
+r.metadata["kappa"], r.metadata["particle"]                      # 1.535, 'neutron'
 ```
 
 #### Charged deep traps beyond compensation (opt-in, `radiation_traps=True`)
@@ -1225,7 +1269,7 @@ header carries solver, domain, config and version.
 | C-V Analysis            | `run_cv`                                                                        | max reverse bias (default -50 V), points (40)                                                                                                                                                                                                                                                                                          | C-V, Mott-Schottky, eps*A/C and depletion edge vs V, full-depletion marker, CSV                                                                                                                                                                                                                                                                                                                                  |
 | Charge Collection (CCE) | `run_cce`                                                                       | V_start (-10), V_stop (-40), points (30); reverse bias only                                                                                                                                                                                                                                                                            | CCE vs bias, CSV                                                                                                                                                                                                                                                                                                                                                                                                 |
 | Field Map               | `run_field`, 1D or 2D                                                           | reverse bias (default -50 V, down to -200)                                                                                                                                                                                                                                                                                             | 1D: E(x), potential, net doping, CSV. 2D: heatmap viewer (field, potential, doping)                                                                                                                                                                                                                                                                                                                              |
-| Radiation Damage        | `run_radiation_damage`                                                          | proton energy (30/62/70/150 MeV), fluence range (default 0.7e-3 to 0.7 x the compensation fluence; with the opt-in charged-traps checkbox (`radiation_traps=True`) 0.01 x it to 1e16 neq), points (6), bias (-20 V)                                                                                                                    | CCE vs fluence with NaN gaps explained. A persistent banner says kappa is SR-NIEL (Si neq) with the SiC neutron normalisation open                                                                                                                                                                                                                                                                               |
+| Radiation Damage        | `run_radiation_damage`                                                          | proton energy (30/62/70/150 MeV), fluence range (default 0.7e-3 to 0.7 x the compensation fluence; with the opt-in charged-traps checkbox (`radiation_traps=True`) 0.01 x it to 1e16 neq), points (6), bias (-20 V)                                                                                                                                                                                                           | CCE vs fluence with NaN gaps explained. A persistent banner says kappa is SR-NIEL (Si neq by default) and states r_n; particle (proton/neutron) and NIEL convention selectors (defaults proton / si-neq)                                                                                                                                                                                                                                                                               |
 | Dark Current            | total leakage vs T at one bias (`ParametricSweep` over T of `run_dark_current`) | T range (250-400 K), points (6), bias (-20 V), advanced N_t                                                                                                                                                                                                                                                                            | I_total vs T, CSV. A calibration banner is shown; only the total is shown                                                                                                                                                                                                                                                                                                                                        |
 | Microdosimetry          | `run_microdosimetry`                                                            | MC events CSV upload, SV thickness (10 µm) and width (100 µm, depth = width)                                                                                                                                                                                                                                                           | y·d(y), y_F / y_D, CSV. Independent of the sidebar                                                                                                                                                                                                                                                                                                                                                               |
 | Batch Sweep             | `ParametricSweep`                                                               | one of epi thickness, p+ thickness, N_A, N_D junction, N_D bulk, transition length, T, area; comma-separated values; facade (CCE vs bias, C-V, CCE vs temperature)                                                                                                                                                                     | overlaid curves, bulk CSV, per-value failures listed                                                                                                                                                                                                                                                                                                                                                             |
@@ -1551,9 +1595,9 @@ uv run pytest -n0 -x tests/test_api_cce.py        # serial, e.g. with --pdb
 uv run pytest -n auto -q --durations=20           # slowest tests
 ```
 
-- 122 modules and 1559 tests (2026-10-21). `pytest.ini` deselects the `exhaustive` marker
+- 128 modules and 1653 tests (2026-10-21). `pytest.ini` deselects the `exhaustive` marker
   (6 redundant deep variants, each implied by a kept test), so the default run collects
-  1553: all pass with `--extra dev --extra viz`; with `--extra dev` only, 1545 pass and 8
+  1647: all pass with `--extra dev --extra viz`; with `--extra dev` only, 1639 pass and 8
   skip (the manim and gdstk tests). The `slow` marker labels the devsim integration tests
   but does not deselect them.
 - `pytest.ini` adds `--dist loadgroup --no-loadscope-reorder` (inert without `-n`), so
@@ -1795,6 +1839,29 @@ sigma_I/|I|` (absolute covariance and chi2/dof with file sigmas; residual-scaled
   at -30 V, 280-340 K, p = 0 the fitted model E_a is 1.69 eV against E_g/2 = 1.63 eV. The
   comparison (`delta_eV`, `z` = delta / sigma of the data fit) tests that assumption; a
   curved Arrhenius plot (see the residuals) means more than one mechanism.
+
+### Unit and plausibility checks, examples, data request
+
+On top of the schema checks, every loader runs `etna.measurements.plausibility` on the
+converted values. **Refused** (added to the `MeasurementFileError` with a unit hint): a
+median depletion width eps/(C/A) below 1 nm or above 1 cm ("values look like F in a pF
+column (x1e12)", "pF in an F column"), an area outside 1e-6-100 cm^2, |V| > 5 kV, a SIMS
+concentration above the SiC atomic density (m^-3 in a cm^-3 column) or all values <= 30
+(log10 given), depths beyond 5 mm (nm in `depth_um`), T outside 4-2000 K, |I| > 0.1 A.
+**Warned** (`MeasurementPlausibilityWarning`, also `plausibility_report(data)`): W
+outside 0.05-500 um, |V| > 1.5 kV, test frequency outside 10 Hz-100 MHz, T outside
+77-700 K (with a degC hint for a `T_K` column below 250), C rising by > 5 % with reverse
+bias, SIMS values below 1e12 cm^-3 or a profile ending above 0.2 um, |I| above 0.1 mA or
+below 10 aA. The bounds are sanity limits, not model validity ranges.
+
+`examples/measurements/` holds one SYNTHETIC file of each kind generated from the model
+(`make_synthetic.py`, truth = `measured_cv_tabulated_config()`: C-V 0 to -200 V, SIMS
+N/Al from the surface, I(T) at -10/-50 V, 300-380 K) and `roundtrip.py`, which loads them
+and recovers the truth (C-V rms W 8e-10 um, donor table 0.000 dex, E_a to 1e-11 eV) in
+under a second; `tests/test_measurement_examples.py` checks the files are reproducible
+and the round trip. With a realistic SIMS N floor above the epi doping the epi knots are
+censored and refused (the test shows it). What to ask INFN-LNS and the foundry for, and
+how each file is used: `docs/DATA_REQUEST_CHECKLIST.md`.
 
 ### Streamlit page
 

@@ -104,8 +104,16 @@ def build_damage_figure(result: SimResult) -> go.Figure:
     )
     fig.add_hline(y=1.0, line_dash="dash", line_color="#9AA0A6", opacity=0.5)
     fig.update_layout(
-        title="CCE vs Proton Fluence",
-        xaxis_title="Proton Fluence (p/cm²)",
+        title=(
+            "CCE vs Neutron Fluence"
+            if result.metadata.get("particle") == "neutron"
+            else "CCE vs Proton Fluence"
+        ),
+        xaxis_title=(
+            "Neutron Fluence (n/cm²)"
+            if result.metadata.get("particle") == "neutron"
+            else "Proton Fluence (p/cm²)"
+        ),
         xaxis_type="log",
         xaxis_exponentformat="power",
         yaxis_title="Charge Collection Efficiency",
@@ -539,9 +547,21 @@ def to_csv_bytes(result: SimResult) -> bytes:
                 if "compensation_fluence" in result.metadata
                 else []
             ),
-            "# WARNING: kappa (NIEL hardness factor) is SR-NIEL proton NIEL in the Si "
-            "1-MeV-neq convention; the SiC neutron normalisation is still open, so "
-            "absolute SiC Phi_crit numbers are unvalidated.",
+            *(
+                [
+                    f"# particle: {result.metadata['particle']} (fluence column is "
+                    "particles/cm^2 of this particle)",
+                    f"# niel_convention: {result.metadata.get('niel_convention')}",
+                    f"# kappa_neq_per_particle: {result.metadata.get('kappa', float('nan')):.4g}",
+                ]
+                if "particle" in result.metadata
+                else []
+            ),
+            "# WARNING: kappa (NIEL hardness factor) is SR-NIEL proton / NJOY neutron "
+            "NIEL; in the default Si-neq convention it overstates the SiC damage per "
+            "proton by r_n/r_p (opt-in 'sic-damage' removes that). The introduction "
+            "rates are unvalidated literature values, so absolute SiC Phi_crit "
+            "numbers are unvalidated.",
         ]
     elif result.sim_type in ("dark_current", "dark_current_vs_T"):
         md = result.metadata

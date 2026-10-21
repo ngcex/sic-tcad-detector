@@ -77,8 +77,9 @@ NOTES = {
         "physics not modelled."
     ),
     "damage": (
-        "kappa (NIEL hardness): SR-NIEL proton NIEL, Si 1-MeV-neq convention; "
-        "SiC neutron normalisation still open, absolute SiC fluence scale unvalidated."
+        "kappa (NIEL hardness): SR-NIEL proton NIEL, Si 1-MeV-neq convention by "
+        "default (overstates SiC damage by r_n/r_p, r_n = 1.069 from NJOY); "
+        "absolute SiC fluence scale unvalidated."
     ),
     "temperature": "CCE vs T: model trend, not validated against a T measurement.",
     "cce_let": (
@@ -617,10 +618,14 @@ def _damage(fig, res, notes, **_):
             label=f"compensation {phi_c:.2g} cm$^{{-2}}$",
         )
     ax.set_ylim(0, 1.08)
-    ax.set_xlabel(S.UNITS["fluence"][1])
+    neutron = md.get("particle") == "neutron"
+    ax.set_xlabel(
+        r"Neutron fluence (cm$^{-2}$)" if neutron else S.UNITS["fluence"][1]
+    )
     ax.set_ylabel(S.UNITS["cce"][1])
     ax.set_title(
-        f"CCE vs fluence ({md.get('energy_MeV', '')} MeV p, {md.get('V_bias', '')} V)"
+        f"CCE vs fluence ({md.get('energy_MeV', '')} MeV {'n' if neutron else 'p'}, "
+        f"{md.get('V_bias', '')} V)"
     )
     _legend(ax, loc="lower left")
     notes.insert(0, NOTES["damage"])

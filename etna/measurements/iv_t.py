@@ -187,8 +187,18 @@ def load_it_csv(src) -> ITData:
             f"{conv} convention: a dark current is measured in reverse; add "
             "'# bias_convention: reverse_positive' if reverse is positive in this file"
         )
+    plaus_warn = []
+    if not issues:  # unit / plausibility checks on a well-formed file
+        from etna.measurements.plausibility import check_it
+
+        plaus_err, plaus_warn = check_it(T, I, tname, names["I"], "T" in cols)
+        issues += plaus_err
     if issues:
         raise MeasurementFileError(source, issues)
+    if plaus_warn:
+        from etna.measurements.plausibility import emit
+
+        emit(source, plaus_warn)
     return ITData(
         T_K=T,
         I_A=I,
