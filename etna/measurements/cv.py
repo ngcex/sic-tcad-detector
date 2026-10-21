@@ -209,6 +209,7 @@ def load_cv_csv(src, area_cm2: "float | None" = None) -> CVData:
         exclusive=[("C", "CA"), ("sC", "sCA")],
         meta_keys=CV_META,
         kind="C-V",
+        complete_if_present=("sC", "sCA", "sV"),
     )
     cols, names, issues = raw.columns, raw.column_names, []
     lines = np.asarray(raw.lines)

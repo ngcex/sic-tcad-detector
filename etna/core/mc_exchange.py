@@ -243,11 +243,22 @@ def tracks_to_dataframe(events):
     event with edep_keV, the chord MIDPOINT in the SV (cm; the lateral position used by
     ``cce_lateral`` weighting, not the entry point, which lies on a side face for
     isotropic tracks), ``ekin_MeV`` = kinetic energy at SV entry (for the kappa(E)
-    lookup) and ``track_id`` = 1. Tracks that miss the SV get position 0."""
+    lookup) and ``track_id`` = 1. Tracks that miss the SV get position 0.
+
+    Delta-only events (the primary misses the SV, delta rays from a surround deposit;
+    ``delta_only`` = True) have no SV-entry energy. Their ``ekin_MeV`` is the median
+    SV-entry energy of the events that cross the SV (a primary passing beside the SV
+    has about the same energy), so ``tissue_equivalence_correction(...,
+    particle_energy_MeV=...)`` does not hit NaN (audit v8 finding 6). It stays NaN only
+    if no event crosses the SV."""
     import pandas as pd
 
     mid = events.entry_um + 0.5 * events.chord_um[:, None] * events.direction
     ent = np.nan_to_num(mid, nan=0.0) * 1e-4
+    ekin = np.array(events.E_sv_entry_MeV, dtype=float)
+    miss = ~np.isfinite(ekin)
+    if miss.any() and (~miss).any():
+        ekin[miss] = float(np.median(ekin[~miss]))
     return pd.DataFrame(
         {
             "event_id": np.arange(events.n_events),
@@ -255,8 +266,9 @@ def tracks_to_dataframe(events):
             "y_cm": ent[:, 1],
             "z_cm": ent[:, 2],
             "edep_keV": events.edep_keV,
-            "ekin_MeV": events.E_sv_entry_MeV,
+            "ekin_MeV": ekin,
             "track_id": np.ones(events.n_events, dtype=int),
+            "delta_only": miss & (events.edep_keV > 0),
         }
     )
 

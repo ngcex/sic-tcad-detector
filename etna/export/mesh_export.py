@@ -65,6 +65,14 @@ def _fields(vals) -> "list[tuple[str, str]]":
     return list(_FIELDS) + [(k, h) for k, h in _OPTIONAL_FIELDS if k in vals]
 
 
+def _xml_comment_safe(text: str) -> str:
+    """Text that cannot end or invalidate an XML comment: no '--' anywhere (a single
+    replace left '- --' from '---'), and no trailing '-' (it would form '--->')."""
+    while "--" in text:
+        text = text.replace("--", "- -")
+    return text + " " if text.endswith("-") else text
+
+
 def _meta_lines(result) -> "list[str]":
     md = result.metadata
     two_d = result.mesh is not None and result.mesh.y_coords is not None
@@ -216,7 +224,7 @@ def profile_to_vtu(result) -> str:
         offsets.append(acc)
     validated = md.get("validated_domain")
     bias = float("nan") if md.get("bias_V") is None else md["bias_V"]
-    meta = " | ".join(_meta_lines(result)).replace("--", "- -")
+    meta = _xml_comment_safe(" | ".join(_meta_lines(result)))
     out = [
         '<?xml version="1.0"?>',
         '<VTKFile type="UnstructuredGrid" version="1.0" byte_order="LittleEndian" '

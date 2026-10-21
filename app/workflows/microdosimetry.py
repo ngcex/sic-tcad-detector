@@ -29,6 +29,7 @@ y_F/y_D readout uses a plain st.caption line rather than metric tiles
 
 from __future__ import annotations
 
+import hashlib
 import io
 
 import streamlit as st
@@ -107,8 +108,12 @@ def render() -> None:
 
     # page inputs the cached spectrum depends on (it ignores the sidebar config)
     inputs = {
+        # content hash: a different file with the same name and size is a new input
         "uploaded file": (
-            None if uploaded is None else f"{uploaded.name} ({uploaded.size} B)"
+            None
+            if uploaded is None
+            else f"{uploaded.name} ({uploaded.size} B, sha256 "
+            f"{hashlib.sha256(uploaded.getvalue()).hexdigest()[:16]})"
         ),
         "sensitive-volume thickness": float(sv_thickness),
         "sensitive-volume width": float(sv_width),

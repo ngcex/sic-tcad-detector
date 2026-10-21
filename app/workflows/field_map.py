@@ -117,16 +117,32 @@ def render() -> None:
             )
 
             with st.expander("Net doping vs depth"):
+                import numpy as np
                 import plotly.graph_objects as go
 
-                net_doping = result.metadata["net_doping"]
+                net_doping = np.asarray(result.metadata["net_doping"], dtype=float)
+                # |N_D - N_A| on the log axis, n and p as separate traces (a signed
+                # value on a log axis dropped the p+ anode)
                 doping_fig = go.Figure(
-                    data=go.Scatter(x=result.x, y=net_doping, mode="lines")
+                    data=[
+                        go.Scatter(
+                            x=result.x,
+                            y=np.where(net_doping > 0, net_doping, np.nan),
+                            mode="lines",
+                            name="n-type (N_D − N_A > 0)",
+                        ),
+                        go.Scatter(
+                            x=result.x,
+                            y=np.where(net_doping < 0, -net_doping, np.nan),
+                            mode="lines",
+                            name="p-type (N_A − N_D > 0)",
+                        ),
+                    ]
                 )
                 doping_fig.update_layout(
-                    title="Net Doping vs Depth",
+                    title="|Net Doping| vs Depth",
                     xaxis_title="Depth (µm)",
-                    yaxis_title="Net Doping (cm⁻³)",
+                    yaxis_title="|N_D − N_A| (cm⁻³)",
                     yaxis_type="log",
                 )
                 st.plotly_chart(doping_fig)

@@ -132,6 +132,7 @@ def load_it_csv(src) -> ITData:
         exclusive=[("T", "TC")],
         meta_keys=IT_META,
         kind="I(T)",
+        complete_if_present=("sI", "sT"),
     )
     cols, names, issues = raw.columns, raw.column_names, []
     lines = np.asarray(raw.lines)

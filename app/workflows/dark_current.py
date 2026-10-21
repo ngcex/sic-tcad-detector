@@ -187,6 +187,8 @@ def render() -> None:
                     y=np.array(I_total),
                     metadata={
                         "V_bias": V_bias,
+                        # the N_t actually used (Advanced override or sidebar)
+                        "N_t": cfg.N_t if N_t is None else float(N_t),
                         # the solver(s) that actually produced the points
                         "solver": " + ".join(dict.fromkeys(solvers)),
                         **(

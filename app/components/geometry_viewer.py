@@ -55,7 +55,7 @@ def _build_bar(
     depth_um = np.asarray(mesh.x_coords) * 1e4
     fig = go.Figure(data=go.Bar(x=depth_um, y=z_scaled))
     fig.update_layout(
-        title=title,
+        title=title.replace("2D ", "1D ", 1),  # a depth profile, not a 2D map
         xaxis_title="Depth (µm)",
         yaxis_title=colorbar_label,
     )

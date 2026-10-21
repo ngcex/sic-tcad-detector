@@ -1225,7 +1225,10 @@ energy spectrum: `x` is y (keV/µm), `y` is y·d(y). Metadata holds `y_F`, `y_D`
 thickness). `config` is carried for provenance only. `mc_csv_path` may be
 a path or a file-like object (e.g. `io.BytesIO`). It raises `ValueError` for non-positive or
 non-finite sensitive-volume dimensions, an unknown `chord_model`, a CSV with no events,
-non-finite or negative `edep`, or no event depositing energy.
+non-finite or negative `edep`, or no event depositing energy. f(y), y_F and y_D are over
+the events that deposit energy with y inside the bins (ICRU 36); `n_zero_events` and
+`n_out_of_range` in the metadata count the excluded ones (before 2026-10-21 zero events
+were in the f(y) normalisation, which scaled y_F by the non-zero fraction).
 
 Mean chord length (audit D-15 follow-up, 2026-10-20): `chord_model="cauchy"` (default) is
 Cauchy's l̄ = 4V/S of the finite box w × d × t (`sv_depth_um=None` means a square footprint,

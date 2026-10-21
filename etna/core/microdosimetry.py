@@ -146,7 +146,9 @@ def lineal_energy_spectrum(
         bin_edges, bin_centers, bin_widths : ndarray
         f_y, d_y : ndarray -- frequency and dose distributions
         y_F, y_D : float -- frequency-mean and dose-mean lineal energy
-        n_events : int -- number of events used
+        n_events : int -- number of input events
+        n_in_range, n_zero, n_out_of_range : int -- events in f(y) (y in range),
+            with epsilon <= 0, with y > 0 outside the bins (the last two excluded)
         y_values : ndarray -- raw lineal energy per event
     """
     energies = np.asarray(collected_energies_keV, dtype=np.float64)
@@ -160,11 +162,28 @@ def lineal_energy_spectrum(
     # Histogram into log-spaced bins
     counts, _ = np.histogram(y_values, bins=bin_edges)
     n_total = len(y_values)
+    # f(y) is the distribution of events that deposit energy (ICRU 36): epsilon = 0
+    # events (and positive y outside [y_min, y_max], which cannot be binned) are not
+    # part of the normalisation. Dividing by all events scaled y_F by the non-zero
+    # fraction while leaving y_D unchanged (audit v8 finding 5).
+    n_in = int(counts.sum())
+    n_zero = int(np.sum(y_values <= 0))
+    n_out = n_total - n_in - n_zero
+    if n_out > 0:
+        logger.warning(
+            "%d of %d events with y > 0 fall outside [%.2e, %.2e] keV/um and are "
+            "excluded from f(y)",
+            n_out,
+            n_total,
+            y_min,
+            y_max,
+        )
 
     # f(y): normalized frequency distribution, integral f(y)*dy = 1
     f_y = np.zeros_like(bin_centers)
     nonzero = bin_widths > 0
-    f_y[nonzero] = counts[nonzero] / (n_total * bin_widths[nonzero])
+    if n_in > 0:
+        f_y[nonzero] = counts[nonzero] / (n_in * bin_widths[nonzero])
 
     # Validate normalization
     integral_f = np.sum(f_y * bin_widths)
@@ -214,6 +233,9 @@ def lineal_energy_spectrum(
         "y_F": y_F,
         "y_D": y_D,
         "n_events": n_total,
+        "n_in_range": n_in,
+        "n_zero": n_zero,
+        "n_out_of_range": n_out,
         "y_values": y_values,
     }
 
