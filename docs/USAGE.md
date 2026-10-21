@@ -1361,9 +1361,9 @@ uv run pytest -n0 -x tests/test_api_cce.py        # serial, e.g. with --pdb
 uv run pytest -n auto -q --durations=20           # slowest tests
 ```
 
-- 118 modules and 1482 tests (2026-10-21). `pytest.ini` deselects the `exhaustive` marker
+- 119 modules and 1514 tests (2026-10-21). `pytest.ini` deselects the `exhaustive` marker
   (6 redundant deep variants, each implied by a kept test), so the default run collects
-  1476: all pass with `--extra dev --extra viz`; with `--extra dev` only, 1468 pass and 8
+  1508: all pass with `--extra dev --extra viz`; with `--extra dev` only, 1500 pass and 8
   skip (the manim and gdstk tests). The `slow` marker labels the devsim integration tests
   but does not deselect them.
 - `pytest.ini` adds `--dist loadgroup --no-loadscope-reorder` (inert without `-n`), so
@@ -1384,7 +1384,7 @@ uv run pytest -n auto -q --durations=20           # slowest tests
   `test_device2d.py`, `test_material.py`, `test_dark_current.py` helpers). List them
   with `ETNA_REPORT_DEVSIM_LEAKS=/tmp/leaks.txt uv run pytest -n auto -q`.
 - **Timing** (10-core M4, 4 performance + 6 efficiency cores; the machine was shared with
-  other jobs). 2026-10-21, 1476 default tests: 169 s wall, 902 s user CPU (load average
+  other jobs). 2026-10-21, 1508 default tests: 169 s wall, 902 s user CPU (load average
   3 at the start); 205 s wall, 948 s user CPU with load average up to 25. Expect about
   3 minutes. History: 2026-10-18 before the
   scheduler and leak fixes, `--dist loadfile`, 502 s wall, 2173 s user CPU; after,
