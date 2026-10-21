@@ -1,0 +1,38 @@
+name: Physics or usage question
+description: Is a model applicable to my device? Why does a result look like this? How do I simulate X?
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please read [USAGE §2 "What to trust"](https://github.com/ngcex/sic-tcad-detector/blob/main/docs/USAGE.md#2-what-to-trust) and [§8 "Validity and limits"](https://github.com/ngcex/sic-tcad-detector/blob/main/docs/USAGE.md#8-validity-and-limits) first: many outputs are calibrations or model predictions, not validated against measurement.
+        Answers are best effort (see SUPPORT.md).
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+    validations:
+      required: true
+  - type: textarea
+    id: device
+    attributes:
+      label: Device and conditions
+      description: Structure, doping, thickness, area, bias, temperature, particle and energy, fluence; the DeviceConfig or preset you use.
+      render: python
+  - type: textarea
+    id: tried
+    attributes:
+      label: What you have tried or found
+      description: Code, results, the USAGE section or reference you are comparing with. Please give full references for any literature you cite.
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind of question
+      options:
+        - Model applicability / validity
+        - Interpreting a result
+        - How to simulate something
+        - Comparison with a measurement or the literature
+        - Other
+    validations:
+      required: true

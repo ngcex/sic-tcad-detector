@@ -1,0 +1,80 @@
+# ETNA documentation site (issue #3 P4.1). Builds the EXISTING docs/ files in place (no
+# copies). Pages in docs/ that are not in `nav` are still built and searchable, so new
+# documents (V&V report, theory manual) appear without editing this file; add them to
+# `nav` to list them in the menu.
+#
+#   uvx --from mkdocs==1.6.1 --with mkdocs-material==9.7.7 mkdocs build --strict      # -> site/ (gitignored)
+#   uvx --from mkdocs==1.6.1 --with mkdocs-material==9.7.7 mkdocs serve               # http://127.0.0.1:8000
+#
+# Deployed by .github/workflows/docs.yml (manual trigger only, not enabled).
+site_name: ETNA documentation
+site_description: >-
+  ETNA (Epitaxial Tcad Numerical Analysis): 1D/2D drift-diffusion TCAD library for
+  4H-SiC radiation detectors.
+site_author: Cesare Scalia
+repo_url: https://github.com/ngcex/sic-tcad-detector
+repo_name: ngcex/sic-tcad-detector
+edit_uri: edit/main/docs/
+copyright: Copyright &copy; Cesare Scalia. MIT licence.
+
+docs_dir: docs
+strict: true
+
+# Internal, non-user documents that live in docs/ for history but are not part of the
+# site: design specs of the agent tooling and the history-rewrite SHA map.
+exclude_docs: |
+  superpowers/
+  history-rewrite-commit-map.txt
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - toc.follow
+    - search.highlight
+    - content.code.copy
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+
+plugins:
+  - search
+
+validation:
+  nav:
+    omitted_files: info
+    not_found: warn
+  links:
+    not_found: warn
+    anchors: warn
+    unrecognized_links: info
+
+nav:
+  - Home: index.md
+  - Usage guide: USAGE.md
+  - Data request checklist: DATA_REQUEST_CHECKLIST.md
+  - Releasing: RELEASING.md

@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Usage guide (read first)
+    url: https://github.com/ngcex/sic-tcad-detector/blob/main/docs/USAGE.md
+    about: Installation, every run_* facade, what to trust, validity limits and troubleshooting.
+  - name: Security vulnerability
+    url: https://github.com/ngcex/sic-tcad-detector/blob/main/SECURITY.md
+    about: Please report security issues privately as described in SECURITY.md, not as a public issue.
