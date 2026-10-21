@@ -12,7 +12,7 @@ Allpix Squared statements cite only source files that were opened (Geant4 v11.3.
 `DetectorField.tpp`, `field_parser.h`). Repro snippets are inline because the scratch
 scripts are not kept.
 
-Summary: **0 critical, 4 major, 13 minor.**
+Summary: **0 critical, 4 major, 13 minor.** GitHub issues (label bug): #17 (finding 1), #18 (2), #19 (3), #20 (4).
 
 | #    | Sev   | Where                                      | One line                                                                                                                                       |
 | ---- | ----- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
