@@ -10,10 +10,12 @@ units by test count).
 Work unit of a test, first rule that applies:
 
 1. it uses a module-scoped fixture  -> its whole file (the fixture is built once);
-2. its nodeid starts with a ``SPLIT_PER_TEST`` prefix -> the test alone (heavy,
+2. its nodeid starts with a ``SPLIT_PER_PARAM`` prefix -> the single parametrization
+   (heavy, independent devsim-parity cases of one parametrized test);
+3. its nodeid starts with a ``SPLIT_PER_TEST`` prefix -> the test alone (heavy,
    independent tests that used to sit in one file or class);
-3. it is a method                    -> its class (class-scoped fixtures built once);
-4. otherwise                         -> its file (module-level helpers / caches shared).
+4. it is a method                    -> its class (class-scoped fixtures built once);
+5. otherwise                         -> its file (module-level helpers / caches shared).
 
 Only the grouping and the order change. Every worker is still a separate process with
 its own devsim state, and a test can already run after any other file under loadfile.
@@ -34,6 +36,17 @@ SPLIT_PER_TEST = (
     "tests/test_iv_sweep_balanced.py::test_",
     "tests/test_devsim_quiet.py::test_",
     "tests/test_v3_baseline_regression.py::test_",
+    "tests/test_incomplete_ionization_engines.py::test_",
+    "tests/test_fluence_engine.py::test_",
+)
+
+# Parametrized tests whose cases are independent devsim reference runs (5-25 s each):
+# one work unit per case instead of all cases in series on one worker.
+SPLIT_PER_PARAM = (
+    "tests/test_incomplete_ionization_engines.py::test_1d_engine_matches_devsim[",
+    "tests/test_incomplete_ionization_engines.py::test_engine2d_field_matches_devsim[",
+    "tests/test_fluence_engine.py::test_cce_vs_fluence_engine_matches_devsim[",
+    "tests/test_fluence_engine.py::test_cv_at_fluence_engine_matches_devsim[",
 )
 
 # unit (file, file::Class or full nodeid of a split test) -> approx. seconds
@@ -58,7 +71,10 @@ HEAVY = {
     "tests/test_plotting2d.py::TestPoisson2DSolve": 60,
     "tests/test_dark_current.py::TestSurfaceRecombination": 56,
     "tests/test_v3_baseline_regression.py::test_default_2d_builder_cce_uniform_generation_10V_hw50": 56,
-    "tests/test_fluence_engine.py": 55,
+    "tests/test_incomplete_ionization_engines.py::test_1d_engine_matches_devsim[tabulated]": 25,
+    "tests/test_incomplete_ionization_engines.py::test_1d_engine_matches_devsim[default]": 25,
+    "tests/test_incomplete_ionization_engines.py::test_1d_engine_matches_devsim[T150]": 20,
+    "tests/test_incomplete_ionization_engines.py::test_1d_engine_matches_devsim[T450]": 18,
     "tests/test_iv_sweep_balanced.py::test_forward_anode_current_matches_direct_form": 55,
     "tests/test_engine2d_stack.py": 50,
     "tests/test_iv_sweep_balanced.py::test_iv_sweep_starts_from_the_live_bias": 50,
@@ -90,6 +106,8 @@ def _unit(item: pytest.Item) -> str:
     module = _module_path(item)
     if _uses_module_fixture(item):
         return module
+    if item.nodeid.startswith(SPLIT_PER_PARAM):
+        return item.nodeid
     base = item.nodeid.split("[", 1)[0]
     if item.nodeid.startswith(SPLIT_PER_TEST):
         return base

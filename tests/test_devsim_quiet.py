@@ -59,14 +59,18 @@ _probe = iter(range(10**6))
 
 
 def _direct_core_field():
-    """A direct core call (no facade, no ``serialized``): builds and solves devsim."""
+    """A direct core call (no facade, no ``serialized``): builds and solves devsim.
+
+    1D DD device ramped to 5 V (~1100 log lines, 0.2 s); was a hw 20 um 2D device at
+    5 V (~400 lines, 1.4 s, called five times). Only the log and the bit-identity of the
+    result are checked, and both come from the same devsim calls in 1D.
+    """
     import devsim
 
-    from etna.core.charge_collection_2d import create_2d_dd_device
+    from etna.core.drift_diffusion import create_dd_device, ramp_bias
 
-    info = create_2d_dd_device(
-        half_width_um=20.0, V_bias=5.0, device_name=f"quiet_probe{next(_probe)}"
-    )
+    info = create_dd_device(device_name=f"quiet_probe{next(_probe)}")
+    ramp_bias(info, 5.0, contact="cathode", V_step=0.5)
     try:
         return np.array(
             devsim.get_node_model_values(

@@ -147,7 +147,12 @@ class TestValidation2Dvs1D:
         setup_poisson(dev_2d)
         solve_equilibrium(dev_2d)
 
-        return dev_1d, dev_2d
+        # class-scoped: conftest's per-test leak cleanup keeps these devices, and
+        # devsim.solve solves every live device, so a leaked hw=50 2D device made
+        # every later devsim test in the same xdist worker many times slower
+        yield dev_1d, dev_2d
+        for d in (dev_1d, dev_2d):
+            devsim.delete_device(device=d["device_name"])
 
     def test_potential_matches_1d_within_1pct(self, solved_devices):
         """2D center-column potential should match 1D within 1%."""
@@ -185,7 +190,8 @@ class TestVisualization2D:
         )
         setup_poisson(dev)
         solve_equilibrium(dev)
-        return dev
+        yield dev
+        devsim.delete_device(device=dev["device_name"])  # see solved_devices
 
     def test_plot_potential_returns_figure(self, solved_2d_device):
         """plot_potential_2d should return (fig, ax)."""

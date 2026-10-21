@@ -108,73 +108,56 @@ class TestAugerHighInjection:
 
     def test_auger_increases_recombination_at_high_injection(self):
         """CCE with Auger should be <= CCE without Auger at high dose rate."""
-        # --- Device WITHOUT Auger ---
-        di_no_auger = _make_dd_device("test_no_auger")
-        dev_no = di_no_auger["device_name"]
-        region_no = di_no_auger["region_name"]
 
-        # --- Device WITH Auger ---
-        di_auger = _make_dd_device("test_with_auger")
-        dev_au = di_auger["device_name"]
-        region_au = di_auger["region_name"]
+        def cce_at_200_Gy_s(auger):
+            # One device at a time: devsim.solve solves every live device, so ramping
+            # the two devices side by side (as before) solved both at every step.
+            di = _make_dd_device("test_with_auger" if auger else "test_no_auger")
+            try:
+                # Ramp to -30V reverse bias
+                ramp_bias(di, 30.0, contact="cathode", V_step=0.5)
+                if auger:
+                    add_auger_recombination(di)
 
-        try:
-            # Ramp both to -30V reverse bias
-            ramp_bias(di_no_auger, 30.0, contact="cathode", V_step=0.5)
-            ramp_bias(di_auger, 30.0, contact="cathode", V_step=0.5)
+                # Generate high-injection profile: 200 Gy/s proton beam at 62 MeV
+                x_nodes = np.array(
+                    devsim.get_node_model_values(
+                        device=di["device_name"], region=di["region_name"], name="x"
+                    )
+                )
+                x_epi = x_nodes - di["junction_pos"]
+                gen = proton_generation_profile(x_epi, E_MeV=62, dose_rate_Gy_s=200)
+                gen[x_epi < 0] = 0.0  # zero generation in p+ substrate
 
-            # Add Auger to second device
-            add_auger_recombination(di_auger)
-
-            # Generate high-injection profile: 200 Gy/s proton beam at 62 MeV
-            x_nodes_no = np.array(
-                devsim.get_node_model_values(device=dev_no, region=region_no, name="x")
-            )
-            x_nodes_au = np.array(
-                devsim.get_node_model_values(device=dev_au, region=region_au, name="x")
-            )
-
-            # Use proton profile at 62 MeV, 200 Gy/s
-            junction_pos = di_no_auger["junction_pos"]
-            x_epi_no = x_nodes_no - junction_pos
-            x_epi_au = x_nodes_au - junction_pos
-
-            gen_no = proton_generation_profile(x_epi_no, E_MeV=62, dose_rate_Gy_s=200)
-            gen_au = proton_generation_profile(x_epi_au, E_MeV=62, dose_rate_Gy_s=200)
-
-            # Zero generation in p+ substrate
-            gen_no[x_epi_no < 0] = 0.0
-            gen_au[x_epi_au < 0] = 0.0
-
-            # Solve without Auger
-            add_generation_to_dd(di_no_auger, gen_no)
-            devsim.solve(
-                type="dc",
-                absolute_error=1e10,
-                relative_error=1e-10,
-                maximum_iterations=60,
-            )
-            cce_no_auger = compute_cce_from_dd(di_no_auger, gen_no, contact="cathode")
-
-            # Solve with Auger using continuation
-            converged = solve_with_continuation(di_auger, gen_au, n_steps=5)
-            assert (
-                converged
-            ), "Continuation solver should converge with Auger at 200 Gy/s"
-            cce_with_auger = compute_cce_from_dd(di_auger, gen_au, contact="cathode")
-
-            # Auger can only reduce CCE or leave it unchanged
-            assert cce_with_auger <= cce_no_auger + 1e-10, (
-                f"CCE with Auger ({cce_with_auger:.6f}) should be <= "
-                f"CCE without Auger ({cce_no_auger:.6f})"
-            )
-
-        finally:
-            for dev in (dev_no, dev_au):
+                if auger:
+                    # Solve with Auger using continuation
+                    converged = solve_with_continuation(di, gen, n_steps=5)
+                    assert (
+                        converged
+                    ), "Continuation solver should converge with Auger at 200 Gy/s"
+                else:
+                    add_generation_to_dd(di, gen)
+                    devsim.solve(
+                        type="dc",
+                        absolute_error=1e10,
+                        relative_error=1e-10,
+                        maximum_iterations=60,
+                    )
+                return compute_cce_from_dd(di, gen, contact="cathode")
+            finally:
                 try:
-                    devsim.delete_device(device=dev)
+                    devsim.delete_device(device=di["device_name"])
                 except Exception:
                     pass
+
+        cce_no_auger = cce_at_200_Gy_s(auger=False)
+        cce_with_auger = cce_at_200_Gy_s(auger=True)
+
+        # Auger can only reduce CCE or leave it unchanged
+        assert cce_with_auger <= cce_no_auger + 1e-10, (
+            f"CCE with Auger ({cce_with_auger:.6f}) should be <= "
+            f"CCE without Auger ({cce_no_auger:.6f})"
+        )
 
 
 class TestContinuationConvergence:
