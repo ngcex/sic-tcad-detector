@@ -666,7 +666,166 @@ EH6/7 (emission time about 1e14 s) never reaches steady state on lab time scales
 
 Small-signal C with traps is not implemented (it raises). At 0 to -1 V a semi-insulating
 epi under the DC alpha proxy is photoconductive: a few points do not converge, and CCE is
-not monotonic there.
+not monotonic there. For C-V with traps, and for occupancies that depend on the
+measurement history, see the next subsection.
+
+#### Kinetic (time-dependent) trap occupancy and C-V (opt-in, `etna.core.trap_kinetics`)
+
+This is a library module only: no `DeviceConfig` field, no facade, and every default is
+unchanged. It integrates the SRH rate equation of every trap at every node,
+df/dt = c_n n (1-f) - e_n f - c_p p f + e_p (1-f), along a bias / illumination
+history. Poisson is solved with dark flat quasi-Fermi levels at each instant. Context and
+sources: GitHub issue #5.
+
+**Numerics**
+
+- Backward Euler is folded into a numba Newton kernel, f_new = (f_old + dt a) / (1 + dt lam). It is
+  implicit and unconditionally stable for the ~1e8 /s capture rates of a neutral epi, with
+  an analytic Jacobian, parallel over the batch.
+- The two limits are tested: dt = inf is the `radiation_traps` steady-state kernel (psi
+  identical to 1e-14 V), and dt = 0 is a fixed-charge Poisson.
+- Adaptive dt uses step doubling. The error is weighted by each trap's share of the
+  local space charge (`norm="charge"`, the default) or is plain occupancy
+  (`norm="occupancy"`).
+- Bias ramps use a secant predictor and steps of at most `dV_max`.
+- Convergence on a 20 um, 1e14 device, C-V from 0 to -40 V at 1 V/s, max |dC/C| against
+  tol = 1e-5:
+
+  | tol  | steps | max abs(dC/C) |
+  | ---- | ----- | ------------- |
+  | 1e-2 | 56    | 1e-4          |
+  | 1e-3 | 150   | 2.3e-5        |
+  | 1e-4 | 784   | 4.2e-6        |
+
+- The analytic single-trap relaxation in a fully depleted epi is reproduced, and the
+  error falls with tol (`tests/test_trap_kinetics.py`).
+
+**API**
+
+```python
+from etna import DeviceConfig
+from etna.core.trap_kinetics import KineticTrapSolver, hold, simulate_cv, neff_from_cv
+
+cfg = DeviceConfig(epi_thickness_um=50.0, doping_profile="uniform", N_D=4e13)
+s = KineticTrapSolver.from_config(cfg, [0.0, 1e12, 2e12], energy_MeV=252.7)  # p/cm2
+cv = simulate_cv(s, V_points, freq_Hz=1e6, occupancy="kinetic", initial="equilibrium",
+                 storage=(hold(600.0, 0.0),), rate_V_per_s=1.0)
+cv.C_ac, cv.C_qs, neff_from_cv(V_points, cv.C_ac)   # F/cm2 (area 1), cm^-3
+```
+
+- **`occupancy`** takes one of three values:
+  - `"kinetic"`: the history.
+  - `"steady"`: the steady state at each bias (the `radiation_traps` choice).
+  - `"frozen"`: the `initial` occupancy held fixed.
+- **`initial`** (the occupancy left by the irradiation and storage) takes one of four
+  forms:
+  - `"equilibrium"`: Fermi-Dirac at 0 V.
+  - `"in_beam"`: high injection, f = c_n / (c_n + c_p).
+  - `"neutral"`: local neutral bulk.
+  - An array.
+
+  EH6/7 never relaxes, so this is a stated assumption: report results across policies.
+
+- **`solver.run(state, [Segment(...), ...])`** runs general histories: ramps, holds,
+  uniform illumination `G`.
+  - Illumination uses a drift-limited photo-carrier estimate, capped at G * 1 us. It is
+    crude.
+  - Temperature is set per solver: build one solver per T.
+- **C is computed with the trap charge frozen at AC.**
+  - `C_qs` is the quasi-static small-signal C.
+  - `C_ac` adds the dielectric-relaxation impedance of the undepleted region in series:
+    1/Y = 1/(i w C_qs) + sum h / (sigma + i w eps).
+  - On conducting devices `C_ac` = `C_qs` (tested to 0.5 %). On a semi-insulating epi
+    C -> eps A / d.
+- **Other observables:**
+  - `generation_current` gives the steady-state SRH generation through the traps, and
+    the net hole emission of the actual occupancy.
+  - `flatband_resistance` gives the specific resistance of the compensated epi (the
+    ohmic bound of the forward current).
+
+**Results** (`lab/radiation_traps/bench/kinetics.py`, ~40 s; log in
+`lab/radiation_traps/notes/KINETICS.md`). PREDICTED unless marked CALIBRATED.
+
+- **Sign of the C-V removal is fixed.** Radmanovac-like device (50 um, 4e13,
+  252.7 MeV, 1 MHz, N_eff at W 10-40 um), removal rate g per p/cm2:
+
+  | Model                           | g (/p)     |
+  | ------------------------------- | ---------- |
+  | Steady state                    | 0.2        |
+  | Kinetic                         | 2.7        |
+  | Legacy scalar                   | 4.3        |
+  | EH6/7 as acceptor (alternative) | 4.2        |
+  | Measured (arXiv:2510.11304)     | 5.6 +- 0.8 |
+  - Steady state is effectively no removal: N_eff rises, then falls only near the edge.
+  - Kinetic is EH4-dominated. Z1/2 empties within ~40 ms in a depleted region.
+  - The kinetic g is the same for the equilibrium start and for an in-beam start plus
+    10 min or 1 day at 0 V.
+
+- **The table's magnitude is short by ~2x, and scaling cannot fix it.**
+  - CALIBRATED to that single g, the global rate scale is 2.06 +- 0.28. That predicts
+    compensation at 3.1e12 p/cm2, against N0/g = 7.1e12.
+  - Scaling EH4 alone gives 2.50 +- 0.39.
+  - The g sensitivities per unit scale (3-fluence subset, g = 2.51 there) are
+    EH4 2.06, Z1/2 0.69 and all 2.92: Z1/2 near the depletion edge still adds to g.
+  - A two-number reading solves the C-V slope and the compensation fluence N0/g
+    together. It assumes the measured linear N_eff(Phi) extrapolates to compensation, as
+    it does for CNM W4. Result: s_EH4 = 2.86 +- 0.39 and s_Z1/2 = -0.06, which is about
+    zero.
+    - The sigma of s_Z1/2 from g alone vanishes, because both rows scale with g. Its
+      real uncertainty is set by that assumption.
+    - So the data are consistent with a slow acceptor at about 7 /neq carrying the
+      removal, and Z1/2 carrying none at room temperature.
+    - This is an assumption-laden reading, not a fit. Li et al. (arXiv:2503.09016)
+      likewise report that Z1/2 does "not appear to significantly contribute".
+  - The open question is in issue #5.
+- **Temperature (PREDICTED, testable).** The kinetic g falls from 2.51 /p at 300 K to
+  1.95 /p at 325 K and 0.77 /p at 350 K: EH4 emission speeds up with T. No measurement
+  of this was found.
+- **History.** After 1 h at -150 V, a down-sweep shows N_eff within 1 % of the
+  up-sweep. Edge traps re-capture in microseconds, so no significant C-V hysteresis is
+  predicted. No opened source reports any.
+- **C-V flattening.** Gsponer-like device: 50 um, 1.5e14, 3x3 mm2, 10 kHz.
+  - At >= 3e13 neq, C is flat to 0.9 %, at 15.46-15.59 pF. Measured: flat at 5e14 to
+    1e16, about 15.5 pF.
+  - The model flattening onset is about 1.6e13 neq for 6.2e13 doping. Kroll et al.
+    measured flattening from about 3.1e13 neq (Si-kappa conversion).
+- **Loss of rectification (ohmic bound).** At 1 kV forward the bound is
+  I_fwd <= 1.5e-11 A at 1e15 neq and 1.4e-12 A at 1e16. Measured: < 1 nA, and equal to
+  the reverse floor (< 10 pA). Qualitative only; double injection is not modelled.
+- **Leakage.** Bulk trap generation rises with fluence but stays at 1e-25 to 1e-21 A,
+  far below the ~1e-11 A floor of every measurement opened, so it cannot be tested. The
+  measurements show reverse leakage unchanged (Radmanovac et al.) or falling with
+  fluence (Kroll et al., Li et al.). This module does not address that: the dominant
+  measured leakage mechanism is not in it.
+
+**Calibration** (`etna.core.trap_calibration.calibrate_cv`). It fits only multiplicative
+scales on the unmeasured introduction rates, globally (`"all"`) or per trap name, to
+measured C-V curves.
+
+- Inputs are `(fluence, CVData)` pairs from `etna.measurements.load_cv_csv`. Each
+  file's frequency and sigma are used.
+- It returns:
+  - the scales with their Gauss-Newton 1-sigma, also scaled by the reduced chi^2;
+  - the correlation matrix and the singular values;
+  - identifiability flags and warnings for bounds, correlation > 0.95 and missing
+    frequency.
+- The device itself (geometry, pristine N_D) is input from pristine C-V or SIMS and is
+  not fitted. The initial occupancy and the history are stated inputs.
+- Tested by recovering a SYNTHETIC truth through the CSV loader: 1.7025 +- 0.0037 for
+  1.7, within 1 sigma; the test bound is 3 sigma. The same model, mesh and protocol
+  generate and fit those data, so this validates the plumbing and the covariance, not
+  whether the model is adequate.
+- No measured irradiated C-V curve ships with the repository, so no calibrated 62 MeV
+  number exists yet. The INFN-LNS C-V vs fluence data
+  (`.planning/CARRIER_REMOVAL_REVIEW.md` §6) would provide it.
+
+**Not modelled**
+
+- AC trap response (the lambda effect).
+- Transport-limited quasi-Fermi splitting in a semi-insulating epi under bias.
+- Poole-Frenkel emission.
+- Negative-U two-level Z1/2.
+- Temperature changes within a run.
 
 ### `run_dark_current(config, v_start=0.0, v_stop=-100.0, n_points=20, N_t=None, S_n=None, S_p=None, solver="auto")`
 
@@ -1595,9 +1754,9 @@ uv run pytest -n0 -x tests/test_api_cce.py        # serial, e.g. with --pdb
 uv run pytest -n auto -q --durations=20           # slowest tests
 ```
 
-- 128 modules and 1653 tests (2026-10-21). `pytest.ini` deselects the `exhaustive` marker
+- 129 modules and 1665 tests (2026-10-21). `pytest.ini` deselects the `exhaustive` marker
   (6 redundant deep variants, each implied by a kept test), so the default run collects
-  1647: all pass with `--extra dev --extra viz`; with `--extra dev` only, 1639 pass and 8
+  1659: all pass with `--extra dev --extra viz`; with `--extra dev` only, 1651 pass and 8
   skip (the manim and gdstk tests). The `slow` marker labels the devsim integration tests
   but does not deselect them.
 - `pytest.ini` adds `--dist loadgroup --no-loadscope-reorder` (inert without `-n`), so
