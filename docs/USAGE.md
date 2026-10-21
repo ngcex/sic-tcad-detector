@@ -1342,6 +1342,14 @@ unit_energy="MeV")` reads the Allpix `DepositionReader` CSV (`Event: N` headers 
   1D results give a laterally uniform map. 2D half-cell results are mirrored to a full
   plane (`PIXEL_FULL`).
 
+  The snippet sets `field_depth` / `doping_depth` / `potential_depth` to the exported
+  thickness (the whole stack, 11.3 um for the default device; `depth_range_um` picks a
+  sub-range). Allpix otherwise maps each file onto the whole sensor thickness and
+  silently stretches it (issue #19: 47 V instead of 53.2 V across a 10 um sensor at
+  -50 V). The Allpix sensor must be at least that thick (Allpix rejects deeper maps);
+  pass `sensor_thickness_um=` to get a warning on any mismatch. The maps sit at the top
+  (implant side) of the sensor, while `write_deposition_csv` hits are SV-centred.
+
 - These files are checked against the quoted parser layout and against each other, not in
   an Allpix run.
   - Allpix truncates E/W per deposit to an integer in `DepositionReader`, so avoid many

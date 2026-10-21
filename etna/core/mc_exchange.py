@@ -33,8 +33,18 @@
    The parser treats the value grid as CELLS: z index k covers
    [z_lo + (k-1) d/nz, z_lo + k d/nz] of the field depth d, and z_lo is the BACK of
    the sensor (Allpix local +z points to the implant side). ElectricFieldReader reads
-   V/cm (``file_units`` default), DopingProfileReader 1/cm^3 (positive = n-type),
+   V/cm (``file_units`` default), DopingProfileReader 1/cm^3 (positive = n-type:
+   UNVERIFIED, the opened DopingProfileReaderModule.cpp states no sign convention),
    WeightingPotentialReader a dimensionless scalar.
+
+   Depth of a map in the sensor (Allpix master ``ElectricFieldReaderModule.cpp``,
+   ``DopingProfileReaderModule.cpp``, ``WeightingPotentialReaderModule.cpp``, opened
+   2026-10-21): each reader maps the file's z grid onto
+   ``(sensor_max_z - depth, sensor_max_z)`` with depth = ``field_depth`` (alias of
+   ``depletion_depth``) / ``doping_depth`` / ``potential_depth``, DEFAULT THE SENSOR
+   THICKNESS; the file's own thickness is never compared with it, and a depth larger
+   than the sensor is rejected. Without the keys a map is stretched or compressed onto
+   the whole sensor (issue #19), so :func:`export_allpix_fields` always emits them.
 
    :func:`export_allpix_fields` converts an ETNA ``run_field`` result: the potential is
    interpolated onto the cell centres and differentiated (E = -grad psi), so signs are
@@ -332,6 +342,29 @@ def _cell_depths_um(thickness_um, nz):
     return thickness_um - zc
 
 
+def _check_sensor_thickness(th_um, sensor_um):
+    import warnings
+
+    if abs(sensor_um - th_um) <= 1e-6 * max(th_um, 1.0):
+        return
+    if sensor_um < th_um:
+        msg = (
+            f"exported maps span {th_um:.6g} um but the Allpix sensor is "
+            f"{sensor_um:.6g} um: Allpix rejects field_depth/doping_depth/"
+            "potential_depth larger than the sensor; pass depth_range_um to export a "
+            "sub-range (e.g. the epi)"
+        )
+    else:
+        msg = (
+            f"exported maps span {th_um:.6g} um but the Allpix sensor is "
+            f"{sensor_um:.6g} um: with the *_depth keys the maps cover the top "
+            "(implant side) of the sensor and there is no field below them; the hit "
+            "file (write_deposition_csv) is SV-centred, so its z frame does not "
+            "coincide with the field's"
+        )
+    warnings.warn(msg, UserWarning, stacklevel=3)
+
+
 def export_allpix_fields(
     result,
     outdir,
@@ -340,6 +373,7 @@ def export_allpix_fields(
     pitch_um=(100.0, 100.0),
     depth_range_um=None,
     prefix="etna",
+    sensor_thickness_um=None,
 ):
     """Write ``<prefix>_efield.init`` (V/cm), ``<prefix>_doping.init`` (1/cm^3) and
     ``<prefix>_weighting.init`` (planar pad) from a ``run_field`` SimResult.
@@ -351,6 +385,15 @@ def export_allpix_fields(
     half-cell model), ny = 1. The weighting potential is the planar-pad 1D solution
     phi_w = z/t (1 at the implant side, 0 at the back): exact for a pad much wider
     than thick, an approximation near the pad edge.
+
+    The config snippet sets ``field_depth`` / ``doping_depth`` / ``potential_depth`` to
+    the exported thickness, so Allpix maps the files onto the top (implant side) of the
+    sensor at their true scale instead of stretching them over the sensor thickness
+    (issue #19). The Allpix sensor must be at least that thick. ``sensor_thickness_um``
+    (the Allpix sensor thickness, e.g. the SV thickness ``sv_um[2]`` used for the hit
+    file) is checked: a mismatch warns (thinner: Allpix refuses the depth keys; thicker:
+    no field below the map, and the hit file's SV-centred z frame differs from the
+    field's top-aligned one).
 
     Returns dict: paths, thickness_um, and an Allpix config snippet.
     """
@@ -437,19 +480,28 @@ def export_allpix_fields(
     write_init(
         paths["weighting"], wp, (size[0], size[1], th), "", header=hdr + " planar pad"
     )
+    dstr = f"{th:.6g}um"
+    if sensor_thickness_um is not None:
+        _check_sensor_thickness(th, float(sensor_thickness_um))
     snippet = (
+        f"# ETNA maps span {th:.6g} um (top = implant side). The *_depth keys stop\n"
+        "# Allpix from stretching them over the sensor thickness; the Allpix sensor\n"
+        f"# must be at least {th:.6g} um thick.\n"
         "[ElectricFieldReader]\n"
         'model = "mesh"\n'
         f'file_name = "{paths["efield"].name}"\n'
-        f'field_mapping = "{mapping}"\n\n'
+        f'field_mapping = "{mapping}"\n'
+        f"field_depth = {dstr}\n\n"
         "[DopingProfileReader]\n"
         'model = "mesh"\n'
         f'file_name = "{paths["doping"].name}"\n'
-        f'field_mapping = "{mapping}"\n\n'
+        f'field_mapping = "{mapping}"\n'
+        f"doping_depth = {dstr}\n\n"
         "[WeightingPotentialReader]\n"
         'model = "mesh"\n'
         f'file_name = "{paths["weighting"].name}"\n'
         'field_mapping = "PIXEL_FULL"\n'
+        f"potential_depth = {dstr}\n"
     )
     return {
         "paths": {k: str(v) for k, v in paths.items()},
