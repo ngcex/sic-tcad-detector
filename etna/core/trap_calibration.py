@@ -145,13 +145,14 @@ def calibrate_cv(
         raise ValueError("calibrate_cv: no datasets")
     groups = tuple(groups)
     P = len(groups)
-    base = resolve_traps(trap_model) or DEFAULT_TRAP_MODEL
-    scaled_model(base, groups, np.ones(P))  # validates the group names
     from etna.core.radiation_damage import hardness_table
     from etna.core.radiation_damage import resolve_niel_convention
     from etna.core.radiation_traps import check_trap_convention
 
     conv = resolve_niel_convention(niel_convention)
+    # a preset name is built in the run's convention (issue #12)
+    base = resolve_traps(trap_model, conv) or DEFAULT_TRAP_MODEL
+    scaled_model(base, groups, np.ones(P))  # validates the group names
     check_trap_convention(base, conv)
     kappa = (
         1.0
@@ -378,9 +379,13 @@ def semi_insulating_fluence(model, N_D, T=300.0, freq_Hz=1e4, mu_n=950.0, kappa=
 def removal_observable(obs: RemovalObservation, model):
     """Model value of ``obs`` (same units as ``obs.value``) for ``model``."""
     from etna.api.device import DeviceConfig
+    from etna.core.radiation_damage import resolve_niel_convention
+    from etna.core.radiation_traps import check_trap_convention
     from etna.core.trap_kinetics import KineticTrapSolver, simulate_cv
 
     if obs.kind == "flat_fluence":
+        # the slope branch checks in KineticTrapSolver.from_config (issue #15)
+        check_trap_convention(model, resolve_niel_convention(obs.niel_convention))
         return np.log10(
             semi_insulating_fluence(model, obs.N_D, obs.T, obs.freq_Hz, kappa=obs.kappa)
         )
@@ -454,7 +459,14 @@ def calibrate_removal(
         raise ValueError("calibrate_removal: no observations")
     params = tuple(params)
     P = len(params)
-    base = resolve_traps(base_model) or DEFAULT_TRAP_MODEL
+    from etna.core.radiation_damage import resolve_niel_convention
+
+    convs = {resolve_niel_convention(o.niel_convention) for o in obs}
+    # a preset NAME is built in the observations' convention (issue #12); with mixed
+    # conventions it is built in the default one and the observations of another
+    # convention raise (check_trap_convention in removal_observable)
+    conv = convs.pop() if len(convs) == 1 else None
+    base = resolve_traps(base_model, conv) or DEFAULT_TRAP_MODEL
     if x0 is None:
         # start off the lower bound (a zero start pins the bounded TRF at 0)
         x0 = [max(base.donor_removal, 1.0) if p == "donor_removal" else 1.0

@@ -444,7 +444,10 @@ class KineticTrapSolver:
         conv = resolve_niel_convention(niel_convention)
         if trap_model is None:
             trap_model = resolve_traps(config.radiation_traps, conv) or True
-        check_trap_convention(resolve_traps(trap_model, conv), conv)
+        # resolve ONCE in the run's convention and hand the MODEL on: a name passed
+        # through would be rebuilt by __init__ in the default convention (issue #12)
+        trap_model = resolve_traps(trap_model, conv)
+        check_trap_convention(trap_model, conv)
         ref = _fluence_reference(device_kwargs(config))
         kappa = (
             1.0

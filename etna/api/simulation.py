@@ -1839,9 +1839,11 @@ def trap_compensation_fluence(
     preset, whatever the engine scope; "legacy" / False -> the Burin Table I steady
     model, 7.4 /neq). Beyond it the bulk is semi-insulating; the model still solves it.
     """
-    from etna.core.radiation_traps import DEFAULT_TRAP_MODEL
+    from etna.core.radiation_damage import resolve_niel_convention
+    from etna.core.radiation_traps import DEFAULT_TRAP_MODEL, check_trap_convention
 
     model = resolve_traps(config.radiation_traps, niel_convention) or DEFAULT_TRAP_MODEL
+    check_trap_convention(model, resolve_niel_convention(niel_convention))  # issue #15
     return _compensation_of(model, config, proton_energy_MeV, particle=particle,
                             niel_convention=niel_convention)  # fmt: skip
 
