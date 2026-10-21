@@ -568,7 +568,11 @@ fluence (`lab/radiation_traps/bench/default_flip.py`):
 | old default (legacy, si-neq; Phi_comp 3.48e12) | 0.999618 | 0.998882 | 0.998294 | NaN | NaN |
 | legacy, sic-damage (4.36e12) | 0.999618 | 0.998882 | 0.998294 | NaN | NaN |
 | calibrated traps, si-neq, d 2.87 (1.70e12) | 0.999787 | 0.999572 | 0.999377 | 0.999113 | 0.996910 |
-| **new default** (calibrated traps, sic-damage, d 4.69; 1.80e12) | 0.999796 | 0.999611 | 0.999441 | 0.999209 | 0.997229 |
+| **new default** (calibrated traps, sic-damage, d 4.69; 1.80e12) | 0.999798 | 0.999619 | 0.999456 | 0.999237 | 0.997448 |
+
+Only the **new default** row is on the current c-axis electron mobility (re-measured
+2026-10-21 after the mobility default changed); the other rows were computed on
+`mobility="legacy_perp"` and move by up to about 1e-4 on the current default.
 
 At the same absolute fluences (0.1 ... 10 x 3.48e12 p/cm²) the new default gives
 0.999751 / 0.999414 / 0.999122 / 0.998745 / 0.995838 (old: 0.999618 / 0.998882 /

@@ -305,7 +305,9 @@ def test_legacy_selection_reproduces_the_pre_flip_numbers():
     import etna
     from etna.api.simulation import compensation_fluence, default_fluence_grid
 
-    cfg = DeviceConfig(radiation_traps=False)
+    # mobility="legacy_perp": the pre-2026-10-21 default mobility (the c-axis default
+    # moves these CCE values by up to 9e-5), so the numbers below are the old ones
+    cfg = DeviceConfig(radiation_traps=False, mobility="legacy_perp")
     si = dict(niel_convention="si-neq")
     assert compensation_fluence(cfg, 62.0, **si) == pytest.approx(3.4836e12, rel=1e-4)
     g = default_fluence_grid(cfg, 62.0, **si)
@@ -320,7 +322,11 @@ def test_legacy_selection_reproduces_the_pre_flip_numbers():
     assert np.isnan(c[4]) and "compensation" in r.metadata["reason"][4]
     # the Burin steady trap model of the same table (True, si-neq): 0.998345 at 3e12
     rt = etna.run_radiation_damage(
-        DeviceConfig(radiation_traps=True), np.array([3e12]), -40.0, 62.0, **si
+        DeviceConfig(radiation_traps=True, mobility="legacy_perp"),
+        np.array([3e12]),
+        -40.0,
+        62.0,
+        **si,
     )
     assert rt.y[0] == pytest.approx(0.998345, abs=2e-6)
 
@@ -348,7 +354,9 @@ def test_new_default_is_calibrated_kinetic_in_sic_damage():
     )
     assert r.y[0] == leg.y[0]  # pristine point: identical
     # pins (bench lab/radiation_traps/bench/default_flip.py)
-    np.testing.assert_allclose(r.y[1:], [0.999611, 0.999209, 0.997229], atol=2e-5)
+    # re-pinned for the c-axis electron mobility default (was 0.999611, 0.999209, 0.997229
+    # on legacy_perp)
+    np.testing.assert_allclose(r.y[1:], [0.999619, 0.999237, 0.997448], atol=2e-5)
 
 
 def test_auto_falls_back_to_legacy_with_a_note_outside_the_engine():
