@@ -145,11 +145,17 @@ def test_particle_switch_marks_damage_result_stale(monkeypatch):
     at = AppTest.from_function(page)
     at.session_state["device_config"] = DeviceConfig()
     at.run()
+    # run with neutrons, then switch back to protons: the proton (default) inputs
+    # used to omit the particle key, so the switch was not compared (finding 12)
+    at.radio(key="rad_particle").set_value("neutron").run()
     at.button[0].click()
     at.run()
     assert at.exception == []
-    at.radio(key="rad_particle").set_value("neutron").run()
-    assert any("particle" in (w.value or "") for w in at.warning)
+    at.radio(key="rad_particle").set_value("proton").run()
+    stale = [
+        w.value or "" for w in at.warning if "different page inputs" in (w.value or "")
+    ]
+    assert stale and "particle" in stale[0]
 
 
 # ---- 16: spec-sheet W(-10 V) is the solved value, not an interpolation --------------
