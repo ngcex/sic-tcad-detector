@@ -42,6 +42,7 @@ import streamlit as st
 import etna
 from app.components.page_utils import (
     SOLVER_LABELS,
+    about,
     require_config,
     show_error,
     show_stale_warning,
@@ -53,9 +54,10 @@ from app.components.results import (
 )
 
 # Curated numeric, 1D-facade-safe DeviceConfig fields. Deliberately NOT derived
-# from dataclasses.fields: half_width_um switches the device 1D->2D, the doping
-# profile selector is a string (non-numeric), and N_D defaults to None unless a
-# uniform profile is selected -- all three are omitted here on purpose.
+# from dataclasses.fields: half_width_um switches the device 1D->2D and the doping
+# profile selector is a string (non-numeric). The doping fields offered depend on the
+# sidebar profile (sweepable_fields): a field the device does not read would overlay
+# identical curves.
 SWEEPABLE_FIELDS = [
     "epi_thickness_um",
     "substrate_thickness_um",
@@ -66,6 +68,26 @@ SWEEPABLE_FIELDS = [
     "T",
     "area_cm2",
 ]
+GRADED_FIELDS = ("N_D_junction", "N_D_bulk", "L_transition_um")
+BUFFER_FIELDS = ("buffer_thickness_um", "buffer_end_doping")
+
+
+def sweepable_fields(cfg) -> list:
+    """SWEEPABLE_FIELDS restricted to what this device reads: the graded triplet only
+    for a parametric graded epi (a uniform epi reads N_D, a tabulated one its knots),
+    the graded n-/n+ transition only when it is on."""
+    fields = [
+        f
+        for f in SWEEPABLE_FIELDS
+        if f not in GRADED_FIELDS
+        or (cfg.doping_profile == "graded" and cfg.donor_table is None)
+    ]
+    if cfg.doping_profile == "uniform":
+        fields.insert(fields.index("N_A") + 1, "N_D")
+    if cfg.buffer_thickness_um is not None:
+        fields += list(BUFFER_FIELDS)
+    return fields
+
 
 # Parameter-aware default value lists (one sensible spread per field, around
 # the DeviceConfig defaults and inside its valid range).
@@ -78,6 +100,9 @@ DEFAULT_VALUES = {
     "L_transition_um": "0.3, 0.463863, 1",
     "T": "250, 300, 350",
     "area_cm2": "1e-4, 1e-3, 4e-2",
+    "N_D": "5e14, 1e15, 2e15",
+    "buffer_thickness_um": "0.5, 1.136634, 2",
+    "buffer_end_doping": "1e16, 4.516421e16, 1e17",
 }
 
 # Curated facade selectbox: label -> module-attribute name. Restricted to the
@@ -115,6 +140,21 @@ def _reset_default_values() -> None:
 
 def render() -> None:
     st.title("Batch Sweep")
+    st.caption(
+        "One device parameter swept over a list of values (all other sidebar values "
+        "fixed); one curve per value, overlaid."
+    )
+    about(
+        "- Each value builds a copy of the sidebar device (validated like the "
+        "sidebar) and runs the chosen simulation on it; values that fail are listed, "
+        "the rest are plotted.\n"
+        "- The parameters offered are the ones the sidebar device reads: the graded "
+        "triplet for a parametric graded epi, N_D for a uniform epi (none for the "
+        "tabulated profile), the n⁻/n⁺ transition when it is on.\n"
+        "- Validity and solver are as on the single-run pages (C-V: doping fitted "
+        "to the measured C-V; CCE: predicted). 'CCE vs temperature' is the analytical "
+        "Hecht model on the depletion width at −30 V, not a drift-diffusion CCE."
+    )
 
     cfg = require_config()
 
@@ -122,16 +162,26 @@ def render() -> None:
         st.warning("This workflow is 1D-only. Set Dimensionality to 1D in the sidebar.")
         st.stop()
 
+    fields = sweepable_fields(cfg)
+    if st.session_state.get("sweep_param") not in (None, *fields):
+        # the sidebar profile changed under a field it no longer reads: reset both
+        st.session_state["sweep_param"] = fields[0]
+        st.session_state["sweep_values"] = DEFAULT_VALUES[fields[0]]
     param = st.selectbox(
         "Sweep parameter",
-        SWEEPABLE_FIELDS,
+        fields,
         format_func=lambda f: PARAM_LABELS.get(f, f),
         key="sweep_param",
         on_change=_reset_default_values,
+        help="Device field to vary (units in the label).",
     )
     if "sweep_values" not in st.session_state:
         st.session_state["sweep_values"] = DEFAULT_VALUES[param]
-    values_raw = st.text_input("Values (comma-separated)", key="sweep_values")
+    values_raw = st.text_input(
+        "Values (comma-separated)",
+        key="sweep_values",
+        help="In the unit of the parameter label, e.g. '10, 15, 20' or '1e15, 2e15'.",
+    )
     sim_label = st.selectbox("Simulation type", list(SIM_FACADES), key="sweep_sim")
 
     run_disabled = False

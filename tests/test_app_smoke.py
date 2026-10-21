@@ -141,7 +141,10 @@ def test_dark_current_page_two_temperatures():
     _click_run(at)
     res = at.session_state["dark_current_result"]
     assert len(res.x) == 2
-    assert "Solver: devsim" in _captions(at)
+    # the label comes from the per-temperature results (300 K default stack: engine);
+    # it was hard-coded "devsim" before 2026-10-21
+    assert res.metadata["solver"] == "batched"
+    assert "Solver: batched 1D engine" in _captions(at)
 
 
 def test_radiation_damage_page_two_fluences():

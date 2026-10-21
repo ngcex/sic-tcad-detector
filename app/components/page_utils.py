@@ -18,6 +18,7 @@ from app.components.results import provenance_text
 SOLVER_LABELS = {
     "batched": "batched 1D engine (numba)",
     "engine2d": "2D engine (numba)",
+    "batched+traps": "batched 1D engine with charged deep traps",
     "devsim": "devsim (reference finite-volume solver)",
 }
 
@@ -39,6 +40,21 @@ CROSS_CHECK_SCOPE = (
     "≤ 3e-6, typically far smaller) at the checked biases down to −40 V "
     "(−100 V with the n+ layer); neither is validated against measurement there"
 )
+
+
+def about(text: str) -> None:
+    """One collapsed 'About this page' box: what the page computes, the model, its
+    validity limits (Markdown)."""
+    with st.expander("About this page: model and validity", expanded=False):
+        st.markdown(text)
+
+
+def _cathode_text(result) -> str:
+    """The cathode model the saturation / truncation depends on, per the result's config."""
+    cfg = getattr(result, "config", None)
+    if cfg is not None and getattr(cfg, "nplus_thickness_um", None) is None:
+        return "ohmic contact directly on the n⁻ epi, no n⁺ layer (legacy model)"
+    return "the 1 µm n⁺ layer under the epi, cathode on its far end"
 
 
 def require_config():
@@ -101,7 +117,8 @@ def solver_badge_text(metadata: dict) -> str:
     solver = metadata.get("solver")
     if solver is None:
         return ""
-    label = SOLVER_LABELS.get(solver, solver)
+    # mixed results name several solvers ("batched + devsim")
+    label = " + ".join(SOLVER_LABELS.get(s, s) for s in str(solver).split(" + "))
     parts = [f"Solver: {label}"]
     if metadata.get("fallback_reason"):
         parts[0] += f" (fallback: {metadata['fallback_reason']})"
@@ -136,7 +153,7 @@ def reach_through_text(result) -> str:
         f"Epi fully depleted from |V| ≈ {v_rt:.2f} V (dotted line"
         + (f"; {method}" if method else "")
         + f"). Beyond it {what} and the result depends on the cathode model "
-        "(ohmic contact directly on the n⁻ epi, no n⁺ substrate)."
+        f"({_cathode_text(result)})."
     )
 
 
@@ -166,7 +183,7 @@ def truncation_text(result) -> str:
         f"Sweep stopped at {np.min(result.x):.1f} V (requested down to "
         f"{md.get('requested_v_stop', float('nan')):.1f} V): devsim did not "
         "converge beyond this point. This is an artefact of the device model "
-        "(ohmic cathode directly on the n⁻ epi, no n⁺ substrate) and of solver "
+        f"({_cathode_text(result)}) and of solver "
         "robustness beyond full depletion (outside the cross-check domain), not a "
         "physical device limit. Results below cover only "
         "the converged portion."

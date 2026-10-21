@@ -31,6 +31,7 @@ import streamlit as st
 import etna
 from app.components.geometry_viewer import build_geometry_figure, QUANTITIES
 from app.components.page_utils import (
+    about,
     require_config,
     show_error,
     show_result_notes,
@@ -41,6 +42,20 @@ from app.components.results import build_field_figures, to_csv_bytes
 
 def render() -> None:
     st.title("Field Map")
+    st.caption(
+        "Electrostatic potential, electric field and net doping of the sidebar device "
+        "at one reverse bias (1D depth profiles, or 2D maps for a 2D device)."
+    )
+    about(
+        "- **Model:** dark drift-diffusion (Poisson + carriers) at one bias.\n"
+        "- **Solver:** 1D: batched engine inside its cross-check box, devsim otherwise. "
+        "2D: the 2D engine for half-width 25-150 µm and |V| 5-100 V with the n⁺ layer "
+        "(5-80 V legacy, no n⁺), devsim otherwise (slow, may not converge at deep "
+        "reverse bias).\n"
+        "- **Peak field:** nm-scale spikes at abrupt doping steps are mesh/estimator "
+        "artefacts and are excluded from the reported peak.\n"
+        "- Predicted, not validated against measurement."
+    )
 
     cfg = require_config()
 
@@ -52,9 +67,9 @@ def render() -> None:
         step=5.0,
         key="field_bias_V",
         help=(
-            "Negative = reverse bias. 2D devices use the fast 2D engine for "
-            "|V| between 5 and 80 V; other cases use devsim, which may not "
-            "converge at deep reverse bias."
+            "Negative = reverse bias. 2D devices use the fast 2D engine for |V| "
+            "5-100 V with the n+ layer (5-80 V legacy); otherwise devsim, which may "
+            "not converge at deep reverse bias."
         ),
     )
 
@@ -120,7 +135,11 @@ def render() -> None:
         # builder. On a selectbox change Streamlit reruns, the Run button
         # returns False, the cached result is read, and only griddata re-runs.
         quantity = st.selectbox(
-            "Quantity", list(QUANTITIES.keys()), index=0, key="geo_quantity"
+            "Quantity",
+            list(QUANTITIES.keys()),
+            index=0,
+            key="geo_quantity",
+            help="Re-plots the stored solution; no new solve.",
         )
         st.plotly_chart(build_geometry_figure(result.mesh, quantity))
 

@@ -5,7 +5,9 @@ All Streamlit calls live inside render() (no module-level side effects), so the 
 be imported for st.Page registration (app/main.py) and driven headlessly via
 AppTest.from_function (tests/test_app_measurements_page.py). The analysis functions are
 referenced through the ``etna.measurements`` MODULE (``M.compare_cv`` ...) so tests can
-monkeypatch them. Nothing is stored on disk: uploads stay in the session.
+monkeypatch them. Nothing is stored on disk: uploads stay in the session. The figure
+PNGs and the SIMS profile-vs-model metric are memoised in the session per result object
+(``_memo``), so a widget change does not re-render them (~0.4 s per rerun before).
 """
 
 from __future__ import annotations
@@ -15,7 +17,7 @@ from pathlib import Path
 import streamlit as st
 
 import etna.measurements as M
-from app.components.page_utils import require_config
+from app.components.page_utils import about, require_config
 
 TEMPLATES = Path(__file__).resolve().parents[2] / "data" / "measurements" / "templates"
 INTRO = (
@@ -45,6 +47,22 @@ def _png(fig) -> bytes:
     from etna.viz import export_figure
 
     return export_figure(fig, "png", dpi=150)
+
+
+MEMO_KEY = "meas_memo"
+
+
+def _memo(name: str, obj, build, *extra):
+    """``build()`` memoised in the session per (name, result object, extra). The object
+    is kept with the value so its id() cannot be reused by a later result."""
+    cache = st.session_state.setdefault(MEMO_KEY, {})
+    key = (name, id(obj), *extra)
+    hit = cache.get(key)
+    if hit is None or hit[0] is not obj:
+        if len(cache) > 32:
+            cache.clear()
+        hit = cache[key] = (obj, build())
+    return hit[1]
 
 
 def _notes(items) -> None:
@@ -108,7 +126,13 @@ def _cv_tab(cfg) -> None:
     )
     c1, c2, c3 = st.columns(3)
     lam = c1.number_input(
-        "Smoothing λ (inversion)", value=1.0, min_value=0.0, step=0.5, key="meas_cv_lam"
+        "Smoothing λ (inversion)",
+        value=1.0,
+        min_value=0.0,
+        step=0.5,
+        key="meas_cv_lam",
+        help="Weight of the curvature penalty on log10 N_D across the knots: larger = "
+        "smoother donor_table, looser W fit. 0 = unregularised.",
     )
     token = _token(data.sha256, cfg)
     if c2.button("Compare with the model", key="meas_cv_compare"):
@@ -137,7 +161,7 @@ def _cv_tab(cfg) -> None:
         st.subheader("Measured vs model")
         st.metric("rms W (µm)", f"{cmp.rms_W_um:.4g}")
         st.metric("rms C (relative)", f"{cmp.rms_C_rel:.3g}")
-        png = _png(plots.cv_comparison_figure(cmp))
+        png = _memo("cv_cmp", cmp, lambda: _png(plots.cv_comparison_figure(cmp)))
         st.image(png)
         _notes(cmp.notes)
         d1, d2 = st.columns(2)
@@ -160,7 +184,8 @@ def _cv_tab(cfg) -> None:
             f"Probed depth {inv.probed_depth_um[0]:.3g} .. {inv.probed_depth_um[1]:.3g} µm "
             f"below the junction; chi2 {inv.chi2:.4g} / {inv.dof} dof."
         )
-        png = _png(plots.inversion_figure(inv, st.session_state.get("meas_cv_dep")))
+        dep = st.session_state.get("meas_cv_dep")
+        png = _memo("cv_inv", inv, lambda: _png(plots.inversion_figure(inv, dep)))
         st.image(png)
         st.dataframe(
             {
@@ -254,10 +279,14 @@ def _sims_tab(cfg) -> None:
     from etna.measurements import plots
 
     _stale("meas_sims_tab", token)
-    cmpm = M.profile_vs_model(tab, cfg)
+    from etna.viz.provenance import config_hash
+
+    ch = config_hash(cfg)
+    cmpm = _memo("sims_cmp", tab, lambda: M.profile_vs_model(tab, cfg), ch)
     st.metric("rms log10(N_table / N_model)", f"{cmpm['rms_log10']:.3g}")
-    png = _png(
-        plots.profile_figure(st.session_state["meas_sims_prof"], tab, config=cfg)
+    prof = st.session_state["meas_sims_prof"]
+    png = _memo(
+        "sims_png", tab, lambda: _png(plots.profile_figure(prof, tab, config=cfg)), ch
     )
     st.image(png)
     st.dataframe(
@@ -323,7 +352,9 @@ def _it_tab(cfg) -> None:
         "Prefactor exponent p in ln(|I|/T^p)",
         [0.0, 1.5, 2.0, 3.0],
         key="meas_it_p",
-        help="Same p on data and model; E_a shifts by ~k_B·T per unit of p.",
+        help="Arrhenius fit of ln(|I|/T^p) vs 1/T. Usual choices: 1.5 for a "
+        "generation current ∝ n_i, 3 for a diffusion current ∝ n_i². Same p on data "
+        "and model; E_a shifts by ~k_B·T per unit of p.",
     )
     token = _token(data.sha256, cfg, float(p))
     if st.button("Fit E_a and compare with the model", key="meas_it_run"):
@@ -352,7 +383,7 @@ def _it_tab(cfg) -> None:
                 f"{c.model_fit.E_a_eV:.4f}",
                 delta=f"data − model {c.delta_eV:+.4f} eV",
             )
-    png = _png(plots.arrhenius_figure(res))
+    png = _memo("it_png", res, lambda: _png(plots.arrhenius_figure(res)))
     st.image(png)
     _notes(res.notes)
     with st.expander("Limits"):
@@ -380,6 +411,19 @@ def _it_tab(cfg) -> None:
 def render() -> None:
     st.title("Measurements")
     st.caption(INTRO)
+    about(
+        "- **C-V:** W = ε·A/C of your curve vs the model's small-signal C of the "
+        "sidebar device (rms in W and relative C); *Invert* fits a log-linear donor_table "
+        "(default knots) to your W(V) (a model-dependent inversion of one curve: the "
+        "first ~0.5 µm and the region beyond the probed depth are not resolved).\n"
+        "- **SIMS / SRP:** resamples a measured depth profile to a donor_table on "
+        "knots below the junction and compares it with the sidebar doping.\n"
+        "- **I(T):** activation energy E_a from an Arrhenius fit, compared with the "
+        "model dark current at the same biases (the model level is calibrated, its T "
+        "dependence is not fitted).\n"
+        "- Files are validated against the templates (units in the column names); "
+        "the repository ships no measurement data."
+    )
     cfg = require_config()
     if cfg.half_width_um is not None:
         st.warning(
