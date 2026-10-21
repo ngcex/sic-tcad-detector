@@ -154,9 +154,10 @@ full-depletion definitions in [USAGE §8](docs/USAGE.md#8-validity-and-limits).
 | Measurement inputs              | `etna.measurements` (C-V, SIMS/SRP and I(T) CSV loaders, model comparison, C-V inversion)                                                                                                                                                              | [USAGE §17](docs/USAGE.md#17-measurement-inputs-etnameasurements)     |
 | Notebooks                       | 21 notebooks in `notebooks/`, committed without outputs                                                                                                                                                                                                | [USAGE §12](docs/USAGE.md#12-notebooks)                               |
 
-**The app** (12 pages): Home, Simulate → Figures, Run All, C-V Analysis, Charge
+**The app** (17 pages): Home, Simulate → Figures, Run All, C-V Analysis, Charge
 Collection (CCE), Field Map, Radiation Damage, Dark Current, Microdosimetry, Batch Sweep,
-Export, Measurements. The device is set once in the sidebar (geometry, doping,
+Export, Measurements, and the opt-in model pages Breakdown & Avalanche, Monte Carlo
+Deposition, Track Engine, Trap Kinetics & Calibration, 2D Structures (fv2d). The device is set once in the sidebar (geometry, doping,
 temperature, area, presets) and shared by every page. Each result shows its solver and
 validity notes, and its CSV download carries the same provenance in a `#` header. The
 app has no authentication and binds to localhost (`.streamlit/config.toml`); for shared
@@ -265,9 +266,9 @@ uv run pytest -n auto -q -m exhaustive     # the 6 deselected deep variants
 uv run pytest -n0 -x tests/test_api_cce.py # serial, e.g. with --pdb
 ```
 
-1882 tests in 142 modules. `pytest.ini` deselects the 6 `exhaustive` ones, so the default
-run is 1876 tests: all pass with `--extra dev --extra viz`, and with `--extra dev` only
-1868 pass and 8 skip (manim/gdstk). On a 10-core Apple M4 shared with other jobs, `-n auto`
+1924 tests in 147 modules. `pytest.ini` deselects the 6 `exhaustive` ones, so the default
+run is 1918 tests: all pass with `--extra dev --extra viz`, and with `--extra dev` only
+1910 pass and 8 skip (manim/gdstk). On a 10-core Apple M4 shared with other jobs, `-n auto`
 took 169–205 s on 2026-10-21 (600 s on a heavily loaded machine): plan on about 3 minutes. `pytest.ini` supplies the tuned
 xdist scheduler; use `-n0` for pdb.
 
