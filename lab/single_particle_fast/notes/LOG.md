@@ -169,6 +169,22 @@ Default suite (`-m "not exhaustive"`), serial wall times at load 4-8 (2026-10-21
 | TestCCEVsBias | 14.4 | | |
 | total | 96.5 | total | 47.8 |
 
+Full suite, `uv run pytest -n 6 --durations`, same machine, load 5-11 (2026-10-21):
+
+| | before (devsim classes in the default suite, main's schedule) | after |
+|---|---|---|
+| suite wall | 197.2 s (1983 passed, 8 skipped) | 186.8 s (1989 passed, 8 skipped) |
+| longest unit | TestBuildCCELetTableSmallMesh ~140 s (fixtures 101.6 + parallel 35.8 + build-once call) | test_engine2d failing_config 65.7 s |
+| single-particle units | + TestCCEVsBias 25.1 s, legacy 22.7 s | fast file ~45 s (fixtures 19 + error-estimate test 20 + ...), parity 39.4 s and 16.1 s, legacy 20.5 s |
+
+The suite wall is bound by the total work over 6 workers, so it drops by only 5 %; the
+longest unit (the critical path once the other units are spread) halves. Under xdist load
+the devsim parity test (3 devsim transients: the 2-LET shared-device table and the fresh
+device of the build-once check) takes 39 s, above the 10 s per-test guideline: it is the
+one devsim check kept on purpose. `test_single_particle_legacy.py` (devsim, hw 25,
+legacy stack, cathode contact) is at 20-23 s and was not switched: the legacy stack has
+no devsim parity test in the fast files, and adding one would cost about what it saves.
+
 Both devsim classes stay, marked `exhaustive` (run with `-m exhaustive`; the [full-2]
 parametrization was already exhaustive: 20.8 s). Under xdist the largest of these units
 drops from ~82 s (HEAVY: 160 s under load) to 21.6 s; `tests/_xdist_schedule.py` updated
