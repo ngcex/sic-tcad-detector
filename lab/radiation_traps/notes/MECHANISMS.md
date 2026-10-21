@@ -168,3 +168,27 @@ Fluences 1e11, 1e12, 3e12, 1e13, 1e14, 3e14, 1e15, 5e15 p/cm2. Legacy removal: N
 - Literature check (different devices, qualitative): Gsponer et al. measured alpha CCE
   > 50 % up to 1e15 neq (abstract); De Napoli 2022 reports 7 % and 22.5 % losses at
   > 1.3e14 and 7.3e14 (14 MeV n, 20 um). Not fitted.
+
+
+## 6. NIEL convention flip (2026-10-21, issues #5 / #8)
+
+The maintainer made `sic-damage` the default NIEL convention and `radmanovac_calibrated`
+the default damage model. d is per neq and was fitted with the si-neq kappa(252.7 MeV) =
+0.8514; the Radmanovac slopes are per proton, so d was RE-FITTED per convention
+(`bench/convention_refit.py`, ~6.5 min at load ~25):
+
+| convention | kappa(252.7) | d (/neq) | chi2 / 2 dof | model g/p onsemi, W2, W4 | Burin/Capan share g/p |
+| --- | --- | --- | --- | --- | --- |
+| si-neq | 0.8514 | 2.873 +- 0.221 | 1.132 | 4.948, 4.813, 4.412 | 2.411, 2.258, 1.914 |
+| sic-damage | 0.6390 | 4.694 +- 0.303 | 1.029 | 4.858, 4.743, 4.471 | 1.798, 1.669, 1.428 |
+| sic-1mev | 0.6051 | 5.097 +- 0.324 | 1.035 | 4.841, 4.731, 4.476 | 1.701, 1.574, 1.351 |
+
+The per-proton fitted slopes agree to <= 0.11 /p (data sigmas 0.26-0.81): the per-proton
+calibration is convention independent. The naive rescaling d_si kappa_si / kappa_c (3.83
+/neq in sic-damage) would be wrong by ~0.6 /p because the literature-level share does not
+scale with kappa (those rates are neutron-anchored and unchanged per neq). What changes
+per proton: the literature share (x r_p/r_n), the energy transfer 252.7 -> 62 MeV, the
+62 MeV neutral-bulk removal (20.0 -> 18.8 /p) and the compensation fluence of the default
+stack (1.70e12 -> 1.80e12 p/cm2). The flat-C-V checks of section 3 (Kroll, Li: neq as the
+authors labelled them with Si kappa) are not converted (the proton tables stop at 1 GeV;
+Li's kappa unknown): they stay checks in Si neq.

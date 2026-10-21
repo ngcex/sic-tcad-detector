@@ -41,7 +41,7 @@ E_d sensitivity of the SiC proton NIEL (35/21 vs 21/21 eV): -5 % at 1 MeV, -4 % 
   Lindhard NIEL; full text not opened)). So the SiC numbers below have no published
   point to compare with; their checks are the Si ones and the internal ones.
 
-## Why the default hardness factor is Si-normalised
+## Why the Si-normalised factor was the default (until 2026-10-21)
 
 The defect introduction rates of `RadiationDamageParams` (Burin et al.,
 arXiv:2407.16710, Table I, "g_int [cm^-1]") are per **1 MeV equivalent neutron fluence**
@@ -51,7 +51,7 @@ and 10^16 neq/cm2"; Hazdra et al. NIMB 327 (2014) for g_int). The same group (Bu
 co-author) converts protons to that fluence with **silicon** NIEL: Radmanovac et al.,
 arXiv:2510.11304: "According to non-ionizing energy loss (NIEL) data in silicon, ...
 252.7 MeV proton beam (k ~ 0.9)" and "equivalent to 9x10^13 neq./cm2 in silicon".
-The default table therefore is
+The Si-neq table therefore is
 
     kappa_Si(E) = NIEL_p,Si(E) / NIEL_n,Si(1 MeV)          (sr_niel_proton_si_Ed21.csv)
 
@@ -68,8 +68,8 @@ the reactor neutrons, r_n. r_p is measured here: 0.97 (1 MeV), 0.94 (5.6), 0.88 
 it is now computed with NJOY (section "Neutron NIEL" below): r_n = 1.069 for a fission
 spectrum (plausible range 1.02-1.20 for a reactor spectrum), > r_p at every energy, so
 kappa_Si OVERSTATES the SiC damage per proton by r_n / r_p (x1.25 at 62 MeV with the
-fission r_n). The default stays kappa_Si; the corrected factor is the opt-in
-`sic-damage` convention.
+fission r_n). The corrected factor is the `sic-damage` convention, the DEFAULT since
+2026-10-21 (maintainer decision, issue #8); kappa_Si stays selectable as `si-neq`.
 
 ## Known systematic of NIEL scaling at low energy
 
@@ -151,7 +151,7 @@ compositions); per-gram normalisation with 28.0855 and 12.011 g/mol; SiC = 1:1 m
   the same reason the bin-averaged neutron tables do not give kappa = 1 at 1 MeV in
   their own conventions (0.953 `si-neq`, 0.976 `sic-1mev`).
 
-### How it is used (opt-in; defaults unchanged)
+### How it is used (default `sic-damage` since 2026-10-21)
 
 `etna.core.radiation_damage.hardness_table(particle, convention)`, threaded as
 `niel_table=` through `compute_damaged_params`, `cce_vs_fluence`,
@@ -159,8 +159,9 @@ compositions); per-gram normalisation with 28.0855 and 12.011 g/mol; SiC = 1:1 m
 `run_radiation_damage`, `compensation_fluence`, `trap_compensation_fluence`,
 `default_fluence_grid` and the Radiation Damage page:
 
-- `si-neq` (default): NIEL_x,Si(E) / NIEL_n,Si(1 MeV, ASTM) -- the label of the rates.
-- `sic-damage`: NIEL_x,SiC(E) / (r_n NIEL_n,Si(1 MeV)) -- the Si-labelled reactor-neq
+- `si-neq` (the default until 2026-10-21): NIEL_x,Si(E) / NIEL_n,Si(1 MeV, ASTM) -- the
+  silicon-NIEL label convention.
+- `sic-damage` (DEFAULT): NIEL_x,SiC(E) / (r_n NIEL_n,Si(1 MeV)) -- the Si-labelled reactor-neq
   fluence giving the same SiC damage; for protons = kappa_Si r_p / r_n: 0.88x at 5.6 MeV,
   0.80x at 62 MeV, 0.77x at 150 MeV (compensation fluence 1.13x / 1.25x / 1.30x).
 - `sic-1mev`: NIEL_x,SiC(E) / NIEL_n,SiC(1 MeV) -- SiC-native 1 MeV neq (for rates
@@ -168,7 +169,10 @@ compositions); per-gram normalisation with 28.0855 and 12.011 g/mol; SiC = 1:1 m
 - `particle="neutron"`: the bin-averaged tables above (10 eV-18.9 MeV centres),
   log-log interpolated, no extrapolation.
 
-The default stays `si-neq` because the r_n spectrum range (1.02-1.20) is wider than the
-choice it would fix is certain; `sic-damage` is the physically consistent option when
-the calibration spectrum is fission-like. What stays unvalidated: the introduction rates
-themselves, and NIEL scaling for low-energy protons (see above).
+`sic-damage` is the default since 2026-10-21 (maintainer decision): it is the physically
+consistent option when the calibration spectrum is fission-like; the r_n spectrum range
+(1.02-1.20) remains its systematic. Proton-calibrated numbers (the slow removal d of
+`etna.core.trap_presets.radmanovac_calibrated`) are re-fitted per convention so their
+per-proton calibration holds (docs/USAGE.md, "NIEL convention and the calibrated
+removal"). What stays unvalidated: the introduction rates themselves, and NIEL scaling
+for low-energy protons (see above).
