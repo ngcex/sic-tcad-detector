@@ -3,8 +3,9 @@
 This is the single usage document for ETNA (Epitaxial Tcad Numerical Analysis). It is
 written for a physicist or engineer who knows semiconductor radiation detectors but has
 not read this code. Every Python block below was run against this repository (version
-5.0.0, 2026-10-18); the numbers quoted come from those runs on an Apple M4 (10 cores) and
-will differ slightly on other machines. File paths are relative to the repository root.
+5.0.0; re-run 2026-10-21); the numbers quoted come from those runs on an Apple M4 (10
+cores) and will differ slightly on other machines; timings are dated where given. File
+paths are relative to the repository root.
 
 Contents
 
@@ -60,8 +61,8 @@ What ETNA is **not**:
     measured bound of < 18 pA at -60 V. Agreement with the data used for a fit is fit
     quality, not validation.
   - **Literature check**. A C-V comparison with Bruzzi & Verroi 2023 (a Schottky diode on
-    a different 30 µm wafer) checks the solver scale only: +3.1 % at -40 V, < 1 % with
-    V_bi matched (`.planning/VALIDATION_LITERATURE.md`). It does not validate this device.
+    a different 30 µm wafer) checks the solver scale only: W +3.1 % at -40 V, +1.0 % with
+    V_bi matched (paper W to 2 significant figures) (`.planning/VALIDATION_LITERATURE.md`). It does not validate this device.
   - **Not reproduced / open**. The microdosimeter's measured alpha CCE-vs-bias shape is
     not reproduced by any drift-diffusion variant (section 8). FLASH plasma recombination
     is not implemented. The NIEL hardness factors are SR-NIEL data in the Si
@@ -102,7 +103,7 @@ wheel; it looks for BLAS/LAPACK at import (on macOS it uses the system Accelerat
 on Linux install OpenBLAS/LAPACK, e.g. `apt-get install libopenblas-dev liblapack-dev`).
 
 ```bash
-git clone git@github.com:ngcex/sic-tcad-detector.git
+git clone https://github.com/ngcex/sic-tcad-detector.git
 cd sic-tcad-detector
 uv sync --extra dev --extra viz     # library + dev tools + optional animation/GDS
 ```
@@ -152,7 +153,7 @@ print(cv.metadata["validated_domain"])    # True: inside the engine/devsim cross
 print(cv.metadata["reach_through_V"])     # 3.1 (V, a positive magnitude)
 print(cv.metadata["W_from_C"][[0, 10, 30]] * 1e4)  # eps*A/C in um at 0/-10/-30 V: ~1.655 9.519 9.750
 
-report = run_all(cfg)                     # every section in one call, ~3 s on the default device
+report = run_all(cfg)                     # every section in one call, < 1 s with a warm numba cache
 for row in report.rows():
     print(row["section"], row["status"], row["solver"], row["key figures"])
 ```
@@ -369,7 +370,7 @@ relative to the in-epi generation). `x` is bias (V), `y` is CCE in [0, 1]. Metad
 from etna import DeviceConfig, run_cce
 
 r = run_cce(DeviceConfig(), v_start=-1.0, v_stop=-10.0, n_points=10)
-print(r.metadata["solver"], [round(float(v), 4) for v in r.y[[0, 1, -1]]])  # batched [0.9743 0.9944 0.9995]
+print(r.metadata["solver"], [round(float(v), 4) for v in r.y[[0, 1, -1]]])  # batched [0.9719, 0.9937, 0.9994]
 ```
 
 ### `run_cce_tilted_alpha(config, v_start=0, v_stop=-60, n_points=61, theta_deg=65, alpha_range_um=18, dead_layer_um=0, shape="bragg", generation_in_p_plus=False)`
@@ -420,7 +421,7 @@ from etna.api.results import peak_field_1d
 cfg = DeviceConfig()
 r = run_field(cfg, bias_V=-30.0)
 peak, depth_um, excluded = peak_field_1d(r.x, r.y, cfg)   # skips the nm spikes at abrupt steps
-print(r.metadata["solver"], f"{peak:.3g} V/cm at {depth_um:.2f} um", excluded)  # devsim 9.06e+04 V/cm at 0.40 um True
+print(r.metadata["solver"], f"{peak:.3g} V/cm at {depth_um:.2f} um", excluded)  # batched 9.06e+04 V/cm at 0.40 um True
 
 r2 = run_field(DeviceConfig(half_width_um=50.0), bias_V=-30.0)
 print(r2.metadata["solver"], r2.x.size, r2.mesh.x_coords.size, r2.mesh.y_coords.max() * 1e4)  # engine2d 0 17784 ~11.3 um
@@ -779,9 +780,9 @@ for r in sweep.run():
 
 Runs, in one process: `cv`, `cce`, `field`, `damage`, `dark`, `temperature`, `flash`,
 and, on request, `sweep` (a small 2D-engine microdosimetric grid; section 11). It asserts
-between sections that no devsim device leaked. On the default device the whole run takes
-about 0.5 s with every fast path active (all sections but the 1D `field` on the engines;
-legacy preset 2.1 s: its 0..-100 V dark sweep runs on devsim). A section's `status` is `ok`, `warning` (it ran
+between sections that no devsim device leaked. On the default device every section runs on
+the engines and the whole run takes about 0.2 s with a warm numba cache (legacy preset
+about 0.9 s: its 0..-100 V dark sweep runs on devsim; measured 2026-10-21). A section's `status` is `ok`, `warning` (it ran
 but returned no valid point; `reason` says why), `error` or `skipped`; `rep.ok` is
 True when no section is `error` or `warning` (skipped sections do not count). A curve with invalid points starts its key
 figures with "k of n points valid", and the damage row adds the compensation fluence.
@@ -882,8 +883,18 @@ Logging and environment:
   (logger names `etna.*`).
 - `ETNA_FIGURE_DIR` sets where `etna.core.plotting.save_figure` writes (default:
   `./figures` of the current working directory). Run notebooks from `notebooks/` (giving
-  `notebooks/figures/`, which is gitignored) or set the variable. Running from the repo
-  root writes over the tracked `figures/*.png`.
+  `notebooks/figures/`) or set the variable. Both `notebooks/figures/` and the root
+  `figures/` are gitignored; the only tracked figure is
+  `figures/cv_validation_bruzzi2023.png` (section 13).
+- `ETNA_DEVSIM_STOCK_SOLVER=1` keeps devsim's stock UMFPACK callback. By default
+  `etna.core.devsim_fastsolve` installs the same callback with its per-solve library
+  reload cached (bit-identical results, `tests/test_devsim_fastsolve.py`).
+- devsim bias points start from the engine solution (`etna.core.drift_diffusion.seeded_bias`):
+  the engine's dark state at the target bias plus one strict devsim solve replaces the
+  0.5-2 V ramp from 0 V (with Auger or the TAT/Hurkx model the engine state is only the
+  Newton start). It is never used with incomplete ionization, illumination, forward bias
+  or laterally non-uniform 2D devices; there, or if that solve fails, the old ramp runs
+  (`tests/test_seeded_bias.py`).
 - numba parallel kernels use all cores. Worker pools (`n_jobs > 1` in the optimisation
   sweeps) pin `NUMBA_NUM_THREADS` / `OMP_NUM_THREADS` to 1 per worker.
 
@@ -1032,7 +1043,7 @@ header carries solver, domain, config and version.
 | C-V Analysis            | `run_cv`                                                                        | max reverse bias (default -50 V), points (40)                                                                                                                                                                                                                                                                                          | C-V, Mott-Schottky, eps*A/C and depletion edge vs V, full-depletion marker, CSV                                                                                                                                                                                                                                                                                                                                  |
 | Charge Collection (CCE) | `run_cce`                                                                       | V_start (-10), V_stop (-40), points (30); reverse bias only                                                                                                                                                                                                                                                                            | CCE vs bias, CSV                                                                                                                                                                                                                                                                                                                                                                                                 |
 | Field Map               | `run_field`, 1D or 2D                                                           | reverse bias (default -50 V, down to -200)                                                                                                                                                                                                                                                                                             | 1D: E(x), potential, net doping, CSV. 2D: heatmap viewer (field, potential, doping)                                                                                                                                                                                                                                                                                                                              |
-| Radiation Damage        | `run_radiation_damage`                                                          | proton energy (30/62/70/150 MeV), fluence range (default 0.7e-3 to 0.7 x the compensation fluence), points (6), bias (-20 V)                                                                                                                                                                                                           | CCE vs fluence with NaN gaps explained. A persistent banner says kappa is SR-NIEL (Si neq) with the SiC neutron normalisation open                                                                                                                                                                                                                                                                               |
+| Radiation Damage        | `run_radiation_damage`                                                          | proton energy (30/62/70/150 MeV), fluence range (default 0.7e-3 to 0.7 x the compensation fluence; with the opt-in charged-traps checkbox (`radiation_traps=True`) 0.01 x it to 1e16 neq), points (6), bias (-20 V)                                                                                                                                                                                                           | CCE vs fluence with NaN gaps explained. A persistent banner says kappa is SR-NIEL (Si neq) with the SiC neutron normalisation open                                                                                                                                                                                                                                                                               |
 | Dark Current            | total leakage vs T at one bias (`ParametricSweep` over T of `run_dark_current`) | T range (250-400 K), points (6), bias (-20 V), advanced N_t                                                                                                                                                                                                                                                                            | I_total vs T, CSV. A calibration banner is shown; only the total is shown                                                                                                                                                                                                                                                                                                                                        |
 | Microdosimetry          | `run_microdosimetry`                                                            | MC events CSV upload, SV thickness (10 µm) and width (100 µm, depth = width)                                                                                                                                                                                                                                                           | y·d(y), y_F / y_D, CSV. Independent of the sidebar                                                                                                                                                                                                                                                                                                                                                               |
 | Batch Sweep             | `ParametricSweep`                                                               | one of epi thickness, p+ thickness, N_A, N_D junction, N_D bulk, transition length, T, area; comma-separated values; facade (CCE vs bias, C-V, CCE vs temperature)                                                                                                                                                                     | overlaid curves, bulk CSV, per-value failures listed                                                                                                                                                                                                                                                                                                                                                             |
@@ -1059,9 +1070,10 @@ Page details not in the table:
   CSV column for 1/C² is `one_over_C2_per_F2`.
 
 As of the v5.0 milestone audit (`.planning/milestones/v5.0-MILESTONE-AUDIT.md`), 7 of the
-21 notebook workflows had no page. The Run All page has since added the FLASH
-steady-state section (notebook 04). Notebooks 08, 12, 14, 16, 19 and 20 remain
-notebook-only.
+21 notebook workflows had no page. Since then Run All has added the FLASH steady-state
+section (notebook 04) and Simulate → Figures the FLASH transient (part of notebook 08) and
+the committed CCE(LET) table (the output of notebook 16). Notebooks 12, 14, 19 and 20
+remain notebook-only.
 
 ---
 
@@ -1248,29 +1260,29 @@ kernel started in; notebooks 15-20 resolve it before their `os.chdir('..')`.
 Notebooks written before 2026-10-18 may state numbers for older defaults; the model they
 run is whatever `DeviceConfig()` / the core defaults are now, unless they pin a preset.
 
-| notebook                       | topic                                          | notes                                                                                                                                                                                        |
-| ------------------------------ | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 01_phase1_validation           | material parameters, analytical electrostatics |                                                                                                                                                                                              |
-| 02_electrical_characterization | C-V, Mott-Schottky, doping profile, I-V        |                                                                                                                                                                                              |
-| 03_charge_collection           | CCE vs bias, generation profiles, Hecht        | generator `scripts/create_notebook_03.py`                                                                                                                                                    |
-| 04_flash_recombination         | FLASH Auger/SRH CCE vs dose rate               | sensitivity bound only                                                                                                                                                                       |
-| 05_dark_current_vs_fluence     | dark current vs proton fluence                 | TAT on the batched engine; fluences are fractions of `compensation_fluence(DeviceConfig(), 62)` (3.48e12 p/cm²) since 2026-10-21                                                             |
-| 05b_flash_parametric_studies   | FLASH parametric sweeps                        | runs its 60-condition sweep when the untracked cache is missing                                                                                                                              |
-| 06_temperature_dependence      | material properties and CCE vs T               |                                                                                                                                                                                              |
-| 07_dark_current                | TAT / SRH / surface terms                      |                                                                                                                                                                                              |
-| 08_transient_flash             | FLASH pulse transients                         | generator `create_notebook_08.py`                                                                                                                                                            |
-| 09_radiation_damage            | defect introduction, lifetimes, NIEL scaling   | markdown updated 2026-10-21 to SR-NIEL kappa (1.942 at 62 MeV), SiC normalisation open; summary table at 0.1/0.5/0.9 x the compensation fluence                                              |
-| 10_cce_vs_fluence              | CCE degradation vs fluence                     | fluences are fractions of `compensation_fluence(DeviceConfig(), 62)` (3.48e12 p/cm²) since 2026-10-21                                                                                        |
-| 11_dark_current_cv_evolution   | leakage and C-V vs fluence                     | fluences are fractions of `compensation_fluence(DeviceConfig(), 62)` (3.48e12 p/cm²) since 2026-10-21; C-V at 0.1/0.3/0.6/0.9 x                                                              |
-| 12_multi_defect_comparison     | 3-defect vs single-defect models               | fluences are fractions of `compensation_fluence(DeviceConfig(), 62)` (3.48e12 p/cm²) since 2026-10-21                                                                                        |
-| 13_parametric_optimization     | radiation-hardness sweep                       | 2 x 3 x 2 grid at 0.6 x the compensation fluence of the lowest-doped config (was 4 x 4 x 4 at 1e13, 15-20 min)                                                                               |
-| 14_validation                  | model vs published irradiation trends          | fractions of `compensation_fluence(DeviceConfig(), 62)` (3.48e12 p/cm²) + 1 refused point; trapping-only loss below it; unsourced 0.95/0.70/0.40 curve and onset ~1e12 removed 2026-10-21    |
-| 15_2d_electrostatics_cce       | 2D field and CCE of the microdosimeter         | generator `create_notebook_15.py`                                                                                                                                                            |
-| 16_single_particle_cce         | single-particle 2D transient CCE, CCE(LET)     | generator `create_notebook_16.py`; loads `data/cce_let_table_*.json`; `ETNA_REBUILD_CCE_TABLES=1` rebuilds them (~40 min) into `$ETNA_FIGURE_DIR/data/`                                      |
-| 17_mc_coupling                 | MC energy deposition to pulse height           | generator executes it in place                                                                                                                                                               |
-| 18_microdosimetric_spectra     | lineal energy spectra, y_F / y_D               | real NIST kappa, 62 MeV assumed; generator executes it                                                                                                                                       |
-| 19_alternative_structures      | mesa, 3D electrode, ΔE-E, guard ring           | pins the previous-default doping on the legacy geometry (PERF-06)                                                                                                                            |
-| 20_feasibility_report          | microdosimeter design study                    | outside-validity rows reported                                                                                                                                                               |
+| notebook                       | topic                                          | notes                                                                                                                                                                                     |
+| ------------------------------ | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 01_phase1_validation           | material parameters, analytical electrostatics |                                                                                                                                                                                           |
+| 02_electrical_characterization | C-V, Mott-Schottky, doping profile, I-V        |                                                                                                                                                                                           |
+| 03_charge_collection           | CCE vs bias, generation profiles, Hecht        | generator `scripts/create_notebook_03.py`                                                                                                                                                 |
+| 04_flash_recombination         | FLASH Auger/SRH CCE vs dose rate               | sensitivity bound only                                                                                                                                                                    |
+| 05_dark_current_vs_fluence     | dark current vs proton fluence                 | TAT on the batched engine; fluences are fractions of `compensation_fluence(DeviceConfig(), 62)` (3.48e12 p/cm²) since 2026-10-21                                                          |
+| 05b_flash_parametric_studies   | FLASH parametric sweeps                        | runs its 60-condition sweep when the untracked cache is missing                                                                                                                           |
+| 06_temperature_dependence      | material properties and CCE vs T               |                                                                                                                                                                                           |
+| 07_dark_current                | TAT / SRH / surface terms                      |                                                                                                                                                                                           |
+| 08_transient_flash             | FLASH pulse transients                         | generator `create_notebook_08.py`                                                                                                                                                         |
+| 09_radiation_damage            | defect introduction, lifetimes, NIEL scaling   | markdown updated 2026-10-21 to SR-NIEL kappa (1.942 at 62 MeV), SiC normalisation open; summary table at 0.1/0.5/0.9 x the compensation fluence                                           |
+| 10_cce_vs_fluence              | CCE degradation vs fluence                     | fluences are fractions of `compensation_fluence(DeviceConfig(), 62)` (3.48e12 p/cm²) since 2026-10-21                                                                                     |
+| 11_dark_current_cv_evolution   | leakage and C-V vs fluence                     | fluences are fractions of `compensation_fluence(DeviceConfig(), 62)` (3.48e12 p/cm²) since 2026-10-21; C-V at 0.1/0.3/0.6/0.9 x                                                           |
+| 12_multi_defect_comparison     | 3-defect vs single-defect models               | fluences are fractions of `compensation_fluence(DeviceConfig(), 62)` (3.48e12 p/cm²) since 2026-10-21                                                                                     |
+| 13_parametric_optimization     | radiation-hardness sweep                       | 2 x 3 x 2 grid at 0.6 x the compensation fluence of the lowest-doped config (was 4 x 4 x 4 at 1e13, 15-20 min)                                                                            |
+| 14_validation                  | model vs published irradiation trends          | fractions of `compensation_fluence(DeviceConfig(), 62)` (3.48e12 p/cm²) + 1 refused point; trapping-only loss below it; unsourced 0.95/0.70/0.40 curve and onset ~1e12 removed 2026-10-21 |
+| 15_2d_electrostatics_cce       | 2D field and CCE of the microdosimeter         | generator `create_notebook_15.py`                                                                                                                                                         |
+| 16_single_particle_cce         | single-particle 2D transient CCE, CCE(LET)     | generator `create_notebook_16.py`; loads `data/cce_let_table_*.json`; `ETNA_REBUILD_CCE_TABLES=1` rebuilds them (~40 min) into `$ETNA_FIGURE_DIR/data/`                                   |
+| 17_mc_coupling                 | MC energy deposition to pulse height           | generator executes it in place                                                                                                                                                            |
+| 18_microdosimetric_spectra     | lineal energy spectra, y_F / y_D               | real NIST kappa, 62 MeV assumed; generator executes it                                                                                                                                    |
+| 19_alternative_structures      | mesa, 3D electrode, ΔE-E, guard ring           | pins the previous-default doping on the legacy geometry (PERF-06)                                                                                                                         |
+| 20_feasibility_report          | microdosimeter design study                    | outside-validity rows reported                                                                                                                                                            |
 
 Every notebook calls `set_devsim_quiet(True)` (`etna.core.devsim_lock`, exported from
 `etna`) in its first code cell: devsim's Newton log of the direct core calls is dropped
@@ -1299,8 +1311,8 @@ notebook is. See the table in `scripts/README.md`. After editing either side run
 Generators run from `scripts/` and write `../notebooks/`. Generators 17 and 18 also
 execute the notebook, so strip the outputs before committing.
 
-**Rule:** never commit outputs (`uv run nbstripout notebooks/X.ipynb`), and never execute
-notebooks from the repo root into the tracked `figures/`.
+**Rule:** never commit outputs (`uv run nbstripout notebooks/X.ipynb`). Run notebooks from
+`notebooks/` (or a scratch copy) so their figures stay out of the repo root.
 
 ---
 
@@ -1331,7 +1343,7 @@ Where decisions and evidence live:
 - `.planning/`: physics audits (`PHYSICS_AUDIT_v*.md`, `PHYSICS_REVIEW_v6.md`), the
   literature check (`VALIDATION_LITERATURE.md`) and milestone audits.
 - `deliverables/`: foundry-facing specs (DESIGN-1 dosimetry p-n, DESIGN-2 microdosimeter
-  geometry; Markdown is the source and the PDFs were regenerated from it on 2026-10-18).
+  geometry; Markdown is the source and the PDFs were regenerated from it on 2026-10-21).
   `DIMENSIONS-provenance.md` classes every layout dimension as DOCUMENTED,
   MEASURED-FROM-FIGURE or PLACEHOLDER.
 - The data behind a figure or number is regenerated by the script named next to it, e.g.
@@ -1349,9 +1361,11 @@ uv run pytest -n0 -x tests/test_api_cce.py        # serial, e.g. with --pdb
 uv run pytest -n auto -q --durations=20           # slowest tests
 ```
 
-- 105 modules and 1280 tests. `pytest.ini` deselects the `exhaustive` marker (8 redundant
-  deep variants, each implied by a kept test), so the default run collects 1272.
-  The `slow` marker labels the devsim integration tests but does not deselect them.
+- 118 modules and 1482 tests (2026-10-21). `pytest.ini` deselects the `exhaustive` marker
+  (6 redundant deep variants, each implied by a kept test), so the default run collects
+  1476: all pass with `--extra dev --extra viz`; with `--extra dev` only, 1468 pass and 8
+  skip (the manim and gdstk tests). The `slow` marker labels the devsim integration tests
+  but does not deselect them.
 - `pytest.ini` adds `--dist loadgroup --no-loadscope-reorder` (inert without `-n`), so
   `-n auto` alone uses the tuned scheduler. Do not pass `--dist loadfile` any more (it
   overrides the tuned one), and use `-n0` rather than `-p no:xdist` (the latter makes
@@ -1369,14 +1383,14 @@ uv run pytest -n auto -q --durations=20           # slowest tests
   fixtures survive. About 45 tests still leave devices (mostly `test_poisson.py`,
   `test_device2d.py`, `test_material.py`, `test_dark_current.py` helpers). List them
   with `ETNA_REPORT_DEVSIM_LEAKS=/tmp/leaks.txt uv run pytest -n auto -q`.
-- **Timing** (10-core M4, 4 performance + 6 efficiency cores; the machine was shared
-  with other jobs for every number here). 2026-10-18, before: `--dist loadfile`,
-  502 s wall, 2173 s user CPU. After: 248 s wall, 1682 s user CPU (load average 4-11).
-  The floor is the slowest single tests: run serially they take 87 s
-  (`test_device2d_convergence.py` -50 V at 300 µm), 69 s (`test_devsim_quiet` direct
-  core calls), 62 s (single-particle CCE vs bias), 46 s and 39 s. Inside a 10-worker
-  run they take ~2x longer, on an efficiency core or with contended memory, so
-  ~3-4 minutes is the practical wall time.
+- **Timing** (10-core M4, 4 performance + 6 efficiency cores; the machine was shared with
+  other jobs). 2026-10-21, 1476 default tests: 169 s wall, 902 s user CPU (load average
+  3 at the start); 205 s wall, 948 s user CPU with load average up to 25. Expect about
+  3 minutes. History: 2026-10-18 before the
+  scheduler and leak fixes, `--dist loadfile`, 502 s wall, 2173 s user CPU; after,
+  248 s wall, 1682 s user CPU. The engine-seeded devsim start (`seeded_bias`) and the
+  test-speed work of 2026-10-19..21 cut the CPU time further. The floor is set by the
+  slowest single tests, which run ~2x slower inside a loaded 10-worker run.
 - numba kernels use `cache=True` and cache to `etna/**/__pycache__`. A cold cache costs
   only ~1-2 s per worker (`test_batched_engine.py`: 7.9 s cold vs 5.8 s warm), so
   there is no warm-up fixture.
@@ -1423,19 +1437,19 @@ uv run pytest -n auto -q --durations=20           # slowest tests
 
 ## 16. Troubleshooting
 
-| symptom                                                            | cause and fix                                                                                                                                                                                                                                                      |
-| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| A devsim device you built with `etna.core.*` disappeared           | devsim-path facades (`run_cv` fallback, 1D `run_field`, `run_dark_current`) call `reset_devsim_fully()` (`etna/core/devsim_reset.py`), which deletes **every** devsim device in the process. Build your own devices after the facade calls, or in another process. |
-| results that depend on a previous cell (after an interrupted call) | a stale device from an interrupted call. Restart the kernel, or call `etna.core.devsim_reset.reset_devsim_fully()`. `run_all` asserts that no device leaks between sections.                                                                                       |
-| `metadata["truncated"] == True`, shorter `x`                       | a devsim convergence wall at deep reverse bias. For the legacy model it is the cathode-on-epi artefact (about -64 V): use the default stack, or stay above it.                                                                                                     |
-| `OutsideModelValidity`                                             | the requested point is outside the model's validity (legacy 2D past the contact wall; `run_cce_tilted_alpha` outside the engine box). The message says what to change.                                                                                             |
-| NaN points in a damage sweep                                       | the fluence is at or past `compensation_fluence`; see `metadata["reason"]`.                                                                                                                                                                                        |
-| First call is slow (about 1 s), later calls about 0.1 s            | numba compilation. The batched-engine kernels use `cache=True`, so later processes load the compiled code from `__pycache__`. Changing numba or the source recompiles.                                                                                             |
-| A C-V or CCE call takes seconds instead of milliseconds            | the config is outside the engine box (`validated_domain_reason(cfg)`), or the engine fell back (`metadata["fallback_reason"]`).                                                                                                                                    |
-| `ModuleNotFoundError` (plotly, streamlit) under `uv run pytest`    | `.venv` was synced without `--extra dev`, so a system pytest ran. Run `uv sync --extra dev`.                                                                                                                                                                       |
-| Export page: "Animations are unavailable" / no GDSII button        | install `--extra viz` (macOS: `brew install pkgconf cairo pango` first). Note that a later plain `uv sync --extra dev` removes it again.                                                                                                                           |
-| A notebook overwrote `figures/*.png`                               | it ran from the repo root. Run from `notebooks/`, or set `ETNA_FIGURE_DIR`, then `git checkout figures/`.                                                                                                                                                          |
-| You want devsim's solver output                                    | `ETNA_DEVSIM_VERBOSE=1`.                                                                                                                                                                                                                                           |
+| symptom                                                            | cause and fix                                                                                                                                                                                                                                                                           |
+| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A devsim device you built with `etna.core.*` disappeared           | devsim-path facades (`run_cv` fallback, `run_field` / `run_dark_current` outside the engine box) call `reset_devsim_fully()` (`etna/core/devsim_reset.py`), which deletes **every** devsim device in the process. Build your own devices after the facade calls, or in another process. |
+| results that depend on a previous cell (after an interrupted call) | a stale device from an interrupted call. Restart the kernel, or call `etna.core.devsim_reset.reset_devsim_fully()`. `run_all` asserts that no device leaks between sections.                                                                                                            |
+| `metadata["truncated"] == True`, shorter `x`                       | a devsim convergence wall at deep reverse bias. For the legacy model it is the cathode-on-epi artefact (about -64 V): use the default stack, or stay above it.                                                                                                                          |
+| `OutsideModelValidity`                                             | the requested point is outside the model's validity (legacy 2D past the contact wall; `run_cce_tilted_alpha` outside the engine box). The message says what to change.                                                                                                                  |
+| NaN points in a damage sweep                                       | the fluence is at or past `compensation_fluence`; see `metadata["reason"]`.                                                                                                                                                                                                             |
+| First call is slow (about 1 s), later calls about 0.1 s            | numba compilation. The batched-engine kernels use `cache=True`, so later processes load the compiled code from `__pycache__`. Changing numba or the source recompiles.                                                                                                                  |
+| A C-V or CCE call takes seconds instead of milliseconds            | the config is outside the engine box (`validated_domain_reason(cfg)`), or the engine fell back (`metadata["fallback_reason"]`).                                                                                                                                                         |
+| `ModuleNotFoundError` (plotly, streamlit) under `uv run pytest`    | `.venv` was synced without `--extra dev`, so a system pytest ran. Run `uv sync --extra dev`.                                                                                                                                                                                            |
+| Export page: "Animations are unavailable" / no GDSII button        | install `--extra viz` (macOS: `brew install pkgconf cairo pango` first). Note that a later plain `uv sync --extra dev` removes it again.                                                                                                                                                |
+| Notebook figures appeared in the repo-root `figures/`              | it ran from the repo root. Run from `notebooks/`, or set `ETNA_FIGURE_DIR`. `figures/` is gitignored; if the tracked `figures/cv_validation_bruzzi2023.png` changed, restore it with `git checkout figures/`.                                                                           |
+| You want devsim's solver output                                    | `ETNA_DEVSIM_VERBOSE=1`.                                                                                                                                                                                                                                                                |
 
 ---
 

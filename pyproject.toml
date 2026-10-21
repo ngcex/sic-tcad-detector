@@ -7,6 +7,8 @@ name = "etna"
 # single source of truth: etna/_version.py (__version__), read by hatch below
 dynamic = ["version"]
 description = "ETNA: Epitaxial Tcad Numerical Analysis — SiC TCAD simulator library for 4H-SiC detectors (INFN-LNS Petringa group)"
+readme = "README.md"
+license = "MIT"
 requires-python = ">=3.13"
 dependencies = [
     "devsim>=2.10.0",
@@ -18,6 +20,10 @@ dependencies = [
     "pandas>=2.0",
     "numba>=0.60",
 ]
+
+[project.urls]
+Repository = "https://github.com/ngcex/sic-tcad-detector"
+Documentation = "https://github.com/ngcex/sic-tcad-detector/blob/main/docs/USAGE.md"
 
 [project.optional-dependencies]
 # The ONE development dependency set: `uv sync --extra dev` (add `--extra viz` for the
