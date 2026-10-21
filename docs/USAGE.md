@@ -755,8 +755,9 @@ by up to 2.6e-3; `tests/test_radiation_traps.py`):
 Bulk physics (N_D 3.38e13):
 
 - **Emergent neutral-region removal: 7.4 /neq** (both acceptors filled). For comparison,
-  the legacy scalar is 5, and Radmanovac et al. (arXiv:2510.11304) measured 5-7.5 at
-  252.7 MeV.
+  the legacy scalar is 5 (anchored per reactor neq, issue #14), and Radmanovac et al.
+  (arXiv:2510.11304) measured 4.5-5.6 per PROTON at 252.7 MeV: 5-7.5 /neq in the si-neq
+  conversion (kappa 0.851), about 7.0-8.8 /neq in the default sic-damage (kappa 0.639).
 - **This model's own compensation fluence** is therefore min N_D / (7.4 kappa):
   **2.35e12 p/cm^2 at 62 MeV** on the default stack, below the legacy 3.48e12.
   Metadata gives it as `trap_compensation_fluence` (and, since 2026-10-21, as

@@ -46,8 +46,9 @@ Formulation (opt-in, ``RadiationTrapModel``; nothing here runs unless asked):
 
 KNOWN CONSEQUENCES (reported, not tuned; see docs/USAGE.md):
 - Emergent removal in the NEUTRAL n- region is (eta_Z12 + eta_EH4) = 7.4 /neq (both
-  acceptors filled), vs eta_removal = 5 of the legacy scalar and 5-7.5 measured at
-  252.7 MeV (Radmanovac et al., arXiv:2510.11304). Compensation (bulk Fermi level at the
+  acceptors filled), vs eta_removal = 5 of the legacy scalar and 5-7.5 /neq measured at
+  252.7 MeV (Radmanovac et al., arXiv:2510.11304, 4.5-5.6 per proton, in the si-neq
+  conversion; about 7.0-8.8 /neq in sic-damage). Compensation (bulk Fermi level at the
   Z1/2 level) at ~N_D / 7.4 neq.
 - In the DEPLETED region the steady-state occupancy empties both acceptors (Z1/2
   emission time ~40 ms, EH4 ~30 min at 300 K) and leaves EH6/7 ~90 % ionized: the
