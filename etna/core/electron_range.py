@@ -26,9 +26,10 @@ from pathlib import Path
 
 import numpy as np
 
+from etna._paths import data_path
 from etna.core.stopping_power import SIC_MASS_FRACTION_C, SIC_MASS_FRACTION_SI
 
-ESTAR_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "nist_estar"
+ESTAR_DIR = data_path("nist_estar")
 ESTAR_MATNO = {"si": "014", "c_amorphous": "006", "water": "276"}
 _ROW = re.compile(r"^\s*(\d\.\d+E[+-]\d+)((?:\s+[-+0-9.E]+){4,6})\s*$")
 

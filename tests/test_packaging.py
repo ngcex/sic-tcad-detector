@@ -49,6 +49,10 @@ def test_force_include_sources_exist_and_map_to_package_data():
 def test_no_raw_provenance_or_large_file_in_the_wheel():
     for f in _shipped_files(_force_include()):
         rel = f.relative_to(REPO).as_posix()
+        if rel.startswith("data/nist_estar/raw/"):  # parsed at run time (electron_range)
+            assert f.suffix == ".html", rel
+            assert f.stat().st_size < 20_000, rel
+            continue
         assert "/raw/" not in rel, rel
         assert f.suffix in {".csv", ".json", ".toml", ".md"}, rel
         assert (

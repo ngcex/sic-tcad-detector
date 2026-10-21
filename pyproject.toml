@@ -55,12 +55,20 @@ exclude = ["etna/figures"]
 
 # Runtime data shipped in the wheel. data/ stays at the repository root (scripts,
 # notebooks and lab/ use it there); a wheel gets this subset as etna/_data/, found by
-# etna/_paths.py (packaged copy first, repository data/ in a source checkout). Raw
+# etna/_paths.py (packaged copy first, repository data/ in a source checkout). The NIST
+# ESTAR html (60 KB) is parsed at run time, so it ships; other raw
 # provenance (data/nist_star/raw/, the SR-NIEL .html pages, fetch_sr_niel.py) and
 # notebook-only inputs (synthetic_mc_events.csv) go to the sdist only. Mixed directories
 # are listed file by file; tests/test_packaging.py fails when a new runtime csv/json in
 # data/ is missing here.
 [tool.hatch.build.targets.wheel.force-include]
+"data/nist_estar/raw/estar_default_006.html" = "etna/_data/nist_estar/raw/estar_default_006.html"
+"data/nist_estar/raw/estar_default_014.html" = "etna/_data/nist_estar/raw/estar_default_014.html"
+"data/nist_estar/raw/estar_default_276.html" = "etna/_data/nist_estar/raw/estar_default_276.html"
+"data/nist_estar/raw/estar_lowE_006.html" = "etna/_data/nist_estar/raw/estar_lowE_006.html"
+"data/nist_estar/raw/estar_lowE_014.html" = "etna/_data/nist_estar/raw/estar_lowE_014.html"
+"data/nist_estar/raw/estar_lowE_276.html" = "etna/_data/nist_estar/raw/estar_lowE_276.html"
+"data/nist_estar/README.md" = "etna/_data/nist_estar/README.md"
 "data/nist_star/README.md" = "etna/_data/nist_star/README.md"
 "data/nist_star/astar_c_amorphous.csv" = "etna/_data/nist_star/astar_c_amorphous.csv"
 "data/nist_star/astar_c_graphite.csv" = "etna/_data/nist_star/astar_c_graphite.csv"
