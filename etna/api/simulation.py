@@ -353,11 +353,12 @@ def _failed_result(config, sim_type, error, **empty_keys) -> SimResult:
     )
 
 
-def _engine_batch(kws):
+def _engine_batch(kws, x=None):
     """Engine batch for devices sharing one mesh geometry.
 
     ``kws`` is a list of ``device_kwargs(config)`` dicts. Returns the batch and the
-    mesh nodes. (Until 2026-10-18 it also returned the per-device scalar mobility
+    mesh nodes. ``x`` (optional): node positions to use instead of the devsim mesh of
+    the geometry (mesh-refinement studies, etna.api.models). (Until 2026-10-18 it also returned the per-device scalar mobility
     doping for cce_sweep's ``N_D``; the mobility is local per node since A-03 and
     cce_sweep ignores ``N_D``, so it is no longer computed or passed.)
     """
@@ -365,7 +366,8 @@ def _engine_batch(kws):
     sub = kws[0]["substrate_thickness_cm"]
     t_np = kws[0].get("nplus_thickness_cm")  # shared by the group (mesh geometry)
     epi_end = sub + kws[0]["epi_thickness_cm"]
-    x = node_positions(kws[0]["epi_thickness_cm"], sub, t_np)
+    if x is None:
+        x = node_positions(kws[0]["epi_thickness_cm"], sub, t_np)
     nplus = None
     if t_np is not None:
         nplus = (epi_end, col("N_D_nplus"))

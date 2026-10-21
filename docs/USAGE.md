@@ -26,6 +26,7 @@ Contents
 15. [Development workflow](#15-development-workflow)
 16. [Troubleshooting](#16-troubleshooting)
 17. [Measurement inputs (`etna.measurements`)](#17-measurement-inputs-etnameasurements)
+18. [Physical-model library (opt-in): high-field mobility, anisotropy, avalanche and breakdown](#18-physical-model-library-opt-in-high-field-mobility-anisotropy-avalanche-and-breakdown)
 
 ---
 
@@ -1053,7 +1054,9 @@ figures.
 - high injection or plasma (FLASH)
 - edge termination and guard rings on the default path
 - oxide charge
-- impact ionisation and breakdown
+- impact ionisation and breakdown on the default facades. They are available opt-in, 1D
+  only, through `run_breakdown` / `run_avalanche` ([§18](#18-physical-model-library-opt-in-high-field-mobility-anisotropy-avalanche-and-breakdown)).
+  The breakdown voltage there is the parallel-plane value, with no edge termination.
 - trapping within a shaping time and ballistic deficit
 - 3D effects
 
@@ -1427,9 +1430,9 @@ uv run pytest -n0 -x tests/test_api_cce.py        # serial, e.g. with --pdb
 uv run pytest -n auto -q --durations=20           # slowest tests
 ```
 
-- 120 modules and 1531 tests (2026-10-21). `pytest.ini` deselects the `exhaustive` marker
+- 122 modules and 1559 tests (2026-10-21). `pytest.ini` deselects the `exhaustive` marker
   (6 redundant deep variants, each implied by a kept test), so the default run collects
-  1525: all pass with `--extra dev --extra viz`; with `--extra dev` only, 1517 pass and 8
+  1553: all pass with `--extra dev --extra viz`; with `--extra dev` only, 1545 pass and 8
   skip (the manim and gdstk tests). The `slow` marker labels the devsim integration tests
   but does not deselect them.
 - `pytest.ini` adds `--dist loadgroup --no-loadscope-reorder` (inert without `-n`), so
@@ -1681,3 +1684,164 @@ the sidebar device. A C-V file without an area uses the sidebar area, and the pa
 Outputs: figures (PNG), the comparison and E_a JSON, the donor-table JSON
 (`etna.donor_table/1`, readable by `load_donor_table_json`) and a Markdown report. Results
 are cached in the session and flagged when the file or the sidebar device changed.
+
+---
+
+## 18. Physical-model library (opt-in): high-field mobility, anisotropy, avalanche and breakdown
+
+**What this adds.** `etna.core.physics_models` adds models on top of the default physics (issue #6):
+
+- velocity saturation;
+- the c-axis mobility anisotropy;
+- impact ionization, with breakdown and multiplication;
+- registered bandgap-narrowing parameters.
+
+Each parameter set records its provenance. **Nothing changes unless you ask:** `DeviceConfig()` and every `run_*` facade of §6 keep their physics bit for bit. The models are reached only through the three facades below. They run on the batched 1D engine, which is checked against a devsim twin.
+
+```python
+from etna import DeviceConfig, PhysicsModels, run_breakdown, run_avalanche, run_transit_time
+
+cfg = DeviceConfig()                                   # default 4 mm2 dosimeter
+bd = run_breakdown(cfg)                                # default set: hatakeyama2004 along c
+print(round(bd.metadata["V_BD"], 2), round(bd.metadata["mesh_error_V"], 3))   # 2225.78 0.105
+
+m = PhysicsModels(impact_ionization="hatakeyama2004", high_field_mobility="lades2000")
+a = run_avalanche(cfg, m, v_start=-100.0, n_points=6, approach_breakdown=True)
+print(a.y.round(3))   # CCE with gain (not clipped): [1. 1.074 4.053 21.83 95.547 389.515]
+print(a.metadata["M_mcintyre"].round(3))  # McIntyre limit, same field: [... 95.57 389.781]
+
+t = run_transit_time(cfg, PhysicsModels(high_field_mobility="lades2000"), -10, -100, 4)
+print((t.metadata["t_e"] / t.metadata["t_e_low_field"]).round(2))   # [1.25 2.12 3.28 4.65]
+```
+
+### The selection: `PhysicsModels`
+
+`PhysicsModels` is frozen and hashable. Its fields take a registry name or a parameter-set instance:
+
+| Field | Registry names | Default |
+| --- | --- | --- |
+| `low_field_mobility` | `etna_default` (the solvers' Caughey-Thomas), `ayalew2004` (adds Ayalew's (T/300)^-0.5 on mu_min) | `etna_default` |
+| `high_field_mobility` | `lades2000`: mu = mu0 / (1 + (mu0 E / v_sat)^beta)^(1/beta), v_sat ~ T^-0.44, beta ~ T^1 | None |
+| `anisotropy` | `ayalew2004` (mu_n,par = 1.2 mu_n), `burin2024` (electrons x 1/0.83, holes x 1/1.15) | None |
+| `impact_ionization` | `hatakeyama2004` (default of `run_breakdown`), `niwa2015`, `zhao2019`, `loh2008`, `stefanakis2021`, `ayalew2004_legacy`; all are alpha = a (1 + c dT) exp(-[b (1 + d dT) / E]^m) | None |
+| `bandgap_narrowing` | `lades2000` (Slotboom: Delta E_g = C (F + sqrt(F^2 + 0.5)), F = ln(N / 1e17)) | None, registered only (below) |
+
+**Validation is strict.** These are all errors:
+
+- an unknown or miscapitalised name;
+- a wrong type;
+- an impact-ionization set without parallel-to-c coefficients, because the 1D diode's field is along c;
+- a temperature outside the set's measured range, unless `allow_T_extrapolation=True`. Hatakeyama 2004 is 300 K only; when extrapolated, the results carry `T_extrapolated`.
+
+`describe()` gives the provenance record that every result stores in `metadata["physics_models"]`.
+
+**Direction.** The published Caughey-Thomas set (Schaffer 1994, via Ayalew Table 3.5) is the mobility perpendicular to c. With `anisotropy=None`, ETNA uses it for the vertical (c-axis) transport, as it always has. An `anisotropy` model switches the vertical edges to the parallel-to-c values, and the high-field model to its `v_sat,par`. That changes the physics, so it stays opt-in.
+
+### Provenance (what was opened)
+
+Status **primary** means the numbers were read in the primary source. Status **secondary** means they were read in a compilation that restates it:
+
+- J. Burin et al., "TCAD parameters for 4H-SiC: a review", arXiv:2410.06798, Tables XIII, XXVII, XXXIII and XXXIV;
+- the TU Wien thesis of T. Ayalew (2004).
+
+| Set | Status | Notes |
+| --- | --- | --- |
+| `hatakeyama2004` | primary: APL 85, 1380 (2004), doi:10.1063/1.1784520, Table I | <0001> and <11-20>; 300 K; fitted 2-5 MV/cm. The SISPAD-2005 anisotropic interpolation is `hatakeyama_anisotropic_alpha` (tested, not coupled into 2D) |
+| `niwa2015`, `zhao2019`, `loh2008`, `stefanakis2021` | secondary (review Table XIII) | Primaries not opened. The review flags Zhao 2019's hole c, d. The `niwa2015` 300-448 K and `stefanakis2021` 300-573 K ranges are ETNA assumptions. The `loh2008` direction is not stated in the review |
+| `ayalew2004_legacy` | primary, **legacy** | The review finds b_n carried over from 6H. It is off by +48 to +94 % against Hatakeyama's measured V_BD below. Do not use it for predictions |
+| `etna_default` / `ayalew2004` mobility | primary (Ayalew Table 3.5) | Perpendicular to c. The electron gamma -2.40 is Schaffer's <0001> value; the hole -2.15 is borrowed from electrons. `etna_default` keeps mu_min T-independent |
+| `lades2000` high-field | electrons primary (Ayalew Table 3.6); parallel-to-c and holes secondary (Nilsson 2000 MC) | **Hole beta and T laws are an assumption** (no published fit) |
+| `burin2024` / `ayalew2004` anisotropy | secondary / primary | |
+| `lades2000` BGN | primary (Ayalew Table 3.4) | Lindefelt's own four-term form is restated inconsistently by two secondaries, so it is not offered |
+
+### Numerics
+
+**Breakdown** (`etna.core.avalanche.breakdown_voltage`). The McIntyre ionization integrals are computed with alpha constant on each mesh edge (the edge field) and integrated in closed form per edge. 1 - I_n = exp(-phi(W)) (1 - I_p) holds to round-off. The search is batched over devices: a secant march on ln I_p, then Illinois to 1e-3 V, with Poisson sub-steps of at most 10 V (scaled by T/300 below 300 K).
+
+- `mesh_error_V` is |V_BD(h) - V_BD(h/2)| from a full re-solve on the bisected mesh. Convergence is about first order (ratio 1.5-2.3 over h, h/2, h/4), so the base value is within about 2 x that number of the converged one.
+- `quadrature_error_V` is only the 2h-vs-h quadrature part and is much smaller.
+
+**Drift-diffusion with avalanche** (`etna.core.batched.models_dd.ModelContinuityBatch`). Edge impact generation g = alpha_n |Jn| + alpha_p |Jp| is integrated over the edge volume, as devsim's `edge_volume_model`. At fixed potential the system is linear in (n, p) apart from SRH. Each outer iteration therefore runs a full Newton on (n, p) with the 2x2-block tridiagonal Jacobian, then a Poisson update.
+
+A lagged (Gummel) avalanche term converges with ratio 1 - 1/M. On the default dosimeter (`lab/physics_models/bench/models_bench.py`, 2026-10-21, M4):
+
+| M | lagged sweeps / time | coupled outer x Newton / time |
+| --- | --- | --- |
+| 2.2 | 15 / 14 ms | 3 x 2 / 3.5 ms |
+| 34.5 | 136 / 186 ms | 3 x 2 / 12 ms |
+| 122 | 421 / 514 ms | 4 x 2 / 6 ms |
+
+Past V_BD the system is singular, and the solve reports `converged=False`. `run_avalanche` marks those points NaN ("at or beyond V_BD").
+
+**Current extraction.** The current is Jn + Jp on the best-conditioned edge, where the Scharfetter-Gummel terms are smallest. The discrete equations conserve Jn + Jp exactly. With every model off, the coupled solver reproduces `ContinuityBatch` to <= 1e-15.
+
+**High-field mobility.** mu(E) on each edge is re-evaluated from the potential at every outer iteration. In devsim the field factor is written into the currents through the chain rule.
+
+**Parity** (`tests/test_physics_models_devsim.py`). Device: p+ / 3 um 1e17 / n+, with uniform generation 1e18 cm^-3 s^-1 in the epi, at 300 V (M ~ 34).
+
+- Engine vs devsim: 3e-12 relative, avalanche and high-field together.
+- The devsim run takes 2.0 s (build, ramp and solve) against 13 ms for the engine, ramp included.
+- DD gain vs the generation-weighted McIntyre M: below 5e-6 relative in (1 - 1/M) up to M = 122.
+
+### Validation and calibration labels
+
+**Breakdown vs measurement.** Hatakeyama 2004 measured V_BD = 1940 (1e16/N_D)^0.8 V on (0001) p+n mesas (10 um epi, N_D 3e16-2e17). The table compares a modelled p+ / 10 um n / n+ diode. These coefficients were fitted on these same diodes, so for `hatakeyama2004` this is **consistency, not validation**. The other sets are independent comparisons and show the model spread:
+
+| N_D (cm^-3) | 3e16 | 5e16 | 1e17 | 2e17 |
+| --- | --- | --- | --- | --- |
+| measured fit (V) | 805.6 | 535.3 | 307.5 | 176.6 |
+| hatakeyama2004 | -0.6 % | -0.3 % | +1.8 % | +7.0 % |
+| niwa2015 | -6.4 % | -2.7 % | +5.2 % | +18.1 % |
+| zhao2019 | -10.8 % | -8.1 % | -2.1 % | +8.0 % |
+| loh2008 | -17.8 % | -14.6 % | -8.2 % | +2.0 % |
+| stefanakis2021 | -2.1 % | +4.3 % | +16.2 % | +33.5 % |
+| ayalew2004_legacy | +47.8 % | +55.7 % | +70.6 % | +93.9 % |
+
+The peak field at breakdown, against Hatakeyama's critical field F_C = 2.70 (1e16/N_D)^-0.1 MV/cm (SISPAD 2005), is between -1.6 and -3.2 % for `hatakeyama2004`.
+
+**Default dosimeter V_BD**: a 1D parallel-plane prediction and an **upper bound**.
+
+- The values are 2225.8 V (hatakeyama2004), 1955.4 V (niwa2015), 1928.2 V (zhao2019), 1825.6 V (loh2008) and 1916.9 V (stefanakis2021). Peak field 1.9-2.3 MV/cm, mesh error at most 0.11 V.
+- The spread between sets (about 20 %) is the real uncertainty.
+- The real device breaks down at its edge termination, which is not modelled.
+- The epi is low doped and in punch-through at about 3 V. That extrapolates beyond the measured N_D range of the sets: their field range still covers 1.9-2.3 MV/cm, but the doping regime differs.
+
+**Temperature.** `niwa2015`, `zhao2019` and `stefanakis2021` give a positive temperature coefficient of V_BD from 300 to 448 K on the default dosimeter: 1955 -> 2038 V (+4.2 %), 1928 -> 1999 V (+3.7 %) and 1917 -> 1961 V (+2.3 %).
+
+### Effects on the outputs (default dosimeter, model vs default physics)
+
+| Output | Effect | Why |
+| --- | --- | --- |
+| C-V | none | Pure electrostatics; none of these models enters Poisson |
+| CCE (alpha, steady state) with `lades2000` | -5.0e-5 at -10 V to -6.5e-5 at -100 V | Slower carriers recombine slightly more; lifetime >> transit |
+| ... plus `burin2024` anisotropy | -1.7e-4 / -1.2e-4 | Holes are slower along c |
+| Electron transit time (full depleted width), `lades2000` | x1.25 at -10 V, x4.65 at -100 V (52.6 ps instead of 11.3 ps) | Velocity saturation is strong at 1e5 V/cm. Holes x1.05 to x1.85. This is what a pulse-shape / timing analysis should use |
+| CCE with avalanche, `hatakeyama2004` | 1.00001 at -1050 V, 1.0145 at -1525 V, 2.12 at -2000 V | APD-like gain only within ~25 % of V_BD; none at the operating -10 to -100 V (M - 1 < 1e-5) |
+| Dark current with avalanche | x1.0137 at -1525 V, x2.03 at -2000 V | Multiplication of the TAT effective generation; see the note below |
+
+**The dark current with avalanche** uses the TAT effective generation and the Z1/2 SRH level **without** the Hurkx (1 + Gamma) factor, whose closed form is invalid above about 1.1e6 V/cm. Its absolute value is therefore below `run_dark_current`'s at the same bias. Read it as a multiplication factor (`metadata["gain"]`).
+
+### Facades
+
+- **`run_breakdown(config, models=None, *, n_points=30, M_max=1e4, v_max=1e4, v_tol=1e-3, mesh_check=True)`**
+  - x: bias on a geometric schedule toward V_BD.
+  - y: M_p.
+  - metadata: `V_BD`, `V_BD_refined_mesh`, `mesh_error_V`, `quadrature_error_V`, `E_max_at_breakdown`, `field_extrapolated`, `M_n`, `M_p`, `I_n`, `I_p`, `E_max`, `note`, provenance.
+- **`run_avalanche(config, models=None, v_start=-100, v_stop=-1000, n_points=10, *, source="alpha"|"dark", approach_breakdown=False, M_max=1e3, generation_rate=1e18)`**
+  - y: unclipped CCE (alpha) or dark current (A).
+  - metadata: `J`, `J_baseline`, `gain`, `M_mcintyre`, `V_BD`, `converged`, `reasons`.
+  - `approach_breakdown=True` replaces the linear grid with a geometric schedule toward V_BD: the adaptive near-breakdown sweep. Its last point is V_BD - (V_BD - |v_start|) / `M_max`. `M_max` is a bias depth, not a target multiplication: 1e3 ends near M ~ 400 on the default device.
+- **`run_transit_time(config, models=None, v_start=-5, v_stop=-100, n_points=20)`**
+  - Drift-only, full-width crossing times of the depleted epi (field > 1e3 V/cm).
+  - Metadata: `t_e`, `t_h`, `t_e_low_field`, `t_h_low_field`, `W_dep`.
+
+All three are 1D only. They refuse 2D configs, `radiation_traps`, and `bandgap_narrowing`.
+
+**devsim twin.** `etna.core.devsim_models.apply_physics_models(device_info, models)` installs the same models on a 1D devsim DD device. Call it after `add_generation_to_dd`: any later equation re-registration drops the impact term, and `total_current` then raises.
+
+### Not done (open in issue #6)
+
+- **Bandgap narrowing** is registered with provenance but not coupled into Poisson. Contact potentials and n_i(x) touch the shared Poisson code. The expected effect is about -0.04 V on V_bi at the 1e19 p+, below the C-V fit's resolution.
+- **2D**: the anisotropic mobility and anisotropic impact ionization (Hatakeyama interpolation) are not coupled into engine2d or devsim 2D.
+- **Field-dependent trapping** beyond the Hurkx TAT factor.
+- **Transient runs with the models.** `run_transient` and FLASH do not take models.

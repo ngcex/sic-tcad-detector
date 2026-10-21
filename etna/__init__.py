@@ -31,7 +31,9 @@ from etna.api.simulation import (
     run_temperature_sweep,
     run_transient,
 )
+from etna.api.models import run_avalanche, run_breakdown, run_transit_time
 from etna.api.run_all import Report, SectionResult, run_all
+from etna.core.physics_models import PhysicsModels
 from etna.api.sweep import ParametricSweep
 from etna.core.devsim_lock import quiet_devsim, set_devsim_quiet
 
@@ -62,6 +64,10 @@ __all__ = [
     "run_transient",
     "run_microdosimetry",
     "ParametricSweep",
+    "PhysicsModels",
+    "run_breakdown",
+    "run_avalanche",
+    "run_transit_time",
     "run_all",
     "Report",
     "SectionResult",
