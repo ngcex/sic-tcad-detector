@@ -24,6 +24,9 @@ STRUCTURES = {
     "electrode3d": "3D electrode, axisymmetric (r, z): n+ column, p+ wall",
 }
 MAX_BIAS_V = 200.0
+# the impact-ionization sets of etna.core.physics_models are fitted from 1-2 MV/cm up
+# (field_range_V_cm); fv2d has no avalanche term, so flag fields in that range
+HIGH_FIELD_V_CM = 1.0e6
 
 
 def _mods():
@@ -313,6 +316,14 @@ def render() -> None:
         "PREDICTED (fv2d, cross-checked against devsim on its mesh; not validated against "
         "measurement)."
     )
+    e_max = float(np.nanmax(r["E"]))
+    if e_max > HIGH_FIELD_V_CM:
+        st.warning(
+            f"Peak |E| = {e_max / 1e6:.2f} MV/cm (at a junction edge or corner), inside the "
+            "field range where the impact-ionization sets of the model library are measured "
+            "(from 1-2 MV/cm); fv2d has no avalanche model. The CCE here assumes no multiplication; check the bias against "
+            "the Breakdown & Avalanche page (1D parallel-plane, an upper bound)."
+        )
     st.plotly_chart(_scan_plot(r, pu), key="s2_scan_plot")
     P.figure_block("s2_scan_fig", f"{pu['kind']}_cce_scan", _pub(r, pu, "scan"), tok)
     what = st.radio("Map", ["|E| (kV/cm)", "Potential (V)", "log10 |net doping| (cm⁻³)"],

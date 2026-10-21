@@ -125,3 +125,19 @@ def test_flat_scan_range_and_publication_figures_build():
     for what in ("scan", "map"):
         fig = _pub(r, p, what)("single")
         assert fig.etna_provenance["solver"].startswith("etna.core.fv2d")
+
+
+def test_peak_field_beyond_1_MV_per_cm_is_flagged(monkeypatch):
+    import app.workflows.structures2d as page
+
+    def hot(p):
+        r = _fake_solve(p)
+        r["E"] = r["E"].copy()
+        r["E"][0, 0] = 1.8e6
+        return r
+
+    monkeypatch.setattr(page, "solve_structure", hot)
+    at = _start()
+    at.button(key="s2_run").click()
+    at.run()
+    assert any("no avalanche model" in w.value for w in at.warning)

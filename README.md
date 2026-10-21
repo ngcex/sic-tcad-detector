@@ -145,9 +145,10 @@ full-depletion definitions in [USAGE §8](docs/USAGE.md#8-validity-and-limits).
 | Measurement inputs              | `etna.measurements` (C-V, SIMS/SRP and I(T) CSV loaders, model comparison, C-V inversion)                                                                                                                                                              | [USAGE §17](docs/USAGE.md#17-measurement-inputs-etnameasurements)     |
 | Notebooks                       | 21 notebooks in `notebooks/`, committed without outputs                                                                                                                                                                                                | [USAGE §12](docs/USAGE.md#12-notebooks)                               |
 
-**The app** (12 pages): Home, Simulate → Figures, Run All, C-V Analysis, Charge
+**The app** (17 pages): Home, Simulate → Figures, Run All, C-V Analysis, Charge
 Collection (CCE), Field Map, Radiation Damage, Dark Current, Microdosimetry, Batch Sweep,
-Export, Measurements. The device is set once in the sidebar (geometry, doping,
+Export, Measurements, and the opt-in model pages Breakdown & Avalanche, Monte Carlo
+Deposition, Track Engine, Trap Kinetics & Calibration, 2D Structures (fv2d). The device is set once in the sidebar (geometry, doping,
 temperature, area, presets) and shared by every page. Each result shows its solver and
 validity notes, and its CSV download carries the same provenance in a `#` header. The
 app has no authentication and binds to localhost (`.streamlit/config.toml`); for shared
