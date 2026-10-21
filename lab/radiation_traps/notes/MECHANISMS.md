@@ -3,8 +3,8 @@
 2026-10-21. Code: `etna/core/radiation_traps.py` (two-level traps, `donor_removal`,
 `occupancy`, `lifetimes`), `etna/core/trap_kinetics.py` (two-level kernel),
 `etna/core/trap_calibration.py` (`calibrate_removal`), `etna/core/trap_presets.py`.
-Benches: `lab/radiation_traps/bench/mechanisms.py` (~4 min idle machine; 22 min at
-load 30) and `cce_kinetic.py` (~50 s). Everything opt-in; defaults unchanged.
+Benches: `lab/radiation_traps/bench/mechanisms.py` (measured 1339 s at load average
+29-32, section 1 alone 80 s in an earlier run at lower load) and `cce_kinetic.py` (~50 s). Everything opt-in; defaults unchanged.
 
 Labels: TXT = number printed in the paper; VEC = read from the PDF's vector figure
 paths; DER = derived here. Sources opened in full text unless marked.
@@ -24,7 +24,12 @@ paths; DER = derived here. Sources opened in full text unless marked.
 | Gsponer et al., arXiv:2310.02047                                        | CNM 50 um 1.5e14, 10 kHz                             | flat at 5e14 neq (lowest fluence)                                                                               | TXT          |
 
 The +- of Table 2 is the spread of fits over depletion widths, used here as sigma.
-Not used as fit input: Lebedev et al. Materials 14 (2021) 4976 and 15 (2022) 8637
+Kroll vs Radmanovac doping: Kroll gives N0 6.2e13 (from C) and Radmanovac 4e13 (Table 1)
+for nominally the same onsemi diodes; the Kroll bracket is therefore uncertain by ~1.5x.
+De Napoli, Front. Phys. 10 (2022) 898833 (review, opened): its only removal number is
+Seshadri et al. (IEEE TED 46 (1999) 567, not opened), 9.7 +- 0.7 per n/cm2, fast
+neutrons (> 1 MeV, not neq), Schottky diodes of unstated doping: not usable as fit input.
+Not used as fit input either: Lebedev et al. Materials 14 (2021) 4976 and 15 (2022) 8637
 (7e15 Cree power diodes, 15 MeV p: removal 50-70 /p, Z1/2 13.2 /p), Hazdra et al.
 SSP 242 (2016) 421 (K_N = 14 /neq reactor n), Kaneko & Kimoto APL 98 (2011) 262106
 (no rate), Zhao et al. arXiv:2507.12238 (DLTS Z1/2 ~20 /neq DER, 12x Li's EH3 rate on the
@@ -96,8 +101,10 @@ What the data can and cannot distinguish:
    EH4 at 252.7 MeV (an EH4 at 5.5 /neq would be visible).
 
 Choice for the preset (`radmanovac_calibrated`): d = 2.87 +- 0.23 /neq as DIRECT
-removal on top of `literature_kinetic`. Rationale: slightly better chi2 than the
-EH4-only scale (1.14 vs 2.06), no need for an EH4 2.3x above its DLTS rate, and the
+removal on top of `literature_kinetic`. The chi2 difference to the EH4-only scale
+(1.14 vs 2.06) does NOT discriminate (the sigmas are width spreads, not standard
+errors). The choice rests on (i) the EH4-only fit needing EH4 at 5.5 /neq, 2.3x its
+DLTS-derived rate, which DLTS would show, and (ii) the
 removal-mechanism literature (Lebedev et al. 2022: lower-half-gap acceptors stay
 charged in the space-charge region; Karsthof et al. 2020: compensating acceptors rather
 than N passivation, at 1.8 MeV p after a 300 C anneal) points to a permanent

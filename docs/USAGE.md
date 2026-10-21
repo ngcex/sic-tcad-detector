@@ -779,6 +779,10 @@ cv.C_ac, cv.C_qs, neff_from_cv(V_points, cv.C_ac)   # F/cm2 (area 1), cm^-3
     - This is an assumption-laden reading, not a fit. Li et al. (arXiv:2503.09016)
       likewise report that Z1/2 does "not appear to significantly contribute".
   - The open question is in issue #5.
+  - **Superseded** by the next subsection and `lab/radiation_traps/notes/MECHANISMS.md`. With
+    onsemi's own flat-C-V bracket, the Z1/2 scale is 0.9 +- 0.7 (consistent with nominal),
+    and the slow component (EH4 plus the calibrated permanent removal) is about 5.3 /neq.
+    The "Z1/2 carries none" reading came from an extrapolated compensation fluence.
 - **Temperature (PREDICTED, testable).** The kinetic g falls from 2.51 /p at 300 K to
   1.95 /p at 325 K and 0.77 /p at 350 K: EH4 emission speeds up with T. No measurement
   of this was found.
@@ -897,7 +901,10 @@ steady Burin table).
 - **Calibrated fits.**
   - Direct removal: d = 2.87 +- 0.23 /neq, chi2 = 1.14 for 2 dof. Model g:
     onsemi 4.94, W2 4.81, W4 4.40.
-  - EH4 scale instead: 2.30 +- 0.10, chi2 = 2.06.
+  - EH4 scale instead: 2.30 +- 0.10, chi2 = 2.06. The chi2 difference does not
+    discriminate (the sigmas are width spreads). The preset uses direct removal
+    because the EH4-only fit needs EH4 at 2.3x its DLTS rate, and the removal
+    literature points to a permanent compensating species.
 - **Predicted flat-C-V fluences**, all inside the measured brackets:
   - onsemi: 4.95e12 p/cm2;
   - W4: above 3.5e13;
