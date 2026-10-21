@@ -9,8 +9,9 @@ Independent adversarial review of code written in the previous day and never sec
 the USAGE.md NIEL-convention algebra. Base: main at 7746e8d. No code under `etna/` was
 changed.
 
-Every finding below was reproduced numerically. Each candidate was also attacked and the
-refuted ones are listed at the end. Repro scripts for the major findings and some minor
+Every major finding and the numerical minor ones (N1-N4, N8) were reproduced
+numerically. N5-N7 and N9-N11 are text, label and source checks. Each candidate was
+also attacked, and the refuted ones are listed at the end. Repro scripts for the major findings and some minor
 ones are in `lab/audit_v8/` (run with `uv run python lab/audit_v8/<script>.py`).
 
 **Severity rubric.**
@@ -20,7 +21,8 @@ ones are in `lab/audit_v8/` (run with `uv run python lab/audit_v8/<script>.py`).
   default-path error that is real but small.
 - Minor: docs, tests, labels, provenance.
 
-**Totals: 0 critical, 5 major, 12 minor.**
+**Totals: 0 critical, 4 major, 12 minor.** One of the minor items, N12, is an open
+provenance question demoted from major after review (issue #14).
 
 ## Verdict
 
@@ -42,8 +44,8 @@ nothing is double counted (verdict below). The defects are in the plumbing:
 
 - the convention guard has holes (M1, M4);
 - the default lifetime average depends on the discretisation (M2);
-- the legacy scalar `eta_removal` silently inherited the new convention although its only
-  data backing is per proton (M3);
+- the provenance of the legacy scalar `eta_removal` is ambiguous: the code anchors it per
+  neq, a review proposes re-citing it per proton (N12, open question);
 - the tilted-track plasma slices ignore `DeviceConfig.mobility` (M5).
 
 ## NIEL convention vs calibrated removal d: independent re-derivation
@@ -83,8 +85,10 @@ Single conversion points:
 **Verdict:** consistent; nothing double counted on the trap path. Exceptions:
 
 - the guard holes M1 and M4 let a preset run with the wrong d;
-- the legacy `eta_removal` (M3) is treated as neutron-anchored although it is justified
-  by proton data.
+- whether the legacy `eta_removal` should carry over unchanged depends on its anchor. The
+  code labels it Burin, 1-MeV-neutron-equivalent, so it carries over by item 1. If the
+  review's proposed per-proton re-citation is adopted, it must be re-fitted per
+  convention (N12).
 
 Open, unverified: Burin Table I gives "g_int [cm^-1]" and "1 MeV equivalent neutron
 fluences" with no Si/SiC qualifier (PDF text read). The "Si-labelled" in the
@@ -121,13 +125,15 @@ trap_model="radmanovac_calibrated", niel_convention="si-neq")` gives
     length, where the acceptors are filled and cannot capture.
   - The docstring says "(the epi)".
 - **Evidence:** `lab/audit_v8/m2_occupancy_lifetime_average.py` (default config, -40 V, 62 MeV).
-  Trap part of 1/tau_n, code vs length-weighted over the epi:
+  Trap part of 1/tau_n. The "same mask" column isolates the node-count weighting from
+  the mask choice; averaging over the whole epi, neutral region included, is disclosed
+  in USAGE, but the node weighting is not:
 
-| Phi_p (p/cm²) | code (1/s) | length-weighted, epi (1/s) | ratio |
-| ------------- | ---------- | -------------------------- | ----- |
-| 1e13          | 5.61e7     | 3.56e7                     | 0.64  |
-| 1e14          | 1.30e9     | 2.09e9                     | 1.61  |
-| 1e15          | 1.68e10    | 2.38e10                    | 1.42  |
+| Phi_p (p/cm²) | code, node mean (1/s) | length-weighted, same mask (1/s) | weighting alone | length-weighted, epi only (1/s) | epi / code |
+| --- | --- | --- | --- | --- | --- |
+| 1e13 | 5.61e7 | 3.24e7 | x0.58 | 3.56e7 | 0.64 |
+| 1e14 | 1.30e9 | 1.90e9 | x1.47 | 2.09e9 | 1.61 |
+| 1e15 | 1.68e10 | 2.16e10 | x1.29 | 2.38e10 | 1.42 |
 
 CCE moves from 0.998181 / 0.992217 / 0.940703 to 0.998249 / 0.993286 / 0.947765, so 1-CCE
 changes by a factor of 0.96 / 0.86 / 0.88. The result also depends on mesh refinement.
@@ -139,35 +145,6 @@ changes by a factor of 0.96 / 0.86 / 0.88. The result also depends on mesh refin
   a node field. Correct the docstring.
 - **Confidence:** high that it depends on the discretisation; medium on which average is right.
   Found by B and D.
-
-### M3. The legacy `eta_removal = 5 /neq` changed per-proton meaning with the default flip, although its only data backing is per proton (issue #14)
-
-- **Where:** `etna/core/radiation_damage.py:280`. It is used by:
-  - the `"auto"` fallback;
-  - `cce_vs_bias_at_fluence`, the C-V and dark current at fluence (USAGE: "they follow the new NIEL default");
-  - `legacy_compensation_fluence`.
-- **What is wrong:** `.planning/CARRIER_REMOVAL_REVIEW.md` section 4 re-cites `eta_removal` to
-  Radmanovac (252.7 MeV protons, 4.5-5.6 /p, "about 5-6.6 /Si-neq"). That is per-proton
-  data read in si-neq. USAGE item 2 says proton-calibrated numbers must be re-fitted per
-  convention, and `d` was, but `eta_removal` was carried over unchanged as if it were
-  neutron-anchored.
-- **Evidence:** `lab/audit_v8/m3_legacy_eta_per_proton.py`. Legacy removal per proton at 252.7 MeV:
-
-| convention           | removal (/p) | measured (/p) | eta needed (/neq) |
-| -------------------- | ------------ | ------------- | ----------------- |
-| si-neq               | 4.26         | 4.48-5.60     | 5.26-6.58         |
-| sic-damage (default) | 3.20         | 4.48-5.60     | 7.01-8.76         |
-
-At 62 MeV the default gives 7.76 /p against 9.71 /p before. So every legacy-model
-output on the default convention now removes about 25 % (62 MeV) to 33 % (252.7 MeV)
-fewer donors per proton than the dataset that justifies the number. This is why the
-legacy Phi_comp rose from 3.48e12 to 4.36e12, while the calibrated trap model gives 1.80e12.
-
-- **Fix:** decide what eta_removal is anchored to:
-  - per proton: make it per-convention, about 7-8.8 in sic-damage, or pin the legacy model to si-neq;
-  - per neq: document it as neutron-anchored and drop the Radmanovac justification.
-- **Confidence:** medium-high. The arithmetic is certain; the severity depends on that decision.
-  The review itself notes the value carries a x2-3 uncertainty at 62 MeV.
 
 ### M4. `trap_compensation_fluence` bypasses `check_trap_convention` (silent wrong number) (issue #15)
 
@@ -265,9 +242,29 @@ legacy Phi_comp rose from 3.48e12 to 4.36e12, while the calibrated trap model gi
     "verified-secondary".
   - The `c_axis` set is labelled "verified-primary" as a whole, although its T exponent and
     hole parameters are secondary.
-- **N12. Ishikawa thesis eq. 2.16 (c-axis electron mobility) not verified against the source.**
-  The repository page could not be read; only the internal arithmetic was checked
-  (1174.4 at 3.38e13). The label should say so until someone opens it.
+- **N12 (open question; demoted from major after review; issue #14). Anchor of the
+  legacy `eta_removal = 5 /neq` under the new default convention.**
+  `radiation_damage.py:280`. It is used by the `"auto"` fallback, by
+  `cce_vs_bias_at_fluence`, by C-V and dark current at fluence, and by
+  `legacy_compensation_fluence`.
+  - **Why not a bug:** the code labels the whole `RadiationDamageParams` set
+    (`radiation_damage.py:283-284`) as `source="Burin ..."` and
+    `reference_particle="1 MeV neutron equivalent"`. Under that anchor, carrying 5 /neq
+    unchanged into sic-damage is exactly USAGE item 1. The per-proton drop
+    (`lab/audit_v8/m3_legacy_eta_per_proton.py`) is the intended r_p/r_n correction:
+    4.26 to 3.20 /p at 252.7 MeV, and 9.71 to 7.76 /p at 62 MeV.
+  - **What is open:** `.planning/CARRIER_REMOVAL_REVIEW.md` section 4 calls the value
+    mis-sourced and says Radmanovac's per-proton data (4.5-5.6 /p at 252.7 MeV) "happen to
+    back it" in si-neq. Its section 5 recommends re-citing it to Radmanovac, which has not
+    been done.
+  - **If the re-citation is adopted:** the value becomes proton-calibrated and must be
+    re-fitted per convention, about 7.0-8.8 /neq in sic-damage. Otherwise, drop the
+    Radmanovac comparison in USAGE line 752.
+  - Either way, the decision should be explicit.
+
+Unverified (not counted): Ishikawa thesis eq. 2.16, the c-axis electron mobility. The
+repository page could not be read; only the internal arithmetic was checked (1174.4 at
+3.38e13), and the label should say so until someone opens it.
 
 Out of scope, noted, not verified: `run_transit_time` (`etna/api/models.py:459-475`) does
 not check `ramp.converged`, while `run_avalanche` does.
@@ -323,8 +320,10 @@ Four parallel sub-audits:
 - C: NIEL, presets and calibration;
 - D: damage dispatch and CCE paths.
 
-Each one tried to refute its own candidates. Every critical or major candidate was then
-re-run by the lead auditor; the outputs quoted above come from those re-runs, made on
-7746e8d. Sources opened: Burin arXiv:2407.16710, Capan arXiv:1812.06462, Radmanovac
+Each one tried to refute its own candidates. The lead auditor then re-ran every major
+candidate (all five `lab/audit_v8/m*` scripts) and the N2 and M4-flat-fluence scripts on
+7746e8d; the quoted outputs come from those re-runs. The other minor numbers are the
+sub-auditors' and were not re-run. After review, M3 was demoted to N12, because the code
+anchors `eta_removal` per neq. Sources opened: Burin arXiv:2407.16710, Capan arXiv:1812.06462, Radmanovac
 arXiv:2510.11304, Hatakeyama APL 85 (2004) 1380 and SISPAD 2005, Ayalew thesis (TU Wien),
 and the review arXiv:2410.06798. The Ishikawa thesis was not reachable.
