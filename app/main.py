@@ -4,7 +4,7 @@ Run with: streamlit run app/main.py
 
 Wires the device-config sidebar (renders on every page, before pg.run(),
 so device_config persists across navigation per UI-07) and registers
-Home + the 10 workflow pages (11 st.Page entries) via callable-based st.Page.
+Home + the workflow pages (17 st.Page entries) via callable-based st.Page.
 """
 
 import sys
@@ -27,6 +27,11 @@ from app.workflows.run_all import render as render_run_all
 from app.workflows.export import render as render_export
 from app.workflows.figures import render as render_figures
 from app.workflows.measurements import render as render_measurements
+from app.workflows.breakdown import render as render_breakdown
+from app.workflows.mc_deposition import render as render_mc_deposition
+from app.workflows.track import render as render_track
+from app.workflows.trap_kinetics import render as render_trap_kinetics
+from app.workflows.structures2d import render as render_structures2d
 
 st.set_page_config(
     page_title="ETNA — SiC TCAD Simulator",
@@ -103,6 +108,37 @@ pages = [
         title="Measurements",
         icon=":material/lab_profile:",
         url_path="measurements",
+    ),
+    # opt-in model library pages (app/components/pubfig.py helpers)
+    st.Page(
+        render_breakdown,
+        title="Breakdown & Avalanche",
+        icon=":material/electric_bolt:",
+        url_path="breakdown",
+    ),
+    st.Page(
+        render_mc_deposition,
+        title="Monte Carlo Deposition",
+        icon=":material/grain:",
+        url_path="mc-deposition",
+    ),
+    st.Page(
+        render_track,
+        title="Track Engine",
+        icon=":material/timeline:",
+        url_path="track",
+    ),
+    st.Page(
+        render_trap_kinetics,
+        title="Trap Kinetics & Calibration",
+        icon=":material/tune:",
+        url_path="trap-kinetics",
+    ),
+    st.Page(
+        render_structures2d,
+        title="2D Structures (fv2d)",
+        icon=":material/grid_on:",
+        url_path="structures-2d",
     ),
 ]
 
