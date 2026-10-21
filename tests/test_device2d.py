@@ -248,13 +248,15 @@ class TestCalibrationCV:
             V_bias=0.0,
             doping_profile="graded",
         )
-        from etna.core.drift_diffusion import ramp_bias
+        from etna.core.drift_diffusion import seeded_bias
 
-        # Walk the voltage list with the adaptive ramp (lands exactly on each
-        # target; the old hand-rolled 0.5 V loop made ~100 strict 2D solves).
+        # Each bias point: engine seed + ONE strict devsim solve (seeded_bias), the
+        # adaptive ramp only if the seed is declined or does not converge. The strict
+        # solve decides the state, so W is the ramp's (measured 2026-10-21: W_2d
+        # bit-identical to the ramp_bias walk at all 8 biases; 2D part 26.6 s -> 2.0 s).
         W_2d = []
         for V_rev in voltages:
-            ramp_bias(
+            seeded_bias(
                 dev_2d,
                 V_target=-V_rev,
                 contact="cathode",
