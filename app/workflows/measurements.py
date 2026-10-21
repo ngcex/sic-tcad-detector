@@ -86,6 +86,12 @@ def _token(sha, cfg, *extra):
 # ------------------------------------------------------------------ C-V
 
 
+def _show_plausibility(data) -> None:
+    """Unusual-but-possible values of a loaded file (unit? convention?), as warnings."""
+    for msg in M.plausibility_report(data):
+        st.warning(f"Check the file: {msg}")
+
+
 def _load_cv(raw: bytes, cfg):
     """Load with the file's area; fall back to the sidebar area when the file has none."""
     try:
@@ -119,6 +125,7 @@ def _cv_tab(cfg) -> None:
         f"cm² ({data.area_source}); f {data.frequency_Hz or 'n/a'} Hz; T "
         f"{data.T_K or 'n/a'} K."
     )
+    _show_plausibility(data)
     if area_note:
         st.info(area_note)
     st.dataframe(
@@ -247,6 +254,7 @@ def _sims_tab(cfg) -> None:
         f"{prof.depth_um.min():g} .. {prof.depth_um.max():g} µm from the surface; "
         f"columns {', '.join(prof.input_columns.values())}."
     )
+    _show_plausibility(prof)
     c1, c2, c3 = st.columns(3)
     xj = c1.number_input(
         "Junction depth (µm, 0 = automatic)",
@@ -348,6 +356,7 @@ def _it_tab(cfg) -> None:
         f"{len(data.T_K)} rows loaded, T {data.T_K.min():g} .. {data.T_K.max():g} K, "
         f"bias(es) {', '.join('n/a' if b is None else f'{b:g} V' for b in biases)}."
     )
+    _show_plausibility(data)
     p = st.selectbox(
         "Prefactor exponent p in ln(|I|/T^p)",
         [0.0, 1.5, 2.0, 3.0],

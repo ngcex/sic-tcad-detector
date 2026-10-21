@@ -317,8 +317,20 @@ def load_cv_csv(src, area_cm2: "float | None" = None) -> CVData:
         issues.append(f"temperature must be > 0 K (got {T:g})")
     if freq is not None and not freq > 0:
         issues.append(f"frequency must be > 0 Hz (got {freq:g})")
+    plaus_warn = []
+    if not issues:  # unit / plausibility checks on a well-formed file
+        from etna.measurements.plausibility import check_cv
+
+        plaus_err, plaus_warn = check_cv(
+            V, C / area if absolute else C, area, freq, T, names[cq], _eps()
+        )
+        issues += plaus_err
     if issues:
         raise MeasurementFileError(source, issues)
+    if plaus_warn:
+        from etna.measurements.plausibility import emit
+
+        emit(source, plaus_warn)
 
     CA = C / area if absolute else C
     sCA = None

@@ -182,8 +182,20 @@ def load_sims_csv(src) -> DepthProfile:
         v = raw.meta.get(k)
         if v is not None and v < 0:
             issues.append(f"metadata {k} must be >= 0 (got {v:g})")
+    plaus_warn = []
+    if not issues:  # unit / plausibility checks on a well-formed file
+        from etna.measurements.plausibility import check_sims
+
+        plaus_err, plaus_warn = check_sims(
+            d, {q: cols.get(q) for q in ("N", "Al")}, names
+        )
+        issues += plaus_err
     if issues:
         raise MeasurementFileError(source, issues)
+    if plaus_warn:
+        from etna.measurements.plausibility import emit
+
+        emit(source, plaus_warn)
 
     def arr(q):
         return np.asarray(cols[q], float) if q in cols else None
