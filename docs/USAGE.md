@@ -753,6 +753,119 @@ f = 0.9959 at 41 µm, 0.977 at 46 µm and 0.49 at 51.5 µm (middle of the gap;
 `lab/edge_cce/notes/LOG.md`).
 `run_microdosimetry` does not apply it (it has no CCE step).
 
+#### Energy-deposition sampler, event-by-event pulse heights, Allpix Squared exchange (core API, issue #7)
+
+These are new opt-in modules. Nothing in the `run_*` facades calls them, and no defaults
+changed. Before them ETNA had no transport of its own: an event's deposit was whatever an
+external Geant4 file said, or the deterministic LET x chord.
+
+**`etna.core.mc_transport.sample_track_events(particle, energy_MeV, sv_um=(100, 100, 10), ...)`**
+
+A numba float64 parallel condensed-history sampler for `"proton"`, `"alpha"` and `"c12"` in
+`"sic"`, `"si"` or `"water"`, through a box SV. What goes into it:
+
+- **Irradiation.** `irradiation="normal"`, an angle in degrees (parallel beam), or
+  `"isotropic"` (mu-randomness; the mean chord is Cauchy's 4V/S).
+- **Mean loss.** NIST PSTAR/ASTAR electronic stopping. SiC is Bragg-composed. C-12 is a
+  MODEL: z_eff² x PSTAR at the same velocity, with z_eff from Ziegler's formula as in
+  Geant4.
+- **Fluctuations.** A line-by-line port of the Geant4 11.3 models: `"urban"` for protons
+  and `"ion"` for alpha/C-12 (G4IonFluctuations' Gaussian branch, without Yang's factor;
+  `"universal"` at high velocity), as in G4EmStandardPhysics_option4. `"bohr"` and
+  `"none"` are also available.
+- **Delta rays.** Explicit above `tcut_keV` (default: electron range = 5 % of the
+  smallest SV side, 6.6 keV for 10 um), with a restricted loss below. They travel
+  straight with the NIST ESTAR CSDA range (`data/nist_estar/`) times
+  `delta_range_factor`, so they can leave the SV. `surround_um` adds SiC around the SV:
+  delta rays made there can enter, and the beam is degraded by it.
+- **Stepping.** Adaptive (`step_fraction`, the energy-loss fraction per step), so an
+  alpha stopping in the SV ends at the CSDA range.
+- **Random numbers.** A SplitMix64 stream per (seed, event). Results are independent of
+  the thread count, and `event_offset` continues a stream.
+
+It returns `TrackEvents`: `edep_keV` (= primary + delta part), `chord_um`,
+`E_sv_entry_MeV`, entry point and direction, `stop_path_um` and optional `hits`
+(`max_hits>0`). The deterministic baseline is
+`fluctuations="none", delta_rays=False`, which gives exactly the CSDA mean along the chord
+(`mean_csda_deposit_keV`).
+
+**`etna.core.mc_response`**
+
+- `lineal_moments(edep, l_bar)` gives event-level y_F and y_D with delta-method standard
+  errors.
+- `adaptive_lineal_energy(particle, E, rel_tol=0.01, ...)` samples batches until both
+  relative standard errors are below `rel_tol`.
+- `pulse_heights(edep, chord, cce_interp, fano=None, enc_electrons=0, threshold_keV=0)`
+  runs, per event: N = epsilon/W, then optional Gaussian Fano smearing, then
+  CCE(LET = epsilon/chord) from `load_cce_let_table`, then ENC noise, then the
+  threshold.
+  - W defaults to ETNA's 7.8 eV.
+  - Allpix's 4H-SiC default is 7.6 eV with F = 0.1. ETNA sets no default F.
+
+**`etna.core.mc_exchange`** (file formats only; no Allpix, Geant4 or ROOT install)
+
+- `write_deposition_csv(path, events)` writes and `read_deposition_csv(path, unit_length="mm",
+  unit_energy="MeV")` reads the Allpix `DepositionReader` CSV (`Event: N` headers from
+  0, `pdg, t, E, x, y, z, detector, track, parent`).
+  - The read DataFrame goes straight into `process_mc_ensemble`.
+  - `tracks_to_dataframe(events)` gives one row per event with `ekin_MeV` (SV-entry
+    energy) for the kappa(E) lookup.
+- `write_init` / `read_init` handle the Allpix INIT field format, laid out as
+  `FieldParser::parse_init_file` reads it: 1-based i j k, z fastest, header sizes
+  (thickness, x, y) in um, values on cells, z from the back to the implant side.
+- `export_allpix_fields(run_field(...), outdir)` writes three files and returns the
+  matching `ElectricFieldReader` / `DopingProfileReader` / `WeightingPotentialReader`
+  config snippet:
+  - `etna_efield.init`: V/cm, E = -grad psi of the solved potential, so it points to +z
+    (the p+ side) in the depleted epi.
+  - `etna_doping.init`: 1/cm³, n positive.
+  - `etna_weighting.init`: planar pad z/t.
+
+  1D results give a laterally uniform map. 2D half-cell results are mirrored to a full
+  plane (`PIXEL_FULL`).
+- These files are checked against the quoted parser layout and against each other, not in
+  an Allpix run.
+  - Allpix truncates E/W per deposit to an integer in `DepositionReader`, so avoid many
+    sub-W deposits.
+  - Allpix has no SiC mobility model (use `constant`/`custom`).
+
+```python
+from etna.core import mc_transport as mt, mc_response as mr
+
+ev = mt.sample_track_events("proton", 62.0, sv_um=(100, 100, 10), n_events=200_000)
+m = mr.lineal_moments(ev.edep_keV, 10.0)
+print(round(m["y_F"], 2), round(m["y_D"], 2))  # 2.53 2.85 (bare SV; deterministic LET x t: 2.77 2.77)
+```
+
+Benchmarks: `uv run python lab/mc_transport/bench/bench.py` (about 25 s; numbers in
+`lab/mc_transport/notes/LOG.md`).
+
+- **Consistency (not validation; same tables).** The mean deposit equals the NIST CSDA
+  integral within 0.1 % (8e6 events).
+- **Variance.** 0.84-1.06 x the Vavilov/Bohr variance xi T_max (1 - beta²/2).
+- **Vavilov regime (kappa 0.1-0.5).** The most probable value is within 1-3 % of the
+  numerical Vavilov density. The FWHM is 10-12 % narrower.
+- **Landau regime (kappa < 0.03).** The MPV is 2-12 % above PDG Eq. 34.12 and the FWHM is
+  1.2-1.8 x 4 xi. The PDG and Bichsel 1988 report that thin-Si distributions are wider
+  than Landau's. There is no Geant4 run yet, so how close the port is to Geant4 itself is
+  unchecked.
+- **Alpha 5.486 MeV in SiC.** Range 18.41 um vs CSDA 18.43 um. Straggling 0.156 um vs
+  the Bohr integral 0.165 um.
+- **Delta rays.** A bare 10 um SV keeps 0.914 of the mean (62 MeV p). A 100-300 um SiC
+  surround restores 1.01.
+- **Speed.** 10 M events/s on 10 threads, 2 M events/s on 1. A GPU port was not
+  attempted: one spectrum takes under 1 s on the CPU.
+
+Not modelled:
+
+- nuclear interactions: about 1e-4 per 10 um traversal for C-12, from the computed
+  Tripathi cross sections;
+- multiple scattering of the primary;
+- electron scattering (straight delta rays give the maximal escape distance);
+- track structure below T_cut = 1 keV, which makes it invalid for sub-um SVs.
+
+The Geant4 cross-check is planned (issue #7).
+
 ### Batches and sweeps
 
 - `run_cv_batch(configs, ...)` and `run_cce_batch(configs, ...)` solve many configs

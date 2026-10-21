@@ -25,3 +25,9 @@ the numba path was promoted to `etna/core/batched/` (run_cv / run_cce and the ba
 2D numba engine spike (2026-10-16), promoted to `etna/core/engine2d/`; production parity
 against devsim lives in `tests/test_engine2d*.py`. See `lab/solver2d/README.md` for the
 devsim reference dumps (`notes/*.npz`), which are regenerated on demand, not committed.
+
+## `lab/mc_transport`
+
+Benchmark of the condensed-history energy-deposition sampler (`etna/core/mc_transport.py`,
+issue #7, 2026-10-21) against NIST, Landau/Vavilov/Bohr and Cauchy references:
+`bench/bench.py`, numbers and decisions in `notes/LOG.md`.
