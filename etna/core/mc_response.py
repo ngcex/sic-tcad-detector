@@ -64,15 +64,24 @@ def lineal_moments(edep_keV, l_bar_um):
 
 
 def default_l_bar_um(sv_um, irradiation):
-    """Mean chord: t / cos(theta) for a parallel beam, Cauchy 4V/S for isotropic."""
+    """Mean chord of the SV for the sampler's irradiation (``sample_track_events``).
+
+    Isotropic (mu-randomness): Cauchy 4V/S. Parallel beam tilted by theta in the x-z
+    plane, spread uniformly over the projected area: V / A_proj with
+    A_proj = wx wy cos(theta) + wy t sin(theta) (mean chord of a convex body for a
+    uniform parallel beam). This is NOT the infinite-slab path t / cos(theta), which
+    overestimates it once the side face is lit (60 deg, 100x100x10 um: 17.05 vs
+    20 um; issue #18). Normal beam: t.
+    """
     wx, wy, t = (float(v) for v in sv_um)
+    V = wx * wy * t
     if irradiation == "isotropic":
-        V = wx * wy * t
         S = 2.0 * (wx * wy + wx * t + wy * t)
         return 4.0 * V / S
     if irradiation == "normal":
         return t
-    return t / math.cos(math.radians(float(irradiation)))
+    th = math.radians(float(irradiation))
+    return V / (wx * wy * math.cos(th) + wy * t * math.sin(th))
 
 
 def adaptive_lineal_energy(

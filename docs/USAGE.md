@@ -1308,6 +1308,11 @@ apart, recording only). The deterministic baseline is
   errors.
 - `adaptive_lineal_energy(particle, E, rel_tol=0.01, ...)` samples batches until both
   relative standard errors are below `rel_tol`.
+- `default_l_bar_um(sv_um, irradiation)` (the default l_bar of `adaptive_lineal_energy`)
+  is the sampler's mean chord: t for a normal beam, V / A_proj with
+  A_proj = wx wy cos(theta) + wy t sin(theta) for a beam tilted in x-z, 4V/S for
+  isotropic. It is not the slab t / cos(theta) (60 deg, 100x100x10 um: 17.05 um, not
+  20; issue #18).
 - `pulse_heights(edep, chord, cce_interp, fano=None, enc_electrons=0, threshold_keV=0)`
   runs, per event: N = epsilon/W, then optional Gaussian Fano smearing, then
   CCE(LET = epsilon/chord) from `load_cce_let_table`, then ENC noise, then the
