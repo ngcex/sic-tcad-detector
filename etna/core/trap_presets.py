@@ -33,7 +33,7 @@ Sources opened (full text unless marked):
   the depleted region (kinetic). The remainder is a component that stays charged in
   depletion AND counts once in the neutral bulk: at room temperature a slow deep
   acceptor (Lebedev et al. Materials 15 (2022) 8637: lower-half-gap acceptors; V_Si
-  (0/-) near midgap, Bathen et al. npj QI 5 (2019) 111) and a direct donor loss are
+  (0/-) near midgap, Bathen et al. npj Quantum Inf. 5 (2019), doi:10.1038/s41534-019-0227-y) and a direct donor loss are
   INDISTINGUISHABLE in C-V (same charge in both regions). The preset carries it as
   ``donor_removal`` (CALIBRATED); ``deep_acceptor=True`` puts the same rate on a
   midgap-like acceptor instead (differs only in CCE trapping and above ~500 K).

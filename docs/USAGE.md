@@ -825,8 +825,111 @@ measured C-V curves.
 - AC trap response (the lambda effect).
 - Transport-limited quasi-Fermi splitting in a semi-insulating epi under bias.
 - Poole-Frenkel emission.
-- Negative-U two-level Z1/2.
+- Negative-U two-level Z1/2 in the default table (available as an opt-in two-level
+  trap, next subsection).
 - Temperature changes within a run.
+
+#### Missing C-V removal: two-level traps, direct removal, presets, calibration (opt-in)
+
+Follow-up of issue #5. The kinetic Burin table gives about half of the measured
+depleted-region removal (g 2.6 vs 5.6 +- 0.8 per p/cm2, Radmanovac et al.,
+arXiv:2510.11304). Evidence, every number and its source:
+`lab/radiation_traps/notes/MECHANISMS.md`; benches `bench/mechanisms.py` (about
+4 min) and `bench/cce_kinetic.py` (about 50 s). Every default is unchanged
+(`DeviceConfig().radiation_traps is False`; `radiation_traps=True` is still the
+steady Burin table).
+
+**New model pieces** (fields of `RadiationTrapModel` / `DeepTrap`):
+
+- **Two-level traps.** `DeepTrap(..., E2_below_Ec=, sigma_n2=, sigma_p2=)` adds the
+  level of the second electron (negative U: E2 deeper). Example: Z1/2 = V_C(=/-/0).
+  - Occupancy is carried per level row as g1 = P(>= 1 e) and g2 = P(2 e).
+  - Steady state: the zero-flux chain. Kinetics: a 2x2 backward-Euler system in the
+    numba kernel, with an analytic Jacobian.
+  - Tests: the steady state equals the analytic chain and Fermi-Dirac; the relaxation
+    converges to the matrix exponential.
+  - The steady Poisson kernel refuses two-level traps. The CCE path routes them through
+    `trap_kinetics`, whose steady limit is identical.
+- **`donor_removal`** (cm^-1 per neq): direct, occupancy-independent donor loss on the
+  epi.
+- **`occupancy="kinetic"`**: CCE uses the kinetic dark state. That state is the
+  `initial` state at 0 V, a ramp at `ramp_V_per_s`, then a hold of `hold_s`; its trap
+  charge is then frozen. The default is `"steady"`.
+- **`lifetimes="occupancy"`**: CCE lifetimes count only levels able to capture. A
+  filled level cannot capture an electron. The default is `"legacy"`, which uses
+  `compute_K_tau`.
+
+**Presets** (`etna.core.trap_presets.trap_preset(name)`; pass the returned model as
+`DeviceConfig(radiation_traps=...)`):
+
+| Preset | Content | Label |
+| --- | --- | --- |
+| `burin_steady` | the default trap table | literature |
+| `burin_kinetic` | same table, kinetic occupancy | literature |
+| `literature_kinetic` | Z1/Z2 two-level (Capan et al. JAP 124 (2018) 245701, Table I: energies and Arrhenius emission, [Z2]:[Z1] = 4.4, 2.5 V_C/neq assumed) + EH4 + EH6/7 (sigma_n 1e-13) + kinetic + occupancy lifetimes | PREDICTED |
+| `radmanovac_calibrated` | `literature_kinetic` + direct removal 2.87 +- 0.23 /neq | CALIBRATED to Radmanovac Table 2 |
+| `radmanovac_calibrated_deep_acceptor` | same rate on a midgap acceptor (Ec-1.9) | CALIBRATED; identical C-V |
+
+**Calibration on published numbers** (`trap_calibration.calibrate_removal`):
+
+- `RemovalObservation` takes either a removal slope g read at fixed depletion width
+  (`kind="slope"`) or the fluence at which the C-V turns flat (`kind="flat_fluence"`,
+  `semi_insulating_fluence`).
+- The fit is linear in the parameters: scales of trap rates, or the absolute
+  `donor_removal`. It uses bounded least squares with re-linearisation.
+- It reports sigma, correlation, singular values and the weakest parameter
+  direction.
+
+**Results** (PREDICTED unless CALIBRATED):
+
+- **Negative-U Z1/2 does not close the gap.** Z1/Z2 empty within about 0.1 s in
+  depletion, so the slope does not see them. g is 2.41 /p with 2.5 V_C/neq and 3.13 /p
+  with 5.0 V_C/neq.
+- **EH4 as a donor collapses g** to 0.35 /p. This follows the CAV(+/0) assignment of
+  Karsthof et al. (arXiv:2007.03985).
+- **Hazdra's EH4 pair** changes g by less than 0.2.
+- **EH6/7 as an acceptor** gives g = 3.8 /p.
+- **Identifiability.**
+  - On the 3 Radmanovac slopes, a slow EH4-like acceptor and a permanent removal
+    (direct, or a midgap acceptor) are degenerate, with correlation -0.999.
+  - Direct removal and a midgap acceptor give identical C-V below about 500 K.
+  - Fast acceptors (Z1/2) are seen only through the flat-C-V fluence: scale 0.9 +- 0.7.
+- **Calibrated fits.**
+  - Direct removal: d = 2.87 +- 0.23 /neq, chi2 = 1.14 for 2 dof. Model g:
+    onsemi 4.94, W2 4.81, W4 4.40.
+  - EH4 scale instead: 2.30 +- 0.10, chi2 = 2.06.
+- **Predicted flat-C-V fluences**, all inside the measured brackets:
+  - onsemi: 4.95e12 p/cm2;
+  - W4: above 3.5e13;
+  - Kroll et al.: 1.2e13 neq;
+  - Gsponer et al.: below 5e14 neq.
+- **Discriminating prediction: temperature.** g(onsemi) at 300 / 325 / 350 K:
+  - direct removal: 4.94 / 4.56 / 3.22;
+  - EH4-scale alternative: 5.19 / 4.32 / 1.32.
+- **EH6/7 sigma_n.** 9e-12 (Gaggl/Burin) emits 40-160x faster than measured EH6/7 DLTS
+  peaks in this code's prefactor, and its cited source has no EH6/7 value. 1.4e-14
+  (audit C-4) has no primary source and emits 4-15x too slowly. About 1e-13 is
+  emission-consistent at 1.60 eV.
+  - C-V removal is insensitive to sigma_n.
+  - The default stays 1.4e-14 (MECHANISMS.md section 4).
+- **CCE beyond compensation** (default stack, 62 MeV), at -40 V, for 1e15 / 5e15
+  p/cm2:
+
+  | Model | CCE at 1e15 | CCE at 5e15 |
+  | --- | --- | --- |
+  | steady traps | 0.355 | 0.152 |
+  | kinetic, legacy lifetimes | 0.831 | 0.472 |
+  | kinetic, occupancy lifetimes (calibrated) | 0.919 | 0.686 |
+
+  - The steady-to-kinetic step dominates.
+  - The calibrated removal itself changes CCE by less than 0.01 up to 1e15.
+  - The unknown post-irradiation occupancy of EH6/7 dominates beyond about 3e14. With
+    an in-beam start and a 1 h hold, CCE is 0.477 at 1e15. Report CCE as a range.
+
+**Not modelled.** AC trap response, Poole-Frenkel emission, temperature changes within
+a run, degeneracy factors (all 1), and trap-assisted leakage beyond SRH. The removal
+species' identity is still open: the C-V data cannot fix it, but a C-V at 350 K or
+EH4 DLTS at the same beam could.
 
 ### `run_dark_current(config, v_start=0.0, v_stop=-100.0, n_points=20, N_t=None, S_n=None, S_p=None, solver="auto")`
 
