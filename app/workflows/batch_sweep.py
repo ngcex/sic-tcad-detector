@@ -133,9 +133,22 @@ NON_POSITIVE_TEXT = (
 )
 
 
+# a tabulated epi profile covers only its own depth: thinner epis only
+TABLE_EPI_VALUES = "6, 8, 10"
+
+
+def default_values(param: str, cfg=None) -> str:
+    """The default value list of ``param`` for this device."""
+    if param == "epi_thickness_um" and getattr(cfg, "donor_table", None) is not None:
+        return TABLE_EPI_VALUES
+    return DEFAULT_VALUES[param]
+
+
 def _reset_default_values() -> None:
     """on_change of the parameter selectbox: load that parameter's defaults."""
-    st.session_state["sweep_values"] = DEFAULT_VALUES[st.session_state["sweep_param"]]
+    st.session_state["sweep_values"] = default_values(
+        st.session_state["sweep_param"], st.session_state.get("device_config")
+    )
 
 
 def render() -> None:
@@ -166,7 +179,7 @@ def render() -> None:
     if st.session_state.get("sweep_param") not in (None, *fields):
         # the sidebar profile changed under a field it no longer reads: reset both
         st.session_state["sweep_param"] = fields[0]
-        st.session_state["sweep_values"] = DEFAULT_VALUES[fields[0]]
+        st.session_state["sweep_values"] = default_values(fields[0], cfg)
     param = st.selectbox(
         "Sweep parameter",
         fields,
@@ -176,7 +189,7 @@ def render() -> None:
         help="Device field to vary (units in the label).",
     )
     if "sweep_values" not in st.session_state:
-        st.session_state["sweep_values"] = DEFAULT_VALUES[param]
+        st.session_state["sweep_values"] = default_values(param, cfg)
     values_raw = st.text_input(
         "Values (comma-separated)",
         key="sweep_values",

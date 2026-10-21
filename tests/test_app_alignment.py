@@ -241,6 +241,17 @@ def test_sweepable_fields_follow_the_profile():
                 dataclasses.replace(cfg, **{f: v})
 
 
+def test_batch_sweep_tabulated_epi_defaults_fit_the_table():
+    import dataclasses
+
+    from app.workflows.batch_sweep import default_values
+
+    cfg = etna.measured_cv_tabulated_config()
+    for v in default_values("epi_thickness_um", cfg).split(","):
+        dataclasses.replace(cfg, epi_thickness_um=float(v))  # valid: inside the table
+    assert default_values("epi_thickness_um", DeviceConfig()) == "10, 15, 20"
+
+
 def test_batch_sweep_uniform_device_offers_n_d():
     at = _app("batch_sweep", "DeviceConfig(doping_profile='uniform', N_D=1e15)")
     at.run()

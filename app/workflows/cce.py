@@ -32,7 +32,8 @@ def render() -> None:
     st.title("Charge Collection (CCE)")
     st.caption(
         "Charge collection efficiency (collected / generated charge, 0-1) vs reverse "
-        "bias for an Am-241 alpha (5.486 MeV) entering through the p⁺ anode."
+        "bias for an Am-241 alpha (5.486 MeV) whose Bragg generation profile starts at "
+        "the p⁺/n⁻ junction and runs into the epi."
     )
     about(
         "- **Model:** steady-state 1D drift-diffusion (SRH recombination) under "
