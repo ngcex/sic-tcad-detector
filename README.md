@@ -135,6 +135,10 @@ calibrated removal is re-fitted per convention so its per-proton calibration hol
   breakdown and gain. The default facades do not use it
   ([USAGE §18](docs/USAGE.md#18-physical-model-library-opt-in-high-field-mobility-anisotropy-avalanche-and-breakdown)).
 
+- `etna.run_design`: Bayesian design optimisation (constraints, Pareto fronts, robust
+  mode over the DESIGN-1 tolerances) on the batched engine, no devsim in the loop
+  (issue #10, [USAGE §21](docs/USAGE.md#21-design-optimisation-etnarun_design-etnadesign)).
+
 **Not modelled:** high injection / plasma, edge termination and guard rings on the
 default path (the opt-in breakdown is the parallel-plane value), oxide charge, 3D. Full list and the
 full-depletion definitions in [USAGE §8](docs/USAGE.md#8-validity-and-limits).
@@ -266,9 +270,9 @@ uv run pytest -n auto -q -m exhaustive     # the 6 deselected deep variants
 uv run pytest -n0 -x tests/test_api_cce.py # serial, e.g. with --pdb
 ```
 
-1972 tests in 154 modules. `pytest.ini` deselects the 6 `exhaustive` ones, so the default
-run is 1966 tests: all pass with `--extra dev --extra viz`, and with `--extra dev` only
-1958 pass and 8 skip (manim/gdstk). On a 10-core Apple M4 shared with other jobs, `-n auto`
+1997 tests in 156 modules. `pytest.ini` deselects the 6 `exhaustive` ones, so the default
+run is 1991 tests: all pass with `--extra dev --extra viz`, and with `--extra dev` only
+1983 pass and 8 skip (manim/gdstk). On a 10-core Apple M4 shared with other jobs, `-n auto`
 took 169–205 s on 2026-10-21 (600 s on a heavily loaded machine): plan on about 3 minutes. `pytest.ini` supplies the tuned
 xdist scheduler; use `-n0` for pdb.
 

@@ -26,6 +26,13 @@ SiC neutron NIEL normalisation (2026-10-21): NJOY HEATR on ENDF/B-VIII.0, checks
 ASTM E722 / Griffin, an independent elastic integration, the ENDF/B-VII.1 carbon spread
 and the spectrum sensitivity of r_n. Data in `data/niel/`, numbers in `notes/LOG.md`.
 
+## `lab/design_opt`
+
+Design optimisation on the batched engine (`etna/design/`, `etna.run_design`, issue #10,
+2026-10-21): evaluator throughput, BO vs Sobol on analytic and dosimeter problems, robust
+mode, alternative-physics sensitivity of the optimum: `bench/design_bench.py`, numbers in
+`notes/LOG.md`.
+
 ## `lab/solver2d`
 
 2D numba engine spike (2026-10-16), promoted to `etna/core/engine2d/`; production parity

@@ -31,6 +31,7 @@ Contents
 18. [Physical-model library (opt-in): high-field mobility, anisotropy, avalanche and breakdown](#18-physical-model-library-opt-in-high-field-mobility-anisotropy-avalanche-and-breakdown)
 19. [Single-ion track engine (opt-in, `etna.core.track`)](#19-single-ion-track-engine-opt-in-etnacoretrack)
 20. [Uncertainty quantification and global sensitivity (`etna.uq`, `run_uq`)](#20-uncertainty-quantification-and-global-sensitivity-etnauq-run_uq)
+21. [Design optimisation (`etna.run_design`, `etna.design`)](#21-design-optimisation-etnarun_design-etnadesign)
 
 ---
 
@@ -2265,9 +2266,9 @@ uv run pytest -n0 -x tests/test_api_cce.py        # serial, e.g. with --pdb
 uv run pytest -n auto -q --durations=20           # slowest tests
 ```
 
-- 154 modules and 1972 tests (2026-10-21). `pytest.ini` deselects the `exhaustive` marker
+- 156 modules and 1997 tests (2026-10-21). `pytest.ini` deselects the `exhaustive` marker
   (6 redundant deep variants, each implied by a kept test), so the default run collects
-  1966: all pass with `--extra dev --extra viz`; with `--extra dev` only, 1958 pass and 8
+  1991: all pass with `--extra dev --extra viz`; with `--extra dev` only, 1983 pass and 8
   skip (the manim and gdstk tests). The `slow` marker labels the devsim integration tests
   but does not deselect them.
 - `pytest.ini` adds `--dist loadgroup --no-loadscope-reorder` (inert without `-n`), so
@@ -3083,3 +3084,133 @@ Budget about (F + 2)·n / rate seconds, e.g. CCE with n = 64: 576 evaluations, a
 - The N_t range lies below its fitted value by construction.
 
 Open items: `lab/uq/notes/LOG.md`.
+
+---
+
+## 21. Design optimisation (`etna.run_design`, `etna.design`)
+
+`etna.run_design` searches the 1D p+/n-/n+ stack for designs that meet constraints and trade objectives against each other. Every candidate is solved on the batched numba engine, a whole batch at a time. devsim never solves anything here. The older `etna.core.optimization.microdosimetric_sweep` (notebook 13) is a combinatorial grid on the devsim / 2D paths; it is kept unchanged. Issue #10 has the research and the plan.
+
+```python
+import etna
+
+r = etna.run_design(n_iter=6, batch_size=8, seed=0)        # default: dosimeter Pareto
+for p in r.metadata["pareto"]:
+    print(p["variables"]["epi_thickness_um"], p["metrics"]["sensitivity_nC_per_Gy"],
+          p["metrics"]["cce_fluence"])
+fig = etna.viz.figure_for(r)                                # kind "design"
+
+best = etna.run_design(objectives=["min:V_fd"], constraints=["sensitivity_nC_per_Gy>=14"],
+                       n_iter=4, batch_size=4, seed=1)      # one objective
+rob = etna.run_design(robust="worst", n_iter=5, batch_size=8, seed=0)
+```
+
+### Variables and bounds
+
+**Defaults.** The default variables are:
+- `epi_thickness_um`;
+- `N_D_bulk`;
+- `N_D_junction`;
+- `L_transition_um`;
+- `buffer_thickness_um`.
+
+**Opt-in variables:** `buffer_end_doping`, `substrate_thickness_um` (the p+ depth) and `area_cm2`.
+
+**Bounds are derived, never hand-set.** Each range is the engine cross-check box `_ENGINE_BOX` (section 7), intersected with any `bounds={name: (lo, hi)}` you pass. In robust mode the range is also shrunk by the tolerance, so that every perturbed copy stays inside the box too. A design outside the box, or one the engine does not converge, comes back `ok = False` with a reason, and the optimiser models it as a failure region. It is never re-solved on devsim.
+
+**Lattices.** The epi thickness sits on a 0.25 µm lattice and the p+ depth on 0.05 µm. The thicknesses define the engine mesh, so the lattice lets candidates share one batched solve.
+
+**Area bound.** The upper bound of `area_cm2` comes from `data/foundry/layout_params.toml`: die_side minus the guard-ring periphery. It rests on PLACEHOLDER dimensions, and its note says so. The layout file has no epi or doping rules.
+
+### Metrics
+
+All metrics are taken at `DesignSettings.V_work`, default −10 V (the DESIGN-1 recommendation; |V| ≤ 100 V).
+
+| metric | meaning |
+| --- | --- |
+| `V_fd`, `vfd_gate` | analytic V_fd to the transition start (`VFD_DEFINITION`); gate = 1.2 V_fd / \|V_work\| |
+| `W_dep_um`, `capacitance_F` | depletion edge, small-signal C × area |
+| `cce` | alpha CCE relative to in-epi generation (= `run_cce`); use it as a **constraint**: every depleted design sits near 1 |
+| `cce_uniform`, `sensitivity_nC_per_Gy` | uniform in-epi generation; collected charge per Gy (water) of a `proton_energy_MeV` beam (NIST PSTAR) |
+| `dark_current_A`, `dark_density_A_cm2`, `noise_Qmin_fC` | the calibrated leakage budget; shot-noise floor (`estimate_noise_floor`) |
+| `transit_time_s` | max(t_e, t_h), drift with `lades2000` velocity saturation |
+| `cce_fluence` (costly) | alpha CCE after `settings.fluence` (default 1e14 p/cm², 62 MeV) with the config's damage model |
+| `V_bd` (costly) | 1D parallel-plane breakdown, an upper bound |
+
+**Parity with the facades.** The evaluator reproduces `run_cv`, `run_cce`, `run_dark_current`, `run_transit_time`, `run_breakdown` and `run_radiation_damage` to round-off (`tests/test_design_device.py`).
+
+### Default problem, constraints and search
+
+**Default objectives:** maximise `sensitivity_nC_per_Gy` and maximise `cce_fluence`. This is the dosimeter trade-off: signal against radiation hardness.
+
+**Default constraints:**
+- `vfd_gate <= 1`;
+- `cce >= 0.95 + 2e-4` (the DESIGN-2 gate plus the documented 1D mesh error of the CCE);
+- `dark_density_A_cm2 <= 4.5e-10`: the measured bound of the reference device (< 18 pA at −60 V on 4 mm²), per area.
+
+**How to state them.** Objectives are metric names, `"max:name"` / `"min:name"`, or `Objective`. Constraints are `"metric<=value"`, a tuple, or `Constraint`.
+
+**The search (`etna.design.bo`):**
+- a seeded, scrambled Sobol initial design;
+- a self-written Matérn-5/2 ARD Gaussian process (numpy plus `scipy.optimize`, with an analytic likelihood gradient);
+- one objective: expected improvement × probability of feasibility;
+- several objectives: ParEGO (random augmented-Chebyshev scalarisations) and a Pareto front;
+- batches of `batch_size` by kriging believer;
+- an implicit GP "solvable" constraint learnt from the failed points.
+
+**Reproducible and resumable.** Every random draw comes from `default_rng([seed, iteration])`. `checkpoint="run.npz"` writes the history after each iteration and resumes from it bit for bit; a checkpoint of another problem, seed or method is refused. Evaluations of identical points are cached in the process (`etna.design.clear_cache()`).
+
+### Robust mode
+
+`robust="worst"` or `"p5"`, or a `RobustSpec`, optimises the worst case, or the 5th percentile, of every objective and constraint. It is taken over the documented process tolerances of DESIGN-1 §2:
+- epi ±1 µm;
+- N_D_junction and N_D_bulk ±20 %;
+- L ±0.3 µm.
+
+**The sample.** One fixed, seeded sample is shared by all candidates (common random numbers): the nominal point, the 2⁴ corners and `n_samples` Sobol points, all uniform in the tolerance box (no distribution is documented). The costly `cce_fluence` uses only the nominal point and the low-doping corner. `<metric>_nominal` keeps the nominal value.
+
+### What the result says about the physics
+
+**What `metadata` carries:**
+- `pareto` (variables and metrics per design), `pareto_configs` and `best`;
+- `history`, `hypervolume_trace` and throughput;
+- `notes`, which list the unvalidated inputs.
+
+**`alt_physics`.** The front is re-evaluated under three alternatives:
+- the legacy removal model with the `si-neq` NIEL convention;
+- `si-neq` with the trap model;
+- `mobility="legacy_perp"`.
+
+For each it reports the fraction of the front that stays feasible and non-dominated. `breakdown` gives V_BD of the front designs.
+
+**Measured on the default problem** (`lab/design_opt/notes/LOG.md`, 2026-10-21, shared M4 at load 40-50):
+
+**Sample efficiency.**
+- BO's hypervolume after 60 designs is 4.8-4.9, against 3.0-3.4 for Sobol, on 3 seeds.
+- Branin: the gap to the optimum is 1e-4 after 36 evaluations, against 0.26 for Sobol.
+
+**The front is set by the epi thickness.** Sensitivity goes from 7.5 to 34 nC/Gy between 5.5 and 25 µm. CCE(1e14 p/cm²) goes from 0.99 to 0.88 over the same range. The binding constraint is the full-depletion gate at −10 V.
+
+**Robust optimum.** The worst-case front stops at 14 µm, against 25 µm nominal: the thick nominal designs fail the gate at +1 µm / +20 % doping.
+
+**Dependence on unvalidated physics.**
+- **The radiation-hardness axis exists only in the calibrated trap model.** Under the legacy removal model every front design is beyond full compensation at 1e14 and has no CCE.
+- `si-neq` lowers CCE(1e14) by up to 0.02. `legacy_perp` moves it by at most 0.015. Neither reorders the −10 V front.
+
+**Throughput.**
+- The cheap metric set costs about 6-11 ms per design in batches of 64 on one mesh, against 41-59 ms alone.
+- `cce_fluence` adds 55-320 ms per design: it is not batched across configs and is the bottleneck.
+
+### Microdosimeter cell (opt-in, fv2d)
+
+`run_design(problem="microdosimeter")` optimises the geometry of an annular-trench 3D-electrode cell on fv2d (`etna.design.micro`). The variables are the cell radius, the column radius and the epi. The objectives are:
+- `efficient_fraction`: the area-weighted fraction of the cell with alpha CCE ≥ 0.95;
+- `cell_area_um2`.
+
+**Cost.** One solve plus an 8-point stripe scan per design, about 0.5 s, sequential.
+
+**Caveats:**
+- The axisymmetric cell is **not** a column lattice (section 11.1).
+- The planar SV half-width of DESIGN-2 is not discriminated by the laterally uniform models, so it is not a variable.
+
+**Bench:** `lab/design_opt/bench/design_bench.py`; numbers in `lab/design_opt/notes/LOG.md`.

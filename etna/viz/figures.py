@@ -60,6 +60,7 @@ KINDS = {
     "stack": "Device stack cross-section (depth to scale)",
     "tilted_alpha_shape": "Validation: tilted-alpha CCE shape vs Micro Fig. 4b",
     "w_creep": "Validation: W(V) creep vs Photons Fig. 4b labels",
+    "design": "Design optimisation: Pareto front / best vs evaluations (run_design)",
 }
 MAP_KINDS = ("map_potential", "map_field", "map_doping", "map_electrons", "map_holes")
 
@@ -140,6 +141,8 @@ def kinds_for(obj) -> "list[str]":
         return ["tilted_alpha_shape"]
     if st == "validation_w_creep":
         return ["w_creep"]
+    if st == "design":
+        return ["design"]
     raise ValueError(
         f"no figure kind for {type(obj).__name__} sim_type={st!r} ({md.get('solver')})"
     )
@@ -884,7 +887,14 @@ def _w_creep(fig, res, notes, **_):
     notes.append(md["verdict"])
 
 
+def _design(fig, res, notes, **opts):
+    from etna.viz.design import design_figure
+
+    design_figure(fig, res, notes, **opts)
+
+
 _BUILDERS = {
+    "design": _design,
     "cv": _cv,
     "mott_schottky": _mott,
     "depletion": _depletion,

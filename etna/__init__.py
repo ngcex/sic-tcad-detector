@@ -47,6 +47,15 @@ def run_uq(*args, **kwargs):
 
     return _run_uq(*args, **kwargs)
 
+
+def run_design(*args, **kwargs):
+    """Design optimisation on the batched engine: ``etna.design.run_design`` (imported
+    lazily: scipy.stats / scipy.optimize stay out of ``import etna``)."""
+    from etna.design import run_design as _run_design
+
+    return _run_design(*args, **kwargs)
+
+
 __all__ = [
     "DeviceConfig",
     "LEGACY_PRESET",
@@ -83,6 +92,7 @@ __all__ = [
     "run_breakdown",
     "run_avalanche",
     "run_transit_time",
+    "run_design",
     "run_all",
     "Report",
     "SectionResult",
