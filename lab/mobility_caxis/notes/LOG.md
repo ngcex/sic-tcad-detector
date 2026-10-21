@@ -275,3 +275,21 @@ pipeline). The CCE(LET) tables: section 6.
   is within 4 % of it.
 - The FLASH transient estimator noise (~1e-4) hides the mobility effect there.
 - fv2d / alternative structures (notebook 19) take the default; no `DeviceConfig` route.
+
+## 9. Re-pinned tests, regenerated files
+
+Re-pinned to the c-axis numbers (the legacy value stays in a comment or a second assert):
+`tests/test_nplus.py` (1D spike CCE, 2D CCE with/without n+ generation),
+`tests/test_default_stack.py` (default CCE record, transient anode), `tests/test_charge_collection.py`
+(Hecht 300 K), `tests/test_material.py` (legacy formula tests now take legacy params;
+device mobility 1096.28 / 109.01), `tests/test_microdosimeter_preset.py` (0 V 0.9920, old
+30 V doping 0.9583), `tests/test_viz_figures.py` (Fig. 4b model 0.9920),
+`tests/test_radiation_traps.py` (charged-trap pins), `tests/test_physics_models.py`
+(ayalew2004 vs legacy). `tests/test_displacement_current.py` uses `legacy_perp` on its
+uniform-field device (the c-axis mu_n / mu_p ratio leaves 3 time steps in its electron-
+only window; the q N v / d check is set-agnostic). `tests/test_app_device_sidebar.py`:
+the new field. Regenerated: `data/cce_let_table_{100,300}um.json`,
+`examples/measurements/data/it_synthetic.csv` (make_synthetic.py; I(T) moves by < 5e-6),
+`lab/geometry2d/notes/devsim_baselines.json` / `devsim_psi.npz` (devsim_baselines.py).
+Notebooks carry no committed outputs; nb14's first-order transit times (78 / 285 ps, high-
+field velocities) are not ETNA mobility numbers and were left.
