@@ -406,8 +406,8 @@ def test_tilted_alpha_shape_not_reproduced():
         9.0, abs=0.1
     )
     assert list(md["data_V"]) == [0, -5, -10, -20, -30, -40, -50]
-    # 0.9920 with the c-axis mobility default (2026-10-21; 0.9928 legacy_perp)
-    assert md["model_at_data"][0] == pytest.approx(0.9920, abs=1e-3)
+    # 0.9928 (c-axis electron default of 2026-10-21 and legacy_perp alike)
+    assert md["model_at_data"][0] == pytest.approx(0.9928, abs=1e-3)
     assert abs(md["rise_20_50_model"]) < 2e-3 < md["rise_20_50_data"]
     assert md["rms"] > 0.02  # not reproduced
     assert "NOT reproduced" in md["verdict"]

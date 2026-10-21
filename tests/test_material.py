@@ -317,11 +317,11 @@ class TestRegressionT300K:
         # v1.0 uses mobility_caughey_thomas(N_D) with N_D=1.07e15; hole mobility at the epi doping since 2026-10-17 (was N_A, audit-v7 A-03):
         # mu_p 75.68 -> 121.12 cm2/Vs
         # mu_p 75.68 -> 121.12 cm2/Vs. Since 2026-10-21 the default set is "c_axis"
-        # (mu_n 913.39 -> 1096.28, mu_p 121.12 -> 109.01); "legacy_perp" keeps v1.0.
+        # (mu_n 913.39 -> 1096.28, mu_p unchanged 121.12); "legacy_perp" keeps v1.0.
         mu_n_v1 = mobility_caughey_thomas(1.07e15, "electron")
         mu_p_v1 = mobility_caughey_thomas(1.07e15, "hole")
         assert dev["mu_n"] == pytest.approx(1096.2846199758114, rel=1e-12)
-        assert dev["mu_p"] == pytest.approx(0.9 * mu_p_v1, rel=1e-12)
+        assert dev["mu_p"] == pytest.approx(mu_p_v1, rel=1e-12)
         dev = create_sic_device(
             device_name=f"reg300_mu_{uuid.uuid4().hex[:6]}", T=300, mobility="legacy_perp"
         )

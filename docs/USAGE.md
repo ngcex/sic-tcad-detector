@@ -609,10 +609,10 @@ Code: `etna.core.radiation_traps` and `PoissonBatch(traps=...)`.
 
 Numbers (default stack, 62 MeV, kappa 1.942; `lab/radiation_traps/bench/validate.py`,
 log in `lab/radiation_traps/notes/LOG.md`; computed with the perpendicular-to-c mobility
-of that date, now `mobility="legacy_perp"`. With the c-axis default of 2026-10-21 the
-traps row at -40 V reads 0.999758 / 0.999208 / - / 0.99619 / 0.97350 / - / 0.35376 /
-0.15162: the faster electrons collect more at 1e13-1e14, the slower holes less elsewhere,
-all within 1.3e-3; `tests/test_radiation_traps.py`):
+of that date, now `mobility="legacy_perp"`. With the c-axis electron default of
+2026-10-21 the traps row at -40 V reads 0.999780 / 0.999273 / - / 0.99642 / 0.97484 / - /
+0.35761 / 0.15297: the faster electrons collect more where trapping limits the collection,
+by up to 2.6e-3; `tests/test_radiation_traps.py`):
 
 | Phi_p (p/cm^2)    | 1e11     | 1e12     | 3e12     | 1e13  | 1e14  | 3e14  | 1e15  | 5e15  |
 | ----------------- | -------- | -------- | -------- | ----- | ----- | ----- | ----- | ----- |
@@ -1480,9 +1480,9 @@ figures.
 
 - `tilted_alpha_shape()`: `run_cce_tilted_alpha(microdosimeter_config())` at its defaults,
   normalised at -50 V, against the digitised Micro Fig. 4b points (read-off estimates,
-  ±0.0005). Shape only, nothing tuned. Result: model 0.9920 at 0 V vs data 0.9083 (0.9928
-  with the perpendicular-to-c mobility before 2026-10-21); rise -20 -> -50 V +0.0001
-  (model) vs +0.0096 (data); rms 0.0351 (0.0354 before). Not reproduced, as stated above.
+  ±0.0005). Shape only, nothing tuned. Result: model 0.9928 at 0 V vs data 0.9083 (the
+  same with the perpendicular-to-c mobility used before 2026-10-21); rise -20 -> -50 V
+  +0.0001 (model) vs +0.0096 (data); rms 0.0354. Not reproduced, as stated above.
 - `w_creep(config=DeviceConfig())`: `run_cv` (batched) W(V), depletion edge and eps*A/C,
   against the Photons Fig. 4b W labels 1.68 / 9.52 / 9.73 µm (±0.005 rounding). Result on
   the default stack (graded epi + 1.14 µm n-/n+ transition): eps*A/C 1.655 / 9.519 / 9.750
@@ -2294,7 +2294,7 @@ print(round(bd.metadata["V_BD"], 2), round(bd.metadata["mesh_error_V"], 3))   # 
 
 m = PhysicsModels(impact_ionization="hatakeyama2004", high_field_mobility="lades2000")
 a = run_avalanche(cfg, m, v_start=-100.0, n_points=6, approach_breakdown=True)
-print(a.y.round(3))   # CCE with gain (not clipped): [1. 1.074 4.053 21.827 95.504 388.865]
+print(a.y.round(3))   # CCE with gain (not clipped): [1. 1.074 4.053 21.827 95.504 388.867]
 print(a.metadata["M_mcintyre"].round(3))  # McIntyre limit, same field: [... 95.57 389.781]
 
 t = run_transit_time(cfg, PhysicsModels(high_field_mobility="lades2000"), -10, -100, 4)
@@ -2303,33 +2303,36 @@ print((t.metadata["t_e"] / t.metadata["t_e_low_field"]).round(2))   # [1.44 2.87
 
 ### Default low-field mobility: parallel to the c-axis (since 2026-10-21)
 
-The current of the vertical (0001) diode flows along c. Until 2026-10-21 every solver used the Schaffer/Ayalew Caughey-Thomas set, which was measured **perpendicular** to c (Ayalew Table 3.5 is headed mu_perp; its eq. 3.81 gives mu_n,par = 1.2 mu_n). `DeviceConfig.mobility` now selects the set for every engine (devsim 1D/2D, batched 1D, engine2d, track, dark, FLASH, fluence):
+The current of the vertical (0001) diode flows along c. Until 2026-10-21 every solver used the Schaffer/Ayalew Caughey-Thomas set, which was measured **perpendicular** to c (Ayalew Table 3.5 is headed mu_perp; its eq. 3.81 gives mu_n,par = 1.2 mu_n, mu_p,par = mu_p). `DeviceConfig.mobility` now selects the set for every engine (devsim 1D/2D, batched 1D, engine2d, track, dark, FLASH, fluence):
 
-| `mobility=`               | Electrons                                                                                                                    | Holes                                                      | Use                                             |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ----------------------------------------------- |
-| `"c_axis"` (default)      | Ishikawa 2025 thesis Eq. 2.16, drift mobility parallel to c, at 300 K (1190 / 10 / 1e17 / 0.54); T law gamma -2.40 on mu_max | legacy x 0.90 (thesis drift ratio mu_par / mu_perp)        | vertical transport                              |
-| `"legacy_perp"`           | Schaffer/Ayalew perpendicular (950 / 40 / 1.94e17 / 0.61, gamma -2.40)                                                       | Schaffer/Ayalew (125 / 15.9 / 1.76e19 / 0.34, gamma -2.15) | the earlier numbers, bit for bit                |
-| `"ishikawa2025"` (opt-in) | Eq. 2.16 with its full T law (fitted 300-600 K)                                                                              | thesis Eq. 4.6 (Hall, parallel to c)                       | sensitivity to the T law and the hole magnitude |
+| `mobility=` | Electrons | Holes | Use |
+| --- | --- | --- | --- |
+| `"c_axis"` (default) | Ishikawa 2025 thesis Eq. 2.16, drift mobility parallel to c, at 300 K (1190 / 10 / 1e17 / 0.54); T law gamma -2.40 on mu_max | unchanged (legacy set, isotropic as Ayalew eq. 3.81) | vertical transport |
+| `"legacy_perp"` | Schaffer/Ayalew perpendicular (950 / 40 / 1.94e17 / 0.61, gamma -2.40) | Schaffer/Ayalew (125 / 15.9 / 1.76e19 / 0.34, gamma -2.15) | the earlier numbers, bit for bit; the historical presets |
+| `"c_axis_holes_0p9"` (opt-in) | as `c_axis` | legacy x 0.90 (thesis drift ratio mu_par / mu_perp, one opened primary) | the hole-anisotropy alternative |
+| `"ishikawa2025"` (opt-in) | Eq. 2.16 with its full T law (fitted 300-600 K, warns outside) | thesis Eq. 4.6 (Hall, parallel to c) | sensitivity to the T law and the hole magnitude |
 
-Mobility at the epi bulk (3.38e13), 300 K: electrons 945.4 -> 1174.4 cm2/Vs (+24.2 %), holes 123.8 -> 111.4 (-10 %). The primaries agree on the electrons (the thesis's perpendicular drift fit equals the legacy set within 3.5 % up to 5e15; vertical-SBD drift 1070 +- 290 at 1e15; mu_par / mu_perp 1.16-1.21), not on the electron T law (drift fit -3.4 vs Hall -2.4 to -3.2) nor on the hole magnitude (Hall 83-124 at low N_A), so only the agreed parts changed. Sources, cross-checks and decisions: `lab/mobility_caxis/notes/LOG.md`.
+Mobility at the epi bulk (3.38e13), 300 K: electrons 945.4 -> 1174.4 cm2/Vs (+24.2 %, uncertainty about +-8 %, the Hall-factor conversion); holes 123.8, unchanged. The primaries agree on the electrons (the thesis's perpendicular drift fit equals the legacy set within 3.5 % up to 5e15; vertical-SBD drift 1070 +- 290 at 1e15; mu_par / mu_perp 1.16-1.21). They do not agree on the electron T law (drift fit -3.4 vs Hall -2.4 to -3.2: -2.40 kept) nor on the holes (magnitude 83-124 cm2/Vs Hall at low N_A; anisotropy 0.9 Ishikawa, 1/1.15 Hatakeyama 2003, isotropic Ayalew), so the holes stay as they were (uncertainty along c about -35 / +0 %). Sources, cross-checks and decisions: `lab/mobility_caxis/notes/LOG.md`.
 
 Effect on the default dosimeter (`lab/mobility_caxis/bench/caxis_bench.py`, before = `legacy_perp`, after = `c_axis`):
 
-| Output                                                           | Before                                    | After                                                                  |
-| ---------------------------------------------------------------- | ----------------------------------------- | ---------------------------------------------------------------------- |
-| C-V, W(V), every C-V fit (Photons Fig. 4b labels, Bruzzi)        |                                           | identical (electrostatics)                                             |
-| alpha CCE (`run_cce`) at -2 / -10 / -40 / -100 V                 | 0.993707 / 0.999429 / 0.999845 / 0.999936 | 0.993031 / 0.999374 / 0.999831 / 0.999930                              |
-| electron transit, full depleted width, -10 / -40 / -100 V        | 125.1 / 34.0 / 11.3 ps                    | 103.6 / 28.6 / 9.4 ps (x0.83)                                          |
-| hole transit, same                                               | 935.6 / 249.5 / 84.6 ps                   | 1039.5 / 277.2 / 94.0 ps (x1.111)                                      |
-| dark current at -20 / -60 / -100 V                               | 7.637e-12 / 1.800e-11 / 2.487e-11 A       | same to < 2e-6 (generation-dominated; the 18 pA N_t calibration holds) |
-| CCE vs T at -30 V, dd, 250 / 300 / 450 K                         | 0.999813 / 0.999797 / 0.999757            | 0.999795 / 0.999778 / 0.999734                                         |
-| tilted-alpha CCE (microdosimeter preset) at 0 / -5 V             | 0.87545 / 0.99928                         | 0.86410 / 0.99921                                                      |
-| proton-damage CCE at 1e10 / 6e11 cm^-2, -40 V                    | 0.99982 / 0.99874                         | 0.99981 / 0.99870                                                      |
-| FLASH steady-state CCE, -30 V                                    | 0.999809                                  | 0.999791                                                               |
-| track engine (opt-in), LET 1000, 50 V: t95 of the cathode charge | 232.3 ps                                  | 268.1 ps                                                               |
-| CCE(LET) tables (2D sheet track, hw 50 um, 50 V; rebuilt on the same code) | CCE 0.9999625-0.9999703, t_collection 0.1168 ns | CCE 0.9999664-0.9999737, t_collection 0.1298 ns (tracked `data/` tables) |
+| Output | Before | After |
+| --- | --- | --- |
+| C-V, W(V), every C-V fit (Photons Fig. 4b labels, Bruzzi), V_BD | | identical (electrostatics) |
+| alpha CCE (`run_cce`) at -2 / -10 / -40 / -100 V | 0.993707 / 0.999429 / 0.999845 / 0.999936 | 0.993716 / 0.999433 / 0.999847 / 0.999937 (+8.5e-6 to +6.8e-7, mesh-converged to 0.3 %) |
+| electron transit, full depleted width, -10 / -40 / -100 V | 125.1 / 34.0 / 11.3 ps | 103.6 / 28.6 / 9.4 ps (x0.83) |
+| hole transit, same | 935.6 / 249.5 / 84.6 ps | unchanged |
+| dark current at -20 / -60 / -100 V | 7.637e-12 / 1.800e-11 / 2.487e-11 A | same to < 2e-6 (generation-dominated; the 18 pA N_t calibration holds) |
+| CCE vs T at -30 V, dd, 250 / 300 / 450 K | 0.999813 / 0.999797 / 0.999757 | 0.999814 / 0.999799 / 0.999759 |
+| Hecht CCE vs T at -30 V, 300 K | 0.994405 | 0.995475 |
+| tilted-alpha CCE (microdosimeter preset) at 0 V; Petringa Fig. 4b rms | 0.87545; 0.0354 | 0.87545; 0.0354 |
+| proton-damage CCE at 2.6e11 / 6e11 cm^-2, -40 V | 0.99930 / 0.99874 | 0.99932 / 0.99880 |
+| charged-trap CCE at 1e13 / 1e14 / 1e15 p/cm2, -40 V | 0.996109 / 0.972203 / 0.354958 | 0.996417 / 0.974836 / 0.357614 |
+| FLASH steady-state CCE, -30 V | 0.999809 | 0.999811 |
+| FLASH transient CCE, 20 / 100 Gy/s | 0.999725 / 0.999869 | 0.999725 / 0.999869 |
+| track engine (opt-in), LET 10 / 1000, 50 V: t95 of the cathode charge | 121.4 / 232.3 ps | 120.7 / 237.2 ps |
 
-The CCE losses move with the holes (minority carriers in the undepleted epi: a 10 % lower hole mobility shortens their diffusion length), not with the electrons (`section_decomposition` in the bench). 2D devices take the scalar c-axis mobility in both directions: vertical transport is right, lateral electrons are about 20 % too mobile (no mobility tensor yet). Tests: `tests/test_mobility_caxis.py` (registry, cross-checks against the opened primaries, devsim-expression parity, legacy reproduction, engine/devsim parity of the selection).
+The legacy CCE pins hold within 1e-5; only the transit times and the trapping-limited collection (charged traps, Hecht) move. `"c_axis_holes_0p9"` gives CCE 0.993031 at -2 V and a hole transit x1.111 (the hole diffusion out of the undepleted tail sets the CCE loss). 2D devices take the scalar c-axis mobility in both directions: vertical transport is right, lateral electrons are about 20 % too mobile (no mobility tensor yet). Tests: `tests/test_mobility_caxis.py` (registry, cross-checks against the opened primaries, devsim-expression parity, legacy reproduction, engine/devsim parity of the selection).
 
 ### The selection: `PhysicsModels`
 
@@ -2366,7 +2369,8 @@ Status **primary** means the numbers were read in the primary source. Status **s
 | `hatakeyama2004`                                    | primary: APL 85, 1380 (2004), doi:10.1063/1.1784520, Table I                                                                             | <0001> and <11-20>; 300 K; fitted 2-5 MV/cm. The SISPAD-2005 anisotropic interpolation is `hatakeyama_anisotropic_alpha` (tested, not coupled into 2D)                                                                                               |
 | `niwa2015`, `zhao2019`, `loh2008`, `stefanakis2021` | secondary (review Table XIII)                                                                                                            | Primaries not opened. The review flags Zhao 2019's hole c, d. The `niwa2015` 300-448 K and `stefanakis2021` 300-573 K ranges are ETNA assumptions. The `loh2008` direction is not stated in the review                                               |
 | `ayalew2004_legacy`                                 | primary, **legacy**                                                                                                                      | The review finds b_n carried over from 6H. It is off by +48 to +94 % against Hatakeyama's measured V_BD below. Do not use it for predictions                                                                                                         |
-| `c_axis` mobility (default)                         | electrons primary (Ishikawa 2025 Kyoto thesis Eq. 2.16, drift, parallel to c); holes: `legacy_perp` x 0.90 (thesis drift ratio, primary) | 300 K values exactly Eq. 2.16; T law: gamma -2.40 on mu_max (Schaffer's <0001> exponent, secondary) instead of the thesis's -3.4 (a disagreement between drift and Hall fits). Hole magnitude uncertain -30 / +5 % (lab/mobility_caxis/notes/LOG.md) |
+| `c_axis` mobility (default) | electrons primary (Ishikawa 2025 Kyoto thesis Eq. 2.16, drift, parallel to c); holes: `legacy_perp` (unchanged) | 300 K values exactly Eq. 2.16; T law: gamma -2.40 on mu_max (Schaffer's <0001> exponent, secondary) instead of the thesis's -3.4 (a disagreement between drift and Hall fits). Holes unchanged because the primaries disagree (lab/mobility_caxis/notes/LOG.md) |
+| `c_axis_holes_0p9` mobility (opt-in) | as `c_axis`; holes x 0.90 (thesis drift ratio, primary; Hatakeyama 2003 1/1.15 secondary) | Ayalew eq. 3.81 (primary, older) says isotropic: not the default |
 | `ishikawa2025` mobility                             | primary (thesis Eqs. 2.16 and 4.6)                                                                                                       | Full thesis T laws, fitted 300-600 K; holes are HALL mobilities                                                                                                                                                                                      |
 | `legacy_perp` / `ayalew2004` mobility               | primary (Ayalew Table 3.5)                                                                                                               | Perpendicular to c. The electron gamma -2.40 is Schaffer's <0001> value; the hole -2.15 is borrowed from electrons. `legacy_perp` keeps mu_min T-independent                                                                                         |
 | `lades2000` high-field                              | electrons primary (Ayalew Table 3.6); parallel-to-c and holes secondary (Nilsson 2000 MC)                                                | **Hole beta and T laws are an assumption** (no published fit)                                                                                                                                                                                        |
@@ -2434,7 +2438,7 @@ The peak field at breakdown, against Hatakeyama's critical field F_C = 2.70 (1e1
 | C-V                                                      | none                                                         | Pure electrostatics; none of these models enters Poisson                                                                 |
 | CCE (alpha, steady state) with `lades2000` | -9.1e-5 at -10 V to -1.1e-4 at -100 V (c-axis default; -5.0e-5 / -6.5e-5 on a `legacy_perp` device) | Slower carriers recombine slightly more; lifetime >> transit |
 | `legacy_perp` device + `burin2024` anisotropy + `lades2000` | -1.7e-4 / -1.2e-4 | The previous opt-in route to c-axis transport (an anisotropy is refused on the c-axis default) |
-| Electron transit time (full depleted width), `lades2000` | x1.44 at -10 V, x7.10 at -100 V (66.4 ps instead of 9.4 ps; parallel v_sat 1.64e7 since the default is c-axis). `legacy_perp`: x1.25 / x4.65 (52.6 ps instead of 11.3 ps) | Velocity saturation is strong at 1e5 V/cm. Holes x1.09 to x2.37 (1130 / 223 ps). This is what a pulse-shape / timing analysis should use |
+| Electron transit time (full depleted width), `lades2000` | x1.44 at -10 V, x7.10 at -100 V (66.4 ps instead of 9.4 ps; parallel v_sat 1.64e7 since the default is c-axis). `legacy_perp`: x1.25 / x4.65 (52.6 ps instead of 11.3 ps) | Velocity saturation is strong at 1e5 V/cm. Holes x1.10 to x2.54 (1028 / 215 ps, parallel hole v_sat 6.5e6). This is what a pulse-shape / timing analysis should use |
 | CCE with avalanche, `hatakeyama2004`                     | 1.00001 at -1050 V, 1.0145 at -1525 V, 2.12 at -2000 V       | APD-like gain only within ~25 % of V_BD; none at the operating -10 to -100 V (M - 1 < 1e-5)                              |
 | Dark current with avalanche                              | x1.0137 at -1525 V, x2.03 at -2000 V                         | Multiplication of the TAT effective generation; see the note below                                                       |
 

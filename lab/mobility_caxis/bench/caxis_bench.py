@@ -31,8 +31,8 @@ from etna.api.simulation import (
 from etna.core.physics_models import LOW_FIELD_MOBILITY
 from etna.core.sic_material import SiC4H_Parameters, mobility_caughey_thomas_T
 
-SETS = ("legacy_perp", "c_axis", "ishikawa2025")
-SHORT = {"legacy_perp": "before", "c_axis": "after", "ishikawa2025": "ishikawa"}
+SETS = ("legacy_perp", "c_axis", "ishikawa2025", "c_axis_holes_0p9")
+SHORT = {"legacy_perp": "before", "c_axis": "after", "ishikawa2025": "ishikawa", "c_axis_holes_0p9": "holes0p9"}
 
 
 def cfg(name, **kw):

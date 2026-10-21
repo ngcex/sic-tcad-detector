@@ -187,11 +187,12 @@ def test_beyond_compensation_solved_and_gradual(sweeps):
     c = tr["cce_values"]
     assert np.all(np.diff(c) < 0)
     # regression pins (default stack, 62 MeV, -40 V), see docs/USAGE.md; c-axis mobility
-    # default since 2026-10-21 (legacy_perp: 0.996109 / 0.972203 / 0.354958 / 0.152176)
-    assert c[3] == pytest.approx(0.99619, abs=2e-4)  # 1e13 p/cm2
-    assert c[4] == pytest.approx(0.97350, abs=2e-4)  # 1e14
-    assert c[5] == pytest.approx(0.35376, abs=2e-3)  # 1e15 (1.9e15 neq)
-    assert c[6] == pytest.approx(0.15162, abs=2e-3)  # 5e15
+    # electron default since 2026-10-21 (legacy_perp: 0.996109 / 0.972203 / 0.354958 /
+    # 0.152176; the faster electrons collect more where trapping limits the collection)
+    assert c[3] == pytest.approx(0.99642, abs=2e-4)  # 1e13 p/cm2
+    assert c[4] == pytest.approx(0.97484, abs=2e-4)  # 1e14
+    assert c[5] == pytest.approx(0.35761, abs=2e-3)  # 1e15 (1.9e15 neq)
+    assert c[6] == pytest.approx(0.15297, abs=2e-3)  # 5e15
 
 
 def test_frozen_charge_devsim_parity_and_generation_independence(ref):

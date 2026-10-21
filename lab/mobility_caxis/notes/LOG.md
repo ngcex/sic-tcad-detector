@@ -1,6 +1,13 @@
 # c-axis low-field mobility default (issue #6 follow-up): log
 
-Started 2026-10-21. Code:
+Started 2026-10-21.
+
+> **Final state (section 12): strict reading.** The default `c_axis` changes the
+> electrons only; the holes stay the legacy (isotropic) set because the primaries disagree
+> on them. The holes x 0.90 variant described in sections 3-11 (the first version of this
+> branch) is the opt-in set `c_axis_holes_0p9`; its numbers there remain valid for it.
+
+Code:
 
 - `etna/core/physics_models.py`: `LowFieldMobility` (two forms, a direction) and the sets
   `c_axis` (new default), `legacy_perp` (previous default), `ishikawa2025` (opt-in), plus

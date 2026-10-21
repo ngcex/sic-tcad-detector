@@ -112,17 +112,27 @@ def test_c_axis_against_the_independent_cross_checks():
     for nn in (1e14, 1e15):
         r = mu(nn) / mobility_caughey_thomas_T(nn, 300.0, "electron", legacy)
         assert 1.16 <= r <= 1.25
-    # holes: the legacy basal-plane set x 0.90 (thesis drift ratio)
+    # holes: unchanged in c_axis (the primaries disagree on them); x 0.90 (thesis drift
+    # ratio) only in the opt-in c_axis_holes_0p9, whose electrons are c_axis's
     for T in (250.0, 300.0, 450.0):
+        np.testing.assert_array_equal(
+            L["c_axis"].mobility(N, T, "hole"), L["legacy_perp"].mobility(N, T, "hole")
+        )
         np.testing.assert_allclose(
-            L["c_axis"].mobility(N, T, "hole"),
+            L["c_axis_holes_0p9"].mobility(N, T, "hole"),
             0.9 * L["legacy_perp"].mobility(N, T, "hole"),
             rtol=1e-12,
+        )
+        np.testing.assert_array_equal(
+            L["c_axis_holes_0p9"].mobility(N, T, "electron"),
+            L["c_axis"].mobility(N, T, "electron"),
         )
 
 
 @pytest.mark.filterwarnings("ignore:low-field mobility:UserWarning")
-@pytest.mark.parametrize("name", ["legacy_perp", "c_axis", "ishikawa2025"])
+@pytest.mark.parametrize(
+    "name", ["legacy_perp", "c_axis", "c_axis_holes_0p9", "ishikawa2025"]
+)
 @pytest.mark.parametrize("carrier", ["electron", "hole"])
 def test_devsim_expression_is_the_numpy_evaluation(name, carrier):
     """The devsim string (device.mobility_ct_expression) evaluates to the numpy value
@@ -163,19 +173,16 @@ def test_legacy_selection_reaches_engine_and_devsim():
         )
         np.testing.assert_allclose(r.y, ref["cce_values"], atol=1e-6)
         res[cfg.mobility] = np.asarray(r.y)
-    # the c-axis holes (x 0.90) shorten the hole diffusion length: lower CCE at -2 V
+    # only the electrons change: the CCE moves by < 1e-5 (the losses are hole
+    # diffusion out of the undepleted tail, unchanged)
     d = res["c_axis"] - res["legacy_perp"]
-    assert -1e-3 < d[0] < -4e-4
+    assert np.all((d > 0.0) & (d < 1e-5))
 
 
 def test_transit_times_scale_with_the_mobility():
     a = run_transit_time(DeviceConfig(), v_start=-40.0, v_stop=-100.0, n_points=2)
     b = run_transit_time(LEGACY, v_start=-40.0, v_stop=-100.0, n_points=2)
-    np.testing.assert_allclose(
-        np.asarray(a.metadata["t_h"]) / np.asarray(b.metadata["t_h"]),
-        1 / 0.9,
-        rtol=1e-6,
-    )
+    np.testing.assert_array_equal(a.metadata["t_h"], b.metadata["t_h"])
     r_e = np.asarray(a.metadata["t_e"]) / np.asarray(b.metadata["t_e"])
     assert np.all((r_e > 0.80) & (r_e < 0.86))
 
@@ -212,7 +219,7 @@ def test_legacy_perp_reproduces_the_pre_change_pins():
     fl = sim.run_flash_recombination(LEGACY, dose_rates_Gy_s=[20.0])
     assert fl.y[0] == pytest.approx(0.999809, abs=1e-6)
     fl_new = sim.run_flash_recombination(DeviceConfig(), dose_rates_Gy_s=[20.0])
-    assert fl_new.y[0] == pytest.approx(0.999791, abs=1e-6)
+    assert abs(fl_new.y[0] - fl.y[0]) < 1e-5  # electrons only: within 1e-5
 
 
 def test_ishikawa2025_warns_outside_its_fitted_T_range():

@@ -100,9 +100,9 @@ def test_tilted_cce_vs_bias_pins_lab_numbers():
     # W(0 V) = 5.4 um, the depletion edge passes the track end (7.6 um) by -3 V, so the
     # steady-state DD curve is flat to 0.7 % from 0 V. Fig. 4b (0.908 at 0 V, +1 % from
     # -20 to -50 V) is NOT reproduced by the DD model at any doping (LOG.md section 9).
-    # c-axis mobility default since 2026-10-21: 0.9920 at 0 V (legacy_perp 0.9928; the
-    # holes diffusing from the undepleted tail are 10 % slower)
-    assert at(0.0) == pytest.approx(0.9920, abs=5e-4)
+    # c-axis electron mobility default since 2026-10-21: 0.99279 at 0 V (legacy_perp
+    # 0.99277; holes unchanged)
+    assert at(0.0) == pytest.approx(0.9928, abs=5e-4)
     assert at(-10.0) == pytest.approx(0.9998, abs=3e-4)
     assert at(-20.0) > 0.999
     assert np.all(np.diff(r.y) >= -1e-6)
@@ -124,9 +124,9 @@ def test_old_30V_fit_doping_is_still_simulable_but_not_the_preset():
     r = etna.run_cce_tilted_alpha(c, 0.0, -50.0, 11)
     assert r.metadata["reach_through_V"] == pytest.approx(30.0, abs=0.05)
     n = r.y / r.y[-1]
-    # 0.9668 with the qualitative curve; 0.9622 with the perpendicular-to-c mobility
-    # (legacy_perp, before 2026-10-21)
-    assert n[0] == pytest.approx(0.9583, abs=5e-4)
+    # 0.9668 with the qualitative curve; 0.9622 (0.96218 c-axis electrons, 0.96217
+    # legacy_perp)
+    assert n[0] == pytest.approx(0.9622, abs=5e-4)
     assert n[2] > 0.999  # -10 V
 
 
