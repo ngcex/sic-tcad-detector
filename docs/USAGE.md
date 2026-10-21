@@ -26,6 +26,7 @@ Contents
 15. [Development workflow](#15-development-workflow)
 16. [Troubleshooting](#16-troubleshooting)
 17. [Measurement inputs (`etna.measurements`)](#17-measurement-inputs-etnameasurements)
+18. [Single-ion track engine (opt-in, `etna.core.track`)](#18-single-ion-track-engine-opt-in-etnacoretrack)
 
 ---
 
@@ -992,7 +993,8 @@ figures.
 
 **Not modelled:**
 
-- high injection or plasma (FLASH)
+- high injection or plasma (FLASH). A single dense ion track (plasma / columnar
+  recombination) is handled only by the opt-in track engine (§18), at normal incidence.
 - edge termination and guard rings on the default path
 - oxide charge
 - impact ionisation and breakdown
@@ -1043,7 +1045,7 @@ header carries solver, domain, config and version.
 | C-V Analysis            | `run_cv`                                                                        | max reverse bias (default -50 V), points (40)                                                                                                                                                                                                                                                                                          | C-V, Mott-Schottky, eps*A/C and depletion edge vs V, full-depletion marker, CSV                                                                                                                                                                                                                                                                                                                                  |
 | Charge Collection (CCE) | `run_cce`                                                                       | V_start (-10), V_stop (-40), points (30); reverse bias only                                                                                                                                                                                                                                                                            | CCE vs bias, CSV                                                                                                                                                                                                                                                                                                                                                                                                 |
 | Field Map               | `run_field`, 1D or 2D                                                           | reverse bias (default -50 V, down to -200)                                                                                                                                                                                                                                                                                             | 1D: E(x), potential, net doping, CSV. 2D: heatmap viewer (field, potential, doping)                                                                                                                                                                                                                                                                                                                              |
-| Radiation Damage        | `run_radiation_damage`                                                          | proton energy (30/62/70/150 MeV), fluence range (default 0.7e-3 to 0.7 x the compensation fluence; with the opt-in charged-traps checkbox (`radiation_traps=True`) 0.01 x it to 1e16 neq), points (6), bias (-20 V)                                                                                                                                                                                                           | CCE vs fluence with NaN gaps explained. A persistent banner says kappa is SR-NIEL (Si neq) with the SiC neutron normalisation open                                                                                                                                                                                                                                                                               |
+| Radiation Damage        | `run_radiation_damage`                                                          | proton energy (30/62/70/150 MeV), fluence range (default 0.7e-3 to 0.7 x the compensation fluence; with the opt-in charged-traps checkbox (`radiation_traps=True`) 0.01 x it to 1e16 neq), points (6), bias (-20 V)                                                                                                                    | CCE vs fluence with NaN gaps explained. A persistent banner says kappa is SR-NIEL (Si neq) with the SiC neutron normalisation open                                                                                                                                                                                                                                                                               |
 | Dark Current            | total leakage vs T at one bias (`ParametricSweep` over T of `run_dark_current`) | T range (250-400 K), points (6), bias (-20 V), advanced N_t                                                                                                                                                                                                                                                                            | I_total vs T, CSV. A calibration banner is shown; only the total is shown                                                                                                                                                                                                                                                                                                                                        |
 | Microdosimetry          | `run_microdosimetry`                                                            | MC events CSV upload, SV thickness (10 µm) and width (100 µm, depth = width)                                                                                                                                                                                                                                                           | y·d(y), y_F / y_D, CSV. Independent of the sidebar                                                                                                                                                                                                                                                                                                                                                               |
 | Batch Sweep             | `ParametricSweep`                                                               | one of epi thickness, p+ thickness, N_A, N_D junction, N_D bulk, transition length, T, area; comma-separated values; facade (CCE vs bias, C-V, CCE vs temperature)                                                                                                                                                                     | overlaid curves, bulk CSV, per-value failures listed                                                                                                                                                                                                                                                                                                                                                             |
@@ -1615,3 +1617,71 @@ the sidebar device. A C-V file without an area uses the sidebar area, and the pa
 Outputs: figures (PNG), the comparison and E_a JSON, the donor-table JSON
 (`etna.donor_table/1`, readable by `load_donor_table_json`) and a Markdown report. Results
 are cached in the session and flagged when the file or the sidebar device changed.
+
+## 18. Single-ion track engine (opt-in, `etna.core.track`)
+
+The track engine solves one ion track in the default stack (or any `DeviceConfig`), axisymmetric in (r, z) at normal incidence. It models the dense track core, plasma (columnar) recombination by SRH + Auger, the pulse-height defect (PHD) and, opt-in, the lattice temperature.
+
+It is a separate engine. Nothing in the `run_*` facades calls it, and `build_cce_let_table` (2D Cartesian sheet track, linear) is unchanged. Issue #9; numbers and commands are in `lab/track_plasma/notes/LOG.md`.
+
+```python
+from etna import DeviceConfig
+from etna.core.track.phd import MESH_FAST, cce_vs_let, simulate_track, ion_let_profile, whk_along
+from etna.core.track.radial import gaussian, whk, thermalized, beta_of
+
+r = simulate_track(DeviceConfig(), LET_keV_um=1000.0, V_bias=50.0,
+                   radial=thermalized(whk(beta_of(1.0)), 10e-7), mesh=MESH_FAST)
+print(r.cce, r.recombined_fraction, r.ledger_residual)   # 0.998687 0.00131 2e-9
+
+df = cce_vs_let(DeviceConfig(), (1, 100, 1000), 10.0, gaussian(50e-7), mesh=MESH_FAST)
+
+let, epu = ion_let_profile("alpha", 5.486)               # NIST Bragg profile in SiC
+r = simulate_track(DeviceConfig(), LET_keV_um=let, V_bias=50.0, region="all",
+                   radial=lambda z: thermalized(whk_along(epu)(z), 10e-7), mesh=MESH_FAST)
+```
+
+**Model**
+
+- **Discretisation.** Cylindrical finite volumes; the first radial cell is 0.5-2 nm and spacing grows geometrically to R = 20-30 µm. The equations are fully coupled Newton on (ψ, n, p) with Scharfetter-Gummel fluxes, devsim's own discretisation. Both contact planes are ohmic over the full area, and the outer cylinder is reflecting.
+- **Time integration.** TR-BDF2 with an embedded local-truncation-error estimate, on a charge-weighted error per step (`rtol`, default 1e-4). Steps run from 1 fs to µs. The modified (chord) Newton reuses one SuperLU factorisation across stages and steps.
+- **Dark state.** Identical to the batched 1D engine (ψ to 1e-14 V; steady CCE to 1e-11).
+- **Generation.** `radial` gives the fraction of pairs per annulus exactly, so a core finer than the mesh is a conserved sub-grid quantity. Available models:
+  - `gaussian(w)`: commercial-TCAD style.
+  - `core_penumbra`.
+  - `whk(beta)`: Waligórski-Hamm-Katz, transferred from water by mass thickness (an approximation).
+  - `thermalized(model, s)`: a planar Gaussian spread s.
+- **Instantaneous or pulsed deposition.** Deposition is instantaneous by default; `pulse_sigma_s` gives a Gaussian pulse instead.
+- **Opt-in physics** (`etna.core.track.grid.device_from_config`):
+  - `auger_model="injection"`: Auger C falls above ~5e18 cm⁻³ (Tanaka 2023 via arXiv:2410.06798).
+  - `carrier_scattering=True`: Conwell-Weisskopf, Lades 4H-SiC fit.
+- **CCE.** `TrackResult.cce` is the induced charge from the pair balance: 1 − (recombined + wrong-contact minority + stored)/N_gen. The direct majority-carrier contact sums (`cce_cathode`) carry about 1e-5 of float64 round-off in the 1e19 layers.
+
+**Checks** (`tests/test_track_engine.py`):
+- Each run reports `ledger_residual` (pairs) and `extra["quad_err"]`.
+- With `energy=True`, the discrete Poynting theorem ∫J·E = Σ_c ψ_c ∫I_c − ΔW_field is checked; it closes to about 3e-5.
+- The heat solver matches the analytic line source to within 3 %.
+
+**Results to know** (50 V unless stated, details in the LOG):
+
+- **The core radius decides the plasma loss.** At LET 1000 keV/µm the recombined fraction is:
+  - 1.3e-4 with a 50 nm core;
+  - 1.3e-3 for WHK spread by 10 nm;
+  - 4.7e-2 for 1 nm;
+  - 0.18 for the bare sub-nm WHK core, where drift-diffusion is outside its validity.
+
+  The thermalisation radius for 4H-SiC is not known. Every PHD number from this engine is conditional on `radial`.
+- **Normal-incidence ions at 10–50 V.** Protons and 5.5 / 8 MeV alphas recombine 0.1–0.3 % of their pairs. The p+ dead layer (wrong-contact loss) is larger, at 2–6 %.
+- **0 V.** The CCE *rises* with LET (0.872 → 0.933 from 0.1 to 3000 keV/µm), so the linear-table assumption fails without depletion.
+- **Steady-state CCE is not the single-particle CCE** even at low injection. SRH in the depletion region needs both carriers at once (n_i ≈ 0).
+- **The 241Am tilted-alpha data (Fig. 4b) are not reproduced** by a normal-incidence proxy of the tilted track. The plasma loss is nearly bias-independent above 5 V. This confirms `lab/microdosimeter/notes/LOG.md` §9.
+
+**Electrothermal (opt-in, `thermal={"couple": True, "sink": "none"|"cathode"}`)**
+
+- **Physics.** Anisotropic κ (4.71 W/cm/K radial, 3.24 W/cm/K along c; arXiv:1712.00830) and c_v = 0.69 J/g/K × 3.21 g/cm³. Heat sources are Joule J·E (SG edge power), E_g per recombination, and prompt (E_pair − E_g) heat. Mobility and SRH τ follow T; transport stays isothermal SG (no thermodiffusion).
+- **Energy ledger.** The thermal ledger closes to ≤ 1e-7.
+- **Result.** For a single ion the heating is negligible unless the core is sub-10 nm: ΔT_max 118 K for ps in a 10 nm core at LET 1000, with ΔCCE −2.5e-4.
+
+**Cost and limits**
+
+- **Cost.** 2–5 s per event on `MESH_FAST` (6930 unknowns) and 4–15 s on `MESH_DEFAULT`, dominated by sparse LU. Use DEFAULT or finer for PHD numbers: the mesh error is about 5–8 % of the PHD.
+- **Not modelled:** tilted tracks (3D), velocity saturation, band-gap narrowing, hot carriers, and nuclear-stopping or window defects.
