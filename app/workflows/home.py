@@ -20,7 +20,7 @@ PAGES_TEXT = """
 | C-V Analysis | small-signal C(V), 1/C², depletion width | default doping **fitted** to the measured C-V (fit quality, not a prediction) |
 | Charge Collection | CCE vs reverse bias, Am-241 5.486 MeV alpha (NIST ASTAR Bragg profile, 18.43 µm range) | predicted, not validated against measurement |
 | Field Map | E(x), potential, doping; 2D maps | predicted |
-| Radiation Damage | CCE vs proton fluence (SR-NIEL κ(E), carrier removal or charged deep traps) | absolute fluence scale unvalidated (introduction rates; default Si-neq κ overstates SiC damage by r_n/r_p, opt-in sic-damage convention) |
+| Radiation Damage | CCE vs proton fluence (SR-NIEL κ(E) in the sic-damage convention; default: calibrated kinetic deep traps, legacy carrier removal selectable) | removal calibrated on other devices' C-V at one temperature; CCE vs fluence predicted; absolute fluence scale unvalidated (introduction rates, r_n spectrum) |
 | Dark Current | total leakage vs temperature | **calibrated** (N_t fitted to < 18 pA at −60 V): a budget estimate |
 | Microdosimetry | lineal-energy spectrum from uploaded MC events (Cauchy mean chord) | geometry-only, y in SiC |
 | Batch Sweep | one device parameter swept, curves overlaid | as the observable |

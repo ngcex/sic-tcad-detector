@@ -664,9 +664,10 @@ def cce_vs_fluence(
 ):
     """Compute CCE vs proton fluence at fixed reverse bias.
 
-    ``niel_table`` (opt-in): hardness table of
+    ``niel_table``: hardness table of
     ``etna.core.radiation_damage.hardness_table(particle, convention)`` (e.g. neutrons
-    or the SiC-damage convention); None = the default Si-neq proton table.
+    or the previous "si-neq" convention); None = the default-convention proton table
+    ("sic-damage" since 2026-10-21).
 
     Each fluence point is a separate damaged device (damaged lifetimes and donor
     profile applied before the Poisson equilibrium). By default all points are
@@ -727,18 +728,24 @@ def cce_vs_fluence(
         - "energy_MeV": float
         - "lifetime_model": str
 
-    Points at or beyond full donor removal (eta_removal * Phi_neq >= min N_D of
-    the epi; ~3.48e12 p/cm^2 at 62 MeV for the default stack (N_D_bulk 3.4e13) with the
-    SR-NIEL kappa 1.942 and eta 5, ~4.86e13 with the pre-2026-10-20 placeholder 0.35) are NOT
+    LEGACY model (``radiation_traps`` None / False / "legacy", the default of this
+    low-level function): points at or beyond full donor removal (eta_removal * Phi_neq
+    >= min N_D of the epi; for the default stack (N_D_bulk 3.4e13) at 62 MeV 4.36e12
+    p/cm^2 with the sic-damage kappa 1.552, 3.48e12 with the si-neq kappa 1.942) are NOT
     solved: CCE is NaN with a reason.
 
-    ``radiation_traps`` (OPT-IN, default None = the legacy removal model above,
-    unchanged): True or an ``etna.core.radiation_traps.RadiationTrapModel`` replaces the
-    donor removal by charged deep traps in Poisson (Burin Table I levels, dark
-    steady-state SRH occupancy, frozen in the illuminated solve). Every fluence is then
-    solved, also beyond the compensation fluence (semi-insulating epi). Batched engine
-    only: ``solver="devsim"`` or an out-of-scope device raises ValueError, an
-    unconverged point is NaN with a reason (never a silent legacy fallback).
+    ``radiation_traps``: "auto" (the DeviceConfig / run_radiation_damage default since
+    2026-10-21) = the calibrated kinetic preset ``radmanovac_calibrated`` (in the
+    convention of ``niel_table``) where the batched engine applies, else the legacy
+    model with the reason in "damage_model_note"; True (Burin Table I, steady), a preset
+    name or an ``etna.core.radiation_traps.RadiationTrapModel`` replace the donor
+    removal by charged deep traps in Poisson (dark occupancy frozen in the illuminated
+    solve). Every fluence is then solved, also beyond the compensation fluence
+    (semi-insulating epi); zero fluence stays on the legacy path (pristine device).
+    Explicit trap models are batched-engine only: ``solver="devsim"`` or an
+    out-of-scope device raises ValueError, an unconverged point is NaN with a reason
+    (never a silent legacy fallback). A model calibrated in another NIEL convention
+    than ``niel_table``'s raises ValueError.
     """
     return _cce_vs_fluence_multi(
         fluence_range,
@@ -1167,9 +1174,7 @@ def _cce_vs_fluence_multi(
     cce_vs_fluence result dict per damage-parameter set, in order.
     """
     from etna.core.radiation_damage import compute_damaged_params
-    from etna.core.radiation_traps import resolve_traps
 
-    trap_model = resolve_traps(radiation_traps)
     if solver not in ("auto", "engine", "devsim"):
         raise ValueError(
             f"solver must be 'auto', 'engine' or 'devsim' (got {solver!r})"
@@ -1183,6 +1188,9 @@ def _cce_vs_fluence_multi(
         L_transition=L_transition,
     )
     dev_kw.update(device_kwargs or {})
+    trap_model, damage_note = resolve_damage_model(
+        radiation_traps, dev_kw, V_bias, solver, niel_table
+    )
     # --- Pristine parameters for compute_damaged_params, at the device T ---
     T_dev = dev_kw.get("T", 300.0)
     pristine_tau_n = srh_lifetime(T_dev, "electron")
@@ -1232,6 +1240,10 @@ def _cce_vs_fluence_multi(
                 f"({'solver=devsim' if solver == 'devsim' else engine_reason}); the "
                 "devsim path has no charged-trap model"
             )
+        # a zero-fluence point has no traps: it stays on the legacy engine path, so
+        # it is the pristine device exactly (bit-identical to the legacy sweep)
+        pristine = [t for t in todo if t[2]["fluence_neq"] == 0.0]
+        todo = [t for t in todo if t[2]["fluence_neq"] != 0.0]
         if todo:
             cce_b, conv_b = _cce_fluence_engine_traps(
                 ref,
@@ -1251,7 +1263,7 @@ def _cce_vs_fluence_multi(
                         "radiation_traps: batched engine did not converge "
                         "(no devsim fallback for the charged-trap model)"
                     )
-        todo = []
+        todo = pristine
     elif solver == "engine" and engine_reason is not None:
         raise ValueError(
             f"cce_vs_fluence: batched engine unavailable ({engine_reason})"
@@ -1299,9 +1311,54 @@ def _cce_vs_fluence_multi(
             "energy_MeV": energy_MeV,
             "lifetime_model": lifetime_model,
             "radiation_traps": trap_model,
+            "damage_model_note": damage_note,
         }
         for p in range(P)
     ]
+
+
+def resolve_damage_model(
+    radiation_traps, dev_kw, V_bias, solver="auto", niel_table=None, log=True
+):
+    """(RadiationTrapModel or None, note) of a fluence sweep.
+
+    ``radiation_traps``: as ``radiation_traps.resolve_traps``; calibrated presets are
+    built in the convention of ``niel_table`` (``radiation_damage.table_convention``;
+    None = the default convention). "auto" (the DeviceConfig default) is the
+    calibrated preset where the charged-trap engine applies, else the LEGACY scalar
+    removal with ``note`` saying why (logged at WARNING and returned in the result:
+    documented, never silent). An explicit model / preset outside the engine's scope
+    raises later (no fallback). A model calibrated in another convention raises
+    ValueError (``check_trap_convention``)."""
+    from etna.core.radiation_damage import table_convention
+    from etna.core.radiation_traps import (
+        AUTO_DAMAGE_MODEL,
+        check_trap_convention,
+        resolve_traps,
+    )
+
+    conv = table_convention(niel_table)
+    if isinstance(radiation_traps, str) and radiation_traps == AUTO_DAMAGE_MODEL:
+        why = "solver='devsim'" if solver == "devsim" else None
+        why = why or _fluence_engine_reason(dev_kw, V_bias)
+        if why is not None:
+            note = (
+                f"radiation_traps='auto': legacy scalar donor removal ({why}: the "
+                "calibrated charged-trap model needs the batched engine; pass "
+                "radiation_traps='legacy' to silence, or change the device)"
+            )
+            if log:
+                logger.warning(note)
+            return None, note
+        if conv is None:
+            raise ValueError(
+                "radiation_traps='auto' with a user-built hardness table: the calibrated "
+                "preset needs a known NIEL convention (pass hardness_table(particle, "
+                "convention), or radiation_traps='legacy' / a RadiationTrapModel)"
+            )
+    model = resolve_traps(radiation_traps, conv)
+    check_trap_convention(model, conv)
+    return model, ""
 
 
 def cce_vs_bias_at_fluence(
@@ -1321,7 +1378,8 @@ def cce_vs_bias_at_fluence(
 ):
     """Compute CCE vs reverse bias voltage at a fixed proton fluence.
 
-    ``niel_table``: as in ``cce_vs_fluence`` (None = default Si-neq proton table).
+    ``niel_table``: as in ``cce_vs_fluence`` (None = the default-convention proton
+    table, "sic-damage"). LEGACY scalar damage model only (no charged traps).
 
     Creates a single damaged DD device using staged creation, then sweeps
     bias voltage to show how higher reverse bias recovers CCE at a given

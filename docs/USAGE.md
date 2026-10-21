@@ -67,10 +67,11 @@ What ETNA is **not**:
     V_bi matched (paper W to 2 significant figures) (`.planning/VALIDATION_LITERATURE.md`). It does not validate this device.
   - **Not reproduced / open**. The microdosimeter's measured alpha CCE-vs-bias shape is
     not reproduced by any drift-diffusion variant (section 8). FLASH plasma recombination
-    is not implemented. The NIEL hardness factors are SR-NIEL data in the Si
-    1-MeV-neq convention by default; the SiC neutron NIEL is computed with NJOY
-    (r_n = 1.069, opt-in `niel_convention="sic-damage"`; `data/niel/README.md`),
-    the introduction rates remain unvalidated. The tissue-equivalence kappa(E) uses real NIST
+    is not implemented. The NIEL hardness factors are SR-NIEL data, by default (since
+    2026-10-21) in the `sic-damage` convention built on the NJOY SiC neutron NIEL
+    (r_n = 1.069; `data/niel/README.md`); the literature introduction rates remain
+    unvalidated and the default damage model's removal is calibrated on other devices'
+    C-V at one temperature. The tissue-equivalence kappa(E) uses real NIST
     PSTAR/ASTAR data (SiC by Bragg additivity, `data/nist_star/`).
     SIMS is unavailable, so the epi/n+ position comes from the C-V fit.
 
@@ -87,7 +88,8 @@ What ETNA is **not**:
 | CCE vs bias (1D, alpha in epi)                            | **model** (low injection, steady state)                     | engine verified vs devsim; no measured CCE reproduced for the dosimeter                                                                                                    | `run_cce` docstring                                                                                                         |
 | Microdosimeter alpha CCE shape (Fig. 4b, Phys. Med. 2025) | **not reproduced**                                          | flat to 0.7 % from 0 V in the model; data drop to 0.908 at 0 V                                                                                                             | `run_cce_tilted_alpha` docstring, `lab/microdosimeter/notes/LOG.md` §9                                                      |
 | Dark current                                              | **calibration** (budget estimate)                           | one N_t fitted to < 18 pA at -60 V, 4 mm²; bias shape f_depl heuristic x Hurkx (1+Gamma), temperature shape assumed                                                        | `run_dark_current`, DESIGN-1                                                                                                |
-| CCE vs proton fluence                                     | **relative shape only**                                     | NIEL hardness factors: SR-NIEL data, Si-neq convention (SiC normalisation open); points at or beyond the compensation fluence are NaN                                      | `run_radiation_damage` docstring                                                                                            |
+| CCE vs proton fluence (default model, since 2026-10-21)   | **model**: removal **calibrated**, CCE **predicted**        | kinetic trap preset: literature levels (Burin/Capan) + direct removal d **calibrated** to 3 published 252.7 MeV C-V slopes (other devices, one temperature: removal mechanism NOT identified, a slow deep acceptor fits equally); NIEL `sic-damage` (computed r_n, spectrum-dependent 1.02-1.20); CCE vs fluence and beyond compensation **predicted**, not measured | `run_radiation_damage` docstring, section 6 "Defaults since 2026-10-21" |
+| Compensation fluence                                      | **model** (calibrated removal x NIEL)                       | 1.80e12 p/cm² at 62 MeV (default stack); 4.36e12 legacy scalar, 3.48e12 legacy si-neq                                                                                   | `compensation_fluence`                                                                                                      |
 | FLASH dose-rate CCE                                       | **numerical sensitivity bound**                             | no plasma or high-injection physics                                                                                                                                        | `run_flash_recombination`, `run_transient` docstrings                                                                       |
 | Tissue-equivalence kappa(E)                               | **data** (NIST) + approximation                             | NIST PSTAR/ASTAR (2026-10-20); SiC by Bragg additivity (error ~few % for p > 1 MeV, unverified estimate); LET-ratio convention, 0.43 @1 MeV -> 0.375 @150 MeV (p -> water) | `data/nist_star/README.md`, `compute_kappa_table`                                                                           |
 | 2D field maps                                             | **verified** vs devsim inside the engine2d box              | laterally uniform device; no edge termination                                                                                                                              | `tests/test_engine2d*.py`, `tests/test_field_engine_default_100V.py`                                                        |
@@ -487,39 +489,158 @@ r2 = run_field(DeviceConfig(half_width_um=50.0), bias_V=-30.0)
 print(r2.metadata["solver"], r2.x.size, r2.mesh.x_coords.size, r2.mesh.y_coords.max() * 1e4)  # engine2d 0 17784 ~11.3 um
 ```
 
-### `run_radiation_damage(config, fluences=None, V_bias=-40.0, proton_energy_MeV=5.6)`
+### `run_radiation_damage(config, fluences=None, V_bias=-40.0, proton_energy_MeV=5.6, *, particle="proton", niel_convention=None)`
 
 Returns CCE vs proton fluence. `x` is fluence (p/cm²), `y` is CCE. Metadata:
 
 - `valid` (bool per point) and `reason` (str per point)
-- `compensation_fluence` (p/cm²)
-- `solver` (the solver that ran the points: `batched` on the default stack, `devsim`
-  outside the engine box, joined when mixed) and `solver_per_point`
+- `damage_model` (`"charged_traps"` or `"carrier_removal"`), `damage_model_label` (the
+  trap model's provenance label) and `damage_model_note` (why `"auto"` ran the legacy
+  model, else empty)
+- `compensation_fluence` (p/cm², of the model that ran), `legacy_compensation_fluence`
+  (the scalar-removal reference) and, with traps, `trap_compensation_fluence`
+- `particle`, `niel_convention`, `kappa`
+- `solver` (the solver that ran the points: `batched` / `batched+traps` on the default
+  stack, `devsim` outside the engine box, joined when mixed) and `solver_per_point`
 - `V_bias`, `energy_MeV`
 
-The donor-removal model fully compensates the low-doped epi at a fluence that depends on
-the profile: 1.01e12 p/cm² at 5.6 MeV (3.48e12 at 62 MeV) on the default stack, 3.88e11
-(1.33e12) on the tabulated preset. Points at or beyond it are **NaN** with a reason, not solved. Choose the grid
-from `compensation_fluence`, and always check `valid`. With `fluences=None` the grid
-adapts to the device (`etna.api.simulation.default_fluence_grid`): 8 log-spaced points
-from 0.01x to 3x the compensation fluence: 6 are solved, and the last 2 are normally NaN
-with a reason (the 3x point always; `compensation_fluence` is a lower bound on the mesh
-threshold), showing where the model ends. Explicit grids are used as given.
+#### Defaults since 2026-10-21 (issues #5, #8) and how to get the old numbers
 
-NIEL hardness factors (audit C-5 / B-07, since 2026-10-20): kappa(E) =
-NIEL_p,Si(E) / NIEL_n,Si(1 MeV) from SR-NIEL-7 proton NIEL (1-1000 MeV, 59 energies,
-log-log interpolation) over the ASTM 95 MeV mb normalisation: 6.67 at 5.6 MeV, 2.75 at
-30, 1.94 at 62, 1.82 at 70, 1.12 at 150 MeV (the old placeholders were 0.50 / 0.35 /
-0.33 / 0.22 at 30-150 MeV and 5.6 MeV was silently clamped to 0.5). Energies outside
-1-1000 MeV raise `ValueError`. This is the 1-MeV-neq convention of the defect
-introduction rates (Burin et al., fitted to reactor data labelled in Si neq). The
-SiC/Si NIEL ratio of fission neutrons is now computed (r_n = 1.069, see "Neutron NIEL
-and NIEL conventions" below); it exceeds the proton one (0.94 at 5.6 MeV, 0.85 at
-62 MeV: `radiation_damage.niel_ratio_sic_si`), so this default kappa overstates the SiC
-damage per proton by r_n/r_p; the opt-in `niel_convention="sic-damage"` removes it. At
-5.6 MeV NIEL scaling is also known to overpredict measured Si damage by tens of percent.
-Data and provenance: `data/niel/` (raw SR-NIEL pages, CSVs, fetch script, README). The
-Radiation Damage page offers 30, 62, 70 and 150 MeV only.
+The maintainer changed two defaults; both old behaviours stay selectable by name:
+
+| | default since 2026-10-21 | previous default (selectable) |
+| --- | --- | --- |
+| NIEL convention | `niel_convention=None` = `"sic-damage"` (`radiation_damage.DEFAULT_NIEL_CONVENTION`) | `niel_convention="si-neq"` |
+| damage model | `DeviceConfig(radiation_traps="auto")`: the calibrated kinetic preset `trap_presets.radmanovac_calibrated` (direct donor removal) | `radiation_traps=False` or `"legacy"`: scalar donor removal, eta 5 /neq, points beyond compensation refused |
+
+```python
+import dataclasses
+from etna import DeviceConfig, run_radiation_damage
+old = run_radiation_damage(DeviceConfig(radiation_traps=False), fluences, -40.0, 62.0,
+                           niel_convention="si-neq")   # bit-identical to the old default
+new = run_radiation_damage(DeviceConfig(), fluences, -40.0, 62.0)
+```
+
+- **`radiation_traps` values (strict).** `"auto"` (default), `"legacy"` / `False`,
+  `True` (Burin Table I, steady occupancy: the opt-in model of 2026-10-18), a preset
+  name of `etna.core.trap_presets.PRESETS`, or a `RadiationTrapModel`. Anything else
+  raises (`1`, `"yes"`, unknown names).
+- **`"auto"` scope.** The charged-trap engine is batched-1D only. Where it cannot run
+  (`incomplete_ionization=True`, T outside 250-400 K, legacy geometry beyond 40 V,
+  `solver="devsim"` in the core function) `"auto"` runs the legacy model, logs a
+  warning and says why in `damage_model_note`. Explicit trap models never fall back:
+  they raise. `"auto"` is therefore not exclusive with `incomplete_ionization`; an
+  explicit trap model is.
+- **Zero fluence** stays on the legacy engine path: the pristine point is bit-identical
+  to the legacy sweep. Non-irradiated simulations (`run_cv`, `run_cce`, ...) do not read
+  `radiation_traps` and are unchanged.
+- **Which paths use which model.** The trap model runs in `run_radiation_damage`,
+  `run_all` ("damage"), the Radiation Damage page and the core
+  `cce_vs_fluence(radiation_traps=...)`. The core `cce_vs_fluence` keeps
+  `radiation_traps=None` (legacy) as its own default (it is the devsim-parity primitive).
+  `cce_vs_bias_at_fluence`, the C-V / dark current at fluence (notebooks 05, 11, 12,
+  13) and `RadiationDamageParams`-based helpers stay on the scalar model; they follow
+  the new NIEL default.
+- **Fluence grid.** With `fluences=None` (`default_fluence_grid`): trap model, 10
+  log-spaced points from 0.01x its compensation fluence to max(3x it, 1e16 neq), all
+  solved; legacy model, 8 points from 0.01x to 3x its compensation fluence (the last 2
+  normally NaN with a reason).
+- **Speed.** Default sweep (10 points, 62 MeV, -40 V, default stack): 1.2 s in a fresh
+  process with the numba cache on disk, 0.8 s warm (`lab/radiation_traps/bench/
+  default_flip.py`; the kinetic dark state is one batched implicit run for all points).
+  The first run after a clean checkout compiles the kernels (~15 s, once).
+
+Compensation fluence (`compensation_fluence(config, E)`: min N_D / (rate x kappa) of the
+model that runs; trap model: rate = neutral-bulk removal = every acceptor level filled +
+d = 7.4 + 4.69 = 12.09 /neq):
+
+| device, energy | default (traps, sic-damage) | legacy, sic-damage | legacy, si-neq (old default) |
+| --- | --- | --- | --- |
+| default stack, 62 MeV | 1.80e12 | 4.36e12 | 3.48e12 |
+| default stack, 5.6 MeV | 4.75e11 | 1.15e12 | 1.01e12 |
+| tabulated preset, 62 MeV | 6.90e11 | 1.67e12 | 1.33e12 |
+
+CCE at -40 V, 62 MeV, default stack, at fractions of each model's own compensation
+fluence (`lab/radiation_traps/bench/default_flip.py`):
+
+| x Phi_comp | 0.1 | 0.5 | 0.9 | 1.5 | 10 |
+| --- | --- | --- | --- | --- | --- |
+| old default (legacy, si-neq; Phi_comp 3.48e12) | 0.999618 | 0.998882 | 0.998294 | NaN | NaN |
+| legacy, sic-damage (4.36e12) | 0.999618 | 0.998882 | 0.998294 | NaN | NaN |
+| calibrated traps, si-neq, d 2.87 (1.70e12) | 0.999787 | 0.999572 | 0.999377 | 0.999113 | 0.996910 |
+| **new default** (calibrated traps, sic-damage, d 4.69; 1.80e12) | 0.999796 | 0.999611 | 0.999441 | 0.999209 | 0.997229 |
+
+At the same absolute fluences (0.1 ... 10 x 3.48e12 p/cm²) the new default gives
+0.999751 / 0.999414 / 0.999122 / 0.998745 / 0.995838 (old: 0.999618 / 0.998882 /
+0.998294 / NaN / NaN). The new default is LESS damaging below compensation (the legacy
+lifetime K_tau counts every level as a trap, the occupancy lifetimes only free ones) and
+keeps solving beyond it. These CCE numbers are predictions (no measured CCE vs fluence
+of this device).
+
+#### NIEL convention and the calibrated removal (consistency algebra)
+
+The two kinds of per-neq numbers in the chain transform differently:
+
+1. **Neutron-anchored literature rates** (Burin et al. arXiv:2407.16710 Table I: Z1/2
+   5.0, EH4 2.4, EH6/7 1.6 /neq; footnote b cites Hazdra et al., "Point defects in
+   4H-SiC epilayers introduced by neutron irradiation" (title read on the arXiv page;
+   that paper not opened). The rates are labelled in reactor 1-MeV neq. `sic-damage`
+   is normalised by r_n exactly so that a fission-spectrum neutron has the SAME kappa
+   in `si-neq` and `sic-damage` (`tests/test_neutron_niel.py`): these rates carry over
+   unchanged. Per PROTON they now give r_p(E)/r_n fewer defects (x0.80 at 62 MeV, x0.75
+   at 252.7 MeV). That is the intended physics correction of the decision, not
+   bookkeeping.
+2. **Proton-calibrated numbers** (the slow removal d, fitted to Radmanovac et al.
+   arXiv:2510.11304 Table 2 slopes per p/cm² at 252.7 MeV). The data are per proton and
+   convention independent; the model reads them as
+   g_p = kappa_c(252.7) x [G_lit(kappa_c Phi_p) + d_c],
+   with G_lit the per-neq removal that the (convention-independent) literature levels
+   produce in the depleted window. Hence d_c is convention DEPENDENT and is RE-FITTED in
+   each convention (`lab/radiation_traps/bench/convention_refit.py`, ~6 min):
+
+   | convention | kappa(252.7) | d (/neq) | chi2 (2 dof) | model g per p (onsemi, W2, W4) | literature-level share per p |
+   | --- | --- | --- | --- | --- | --- |
+   | si-neq | 0.8514 | 2.873 +- 0.221 | 1.13 | 4.95, 4.81, 4.41 | 2.41, 2.26, 1.91 |
+   | sic-damage | 0.6390 | 4.694 +- 0.303 | 1.03 | 4.86, 4.74, 4.47 | 1.80, 1.67, 1.43 |
+   | sic-1mev | 0.6051 | 5.097 +- 0.324 | 1.04 | 4.84, 4.73, 4.48 | 1.70, 1.57, 1.35 |
+
+   measured: 5.60 +- 0.81, 4.60 +- 0.33, 4.48 +- 0.26. The fitted per-proton slopes agree
+   between conventions to 0.09-0.11 /p, well inside the data sigmas: the per-proton
+   calibration is invariant, as it must be. Rescaling instead (d_si x kappa_si /
+   kappa_c = 3.83 /neq in sic-damage) would under-predict g by ~0.6 /p, because G_lit
+   does not scale.
+3. **No double counting.** The preset records its convention
+   (`RadiationTrapModel.niel_convention`); `resolve_traps("auto", convention)` builds it
+   in the run's convention, and every fluence sweep (`cce_vs_fluence`,
+   `KineticTrapSolver.from_config`, `calibrate_cv`) refuses a calibrated model under
+   another convention (`check_trap_convention`, ValueError). The literature levels
+   carry no convention (they are neutron-anchored).
+4. **What is NOT invariant** (and is reported, not hidden): the share of the removal
+   carried by the literature levels (above), the energy transfer from 252.7 MeV to other
+   energies (kappa_c(62) / kappa_c(252.7) = 2.43 in sic-damage vs 2.28 in si-neq: the
+   SiC vs Si NIEL energy dependence), hence the 62 MeV neutral-bulk removal per proton
+   (18.8 /p sic-damage vs 20.0 /p si-neq) and the compensation fluence (1.80e12 vs
+   1.70e12 p/cm², +6 %), and the CCE beyond compensation (fewer literature traps per
+   proton, more non-trapping removal).
+5. **Unconverted checks.** The flat-C-V brackets of Kroll (24 GeV/c, authors' Si kappa
+   0.62) and Li (~80 MeV, kappa unstated) are labelled in Si neq by the authors and
+   cannot be converted here (the proton tables stop at 1 GeV; Li's kappa unknown).
+   They are checks, not fit inputs (`bench/mechanisms.py`), and remain in Si neq.
+
+#### NIEL hardness factors
+
+NIEL hardness factors (audit C-5 / B-07, since 2026-10-20): SR-NIEL-7 proton NIEL
+(1-1000 MeV, 59 energies, log-log interpolation). Default `sic-damage`: kappa(E) =
+NIEL_p,SiC(E) / (r_n NIEL_n,Si(1 MeV)): 5.89 at 5.6 MeV, 1.55 at 62, 0.859 at 150, 0.639
+at 252.7 MeV. `si-neq` (the previous default): NIEL_p,Si(E) / NIEL_n,Si(1 MeV) over the
+ASTM 95 MeV mb normalisation: 6.67 at 5.6 MeV, 2.75 at 30, 1.94 at 62, 1.82 at 70, 1.12
+at 150 MeV (the old placeholders were 0.50 / 0.35 / 0.33 / 0.22 at 30-150 MeV and 5.6
+MeV was silently clamped to 0.5). Energies outside 1-1000 MeV raise `ValueError`. The
+SiC/Si NIEL ratio of protons r_p (0.94 at 5.6 MeV, 0.85 at 62 MeV:
+`radiation_damage.niel_ratio_sic_si`) is below the fission-neutron r_n = 1.069, so
+`si-neq` overstates the SiC damage per proton by r_n/r_p. At 5.6 MeV NIEL scaling is
+also known to overpredict measured Si damage by tens of percent. Data and provenance:
+`data/niel/` (raw SR-NIEL pages, CSVs, fetch script, README).
 
 ```python
 import numpy as np
@@ -527,8 +648,8 @@ from etna import DeviceConfig, run_radiation_damage
 from etna.api.simulation import compensation_fluence
 
 cfg = DeviceConfig()
-phi_c = compensation_fluence(cfg, 5.6)                       # 1.01e12 p/cm2
-r = run_radiation_damage(cfg, fluences=np.geomspace(1e9, 0.9 * phi_c, 5), V_bias=-40.0)
+phi_c = compensation_fluence(cfg, 5.6)                       # 4.75e11 p/cm2
+r = run_radiation_damage(cfg, fluences=np.geomspace(1e9, 10 * phi_c, 5), V_bias=-40.0)
 print(f"{phi_c:.3g}", r.metadata["valid"].all(), np.round(r.y, 4))
 ```
 
@@ -549,40 +670,41 @@ shapes.
 `trap_compensation_fluence` and `default_fluence_grid` take `particle=` and
 `niel_convention=` (keywords), and the core functions take `niel_table=`:
 
-| convention                    | kappa                                                                                               | 62 MeV proton |
-| ----------------------------- | --------------------------------------------------------------------------------------------------- | ------------- |
-| `si-neq` (default, unchanged) | NIEL_x,Si(E) / NIEL_n,Si(1 MeV, ASTM)                                                               | 1.942         |
-| `sic-damage`                  | NIEL_x,SiC(E) / (r_n NIEL_n,Si(1 MeV)): same SiC damage as the Si-labelled reactor neq of the rates | 1.552         |
-| `sic-1mev`                    | NIEL_x,SiC(E) / NIEL_n,SiC(1 MeV): SiC-native neq                                                   | 1.470         |
+| convention | kappa | 62 MeV proton |
+| ---------- | ----- | ------------- |
+| `si-neq` (default until 2026-10-21) | NIEL_x,Si(E) / NIEL_n,Si(1 MeV, ASTM) | 1.942 |
+| `sic-damage` (**default**) | NIEL_x,SiC(E) / (r_n NIEL_n,Si(1 MeV)): same SiC damage as the Si-labelled reactor neq of the rates | 1.552 |
+| `sic-1mev` | NIEL_x,SiC(E) / NIEL_n,SiC(1 MeV): SiC-native neq | 1.470 |
 
 `particle="neutron"` reads the fluences as neutrons and the energy as the neutron energy
 (bin-averaged NJOY table, 1/20 decade bins, ~1e-5 to 18.9 MeV, no extrapolation; 1 MeV:
 0.953 in `si-neq`, because the resonant damage function is averaged over the bin; 14 MeV:
-1.89, +4-5 % above Griffin). The default stays `si-neq`; with the fission r_n the
-default overstates the SiC damage per proton by r_n/r_p (x1.13 at 5.6 MeV, x1.25 at 62,
-x1.30 at 150 MeV), which is the factor `sic-damage` removes. Bench:
+1.89, +4-5 % above Griffin). With the fission r_n, `si-neq` overstates the SiC damage
+per proton by r_n/r_p (x1.13 at 5.6 MeV, x1.25 at 62, x1.30 at 150 MeV), which is the
+factor `sic-damage` removes; `sic-damage` is the default since 2026-10-21. Bench:
 `uv run python lab/neutron_niel/bench.py` (0.05 s).
 
 ```python
 from etna import DeviceConfig, run_radiation_damage
 from etna.api.simulation import compensation_fluence
 
-cfg = DeviceConfig()
-compensation_fluence(cfg, 62.0)                                  # 3.48e12 p/cm2
-compensation_fluence(cfg, 62.0, niel_convention="sic-damage")    # 4.36e12 p/cm2
-r = run_radiation_damage(cfg, proton_energy_MeV=14.0, particle="neutron",
-                         niel_convention="sic-damage")
+cfg = DeviceConfig(radiation_traps="legacy")
+compensation_fluence(cfg, 62.0, niel_convention="si-neq")        # 3.48e12 p/cm2
+compensation_fluence(cfg, 62.0)                                  # 4.36e12 p/cm2 (sic-damage)
+r = run_radiation_damage(cfg, proton_energy_MeV=14.0, particle="neutron")
 r.metadata["kappa"], r.metadata["particle"]                      # 1.535, 'neutron'
 ```
 
-#### Charged deep traps beyond compensation (opt-in, `radiation_traps=True`)
+#### Charged deep traps beyond compensation (`radiation_traps=True`: Burin Table I, steady)
 
 `DeviceConfig(radiation_traps=True)` (or a `RadiationTrapModel`) replaces the
 donor-removal scalar with the radiation-induced deep levels as charged species in
 Poisson, as in the Burin et al. TCAD approach (arXiv:2407.16710). Real irradiated 4H-SiC
 turns semi-insulating and keeps detecting. The legacy model refuses those points; this
-one solves them. Default `False`: nothing changes and every baseline stays pinned.
-Code: `etna.core.radiation_traps` and `PoissonBatch(traps=...)`.
+one solves them. Since 2026-10-21 the DEFAULT (`"auto"`) is the calibrated kinetic
+preset of the next subsections; `True` stays this steady Burin model. The numbers in this
+subsection are in the `si-neq` convention (pass `niel_convention="si-neq"` to reproduce
+them). Code: `etna.core.radiation_traps` and `PoissonBatch(traps=...)`.
 
 - **Traps.** N_t,k = eta_k * Phi_neq on the epi nodes, from Burin Table I via
   `RadiationDamageParams`:
@@ -627,9 +749,9 @@ Bulk physics (N_D 3.38e13):
   252.7 MeV.
 - **This model's own compensation fluence** is therefore min N_D / (7.4 kappa):
   **2.35e12 p/cm^2 at 62 MeV** on the default stack, below the legacy 3.48e12.
-  Metadata gives it as `trap_compensation_fluence`, and
-  `etna.api.simulation.trap_compensation_fluence` computes it. `compensation_fluence`
-  stays the legacy reference. The 3e12 column in the table above is already past it:
+  Metadata gives it as `trap_compensation_fluence` (and, since 2026-10-21, as
+  `compensation_fluence` of the run), and `etna.api.simulation.trap_compensation_fluence`
+  computes it; `legacy_compensation_fluence` is the scalar reference. The 3e12 column in the table above is already past it:
   CCE still matches legacy because the epi is over-depleted at -40 V.
 - **N_eff below compensation does not match legacy.** Legacy N_eff falls with fluence,
   while the trap model's depleted N_eff rises. Only CCE agrees there.
@@ -711,8 +833,10 @@ sources: GitHub issue #5.
 from etna import DeviceConfig
 from etna.core.trap_kinetics import KineticTrapSolver, hold, simulate_cv, neff_from_cv
 
-cfg = DeviceConfig(epi_thickness_um=50.0, doping_profile="uniform", N_D=4e13)
-s = KineticTrapSolver.from_config(cfg, [0.0, 1e12, 2e12], energy_MeV=252.7)  # p/cm2
+cfg = DeviceConfig(epi_thickness_um=50.0, doping_profile="uniform", N_D=4e13,
+                   radiation_traps=True)   # Burin table (the default "auto" = calibrated preset)
+s = KineticTrapSolver.from_config(cfg, [0.0, 1e12, 2e12], energy_MeV=252.7,
+                                  niel_convention="si-neq")  # p/cm2; numbers below: si-neq
 cv = simulate_cv(s, V_points, freq_Hz=1e6, occupancy="kinetic", initial="equilibrium",
                  storage=(hold(600.0, 0.0),), rate_V_per_s=1.0)
 cv.C_ac, cv.C_qs, neff_from_cv(V_points, cv.C_ac)   # F/cm2 (area 1), cm^-3
@@ -843,9 +967,13 @@ Follow-up of issue #5. The kinetic Burin table gives about half of the measured
 depleted-region removal (g 2.6 vs 5.6 +- 0.8 per p/cm2, Radmanovac et al.,
 arXiv:2510.11304). Evidence, every number and its source:
 `lab/radiation_traps/notes/MECHANISMS.md`; benches `bench/mechanisms.py` (about
-4 min) and `bench/cce_kinetic.py` (about 50 s). Every default is unchanged
-(`DeviceConfig().radiation_traps is False`; `radiation_traps=True` is still the
-steady Burin table).
+4 min) and `bench/cce_kinetic.py` (about 50 s). Since 2026-10-21 the
+`radmanovac_calibrated` preset below is the DEFAULT damage model
+(`DeviceConfig().radiation_traps == "auto"`); `radiation_traps=True` is still the steady
+Burin table. The numbers of this subsection were computed in the `si-neq` convention
+(d = 2.87 /neq); in the default `sic-damage` convention the re-fitted d is 4.69 /neq and
+the per-proton slopes are the same within 0.1 /p (see "NIEL convention and the
+calibrated removal").
 
 **New model pieces** (fields of `RadiationTrapModel` / `DeepTrap`):
 
@@ -870,13 +998,13 @@ steady Burin table).
 **Presets** (`etna.core.trap_presets.trap_preset(name)`; pass the returned model as
 `DeviceConfig(radiation_traps=...)`):
 
-| Preset                                | Content                                                                                                                                                                                            | Label                            |
-| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
-| `burin_steady`                        | the default trap table                                                                                                                                                                             | literature                       |
-| `burin_kinetic`                       | same table, kinetic occupancy                                                                                                                                                                      | literature                       |
-| `literature_kinetic`                  | Z1/Z2 two-level (Capan et al. JAP 124 (2018) 245701, Table I: energies and Arrhenius emission, [Z2]:[Z1] = 4.4, 2.5 V_C/neq assumed) + EH4 + EH6/7 (sigma_n 1e-13) + kinetic + occupancy lifetimes | PREDICTED                        |
-| `radmanovac_calibrated`               | `literature_kinetic` + direct removal 2.87 +- 0.22 /neq                                                                                                                                            | CALIBRATED to Radmanovac Table 2 |
-| `radmanovac_calibrated_deep_acceptor` | same rate on a midgap acceptor (Ec-1.9)                                                                                                                                                            | CALIBRATED; identical C-V        |
+| Preset | Content | Label |
+| --- | --- | --- |
+| `burin_steady` | the default trap table | literature |
+| `burin_kinetic` | same table, kinetic occupancy | literature |
+| `literature_kinetic` | Z1/Z2 two-level (Capan et al. JAP 124 (2018) 245701, Table I: energies and Arrhenius emission, [Z2]:[Z1] = 4.4, 2.5 V_C/neq assumed) + EH4 + EH6/7 (sigma_n 1e-13) + kinetic + occupancy lifetimes | PREDICTED |
+| `radmanovac_calibrated` (**the default damage model since 2026-10-21**, `"auto"`) | `literature_kinetic` + direct removal d per convention: 4.69 +- 0.30 /neq (sic-damage, default), 2.87 +- 0.22 (si-neq), 5.10 +- 0.32 (sic-1mev) | CALIBRATED to Radmanovac Table 2 (per proton; re-fitted per convention, see "NIEL convention and the calibrated removal") |
+| `radmanovac_calibrated_deep_acceptor` | same rate on a midgap acceptor (Ec-1.9) | CALIBRATED; identical C-V |
 
 **Calibration on published numbers** (`trap_calibration.calibrate_removal`):
 
@@ -1462,7 +1590,9 @@ CI runner). This is a contact artefact, not punch-through.
   the cathode-cell field would exceed 5e4 V/cm, with a message meant for the user.
 
 **Compensation fluence.** See `run_radiation_damage`. Beyond `compensation_fluence(config,
-E)` the epi is fully compensated in this model, and the point is NaN with a reason.
+E)` the epi is fully compensated. The default (calibrated trap) model solves it as a
+semi-insulating epi (a prediction); the legacy scalar model (`radiation_traps=False`)
+returns NaN with a reason.
 
 **Microdosimeter alpha test not reproduced.** With the preset (N_D 1e14), the model CCE is
 flat to 0.5 % from 0 V. The data drop to 0.908 at 0 V and rise 1 % from -20 to -50 V. No
@@ -1547,7 +1677,7 @@ header carries solver, domain, config and version.
 | C-V Analysis            | `run_cv`                                                                        | max reverse bias (default -50 V), points (40)                                                                                                                                                                                                                                                                                          | C-V, Mott-Schottky, eps*A/C and depletion edge vs V, full-depletion marker, CSV                                                                                                                                                                                                                                                                                                                                  |
 | Charge Collection (CCE) | `run_cce`                                                                       | V_start (-10), V_stop (-40), points (30); reverse bias only                                                                                                                                                                                                                                                                            | CCE vs bias, CSV                                                                                                                                                                                                                                                                                                                                                                                                 |
 | Field Map               | `run_field`, 1D or 2D                                                           | reverse bias (default -50 V, down to -200)                                                                                                                                                                                                                                                                                             | 1D: E(x), potential, net doping, CSV. 2D: heatmap viewer (field, potential, doping)                                                                                                                                                                                                                                                                                                                              |
-| Radiation Damage        | `run_radiation_damage`                                                          | proton energy (30/62/70/150 MeV), fluence range (default 0.7e-3 to 0.7 x the compensation fluence; with the opt-in charged-traps checkbox (`radiation_traps=True`) 0.01 x it to 1e16 neq), points (6), bias (-20 V)                                                                                                                    | CCE vs fluence with NaN gaps explained. A persistent banner says kappa is SR-NIEL (Si neq by default) and states r_n; particle (proton/neutron) and NIEL convention selectors (defaults proton / si-neq)                                                                                                                                                                                                         |
+| Radiation Damage        | `run_radiation_damage` | damage model selector (default: calibrated kinetic traps = `radiation_traps="auto"`; legacy carrier removal; Burin Table I steady traps), particle (proton/neutron), NIEL convention (default sic-damage), energy (1-1000 MeV protons), fluence range (traps: 0.01 x the model's compensation fluence to 1e16 neq; legacy: 0.7e-3 to 0.7 x), points (6), bias (-20 V) | CCE vs fluence with NaN gaps explained (legacy). A persistent banner says kappa is SR-NIEL in the sic-damage convention (r_n = 1.069) and what is calibrated; an info box gives the compensation fluence of the chosen model and the legacy reference |
 | Dark Current            | total leakage vs T at one bias (`ParametricSweep` over T of `run_dark_current`) | T range (250-400 K), points (6), bias (-20 V), advanced N_t                                                                                                                                                                                                                                                                            | I_total vs T, CSV. A calibration banner is shown; only the total is shown                                                                                                                                                                                                                                                                                                                                        |
 | Microdosimetry          | `run_microdosimetry`                                                            | MC events CSV upload, SV thickness (10 µm) and width (100 µm, depth = width)                                                                                                                                                                                                                                                           | y·d(y), y_F / y_D, CSV. Independent of the sidebar                                                                                                                                                                                                                                                                                                                                                               |
 | Batch Sweep             | `ParametricSweep`                                                               | one of epi thickness, p+ thickness, N_A, N_D junction, N_D bulk, transition length, T, area; comma-separated values; facade (CCE vs bias, C-V, CCE vs temperature)                                                                                                                                                                     | overlaid curves, bulk CSV, per-value failures listed                                                                                                                                                                                                                                                                                                                                                             |
@@ -1892,17 +2022,17 @@ run is whatever `DeviceConfig()` / the core defaults are now, unless they pin a 
 | 02_electrical_characterization | C-V, Mott-Schottky, doping profile, I-V        |                                                                                                                                                                                           |
 | 03_charge_collection           | CCE vs bias, generation profiles, Hecht        | generator `scripts/create_notebook_03.py`                                                                                                                                                 |
 | 04_flash_recombination         | FLASH Auger/SRH CCE vs dose rate               | sensitivity bound only                                                                                                                                                                    |
-| 05_dark_current_vs_fluence     | dark current vs proton fluence                 | TAT on the batched engine; fluences are fractions of `compensation_fluence(DeviceConfig(), 62)` (3.48e12 p/cm²) since 2026-10-21                                                          |
+| 05_dark_current_vs_fluence     | dark current vs proton fluence                 | TAT on the batched engine; fluences are fractions of the legacy `legacy_compensation_fluence(DeviceConfig(), 62)` (4.36e12 p/cm², sic-damage; 3.48e12 si-neq before 2026-10-21) since 2026-10-21                                                          |
 | 05b_flash_parametric_studies   | FLASH parametric sweeps                        | runs its 60-condition sweep when the untracked cache is missing                                                                                                                           |
 | 06_temperature_dependence      | material properties and CCE vs T               |                                                                                                                                                                                           |
 | 07_dark_current                | TAT / SRH / surface terms                      |                                                                                                                                                                                           |
 | 08_transient_flash             | FLASH pulse transients                         | generator `create_notebook_08.py`                                                                                                                                                         |
-| 09_radiation_damage            | defect introduction, lifetimes, NIEL scaling   | markdown updated 2026-10-21 to SR-NIEL kappa (1.942 at 62 MeV), SiC normalisation open; summary table at 0.1/0.5/0.9 x the compensation fluence                                           |
-| 10_cce_vs_fluence              | CCE degradation vs fluence                     | fluences are fractions of `compensation_fluence(DeviceConfig(), 62)` (3.48e12 p/cm²) since 2026-10-21                                                                                     |
-| 11_dark_current_cv_evolution   | leakage and C-V vs fluence                     | fluences are fractions of `compensation_fluence(DeviceConfig(), 62)` (3.48e12 p/cm²) since 2026-10-21; C-V at 0.1/0.3/0.6/0.9 x                                                           |
-| 12_multi_defect_comparison     | 3-defect vs single-defect models               | fluences are fractions of `compensation_fluence(DeviceConfig(), 62)` (3.48e12 p/cm²) since 2026-10-21                                                                                     |
+| 09_radiation_damage            | defect introduction, lifetimes, NIEL scaling   | NIEL plot in both conventions (sic-damage default 1.552, si-neq 1.942 at 62 MeV); summary table at 0.1/0.5/0.9 x the legacy compensation fluence; note cell on the 2026-10-21 defaults                                           |
+| 10_cce_vs_fluence              | CCE degradation vs fluence                     | Figure 1b: the default calibrated kinetic trap model vs the legacy removal, 0.01-100 x its compensation fluence (1.80e12 p/cm²); the other figures study the legacy model; fluences are fractions of the legacy `legacy_compensation_fluence(DeviceConfig(), 62)` (4.36e12 p/cm², sic-damage; 3.48e12 si-neq before 2026-10-21) since 2026-10-21                                                                                     |
+| 11_dark_current_cv_evolution   | leakage and C-V vs fluence                     | fluences are fractions of the legacy `legacy_compensation_fluence(DeviceConfig(), 62)` (4.36e12 p/cm², sic-damage; 3.48e12 si-neq before 2026-10-21) since 2026-10-21; C-V at 0.1/0.3/0.6/0.9 x                                                           |
+| 12_multi_defect_comparison     | 3-defect vs single-defect models               | fluences are fractions of the legacy `legacy_compensation_fluence(DeviceConfig(), 62)` (4.36e12 p/cm², sic-damage; 3.48e12 si-neq before 2026-10-21) since 2026-10-21                                                                                     |
 | 13_parametric_optimization     | radiation-hardness sweep                       | 2 x 3 x 2 grid at 0.6 x the compensation fluence of the lowest-doped config (was 4 x 4 x 4 at 1e13, 15-20 min)                                                                            |
-| 14_validation                  | model vs published irradiation trends          | fractions of `compensation_fluence(DeviceConfig(), 62)` (3.48e12 p/cm²) + 1 refused point; trapping-only loss below it; unsourced 0.95/0.70/0.40 curve and onset ~1e12 removed 2026-10-21 |
+| 14_validation                  | model vs published irradiation trends          | fractions of the legacy `legacy_compensation_fluence(DeviceConfig(), 62)` (4.36e12 p/cm², sic-damage; 3.48e12 si-neq before 2026-10-21) + 1 refused point; trapping-only loss below it; unsourced 0.95/0.70/0.40 curve and onset ~1e12 removed 2026-10-21 |
 | 15_2d_electrostatics_cce       | 2D field and CCE of the microdosimeter         | generator `create_notebook_15.py`                                                                                                                                                         |
 | 16_single_particle_cce         | single-particle 2D transient CCE, CCE(LET)     | generator `create_notebook_16.py`; loads `data/cce_let_table_*.json`; `ETNA_REBUILD_CCE_TABLES=1` rebuilds them (~40 min) into `$ETNA_FIGURE_DIR/data/`                                   |
 | 17_mc_coupling                 | MC energy deposition to pulse height           | generator executes it in place                                                                                                                                                            |
@@ -1994,9 +2124,9 @@ uv run pytest -n0 -x tests/test_api_cce.py        # serial, e.g. with --pdb
 uv run pytest -n auto -q --durations=20           # slowest tests
 ```
 
-- 134 modules and 1745 tests (2026-10-21). `pytest.ini` deselects the `exhaustive` marker
+- 135 modules and 1456 tests (2026-10-21). `pytest.ini` deselects the `exhaustive` marker
   (6 redundant deep variants, each implied by a kept test), so the default run collects
-  1739: all pass with `--extra dev --extra viz`; with `--extra dev` only, 1731 pass and 8
+  1450: all pass with `--extra dev --extra viz`; with `--extra dev` only, 1442 pass and 8
   skip (the manim and gdstk tests). The `slow` marker labels the devsim integration tests
   but does not deselect them.
 - `pytest.ini` adds `--dist loadgroup --no-loadscope-reorder` (inert without `-n`), so
@@ -2076,7 +2206,7 @@ uv run pytest -n auto -q --durations=20           # slowest tests
 | results that depend on a previous cell (after an interrupted call) | a stale device from an interrupted call. Restart the kernel, or call `etna.core.devsim_reset.reset_devsim_fully()`. `run_all` asserts that no device leaks between sections.                                                                                                            |
 | `metadata["truncated"] == True`, shorter `x`                       | a devsim convergence wall at deep reverse bias. For the legacy model it is the cathode-on-epi artefact (about -64 V): use the default stack, or stay above it.                                                                                                                          |
 | `OutsideModelValidity`                                             | the requested point is outside the model's validity (legacy 2D past the contact wall; `run_cce_tilted_alpha` outside the engine box). The message says what to change.                                                                                                                  |
-| NaN points in a damage sweep                                       | the fluence is at or past `compensation_fluence`; see `metadata["reason"]`.                                                                                                                                                                                                             |
+| NaN points in a damage sweep                                       | legacy model (`radiation_traps=False`, or "auto" outside the engine: `metadata["damage_model_note"]`): the fluence is at or past `compensation_fluence`; see `metadata["reason"]`.                                                                                                                                                                                                        |
 | First call is slow (about 0.5 s), later calls about 10 ms          | numba compilation (measured 2026-10-21, run_cv; section 6). The batched-engine kernels use `cache=True`, so later processes load the compiled code from `__pycache__`. Changing numba or the source recompiles.                                                                         |
 | A C-V or CCE call takes seconds instead of milliseconds            | the config is outside the engine box (`validated_domain_reason(cfg)`), or the engine fell back (`metadata["fallback_reason"]`).                                                                                                                                                         |
 | `ModuleNotFoundError` (plotly, streamlit) under `uv run pytest`    | `.venv` was synced without `--extra dev`, so a system pytest ran. Run `uv sync --extra dev`.                                                                                                                                                                                            |

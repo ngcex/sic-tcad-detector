@@ -13,6 +13,11 @@ Literature numbers (full text opened; GitHub issue #5 lists the sources):
   of 24 GeV/c protons (kappa 0.62 Si: ~3.1e13 neq).
 - Li et al., arXiv:2503.09016: 100 um 5.2e13, C-V flat at 3.9e13 neq (10 kHz).
 """
+# NOTE 2026-10-21: the defaults changed (NIEL convention sic-damage, damage model
+# "auto" = calibrated kinetic traps). The numbers logged from this bench predate the flip
+# (si-neq); pass niel_convention="si-neq" / niel_table=hardness_table("proton", "si-neq")
+# and radiation_traps=False or True explicitly to reproduce them.
+
 
 import dataclasses
 import logging

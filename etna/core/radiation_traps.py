@@ -177,6 +177,11 @@ class RadiationTrapModel:
     lifetimes follow the dark-state occupancy of THESE traps, 1/tau_n = 1/tau_0 +
     <sum_k N_k sigma_n,k v_n (fraction able to capture an electron)>_epi and the hole
     twin (``occupancy_lifetimes``): a filled level cannot capture an electron.
+    ``niel_convention`` (default None = no constraint, e.g. the neutron-anchored Burin
+    rates): the NIEL convention the per-neq rates were CALIBRATED in (a proton-fitted
+    number, e.g. ``trap_presets.radmanovac_calibrated``). The fluence sweeps refuse to
+    run such a model under another convention (``check_trap_convention``): its per-neq
+    numbers would then mis-scale the per-proton calibration.
     """
 
     traps: Tuple[DeepTrap, ...] = burin_table_traps()
@@ -187,6 +192,7 @@ class RadiationTrapModel:
     initial: str = "equilibrium"
     label: str = ""
     lifetimes: str = "legacy"
+    niel_convention: Optional[str] = None
 
     def __post_init__(self):
         traps = tuple(self.traps)
@@ -207,6 +213,14 @@ class RadiationTrapModel:
             raise ValueError("initial must be 'equilibrium', 'in_beam' or 'neutral'")
         if self.lifetimes not in ("legacy", "occupancy"):
             raise ValueError("lifetimes must be 'legacy' or 'occupancy'")
+        if self.niel_convention is not None:
+            from etna.core.radiation_damage import NIEL_CONVENTIONS
+
+            if self.niel_convention not in NIEL_CONVENTIONS:
+                raise ValueError(
+                    f"niel_convention must be None or one of {NIEL_CONVENTIONS} "
+                    f"(got {self.niel_convention!r})"
+                )
 
     @property
     def neutral_removal_rate(self) -> float:
@@ -247,21 +261,67 @@ def level_table(model):
 DEFAULT_TRAP_MODEL = RadiationTrapModel()
 
 
-def resolve_traps(spec):
+# DEFAULT damage model of DeviceConfig / run_radiation_damage (maintainer decision
+# 2026-10-21, issue #5): "auto" = the CALIBRATED kinetic preset
+# (``trap_presets.radmanovac_calibrated`` in the run's NIEL convention) wherever the
+# charged-trap engine applies, else the legacy scalar removal with the reason in the
+# result metadata ("damage_model", "damage_model_note"). "legacy" / False = the scalar
+# donor removal (eta_removal 5 /neq, points beyond compensation refused).
+AUTO_DAMAGE_MODEL = "auto"
+DEFAULT_PRESET = "radmanovac_calibrated"
+LEGACY_NAMES = ("legacy",)
+
+
+def resolve_traps(spec, niel_convention=None):
     """``radiation_traps`` keyword -> RadiationTrapModel or None (legacy removal).
 
-    False / None -> None; True -> DEFAULT_TRAP_MODEL; a RadiationTrapModel as is.
-    Anything else (also 1 / "yes") is a TypeError: strict contract."""
+    False / None / "legacy" -> None; True -> DEFAULT_TRAP_MODEL (Burin Table I, steady,
+    the opt-in model of 2026-10-18); "auto" (the DeviceConfig default) and a preset name
+    of ``etna.core.trap_presets.PRESETS`` -> that preset ("auto" = DEFAULT_PRESET), built
+    in ``niel_convention`` (None = the default convention; only calibrated presets
+    depend on it); a RadiationTrapModel as is. Any other type (also 1) is a TypeError,
+    an unknown string a ValueError: strict contract. (Whether "auto" falls back to the
+    legacy model outside the engine's scope is decided by the fluence sweep:
+    ``charge_collection.resolve_damage_model``.)"""
     if spec is None or spec is False:
         return None
     if spec is True:
         return DEFAULT_TRAP_MODEL
     if isinstance(spec, RadiationTrapModel):
         return spec
+    if isinstance(spec, str):
+        if spec in LEGACY_NAMES:
+            return None
+        from etna.core.trap_presets import PRESETS, trap_preset
+
+        name = DEFAULT_PRESET if spec == AUTO_DAMAGE_MODEL else spec
+        if name not in PRESETS:
+            raise ValueError(
+                f"radiation_traps={spec!r}: unknown name (have 'auto', 'legacy', "
+                f"{', '.join(repr(k) for k in sorted(PRESETS))})"
+            )
+        return trap_preset(name, niel_convention=niel_convention)
     raise TypeError(
-        "radiation_traps must be a bool, None or a RadiationTrapModel "
-        f"(got {type(spec).__name__})"
+        "radiation_traps must be a bool, None, a name ('auto', 'legacy', a trap preset) "
+        f"or a RadiationTrapModel (got {type(spec).__name__})"
     )
+
+
+def check_trap_convention(model, convention):
+    """Raise ValueError if ``model`` was calibrated in another NIEL convention than
+    ``convention`` (the one the run converts particle fluence with). None model or
+    an unconstrained model (``niel_convention`` None) pass."""
+    if model is None or model.niel_convention is None:
+        return
+    if convention != model.niel_convention:
+        raise ValueError(
+            f"radiation_traps: this trap model is calibrated in the "
+            f"{model.niel_convention!r} NIEL convention, the run uses "
+            f"{convention!r} (a user-built hardness table if None): its per-neq "
+            "rates would mis-scale the per-proton calibration. Build the preset in "
+            "the run's convention (trap_preset(name, niel_convention=...)) or pass "
+            "the matching niel_convention."
+        )
 
 
 @dataclass(frozen=True)

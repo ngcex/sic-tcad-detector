@@ -1569,16 +1569,25 @@ def run_radiation_damage(
     proton_energy_MeV: float = 5.6,
     *,
     particle: str = "proton",
-    niel_convention: str = "si-neq",
+    niel_convention: "str | None" = None,
 ) -> SimResult:
     """Run a CCE-vs-proton-fluence damage sweep and return a SimResult.
 
-    Opt-in NIEL options (2026-10-21; defaults reproduce the previous behaviour):
-    ``particle="neutron"`` treats ``fluences`` as neutron fluences and
+    DEFAULTS since 2026-10-21 (issues #5, #8; the previous behaviour is selectable):
+    damage model ``config.radiation_traps="auto"`` = the calibrated kinetic trap preset
+    (``etna.core.trap_presets.radmanovac_calibrated``; ``radiation_traps=False`` /
+    "legacy" = the scalar donor removal) and NIEL convention "sic-damage"
+    (``niel_convention=None``; "si-neq" = the previous default). The pre-2026-10-21
+    numbers are ``run_radiation_damage(dataclasses.replace(config,
+    radiation_traps=False), ..., niel_convention="si-neq")``.
+
+    NIEL options: ``particle="neutron"`` treats ``fluences`` as neutron fluences and
     ``proton_energy_MeV`` as the neutron energy (NJOY/ENDF-B-VIII.0 table, ~1e-5 to
-    18.9 MeV); ``niel_convention`` = "si-neq" (default), "sic-damage" or "sic-1mev"
+    18.9 MeV); ``niel_convention`` = "sic-damage" (default), "si-neq" or "sic-1mev"
     selects the hardness convention (``etna.core.radiation_damage.hardness_table``,
-    data/niel/README.md). Metadata records "particle", "niel_convention" and "kappa".
+    data/niel/README.md); the calibrated preset is built in the same convention (its
+    removal d is re-fitted per convention so the per-proton calibration holds).
+    Metadata records "particle", "niel_convention" and "kappa".
 
     Bucket-a config->kwargs adapter over
     `etna.core.charge_collection.cce_vs_fluence`, which builds AND deletes
@@ -1598,12 +1607,12 @@ def run_radiation_damage(
         Device configuration (geometry, doping, temperature, area).
     fluences : np.ndarray or None
         Proton fluences (cm^-2) to sweep, used as given. Default None ->
-        ``default_fluence_grid(config, proton_energy_MeV)``: 8 log-spaced points
-        from 0.01x to 3x this device's compensation fluence (6 below it; the 2 beyond
-        it are normally NaN with a reason - the 3x point always - to show where the
-        model ends: compensation_fluence is a lower bound on the mesh threshold).
-        With ``config.radiation_traps`` on: 10 points from 0.01x the compensation
-        fluence to 1e16 neq (all solved, semi-insulating beyond compensation).
+        ``default_fluence_grid(config, proton_energy_MeV)``. Charged-trap model (the
+        default "auto"): 10 log-spaced points from 0.01x the compensation fluence of
+        that model to max(3x it, 1e16 neq) (all solved, semi-insulating beyond
+        compensation). Legacy model: 8 points from 0.01x to 3x its compensation
+        fluence (6 below it; the 2 beyond it are normally NaN with a reason - the 3x
+        point always - to show where the model ends).
         Before 2026-10-18 the default was a fixed 1e13..1e16 grid, which lies
         beyond the compensation fluence of the default stack (1.35e13 at 5.6 MeV
         with the placeholder kappa 0.5; 1.0e12 with the SR-NIEL kappa 6.67) and of
@@ -1623,40 +1632,47 @@ def run_radiation_damage(
     SimResult
         sim_type="damage", x=fluences (cm^-2), y=CCE values (dimensionless),
         metadata contains "V_bias", "energy_MeV", "valid" (bool per point),
-        "reason" (list of str, "" when valid) and "compensation_fluence"
-        (p/cm^2; points at or beyond it are NaN: epi fully compensated; with
-        ``config.radiation_traps`` they are solved, the value is kept as the legacy
-        reference) and "damage_model" ("carrier_removal" or "charged_traps").
+        "reason" (list of str, "" when valid), "compensation_fluence" (p/cm^2, of the
+        damage model that ran: ``compensation_fluence``), "legacy_compensation_fluence"
+        (the scalar-removal value, for reference), "damage_model" ("carrier_removal"
+        or "charged_traps"), "damage_model_label" (the trap model's provenance label,
+        "" for legacy) and "damage_model_note" (why "auto" ran the legacy model, else
+        ""). Legacy model: points at or beyond its compensation fluence are NaN.
         "solver" names the solver(s) that produced the points ("batched" on the engine's
         box, "devsim" outside it, "batched + devsim" when mixed) and
         "solver_per_point" lists it per fluence ("" = not solved).
 
     Warning
     -------
-    The NIEL kappa hardness factors in `etna.core.radiation_damage` are SR-NIEL
-    proton NIEL data (data/niel/) in the Si-normalised 1-MeV-neq convention of the
-    introduction-rate source (Burin et al.). The SiC/Si NIEL ratio of fission
-    neutrons is computed (NJOY HEATR, ENDF/B-VIII.0: r_n = 1.069), so the default
-    kappa overstates the SiC damage per proton by r_n / r_p (+25 % at 62 MeV);
-    ``niel_convention="sic-damage"`` removes that factor. The defect introduction
-    rates themselves are literature values with a wide spread. Absolute critical-fluence (Phi_crit) numbers are therefore not
-    validated radiation-hardness predictions.
+    The NIEL kappa hardness factors are SR-NIEL proton NIEL data (data/niel/); the
+    default "sic-damage" convention maps them onto the SiC damage of the
+    reactor-neutron fluence the Burin rates are labelled in (r_n = 1.069 from NJOY
+    HEATR / ENDF-B-VIII.0; "si-neq" overstates the SiC damage per proton by r_n / r_p,
+    +25 % at 62 MeV). The defect introduction rates are literature values with a wide
+    spread; the slow removal d is CALIBRATED on 252.7 MeV C-V slopes of other devices
+    (one temperature: the removal mechanism is not identified). Absolute critical
+    fluences are therefore not validated radiation-hardness predictions.
     """
     _require_1d(config, "run_radiation_damage")
 
-    from etna.core.radiation_damage import get_hardness_factor, hardness_table
+    from etna.core.radiation_damage import (
+        get_hardness_factor,
+        hardness_table,
+        resolve_niel_convention,
+    )
 
+    niel_convention = resolve_niel_convention(niel_convention)
     niel = dict(particle=particle, niel_convention=niel_convention)
     table = hardness_table(particle, niel_convention)
     if fluences is None:
-        fluences = default_fluence_grid(config, proton_energy_MeV, **niel)
+        fluences = default_fluence_grid(config, proton_energy_MeV, V_bias=V_bias, **niel)
 
     # Bucket-a: cce_vs_fluence builds AND deletes its own device per fluence.
     # Forward config doping/geometry (D-01) so this facade is self-consistent
     # with run_cce. Do NOT reset/build/delete any device here.
     kw = device_kwargs(config)
-    traps = resolve_traps(config.radiation_traps)
-    extra = {} if traps is None else {"radiation_traps": traps}  # legacy: same call
+    traps_spec = config.radiation_traps
+    extra = {} if resolve_traps(traps_spec) is None else {"radiation_traps": traps_spec}
     result = cce_vs_fluence(
         fluence_range=fluences,
         V_bias=V_bias,
@@ -1666,6 +1682,7 @@ def run_radiation_damage(
         niel_table=table,
         **extra,
     )
+    traps = result.get("radiation_traps")
 
     n = len(result["fluences"])
     valid = result.get("valid")
@@ -1692,7 +1709,10 @@ def run_radiation_damage(
                 else np.asarray(valid, dtype=bool)
             ),
             "reason": list(reason) if reason is not None else [""] * n,
-            "compensation_fluence": compensation_fluence(
+            "compensation_fluence": _compensation_of(
+                traps, config, proton_energy_MeV, **niel
+            ),
+            "legacy_compensation_fluence": legacy_compensation_fluence(
                 config, proton_energy_MeV, **niel
             ),
             "particle": particle,
@@ -1700,12 +1720,14 @@ def run_radiation_damage(
             "kappa": get_hardness_factor(proton_energy_MeV, table),
             # damage model: "carrier_removal" (legacy scalar) or "charged_traps"
             "damage_model": "carrier_removal" if traps is None else "charged_traps",
+            "damage_model_label": "" if traps is None else traps.label,
+            "damage_model_note": result.get("damage_model_note", ""),
             **(
                 {}
                 if traps is None
                 else {
-                    "trap_compensation_fluence": trap_compensation_fluence(
-                        config, proton_energy_MeV, **niel
+                    "trap_compensation_fluence": _compensation_of(
+                        traps, config, proton_energy_MeV, **niel
                     )
                 }
             ),
@@ -1716,9 +1738,27 @@ def run_radiation_damage(
 
 DEFAULT_FLUENCE_GRID_SPAN = (1e-2, 3.0)  # x compensation_fluence
 DEFAULT_FLUENCE_GRID_POINTS = 8
-# radiation_traps=True grid: 0.01 x compensation_fluence .. 1e16 neq (p/cm^2 = neq/kappa)
+# charged-trap grid: 0.01 x compensation_fluence .. 1e16 neq (p/cm^2 = neq/kappa)
 TRAP_FLUENCE_GRID_TOP_NEQ = 1e16
 TRAP_FLUENCE_GRID_POINTS = 10
+
+
+def damage_model_of(config: DeviceConfig, proton_energy_MeV: float = 5.6, *,
+                    V_bias: float = 0.0, particle: str = "proton",
+                    niel_convention: "str | None" = None):  # fmt: skip
+    """(RadiationTrapModel or None = legacy scalar removal, note) that
+    ``run_radiation_damage`` runs for ``config``: ``config.radiation_traps`` resolved in
+    the NIEL convention ("auto" -> the calibrated preset inside the batched engine's
+    scope, else legacy with the reason in ``note``). ``V_bias`` only matters for the
+    legacy geometry's engine depth (0 = not checked)."""
+    from etna.core.charge_collection import resolve_damage_model
+    from etna.core.radiation_damage import hardness_table
+
+    kw = device_kwargs(config)
+    table = hardness_table(particle, niel_convention)
+    return resolve_damage_model(
+        config.radiation_traps, kw, V_bias, "auto", table, log=False
+    )
 
 
 def default_fluence_grid(
@@ -1726,22 +1766,24 @@ def default_fluence_grid(
     proton_energy_MeV: float = 5.6,
     *,
     particle: str = "proton",
-    niel_convention: str = "si-neq",
+    niel_convention: "str | None" = None,
+    V_bias: float = 0.0,
 ) -> np.ndarray:
     """Default fluence grid of ``run_radiation_damage`` for this device (p/cm^2).
 
-    ``DEFAULT_FLUENCE_GRID_POINTS`` log-spaced points from 0.01x to 3x
-    ``compensation_fluence(config, proton_energy_MeV)``: six lie below full donor
-    compensation (solved), the last two beyond its nominal value (normally NaN with a
-    reason; the 3x point always, since compensation_fluence is a lower bound), so the
-    curve shows the shape up to the model's validity limit and where it ends. The
-    Streamlit page proposes a narrower range (0.7e-3x .. 0.7x, every point solvable)
-    on purpose: there the user edits the range.
+    Charged-trap model (the default "auto" -> calibrated preset):
+    TRAP_FLUENCE_GRID_POINTS log-spaced points from 0.01x ``compensation_fluence`` (of
+    that model) to max(3x it, 1e16 neq), every point solved. Legacy scalar model:
+    DEFAULT_FLUENCE_GRID_POINTS points from 0.01x to 3x its compensation fluence: six
+    lie below full donor compensation (solved), the last two beyond its nominal value
+    (normally NaN with a reason; the 3x point always, since it is a lower bound), so
+    the curve shows where the legacy model ends.
     """
     niel = dict(particle=particle, niel_convention=niel_convention)
-    phi_c = compensation_fluence(config, proton_energy_MeV, **niel)
+    model, _ = damage_model_of(config, proton_energy_MeV, V_bias=V_bias, **niel)
+    phi_c = _compensation_of(model, config, proton_energy_MeV, **niel)
     lo, hi = DEFAULT_FLUENCE_GRID_SPAN
-    if resolve_traps(config.radiation_traps) is not None:
+    if model is not None:
         # charged-trap model: every point is solvable; reach the measured
         # semi-insulating decade (1e16 neq, Gsponer arXiv:2310.02047)
         top = max(
@@ -1760,13 +1802,27 @@ def _min_epi_donors(config: DeviceConfig) -> float:
     return min(config.N_D_junction, config.N_D_bulk)
 
 
-def _kappa(
-    energy_MeV: float, particle: str = "proton", niel_convention: str = "si-neq"
-):
-    """Hardness factor (neq per particle) of the chosen particle / NIEL convention."""
+def _kappa(energy_MeV: float, particle: str = "proton", niel_convention=None):
+    """Hardness factor (neq per particle) of the chosen particle / NIEL convention
+    (None = the default convention)."""
     from etna.core.radiation_damage import get_hardness_factor, hardness_table
 
     return get_hardness_factor(energy_MeV, hardness_table(particle, niel_convention))
+
+
+def _compensation_of(model, config, proton_energy_MeV, *, particle="proton",
+                     niel_convention=None):  # fmt: skip
+    """Compensation fluence (p/cm^2) of ``model`` (None = legacy scalar removal)."""
+    kappa = _kappa(proton_energy_MeV, particle, niel_convention)
+    if model is None:
+        from etna.core.radiation_damage import RadiationDamageParams
+
+        eta = RadiationDamageParams().eta_removal
+        return float(_min_epi_donors(config) / (eta * kappa))
+    rate = model.neutral_removal_rate
+    if rate <= 0:  # no acceptor-like level and no direct removal: never compensated
+        return float("inf")
+    return float(_min_epi_donors(config) / (rate * kappa))
 
 
 def trap_compensation_fluence(
@@ -1774,21 +1830,37 @@ def trap_compensation_fluence(
     proton_energy_MeV: float,
     *,
     particle: str = "proton",
-    niel_convention: str = "si-neq",
+    niel_convention: "str | None" = None,
 ) -> float:
-    """Proton fluence (p/cm^2) at which the charged-trap model (``radiation_traps``)
-    compensates the lowest-doped epi: min N_D / (neutral_removal_rate * kappa(E)), the
-    emergent removal of the acceptor levels (7.4 /neq for the default traps, vs 5 of the
-    legacy scalar: 2.35e12 p/cm^2 at 62 MeV on the default stack, vs 3.48e12). Beyond
-    it the bulk is semi-insulating; the model still solves it."""
+    """Proton fluence (p/cm^2) at which the charged-trap model compensates the
+    lowest-doped epi: min N_D / (neutral_removal_rate * kappa(E)), the removal of a
+    neutral n-region (every acceptor level filled, plus the direct donor removal).
+    ``config.radiation_traps`` resolved in the convention ("auto" -> the calibrated
+    preset, whatever the engine scope; "legacy" / False -> the Burin Table I steady
+    model, 7.4 /neq). Beyond it the bulk is semi-insulating; the model still solves it.
+    """
     from etna.core.radiation_traps import DEFAULT_TRAP_MODEL
 
-    model = resolve_traps(config.radiation_traps) or DEFAULT_TRAP_MODEL
-    rate = model.neutral_removal_rate
-    if rate <= 0:  # no acceptor-like level: never compensated
-        return float("inf")
-    kappa = _kappa(proton_energy_MeV, particle, niel_convention)
-    return float(_min_epi_donors(config) / (rate * kappa))
+    model = resolve_traps(config.radiation_traps, niel_convention) or DEFAULT_TRAP_MODEL
+    return _compensation_of(model, config, proton_energy_MeV, particle=particle,
+                            niel_convention=niel_convention)  # fmt: skip
+
+
+def legacy_compensation_fluence(
+    config: DeviceConfig,
+    proton_energy_MeV: float,
+    *,
+    particle: str = "proton",
+    niel_convention: "str | None" = None,
+) -> float:
+    """Compensation fluence (p/cm^2) of the LEGACY scalar removal: eta_removal *
+    kappa(E) * Phi >= min N_D over the epi (as
+    ``etna.core.charge_collection.full_compensation_reason``; min N_D of
+    N_D_junction / N_D_bulk, N_D or the donor table, a slightly conservative lower
+    bound on the mesh-level threshold). 62 MeV, default stack: 4.36e12 (sic-damage),
+    3.48e12 (si-neq)."""
+    return _compensation_of(None, config, proton_energy_MeV, particle=particle,
+                            niel_convention=niel_convention)  # fmt: skip
 
 
 def compensation_fluence(
@@ -1796,29 +1868,21 @@ def compensation_fluence(
     proton_energy_MeV: float,
     *,
     particle: str = "proton",
-    niel_convention: str = "si-neq",
+    niel_convention: "str | None" = None,
+    V_bias: float = 0.0,
 ) -> float:
-    """Proton fluence (p/cm^2) at which carrier removal fully compensates the epi.
+    """Proton fluence (p/cm^2) at which the damage model that ``run_radiation_damage``
+    runs for ``config`` (``damage_model_of``) fully compensates the epi.
 
-    Full compensation is eta_removal * kappa(E) * Phi >= min N_D over the epi
-    (the damage model's own constants, as in
-    ``etna.core.charge_collection.full_compensation_reason``). min N_D is taken
-    as the smaller of N_D_junction / N_D_bulk (graded) or N_D (uniform), so the
-    value is a slightly conservative lower bound on the mesh-level threshold.
-    At or beyond it run_radiation_damage returns NaN with a reason.
+    Charged-trap model (the default "auto" -> calibrated preset): min N_D /
+    (neutral_removal_rate * kappa), beyond it the epi is semi-insulating and still
+    solved. Legacy model (``radiation_traps=False`` / "legacy", or "auto" outside the
+    engine's scope): ``legacy_compensation_fluence``, points at or beyond it are NaN.
+    Until 2026-10-21 this function always returned the legacy value.
     """
-    from etna.core.radiation_damage import RadiationDamageParams
-
-    if config.donor_table is not None:
-        nd_min = min(n for _, n in config.donor_table)
-    elif config.doping_profile == "uniform":
-        nd_min = config.N_D
-    else:
-        nd_min = min(config.N_D_junction, config.N_D_bulk)
-    eta = RadiationDamageParams().eta_removal
-    return float(nd_min / (eta * _kappa(proton_energy_MeV, particle, niel_convention)))
-
-
+    niel = dict(particle=particle, niel_convention=niel_convention)
+    model, _ = damage_model_of(config, proton_energy_MeV, V_bias=V_bias, **niel)
+    return _compensation_of(model, config, proton_energy_MeV, **niel)
 @serialized
 def run_temperature_sweep(
     config: DeviceConfig,

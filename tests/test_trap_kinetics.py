@@ -32,7 +32,11 @@ from etna.core.trap_kinetics import (
 
 pytestmark = pytest.mark.xdist_group("trap_kinetics")
 
-UNI20 = DeviceConfig(epi_thickness_um=20.0, doping_profile="uniform", N_D=1e14)
+# radiation_traps=True: these tests exercise the Burin Table I kernel (the config
+# default is "auto" = the calibrated preset since 2026-10-21)
+UNI20 = DeviceConfig(
+    epi_thickness_um=20.0, doping_profile="uniform", N_D=1e14, radiation_traps=True
+)
 
 
 @pytest.fixture(scope="module")
@@ -144,7 +148,8 @@ def test_kinetic_neff_falls_steady_state_does_not(uni):
     # hotter: EH4 (Ec-1.03) empties during the sweep, the kinetic removal shrinks
     hot = KineticTrapSolver.from_config(
         DeviceConfig(
-            epi_thickness_um=20.0, doping_profile="uniform", N_D=1e14, T=350.0
+            epi_thickness_um=20.0, doping_profile="uniform", N_D=1e14, T=350.0,
+            radiation_traps=True,
         ),
         [0.0, 6e12],
         energy_MeV=None,
@@ -196,8 +201,9 @@ def test_bad_policy_and_occupancy(uni):
         uni.run(uni.steady_state(0.0), [hold(1.0, 0.0)], norm="bogus")
 
 
-def test_default_off():
-    assert DeviceConfig().radiation_traps is False
+def test_default_is_auto():
+    # re-pinned 2026-10-21 (was: default False = legacy removal)
+    assert DeviceConfig().radiation_traps == "auto"
 
 
 # ---------------------------------------------------------------- calibration

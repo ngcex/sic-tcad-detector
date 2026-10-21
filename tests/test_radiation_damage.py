@@ -252,7 +252,14 @@ class TestNIELScaling:
         from etna.core.niel_tables import NIEL_NEUTRON_1MEV_SI_MEV_CM2_G as n1
 
         # SR-NIEL proton NIEL in Si at 62 MeV: 3.9558e-3 MeV cm^2/g
-        assert scale_to_proton_energy(1.0, 62) == pytest.approx(3.9558e-3 / n1)
+        si = NIEL_HARDNESS_PROTON_SIC  # the si-neq table (default until 2026-10-21)
+        assert scale_to_proton_energy(1.0, 62, si) == pytest.approx(3.9558e-3 / n1)
+        # the default (sic-damage since 2026-10-21): SiC NIEL / (r_n x 95 MeV mb)
+        from etna.core.niel_tables import R_N_SIC_SI_FISSION
+
+        assert scale_to_proton_energy(1.0, 62) == pytest.approx(
+            3.3792e-3 / (R_N_SIC_SI_FISSION * n1)
+        )
         assert n1 == pytest.approx(2.0370e-3, rel=1e-4)  # ASTM E722 95 MeV mb
 
     def test_interpolation(self):
@@ -268,9 +275,12 @@ class TestNIELScaling:
         """audit C-5 / B-07: the factors are SR-NIEL data, not the old placeholders
         (0.50 / 0.35 / 0.33 / 0.22 at 30 / 62 / 70 / 150 MeV)."""
         expected = {5.6: 6.672, 30: 2.746, 62: 1.942, 70: 1.817, 150: 1.119, 250: 0.855}
+        si = NIEL_HARDNESS_PROTON_SIC  # si-neq (explicit since the 2026-10-21 flip)
         for energy, kappa in expected.items():
-            assert get_hardness_factor(energy) == pytest.approx(kappa, abs=1e-3)
-        assert get_hardness_factor(62) != pytest.approx(0.35, rel=0.5)
+            assert get_hardness_factor(energy, si) == pytest.approx(kappa, abs=1e-3)
+        assert get_hardness_factor(62, si) != pytest.approx(0.35, rel=0.5)
+        # the default sic-damage table at 62 MeV (issue #8): 1.552
+        assert get_hardness_factor(62) == pytest.approx(1.552, abs=1e-3)
         # monotonically falling NIEL over 1-700 MeV (Coulomb + hadronic)
         E = [e for e in sorted(NIEL_HARDNESS_PROTON_SIC) if e <= 700]
         k = [NIEL_HARDNESS_PROTON_SIC[e] for e in E]
@@ -279,7 +289,10 @@ class TestNIELScaling:
     def test_cross_check_against_published_252_MeV_factor(self):
         """Radmanovac et al. (arXiv:2510.11304) quote k ~ 0.9 for 252.7 MeV protons
         from Si NIEL; the SR-NIEL Si table gives 0.85."""
-        assert get_hardness_factor(252.7) == pytest.approx(0.9, abs=0.06)
+        si = NIEL_HARDNESS_PROTON_SIC
+        assert get_hardness_factor(252.7, si) == pytest.approx(0.9, abs=0.06)
+        # sic-damage (default): x r_p / r_n = 0.639 (convention_refit.py)
+        assert get_hardness_factor(252.7) == pytest.approx(0.639, abs=1e-3)
 
     def test_custom_table(self):
         """Can pass custom NIEL table."""
@@ -519,7 +532,9 @@ class TestComputePhiCrit:
         phi_crit_proton = 1.7e13 / 1.942 ~ 8.75e12 (4.857e13 with the 0.35 placeholder)
         """
         N_D = np.linspace(8.5e13, 2.9e15, 50)
-        result = compute_phi_crit(N_D, eta_removal=5.0, energy_MeV=62.0)
+        result = compute_phi_crit(
+            N_D, eta_removal=5.0, energy_MeV=62.0, niel_table=NIEL_HARDNESS_PROTON_SIC
+        )
         expected_proton = 8.5e13 / 5.0 / 1.942
         np.testing.assert_allclose(
             result["phi_crit_proton"], expected_proton, rtol=0.10
@@ -533,7 +548,9 @@ class TestComputePhiCrit:
         phi_crit_proton = 2e14 / 1.942 ~ 1.03e14
         """
         N_D = np.full(20, 1e15)
-        result = compute_phi_crit(N_D, eta_removal=5.0, energy_MeV=62.0)
+        result = compute_phi_crit(
+            N_D, eta_removal=5.0, energy_MeV=62.0, niel_table=NIEL_HARDNESS_PROTON_SIC
+        )
         expected_proton = 1e15 / 5.0 / 1.942
         np.testing.assert_allclose(
             result["phi_crit_proton"], expected_proton, rtol=0.001

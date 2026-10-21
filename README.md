@@ -87,7 +87,7 @@ listed in [`etna/__init__.py`](etna/__init__.py); each `run_*` facade is documen
 | Doping profile N_D(x)                                            | **inferred**                      | inversion of one C-V curve, no SIMS; bulk 3.4e13 cm⁻³ is below the documented 0.5–1e14                                                                                                                                                                           |
 | CCE vs bias                                                      | **model**                         | low injection, steady state; no measured CCE of the dosimeter reproduced. The microdosimeter's measured alpha CCE-vs-bias shape is **not** reproduced                                                                                                            |
 | Dark current                                                     | **calibration** (budget estimate) | one trap rate N_t fitted to < 18 pA at −60 V on 4 mm²; bias and temperature shapes are model assumptions                                                                                                                                                         |
-| CCE vs proton fluence                                            | **relative shape only**           | SR-NIEL proton hardness factors (Si 1-MeV-neq convention). The **SiC neutron NIEL normalisation is open**, so the absolute SiC fluence scale is unvalidated. Points at or beyond the compensation fluence (3.48e12 p/cm² at 62 MeV on the default stack) are NaN |
+| CCE vs proton fluence                                            | removal **calibrated**, CCE **predicted** | Default since 2026-10-21: calibrated kinetic trap model (literature levels + a direct donor removal **calibrated** to three published 252.7 MeV C-V slopes of other devices, at one temperature, so the removal mechanism is **not identified**) and the `sic-damage` NIEL convention (SR-NIEL protons, NJOY SiC neutron NIEL, r_n = 1.069). Compensation at 1.80e12 p/cm² (62 MeV, default stack); beyond it the semi-insulating epi is solved. CCE vs fluence is a prediction, not checked against a measurement. Old behaviour: `radiation_traps=False`, `niel_convention="si-neq"` (3.48e12, NaN beyond) |
 | FLASH dose-rate CCE                                              | **numerical sensitivity bound**   | SRH + Auger only; high-injection plasma recombination is not implemented                                                                                                                                                                                         |
 | Tissue-equivalence κ(E)                                          | **data + approximation**          | real NIST PSTAR/ASTAR tables; SiC by Bragg additivity of Si + C. κ is the SiC → water LET ratio, 0.43 at 1 MeV → 0.375 at 150 MeV for protons                                                                                                                    |
 | Reference layout (GDSII/SVG)                                     | **REFERENCE-NOT-FAB**             | drawn from `data/foundry/layout_params.toml`; guard rings, pad, dicing street, oxide and the microdosimeter die size are PLACEHOLDER values until mask data is entered                                                                                           |
@@ -96,17 +96,23 @@ The only literature check (`scripts/validation/cv_vs_bruzzi2023.py`, Bruzzi & Ve
 with V_bi matched (the paper quotes W to 2 significant figures). It checks the solver
 scale, not this device.
 
+**Radiation-damage defaults** (changed 2026-10-21, issues #5 and #8; the old behaviour
+is selectable): `DeviceConfig(radiation_traps="auto")` runs the calibrated kinetic trap
+preset (`radiation_traps=False` / `"legacy"` = the scalar donor removal), and the NIEL
+convention is `"sic-damage"` (`niel_convention="si-neq"` = the previous one). The
+calibrated removal is re-fitted per convention so its per-proton calibration holds
+([USAGE §6](docs/USAGE.md#defaults-since-2026-10-21-issues-5-8-and-how-to-get-the-old-numbers)).
+
 **Opt-in models** (default `False`, so every baseline stays as pinned):
 
 - `DeviceConfig(incomplete_ionization=True)`: carrier-dependent N/Al ionization inside
   Poisson (Burin et al.). The default keeps a fixed ionized fraction for the p⁺ Al. Not
   the default because the measured-C-V presets were fitted without it
   ([USAGE §5.3](docs/USAGE.md#53-incomplete-ionization-opt-in-incomplete_ionizationtrue)).
-- `DeviceConfig(radiation_traps=True)`: radiation-induced deep traps (Z1/2, EH4, EH6/7)
-  as charged species in Poisson, so `run_radiation_damage` can solve past the
-  compensation fluence (also a checkbox on the app's Radiation Damage page).
-  Predictions there rest on a stated occupancy assumption
-  ([USAGE §6](docs/USAGE.md#charged-deep-traps-beyond-compensation-opt-in-radiation_trapstrue)).
+- `DeviceConfig(radiation_traps=True)`: the Burin Table I deep traps (Z1/2, EH4, EH6/7)
+  with steady-state occupancy (the opt-in model of 2026-10-18; also a choice on the
+  app's Radiation Damage page). Predictions there rest on a stated occupancy assumption
+  ([USAGE §6](docs/USAGE.md#charged-deep-traps-beyond-compensation-radiation_trapstrue-burin-table-i-steady)).
 
 - `DeviceConfig(mobility=...)`: the low-field mobility set of every solver. Default
   `"c_axis"` (since 2026-10-21): the mobility parallel to the c-axis, the direction of the
@@ -250,9 +256,9 @@ uv run pytest -n auto -q -m exhaustive     # the 6 deselected deep variants
 uv run pytest -n0 -x tests/test_api_cce.py # serial, e.g. with --pdb
 ```
 
-1745 tests in 134 modules. `pytest.ini` deselects the 6 `exhaustive` ones, so the default
-run is 1739 tests: all pass with `--extra dev --extra viz`, and with `--extra dev` only
-1731 pass and 8 skip (manim/gdstk). On a 10-core Apple M4 shared with other jobs, `-n auto`
+1456 tests in 135 modules. `pytest.ini` deselects the 6 `exhaustive` ones, so the default
+run is 1450 tests: all pass with `--extra dev --extra viz`, and with `--extra dev` only
+1442 pass and 8 skip (manim/gdstk). On a 10-core Apple M4 shared with other jobs, `-n auto`
 took 169–205 s on 2026-10-21 (600 s on a heavily loaded machine): plan on about 3 minutes. `pytest.ini` supplies the tuned
 xdist scheduler; use `-n0` for pdb.
 

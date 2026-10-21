@@ -325,16 +325,18 @@ def test_reach_through_found_with_nplus(epi):
 
 
 def test_run_radiation_damage_forwards_valid_and_reason():
-    cfg = DeviceConfig()
-    phi_c = sim.compensation_fluence(cfg, 62)
+    # the LEGACY scalar model refuses points (radiation_traps=False; the default since
+    # 2026-10-21 is the calibrated trap model, which solves them)
+    cfg = DeviceConfig(radiation_traps=False)
+    phi_c = sim.compensation_fluence(cfg, 62, niel_convention="si-neq")
     # N_D_bulk / (eta 5 * kappa(62 MeV)): 3.382506e13 / (5 * 1.942) = 3.48e12 with the
-    # SR-NIEL kappa (2026-10-20; 1.93e13 with the 0.35 placeholder) on the measured-C-V default
+    # SR-NIEL si-neq kappa (2026-10-20; 1.93e13 with the 0.35 placeholder) on the measured-C-V default
     # (2026-10-18; previous default 8.252732e13 -> 4.72e13, legacy 8.82e13 -> 5.04e13;
     # 6.335936e13 -> 3.62e13 before the 2026-10-17 small-signal C recalibration)
     assert 3.45e12 < phi_c < 3.51e12
     res = sim.run_radiation_damage(
         cfg, fluences=np.array([0.5 * phi_c, 2.0 * phi_c]), V_bias=-20.0,
-        proton_energy_MeV=62,
+        proton_energy_MeV=62, niel_convention="si-neq",
     )
     assert list(res.metadata["valid"]) == [True, False]
     assert np.isfinite(res.y[0]) and np.isnan(res.y[1])
@@ -459,16 +461,25 @@ def test_devsim_only_pages_do_not_claim_cross_check():
     # the damage sweep reports the solver that ran each point: on the default stack the
     # batched engine (cross-checked against devsim in tests/test_fluence_engine.py) ...
     res = sim.run_radiation_damage(
-        DeviceConfig(), fluences=np.array([1e12]), V_bias=-20.0, proton_energy_MeV=62
+        DeviceConfig(radiation_traps=False), fluences=np.array([1e12]), V_bias=-20.0,
+        proton_energy_MeV=62,
     )
     assert res.metadata["solver"] == "batched"
     assert res.metadata["solver_per_point"] == ["batched"]
-    # ... and devsim outside the engine's box (450 K), labelled as not cross-checked
+    # (the default calibrated trap model runs on the engine with traps)
+    res = sim.run_radiation_damage(
+        DeviceConfig(), fluences=np.array([1e12]), V_bias=-20.0, proton_energy_MeV=62
+    )
+    assert res.metadata["solver"] == "batched+traps"
+    # ... and devsim outside the engine's box (450 K), labelled as not cross-checked;
+    # there the default "auto" runs the legacy model and says why
     res = sim.run_radiation_damage(
         DeviceConfig(T=450.0), fluences=np.array([1e12]), V_bias=-20.0,
         proton_energy_MeV=62,
     )
     assert res.metadata["solver"] == "devsim"
+    assert res.metadata["damage_model"] == "carrier_removal"
+    assert "T=450" in res.metadata["damage_model_note"]
     badge = solver_badge_text(res.metadata)
     assert "devsim result; not cross-checked" in badge
     assert "cross-check domain" not in badge

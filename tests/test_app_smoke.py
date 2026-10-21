@@ -153,11 +153,13 @@ def test_radiation_damage_page_two_fluences():
     _click_run(at)
     res = at.session_state["damage_result"]
     assert len(res.x) == 2
-    # Defaults stay below full compensation: every point is solved.
+    # Default model (calibrated traps since 2026-10-21): every point is solved, the
+    # default range reaches beyond compensation (semi-insulating epi, 1e16 neq)
     assert res.metadata["valid"].all() and np.isfinite(res.y).all()
-    assert res.x.max() < res.metadata["compensation_fluence"]
-    # the damage sweep reports the solver that ran: the batched engine on the default stack
-    assert "Solver: batched" in _captions(at)
+    assert res.metadata["damage_model"] == "charged_traps"
+    assert res.x.max() > res.metadata["compensation_fluence"]
+    # the damage sweep reports the solver that ran: the batched engine with traps
+    assert "charged deep-trap model on the batched engine" in _captions(at)
 
 
 def test_microdosimetry_page_fixture_upload():

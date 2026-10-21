@@ -32,7 +32,11 @@ from etna.core.trap_kinetics import KineticTrapSolver, hold
 
 pytestmark = pytest.mark.xdist_group("trap_kinetics")
 
-UNI20 = DeviceConfig(epi_thickness_um=20.0, doping_profile="uniform", N_D=1e14)
+# radiation_traps=True: these tests exercise the Burin Table I kernel (the config
+# default is "auto" = the calibrated preset since 2026-10-21)
+UNI20 = DeviceConfig(
+    epi_thickness_um=20.0, doping_profile="uniform", N_D=1e14, radiation_traps=True
+)
 Z2LEV = DeepTrap("Z1/2", "acceptor", 2.5, 0.41, 2e-14, 3.5e-14, 0.67, 2e-14, 3.5e-14)
 NEGU = RadiationTrapModel((Z2LEV,) + DEFAULT_TRAP_MODEL.traps[1:])
 
@@ -143,7 +147,9 @@ def test_kinetic_cce_dark_state_matches_trap_kinetics_run():
 
 
 def test_defaults_unchanged():
-    assert DeviceConfig().radiation_traps is False
+    # re-pinned 2026-10-21: the DeviceConfig default is "auto" (calibrated preset); the
+    # Burin table model itself is unchanged
+    assert DeviceConfig().radiation_traps == "auto"
     assert DEFAULT_TRAP_MODEL.occupancy == "steady"
     assert DEFAULT_TRAP_MODEL.donor_removal == 0.0
     assert DEFAULT_TRAP_MODEL.neutral_removal_rate == pytest.approx(7.4)

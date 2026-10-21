@@ -3,6 +3,9 @@ the kinetic trap model vs every published irradiated-C-V number we could read.
 
 uv run python lab/radiation_traps/bench/mechanisms.py   (numbers -> ../notes/MECHANISMS.md)
 
+All numbers are in the si-neq NIEL convention (pinned below: the default is sic-damage
+since 2026-10-21; the per-convention refit is bench/convention_refit.py).
+
 Data (only values read in the papers; VEC = read from the PDF's vector figure paths,
 DER = derived here):
 - Radmanovac et al., arXiv:2510.11304 (252.7 MeV p, 1 MHz), Table 2 g per p/cm^2:
@@ -49,17 +52,17 @@ OBS = {
     "onsemi": RemovalObservation(
         "onsemi g", "slope", 5.60, 0.81, 4e13, 50.0, 252.7,
         (0.0, 1.4e11, 6.9e11, 1.4e12, 2.8e12), (10.0, 40.0), 150.0, 5.0, 1e6,
-        source=RAD,
+        source=RAD, niel_convention="si-neq",
     ),
     "W2": RemovalObservation(
         "CNM W2 g", "slope", 4.60, 0.33, 7.8e13, 50.0, 252.7,
         (0.0, 1.4e11, 6.9e11, 1.4e12, 2.8e12, 6.9e12), (30.0, 40.0), 200.0, 5.0, 1e6,
-        source=RAD,
+        source=RAD, niel_convention="si-neq",
     ),
     "W4": RemovalObservation(
         "CNM W4 g", "slope", 4.48, 0.26, 3.86e14, 100.0, 252.7,
         (0.0, 6.9e11, 2.8e12, 6.9e12, 1.4e13, 2.1e13), (10.0, 40.0), 650.0, 10.0, 1e6,
-        source=RAD,
+        source=RAD, niel_convention="si-neq",
     ),
 }  # fmt: skip
 # flat-C-V brackets (lo = last diode-like, hi = first flat; fluence units of the paper)
@@ -166,7 +169,7 @@ flat_on = RemovalObservation(
     "onsemi flat (2.8e12, 6.9e12]", "flat_fluence",
     0.5 * (np.log10(2.8e12) + np.log10(6.9e12)),
     0.5 * (np.log10(6.9e12) - np.log10(2.8e12)), 4e13, 50.0, 252.7, freq_Hz=1e6,
-    source="Radmanovac Fig. 4b (VEC)",
+    source="Radmanovac Fig. 4b (VEC)", niel_convention="si-neq",
 )  # fmt: skip
 fits = {
     "d only": (obs3, ("donor_removal",)),

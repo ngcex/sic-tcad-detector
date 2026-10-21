@@ -36,9 +36,9 @@ ALL_FIELDS_VALUES = {
     # opt-in A-02 model: the sidebar has no toggle yet (app/ not touched), so the
     # round-trip is the default (legacy) value
     "incomplete_ionization": False,
-    # opt-in charged radiation traps: set by the Radiation Damage page's own checkbox,
-    # not the sidebar, so the round-trip is the default
-    "radiation_traps": False,
+    # damage model: set by the Radiation Damage page's own selector, not the sidebar,
+    # so the round-trip is the default ("auto" since 2026-10-21, was False)
+    "radiation_traps": "auto",
     # low-field mobility set (sidebar selectbox; non-default value here)
     "mobility": "legacy_perp",
 }
