@@ -79,11 +79,11 @@
 Evidence from git history and code (2026-10-19), phase by phase:
 
 - **26 Graded Doping 2D Calibration:** complete (2026-06-16).
-- **27 PSTAR+SRIM Stopping Power & Real kappa:** partial. Machinery on main (commit `18e4005`): Bragg-additivity SiC stopping power, `compute_kappa_table`, kinetic-energy kappa lookup. The real PSTAR/SRIM CSVs in `data/srim/` are still placeholders (data-blocked). The GSD phase itself was not formally executed.
+- **27 PSTAR+SRIM Stopping Power & Real kappa:** partial. Machinery on main (commit `18e4005`): Bragg-additivity SiC stopping power, `compute_kappa_table`, kinetic-energy kappa lookup. The real PSTAR/SRIM CSVs in `data/srim/` are still placeholders (data-blocked). The GSD phase itself was not formally executed. _Update 2026-10-21:_ real NIST PSTAR/ASTAR data are in `data/nist_star/` and `compute_kappa_table` uses them (C-1, f6d7ade, merge 15b736f): kappa = SiC -> water LET ratio, 0.426 at 1 MeV -> 0.375 at 150 MeV.
 - **28 Geant4 ROOT Integration:** partial. `mc_coupling.py` reads ROOT files through a lazily imported `uproot`; no `RootSchemaMap` or golden fixture was found.
 - **29-34 (noise, build-up, anisotropic mobility, angular sweep, full 3D, milestone audit):** not started; no corresponding code found. The "v4.0 partial: 22 plans" figure in the old STATE.md metrics could not be traced to individual plans.
 
-The open physics items of these phases are also tracked in the audits (`PHYSICS_AUDIT_v4.md`, `_v5.md`, `PHYSICS_REVIEW_v6.md`, `.issues/audit-v7/`). kappa(E) remains data-blocked.
+The open physics items of these phases are also tracked in the audits (`PHYSICS_AUDIT_v4.md`, `_v5.md`, `PHYSICS_REVIEW_v6.md`, `.issues/audit-v7/`). kappa(E) remains data-blocked. _Update 2026-10-21:_ no longer: tissue-equivalence kappa from NIST PSTAR, NIEL kappa from SR-NIEL (Si-neq; SiC neutron normalisation open), see `PHYSICS_AUDIT_v5.md` §10.
 
 ---
 
@@ -100,4 +100,3 @@ The open physics items of these phases are also tracked in the audits (`PHYSICS_
 - Public git history cleaned of copyrighted PDFs (rewrite), commit map in `docs/history-rewrite-commit-map.txt`.
 
 **Open (needs the user):** see STATE.md "Current status".
-

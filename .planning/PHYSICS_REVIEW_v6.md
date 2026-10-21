@@ -64,6 +64,16 @@ Streamlit è pulita (non chiama questa funzione), quindi il rischio è isolato a
 diretto della libreria e ai notebook — ma i notebook sono esattamente il tipo di file
 che finisce allegato a un paper o mostrato a un collaboratore.
 
+> **Correzione 2026-10-21 (testo sopra lasciato com'era).** Il kappa da 0.58 era
+> fabbricato ma **non invertito**. I dati reali NIST PSTAR ora nel repo
+> (`data/nist_star/README.md`, `docs/USAGE.md`) danno il kappa per l'energia lineale
+> (rapporto LET SiC -> acqua) pari a 0.426 a 1 MeV, in calo fino a 0.375 a 150 MeV. Il
+> valore "~1.13-1.24" citato qui è un rapporto di stopping power **massico** (conversione
+> di dose, per g/cm²), non il fattore per y; e anche come rapporto massico i dati danno
+> 1.37 (1 MeV) -> 1.20 (150 MeV). La tabella piatta 0.58 era quindi fabbricata e troppo
+> alta (circa 1.4-1.5x), ma dalla stessa parte di 1 del rapporto lineale reale. Stato
+> aggiornato degli item in fondo al documento.
+
 **Dominio 5 (2D, notebook, honesty audit): le fix strutturali (Mj-1/2/3) sono
 solide** — un test si chiama letteralmente `test_deceptive_undepleted_ranks_below_valid`.
 Ma i notebook 19/20 non sono stati toccati dalla campagna di fix fisici, solo dal
@@ -81,6 +91,8 @@ visibile.
    invertito), formattato come tabella di risultati finale. Aggravante:
    `scripts/create_notebook_18.py:315-341` genera prosa che afferma come fatto la
    fisica invertita. Priorità massima, azione immediata, basso costo.
+   _Correzione 2026-10-21:_ fabbricato sì, invertito no (vedi la nota al Dominio 4);
+   risolto il 2026-10-20 con dati NIST reali (C-1, f6d7ade, merge 15b736f).
 
 2. **README.md:19-20 e DESIGN-1 §6: claim di validazione C-V circolare presentato
    senza hedge**, mentre lo stesso documento hedgia esplicitamente altrove (dark
@@ -196,3 +208,37 @@ sweep, in un unico kernel di lunga durata), non con un bug nella libreria. La
 classificazione di questo item resta quella di Fable: parte del disallineamento
 notebook-20 già coperto in (a), nessuna azione di codice richiesta in (b) per questo
 punto specifico.
+
+---
+
+## Aggiornamento di stato (2026-10-21)
+
+Aggiunto a posteriori; il testo sopra resta com'era. Fonti: `data/nist_star/README.md`,
+`data/niel/`, `docs/USAGE.md`, `.issues/TECH-DEBT-2026-10-18.md`,
+`.issues/audit-v7/issues/{A,B,D}-INDEX.md`. Dettaglio in `PHYSICS_AUDIT_v5.md` §10.
+
+- **Correzione kappa tessuto-equivalente:** fabbricato, non invertito. Rapporto LET
+  SiC -> acqua (fattore per y) 0.426 @1 MeV, 0.391 @10, 0.378 @62, 0.375 @150 MeV;
+  rapporto massico 1.368 -> 1.255 -> 1.215 -> 1.204. Il "~1.13-1.24" era un rapporto
+  massico non verificato, che non coincide con nessuno dei due.
+- **C-1** (dati kappa): risolto (fix 2026-10-20, merge 2026-10-21), NIST PSTAR/ASTAR
+  reali, SiC per additività di Bragg (f6d7ade, merge 15b736f). Nessun default silenzioso
+  di `kappa_constant` già dalla fix di onestà v6.
+- **C-2** (kappa indicizzato all'energia depositata): risolto 2026-10-20, lookup
+  all'energia cinetica, eventi MC con energia cinetica primaria (5ba7c78).
+- **Mj-5** (profili di generazione): alpha = curva di Bragg NIST ASTAR di default;
+  protoni: dipendenza dall'energia PSTAR opt-in (B-10), modo di default invariato
+  (8acb0ec, merge 15b736f).
+- **Mj-4** (Ramo/displacement current): risolto 2026-10-20, corrente ai terminali =
+  conduzione + spostamento; CCE e Q invariati (eba0801, merge d958408).
+- **C-5** (NIEL): parzialmente risolto (fix 2026-10-20, merge 2026-10-21), dati SR-NIEL-7 per protoni
+  1-1000 MeV nella convenzione Si 1-MeV-neq (kappa(62 MeV) = 1.942; B-07, merge
+  1142e9c). **Aperto:** normalizzazione ai neutroni nel SiC (serve un account SR-NIEL
+  registrato o NJOY).
+- **FLASH:** fisica di plasma / alta iniezione ancora non implementata (bound di
+  sensibilità). Termine Auger: era inattivo nello sweep stazionario, corretto
+  2026-10-20 (afbf055), e nello sweep transiente, corretto 2026-10-21 (49cb003, merge
+  bf6e970).
+- **audit-v7:** B-07, B-08, B-10, B-11 fixed; D-15 closed con follow-up fixed; A-02
+  mitigato **opt-in** (`DeviceConfig(incomplete_ionization=True)`, default OFF,
+  calibrazione con il modello attivo ancora aperta).
