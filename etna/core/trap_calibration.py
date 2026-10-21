@@ -40,14 +40,18 @@ def scaled_model(model, groups: Sequence[str], scales):
     ("all" = every trap, else the trap of that name; a trap in several groups gets the
     product). Every other field of ``model`` (donor_removal, occupancy, ...) is kept."""
     names = [t.name for t in model.traps]
+
+    def hit(g, name):  # "Z1/2" also selects the two-site Z1, Z2 traps of the presets
+        return g == "all" or g == name or (g == "Z1/2" and name in ("Z1", "Z2"))
+
     for g in groups:
-        if g != "all" and g not in names:
+        if not any(hit(g, nm) for nm in names):
             raise ValueError(f"unknown trap group {g!r} (traps: {names} or 'all')")
     traps = []
     for t in model.traps:
         s = 1.0
         for g, v in zip(groups, scales):
-            if g == "all" or g == t.name:
+            if hit(g, t.name):
                 s *= float(v)
         traps.append(dataclasses.replace(t, eta=t.eta * s))
     return dataclasses.replace(model, traps=tuple(traps))
@@ -394,6 +398,9 @@ def calibrate_removal(
     bounds=(0.0, 50.0),
     max_nfev=40,
     diff_step=0.05,
+    method="linear",
+    lin_step=0.5,
+    lin_iterations=3,
 ):
     """Fit ``params`` (``parametrized_model``; LINEAR parameters: the removal is linear
     in the introduction rates below compensation) to published removal numbers.
@@ -403,7 +410,14 @@ def calibrate_removal(
     ``settings['observations']``). A parameter at a bound gets a warning: its sigma is
     then not a confidence interval. Right singular vectors of the weighted Jacobian
     (``settings['null_directions']``, rows ordered by increasing singular value) show
-    which parameter COMBINATIONS the data fix and which they cannot see."""
+    which parameter COMBINATIONS the data fix and which they cannot see.
+
+    ``method``: "linear" (default; P + 2 model evaluations): forward-difference
+    Jacobian at ``x0`` (absolute step ``lin_step``), bounded linear least squares
+    (``scipy.optimize.lsq_linear``), then one evaluation at the solution, whose
+    residuals are the ones reported (``settings['linearity_error']``: max |model -
+    linear prediction| / sigma there), re-linearised there up to ``lin_iterations``
+    times while that error exceeds 0.01; "nonlinear": scipy least_squares."""
     from scipy.optimize import least_squares
 
     from etna.core.radiation_traps import DEFAULT_TRAP_MODEL, resolve_traps
@@ -415,7 +429,9 @@ def calibrate_removal(
     P = len(params)
     base = resolve_traps(base_model) or DEFAULT_TRAP_MODEL
     if x0 is None:
-        x0 = [base.donor_removal if p == "donor_removal" else 1.0 for p in params]
+        # start off the lower bound (a zero start pins the bounded TRF at 0)
+        x0 = [max(base.donor_removal, 1.0) if p == "donor_removal" else 1.0
+              for p in params]  # fmt: skip
     x0 = np.clip(np.asarray(x0, dtype=float), bounds[0], bounds[1])
     parametrized_model(base, params, x0)  # validates names
     nfev = [0]
@@ -432,12 +448,36 @@ def calibrate_removal(
         r = (model_values(x) - meas) / sig
         return np.where(np.isfinite(r), r, 1e3)
 
-    sol = least_squares(
-        resid, x0, bounds=(np.full(P, bounds[0]), np.full(P, bounds[1])),
-        diff_step=diff_step, max_nfev=max_nfev, x_scale=1.0, ftol=1e-8, xtol=1e-8,
-    )  # fmt: skip
-    J = sol.jac
-    r = sol.fun
+    lin_err = None
+    if method == "linear":
+        from types import SimpleNamespace
+
+        from scipy.optimize import lsq_linear
+
+        xc = x0.copy()
+        r0 = resid(xc)
+        for _ in range(max(1, int(lin_iterations))):  # Gauss-Newton re-linearisation
+            J = np.empty((r0.size, P))
+            for j in range(P):
+                xj = xc.copy()
+                xj[j] += lin_step
+                J[:, j] = (resid(xj) - r0) / lin_step
+            lin = lsq_linear(J, J @ xc - r0, bounds=(bounds[0], bounds[1]))
+            r = resid(lin.x)
+            lin_err = float(np.max(np.abs(r - (r0 + J @ (lin.x - xc)))))
+            xc, r0 = lin.x, r
+            if lin_err < 1e-2:
+                break
+        sol = SimpleNamespace(x=xc, success=lin.success, message=lin.message)
+    elif method == "nonlinear":
+        sol = least_squares(
+            resid, x0, bounds=(np.full(P, bounds[0]), np.full(P, bounds[1])),
+            diff_step=diff_step, max_nfev=max_nfev, x_scale=1.0, ftol=1e-8, xtol=1e-8,
+        )  # fmt: skip
+        J = sol.jac
+        r = sol.fun
+    else:
+        raise ValueError("method must be 'linear' or 'nonlinear'")
     n = r.size
     dof = n - P
     chi2 = float(r @ r)
@@ -450,12 +490,22 @@ def calibrate_removal(
     red = chi2 / max(dof, 1)
     warnings = []
     rank_ok = S.size == P and S.min() > 1e-6 * max(S.max(), 1e-300)
-    ident = np.array([bool(rank_ok) and np.isfinite(s_x[j]) and s_x[j] > 0 for j in range(P)])
+    ident = np.array(
+        [bool(rank_ok) and dof >= 0 and np.isfinite(s_x[j]) for j in range(P)]
+    )
     if dof < 0:
-        warnings.append(f"{n} observations for {P} parameters: under-determined")
+        warnings.append(
+            f"{n} observations for {P} parameters: under-determined, identifiability "
+            "not assessable"
+        )
     for j, p in enumerate(params):
-        if np.isclose(sol.x[j], bounds[0], atol=1e-6) or np.isclose(sol.x[j], bounds[1]):
-            warnings.append(f"parameter {p!r} at its bound {sol.x[j]:.3g}")
+        # within one sigma of a bound: the Gauss-Newton sigma is not an interval
+        if sol.x[j] - bounds[0] < max(s_x[j], 1e-6) or bounds[1] - sol.x[j] < max(
+            s_x[j], 1e-6
+        ):
+            warnings.append(
+                f"parameter {p!r} at/near its bound ({sol.x[j]:.3g} +- {s_x[j]:.2g})"
+            )
     if not rank_ok:
         warnings.append("Jacobian rank-deficient: some parameter combination is unseen")
     if P > 1:
@@ -490,5 +540,7 @@ def calibrate_removal(
             null_directions=Vt[order].tolist(),
             singular_values_sorted=S[order].tolist(),
             base_label=getattr(base, "label", ""),
+            method=method,
+            linearity_error=lin_err,
         ),  # fmt: skip
     )

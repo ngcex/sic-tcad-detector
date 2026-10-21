@@ -172,7 +172,11 @@ class RadiationTrapModel:
     trap charge frozen in the illuminated solve. Two-level traps need "kinetic" in the
     CCE path (the steady Poisson kernel is single-level; ``trap_kinetics`` handles
     both, its steady limit included). ``label``: provenance of a preset
-    (``etna.core.trap_presets``).
+    (``etna.core.trap_presets``). ``lifetimes`` (default "legacy": ``compute_K_tau``,
+    every trap counted as fully available for capture): "occupancy" makes the CCE
+    lifetimes follow the dark-state occupancy of THESE traps, 1/tau_n = 1/tau_0 +
+    <sum_k N_k sigma_n,k v_n (fraction able to capture an electron)>_epi and the hole
+    twin (``occupancy_lifetimes``): a filled level cannot capture an electron.
     """
 
     traps: Tuple[DeepTrap, ...] = burin_table_traps()
@@ -182,6 +186,7 @@ class RadiationTrapModel:
     hold_s: float = 60.0
     initial: str = "equilibrium"
     label: str = ""
+    lifetimes: str = "legacy"
 
     def __post_init__(self):
         traps = tuple(self.traps)
@@ -200,6 +205,8 @@ class RadiationTrapModel:
             raise ValueError("ramp_V_per_s must be > 0 and hold_s >= 0")
         if self.initial not in ("equilibrium", "in_beam", "neutral"):
             raise ValueError("initial must be 'equilibrium', 'in_beam' or 'neutral'")
+        if self.lifetimes not in ("legacy", "occupancy"):
+            raise ValueError("lifetimes must be 'legacy' or 'occupancy'")
 
     @property
     def neutral_removal_rate(self) -> float:
@@ -412,3 +419,39 @@ def trap_diagnostics(N_D, fluence_neq, T=300.0, model=None):
         "neutral_removal_rate": model.neutral_removal_rate,
         "emission_time_s": tau_e,
     }
+
+
+def capture_availability(fields, f):
+    """Per level row (L, N): the fraction of defects able to capture an ELECTRON
+    (the state below the level's transition) and a HOLE (the state above it), from the
+    occupancy rows f (single level: 1 - f and f; two-level rows a, b: a -> 1 - g1 and
+    g1 - g2, b -> g1 - g2 and g2)."""
+    f = np.asarray(f, dtype=float)
+    lo, up = 1.0 - f, f.copy()
+    if fields.multilevel:
+        for a in np.nonzero(fields.pair >= 0)[0]:
+            b = int(fields.pair[a])
+            up[a] = f[a] - f[b]
+            lo[b] = f[a] - f[b]
+    return lo, up
+
+
+def occupancy_lifetimes(model, fields, f, mask, T, tau0_n, tau0_p):
+    """(tau_n, tau_p) (s) of one device with OCCUPANCY-weighted capture by the traps of
+    ``model``: 1/tau_n = 1/tau0_n + <sum_k N_k sigma_n,k v_n e_avail,k>, 1/tau_p
+    likewise with the hole-capturing fraction, averaged over the trap nodes ``mask``
+    (the epi). ``RadiationTrapModel.lifetimes == "occupancy"``; the legacy
+    ``compute_K_tau`` counts every level as fully available (a filled EH6/7 donor or
+    acceptor cannot capture an electron, an empty one cannot capture a hole)."""
+    from etna.core.sic_material import SiC4H_Parameters
+
+    prm = SiC4H_Parameters()
+    vn, vp = _vth(T, prm.m_e_dos), _vth(T, prm.m_h_dos)
+    rows = level_table(model)
+    sn = np.array([r["sigma_n"] for r in rows])[:, None]
+    sp = np.array([r["sigma_p"] for r in rows])[:, None]
+    lo, up = capture_availability(fields, f)
+    m = np.asarray(mask, dtype=bool)
+    rn = (fields.N_t * sn * vn * lo).sum(axis=0)[m].mean()
+    rp = (fields.N_t * sp * vp * up).sum(axis=0)[m].mean()
+    return 1.0 / (1.0 / tau0_n + rn), 1.0 / (1.0 / tau0_p + rp)

@@ -200,6 +200,17 @@ class RadiationDamageParams:
     # range 1e-15..5e-14), consistent with this defect's own sigma_p=3.8e-14 and
     # the neighboring Z1/2 (2e-14) / EH4 (5e-13) electron cross-sections. Absolute
     # tau_n-vs-fluence (electron side) remains uncertain to ~1 order of magnitude.
+    # UPDATE 2026-10-21 (issue #5, primary sources opened, lab/radiation_traps/notes/
+    # MECHANISMS.md): 1.4e-14 has NO primary source. Paired with E = 1.60 eV in this
+    # code's emission convention it emits 4-15x slower than the measured EH6/7 DLTS
+    # peaks / LDLTS rates (Hazdra et al. SSP 242 (2016) 421: Ec-1.64, 3e-13; Danno &
+    # Kimoto JAP 100 (2006) 113728; Alfieri & Kimoto APL 102 (2013) 152108); 9e-12
+    # emits 40-160x too fast and its cited source (Knezevic et al. Materials 16 (2023)
+    # 3347) has no EH6/7 value. The emission-consistent value at 1.60 eV is ~1e-13
+    # (6e-14..2e-13), used by etna.core.trap_presets. No directly measured (capture)
+    # sigma_n was found. Kept here unchanged: it enters K_tau (legacy CCE) only, where
+    # a filled EH6/7 does not capture electrons at all (occupancy-weighted lifetimes,
+    # RadiationTrapModel.lifetimes="occupancy").
     sigma_n_EH67: float = (
         1.4e-14  # cm^2, electron capture cross-section [order-of-mag; see AUDIT C-4]
     )

@@ -147,3 +147,112 @@ def test_defaults_unchanged():
     assert DEFAULT_TRAP_MODEL.occupancy == "steady"
     assert DEFAULT_TRAP_MODEL.donor_removal == 0.0
     assert DEFAULT_TRAP_MODEL.neutral_removal_rate == pytest.approx(7.4)
+
+
+# ---------------------------------------------------------------- presets
+def test_capan_emission_rates_and_presets():
+    from etna.core.radiation_traps import trap_diagnostics
+    from etna.core.trap_presets import PRESETS, capan_z12_traps, trap_preset
+
+    z1, z2 = capan_z12_traps(2.5)
+    assert z1.eta + z2.eta == pytest.approx(2.5)
+    assert z2.eta / z1.eta == pytest.approx(4.4)
+    # negative-U ordering: the second electron is bound deeper
+    assert z2.E2_below_Ec > z2.E_below_Ec and z1.E2_below_Ec > z1.E_below_Ec
+    m = RadiationTrapModel((z1, z2))
+    tau = trap_diagnostics(1e14, 1e12, model=m)["emission_time_s"]
+    # Capan Table I: Z2(=/0) e = 2.55e7 T^2 exp(-0.67/kT) ~ 13 /s at 300 K (electron
+    # emission dominates: hole emission from an upper-half level is negligible)
+    kT = 8.617333e-5 * 300.0
+    for name, A, E in (("Z2(2)", 2.55e7, 0.67), ("Z2", 2.15e6, 0.41),
+                       ("Z1(2)", 1.1e7, 0.59), ("Z1", 7.4e6, 0.48)):  # fmt: skip
+        e = A * 300.0**2 * np.exp(-E / kT)
+        assert 1.0 / tau[name] == pytest.approx(e, rel=0.03)
+    for name in PRESETS:
+        mod = trap_preset(name)
+        assert isinstance(mod, RadiationTrapModel)
+    assert trap_preset("burin_steady") is DEFAULT_TRAP_MODEL
+    cal = trap_preset("radmanovac_calibrated")
+    assert cal.donor_removal > 0 and "CALIBRATED" in cal.label
+    da = trap_preset("radmanovac_calibrated_deep_acceptor")
+    assert da.donor_removal == 0 and da.traps[-1].name == "deep_acceptor"
+    assert da.neutral_removal_rate == pytest.approx(cal.neutral_removal_rate)
+    with pytest.raises(ValueError, match="unknown trap preset"):
+        trap_preset("nope")
+
+
+def test_occupancy_lifetimes_count_only_available_states():
+    from etna.core.radiation_traps import occupancy_lifetimes, trap_fields
+
+    m = DEFAULT_TRAP_MODEL
+    mask = np.array([True])
+    fl = trap_fields(m, 1e13, mask, 300.0, 5e-9)
+    full = np.ones((3, 1))  # every level filled: no electron capture at all
+    tn, tp = occupancy_lifetimes(m, fl, full, mask, 300.0, 1e-6, 1e-6)
+    assert tn == pytest.approx(1e-6)
+    assert tp < 1e-6
+    empty = np.zeros((3, 1))
+    tn, tp = occupancy_lifetimes(m, fl, empty, mask, 300.0, 1e-6, 1e-6)
+    assert tp == pytest.approx(1e-6) and tn < 1e-6
+    # fully available = legacy-style sum over all levels
+    from etna.core.radiation_traps import _vth
+    from etna.core.sic_material import SiC4H_Parameters
+
+    vn = _vth(300.0, SiC4H_Parameters().m_e_dos)
+    r = sum(t.eta * 1e13 * t.sigma_n * vn for t in m.traps)
+    assert 1.0 / tn == pytest.approx(1e6 + r)
+
+
+def test_run_radiation_damage_with_two_level_preset():
+    from etna.api.simulation import run_radiation_damage
+    from etna.core.trap_presets import literature_kinetic
+
+    m = literature_kinetic(hold_s=1.0)
+    r = run_radiation_damage(
+        DeviceConfig(radiation_traps=m), fluences=[1e12, 1e14], V_bias=-40.0,
+        proton_energy_MeV=62.0,
+    )  # fmt: skip
+    y = np.asarray(r.y, dtype=float)
+    assert np.all(np.isfinite(y)) and np.all((y > 0) & (y <= 1))
+    assert y[1] < y[0]
+    assert r.metadata["damage_model"] == "charged_traps"
+
+
+# ---------------------------------------------------------------- calibration
+def test_removal_calibration_recovers_synthetic_direct_removal():
+    from etna.core.trap_calibration import (
+        RemovalObservation,
+        calibrate_removal,
+        removal_observable,
+    )
+
+    base = dataclasses.replace(DEFAULT_TRAP_MODEL, occupancy="kinetic")
+    o = RemovalObservation(
+        "synthetic", "slope", 1.0, 0.1, 1e14, 20.0, None, (0.0, 2e12, 4e12),
+        (4.0, 12.0), 40.0, 4.0, 1e6,
+    )  # fmt: skip
+    truth = dataclasses.replace(base, donor_removal=2.0)
+    g = removal_observable(o, truth)
+    o = dataclasses.replace(o, value=g)
+    cal = calibrate_removal([o], ("donor_removal",), base_model=base)
+    assert cal.scales[0] == pytest.approx(2.0, abs=0.05)
+    assert cal.settings["linearity_error"] < 0.05
+    # direct removal adds ~1:1 to the depleted slope (per neq; +6 % from the edge)
+    g0 = removal_observable(o, base)
+    assert g - g0 == pytest.approx(2.0, rel=0.1)
+
+
+def test_calibrated_preset_reproduces_radmanovac_onsemi_slope():
+    """Regression pin of the CALIBRATED preset on the onsemi Table 2 slope (5.60 +-
+    0.81 per p/cm^2, 252.7 MeV, W 10-40 um; lab/radiation_traps/bench/mechanisms.py:
+    4.94 with the paper's fluences, here a 3-fluence subset in the linear regime)."""
+    from etna.core.trap_calibration import RemovalObservation, removal_observable
+    from etna.core.trap_presets import trap_preset
+
+    o = RemovalObservation(
+        "onsemi", "slope", 5.60, 0.81, 4e13, 50.0, 252.7, (0.0, 1.4e12, 2.8e12),
+        (10.0, 40.0), 80.0, 5.0, 1e6,
+    )  # fmt: skip
+    g = removal_observable(o, trap_preset("radmanovac_calibrated"))
+    assert abs(g - 5.60) < 0.81
+    assert g == pytest.approx(4.94, abs=0.15)

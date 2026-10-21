@@ -956,6 +956,7 @@ def _trap_dark_states(ref, fluences_neq, V_bias, trap_model):
         donors=donors,
         acceptors=acceptors,
         converged=converged,
+        fluences_neq=fluences_neq,
     )
 
 
@@ -985,16 +986,25 @@ def _trap_dark_states_kinetic(ref, fluences_neq, V_bias, trap_model):
         if trap_model.hold_s > 0:
             prot.append(hold(trap_model.hold_s, V, record=0))
         if prot:
-            st = s.run(st, prot, tol=1e-3, dV_max=_TRAP_ENGINE_STEP_V).final
-    res = SimpleNamespace(psi=st.psi, n=st.n, p=st.p, converged=np.ones(s.B, bool))
+            try:
+                st = s.run(st, prot, tol=1e-3, dV_max=_TRAP_ENGINE_STEP_V).final
+            except RuntimeError:  # a failed implicit step: every point NaN + reason
+                ok = np.zeros(s.B, bool)
+                res = SimpleNamespace(psi=st.psi, n=st.n, p=st.p, converged=ok)
+                return dict(pb=s.pb, res=res, rho_trap=st.rho_trap, donors=s.donors,
+                            acceptors=s.acceptors, converged=ok, state=st,
+                            fluences_neq=s.fluences_neq)  # fmt: skip
+    ok = np.ones(s.B, bool)
+    res = SimpleNamespace(psi=st.psi, n=st.n, p=st.p, converged=ok)
     return dict(
         pb=s.pb,
         res=res,
         rho_trap=st.rho_trap,
         donors=s.donors,
         acceptors=s.acceptors,
-        converged=np.ones(s.B, bool),
+        converged=ok,
         state=st,
+        fluences_neq=s.fluences_neq,
     )
 
 
@@ -1004,6 +1014,26 @@ _TRAP_ENGINE_STEP_V = 5.0
 # Gummel cap with traps: a semi-insulating epi at low field converges slowly (258
 # iterations at -1 V, 4e14 p/cm^2) to the same fixed point; one iteration is ~50 us.
 _TRAP_ENGINE_GUMMEL_MAX_ITER = 3000
+
+
+def _occupancy_taus(ref, dark, trap_model):
+    """(tau_n, tau_p) (B,) of the dark trap states with occupancy-weighted capture
+    (``RadiationTrapModel.lifetimes == "occupancy"``; radiation_traps.occupancy_lifetimes)
+    and the pristine SRH lifetimes at the device T."""
+    from etna.core.radiation_traps import occupancy, occupancy_lifetimes, trap_fields
+
+    T = float(ref["info"]["T"])
+    n_i = float(ref["info"]["n_i"])
+    t0n, t0p = srh_lifetime(T, "electron"), srh_lifetime(T, "hole")
+    st = dark.get("state")
+    out_n, out_p = [], []
+    for b, F in enumerate(dark["fluences_neq"]):
+        fl = trap_fields(trap_model, F, ref["epi_mask"], T, n_i)
+        f = st.f[b] if st is not None else occupancy(fl, dark["res"].n[b], dark["res"].p[b])
+        tn, tp = occupancy_lifetimes(trap_model, fl, f, ref["epi_mask"], T, t0n, t0p)
+        out_n.append(tn)
+        out_p.append(tp)
+    return np.array(out_n), np.array(out_p)
 
 
 def _cce_fluence_engine_traps(
@@ -1028,13 +1058,11 @@ def _cce_fluence_engine_traps(
     # mobility at the pristine (physical) donors: the traps are not counted as
     # ionized-impurity scatterers (a simplification, stated in USAGE)
     mu_n, mu_p = edge_mobilities(donors, acceptors, info["N_A"], info["T"])
-    cb = ContinuityBatch(
-        frozen,
-        mu_n,
-        mu_p,
-        np.array([d["tau_n"] for d in damaged_list], dtype=float),
-        np.array([d["tau_p"] for d in damaged_list], dtype=float),
-    )
+    tau_n = np.array([d["tau_n"] for d in damaged_list], dtype=float)
+    tau_p = np.array([d["tau_p"] for d in damaged_list], dtype=float)
+    if trap_model.lifetimes == "occupancy":
+        tau_n, tau_p = _occupancy_taus(ref, dark, trap_model)
+    cb = ContinuityBatch(frozen, mu_n, mu_p, tau_n, tau_p)
     G = _alpha_generation_values(info, x, alpha_range_cm, generation_rate)
     tr = cb.solve(
         dark["res"].psi,
