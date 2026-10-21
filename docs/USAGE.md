@@ -2271,9 +2271,14 @@ cmp.rms_W_um, cmp.rms_C_rel, cmp.notes
 dep = M.depletion_profile(d)                # differential N(W), depletion approximation
 inv = M.invert_cv(d, etna.DeviceConfig())   # -> inv.donor_table, inv.config
 open("donor_table.json", "w").write(inv.to_json())
-cfg = etna.DeviceConfig(donor_table=M.load_donor_table_json("donor_table.json"))
+cfg = inv.config                            # the fitted device itself
+print(M.device_rebuild_code(inv.config, "donor_table.json"))  # code rebuilding it later
 ```
 
+- `DeviceConfig(donor_table=table)` alone is NOT the fitted device: it keeps the
+  defaults (epi, substrate, n+, mobility, traps) and the parametric transition. Use
+  `inv.config`, or `device_rebuild_code(inv.config, json_name)`, which writes every
+  non-default field out (issue #20; the Measurements page shows that code).
 - Capacitance is stored per area (F/cm²); `W = EPS / (C/A)` with the model's permittivity,
   so data and model are converted identically. The model area does not enter the
   comparison (per-area C); a data area different from `config.area_cm2` is noted.

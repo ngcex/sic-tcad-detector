@@ -34,6 +34,7 @@ from etna.measurements.cv import (
     load_cv_csv,
 )
 from etna.measurements.io import (
+    device_rebuild_code,
     load_donor_table_json,
     read_donor_table_json,
     report_markdown,
@@ -90,6 +91,7 @@ __all__ = [
     "analyze_it",
     "model_current_vs_T",
     "load_donor_table_json",
+    "device_rebuild_code",
     "read_donor_table_json",
     "report_markdown",
     "results_json",
