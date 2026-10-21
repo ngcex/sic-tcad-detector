@@ -194,7 +194,7 @@ def apply_physics_models(device_info, models) -> PhysicsModels:
             "bandgap_narrowing is registered (parameters + provenance) but not coupled "
             "into the devsim / engine solvers yet"
         )
-    if device_info.get("half_width_um") is not None or device_info.get("is_2d"):
+    if device_info.get("dimension", 1) != 1 or "half_width_cm" in device_info:
         raise NotImplementedError("apply_physics_models: 1D devices only")
     T = float(device_info["T"])
     models.check_temperature(T)

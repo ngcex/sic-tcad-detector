@@ -1364,9 +1364,9 @@ uv run pytest -n0 -x tests/test_api_cce.py        # serial, e.g. with --pdb
 uv run pytest -n auto -q --durations=20           # slowest tests
 ```
 
-- 119 modules and 1514 tests (2026-10-21). `pytest.ini` deselects the `exhaustive` marker
+- 121 modules and 1542 tests (2026-10-21). `pytest.ini` deselects the `exhaustive` marker
   (6 redundant deep variants, each implied by a kept test), so the default run collects
-  1508: all pass with `--extra dev --extra viz`; with `--extra dev` only, 1500 pass and 8
+  1536: all pass with `--extra dev --extra viz`; with `--extra dev` only, 1528 pass and 8
   skip (the manim and gdstk tests). The `slow` marker labels the devsim integration tests
   but does not deselect them.
 - `pytest.ini` adds `--dist loadgroup --no-loadscope-reorder` (inert without `-n`), so
@@ -1764,7 +1764,7 @@ The peak field at breakdown, against Hatakeyama's critical field F_C = 2.70 (1e1
 - **`run_avalanche(config, models=None, v_start=-100, v_stop=-1000, n_points=10, *, source="alpha"|"dark", approach_breakdown=False, M_max=1e3, generation_rate=1e18)`**
   - y: unclipped CCE (alpha) or dark current (A).
   - metadata: `J`, `J_baseline`, `gain`, `M_mcintyre`, `V_BD`, `converged`, `reasons`.
-  - `approach_breakdown=True` replaces the linear grid with a geometric schedule toward V_BD up to `M_max`: the adaptive near-breakdown sweep.
+  - `approach_breakdown=True` replaces the linear grid with a geometric schedule toward V_BD: the adaptive near-breakdown sweep. Its last point is V_BD - (V_BD - |v_start|) / `M_max`. `M_max` is a bias depth, not a target multiplication: 1e3 ends near M ~ 400 on the default device.
 - **`run_transit_time(config, models=None, v_start=-5, v_stop=-100, n_points=20)`**
   - Drift-only, full-width crossing times of the depleted epi (field > 1e3 V/cm).
   - Metadata: `t_e`, `t_h`, `t_e_low_field`, `t_h_low_field`, `W_dep`.

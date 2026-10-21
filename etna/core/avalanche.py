@@ -201,9 +201,12 @@ def breakdown_voltage(
     2. Illinois (modified regula falsi) on ln I_p inside each device's own bracket until
        the bracket is below ``v_tol`` V.
 
-    The error estimate ``quadrature_error_V`` is the Richardson estimate
-    |V_BD(h) - V_BD(2h)| / 3 (second-order edge discretisation), evaluated with the
-    root's local slope, not a second search. Devices without breakdown below ``v_max``
+    ``quadrature_error_V`` is the QUADRATURE part only: |ln I(h) - ln I(2h)| / 3 at the
+    root state (pairs of edges merged, same potential) divided by the local slope
+    d ln I / dV. It ignores the Poisson discretisation and is ~100x below the real mesh
+    error (lab/physics_models/notes/LOG.md: h -> h/2 -> h/4 converges about first
+    order); use a re-solve on a refined mesh (``etna.api.models.run_breakdown``
+    ``mesh_error_V``) for the error of V_BD. Devices without breakdown below ``v_max``
     return nan and converged False.
     """
     B = pb.B

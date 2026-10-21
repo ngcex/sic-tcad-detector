@@ -168,11 +168,14 @@ def run_breakdown(
     McIntyre ionization integral reaches 1 (``etna.core.avalanche.breakdown_voltage``:
     batched secant march + Illinois to ``v_tol``). ``mesh_check`` repeats the search
     on the bisected mesh: ``mesh_error_V`` = |V_BD(h) - V_BD(h/2)| (the base-mesh value
-    is reported, as every engine output; the Richardson estimate of its error is
-    |dV| * 4/3 for a second-order scheme, the fine value's |dV| / 3).
+    is reported, as every engine output). The convergence is about first order (ratio
+    1.5-2.3 over h, h/2, h/4 on the default device), so the base value lies within
+    about 2 x ``mesh_error_V`` of the converged one.
 
     Returns a SimResult with x = bias (V, reverse negative) on a geometric schedule
-    toward V_BD up to M_p = ``M_max`` and y = hole-injection multiplication M_p;
+    toward V_BD whose last point is V_BD (1 - 1/``M_max``) (a bias depth, not a target
+    multiplication: M_max = 1e4 ends near M_p ~ 4e3 on the default device) and y =
+    hole-injection multiplication M_p;
     metadata: ``V_BD`` (V, magnitude), ``M_n``, ``M_p``, ``I_n``, ``I_p``, ``E_max``
     (V/cm), ``E_max_at_breakdown``, the error estimates, provenance and validity notes.
     """
@@ -286,10 +289,11 @@ def run_avalanche(
     (module doc); y = dark current (A, for ``config.area_cm2``).
 
     Bias grid: ``np.linspace(v_start, v_stop, n_points)`` (reverse negative), or with
-    ``approach_breakdown=True`` a geometric schedule from ``v_start`` toward V_BD up to
-    the multiplication ``M_max`` (needs an impact-ionization set): the adaptive
-    near-breakdown sweep. Points at or beyond V_BD, or past ``M_max``, are NaN with a
-    reason; a point whose coupled Newton fails is NaN with ``converged`` False.
+    ``approach_breakdown=True`` a geometric schedule from ``v_start`` toward V_BD whose
+    last point is V_BD - (V_BD - |v_start|) / ``M_max`` (a bias depth: M_max = 1e3 ends
+    near M ~ 400 on the default device; needs an impact-ionization set): the adaptive
+    near-breakdown sweep. Points at or beyond V_BD, or whose McIntyre multiplication
+    exceeds ``M_max``, are NaN with a reason; a point whose coupled Newton fails is NaN with ``converged`` False.
 
     metadata: ``J`` / ``J_baseline`` (A/cm^2, models / ETNA default physics),
     ``gain`` = J / J_baseline, ``M_mcintyre`` (generation-weighted McIntyre
