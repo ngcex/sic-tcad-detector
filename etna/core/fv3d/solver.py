@@ -37,7 +37,7 @@ from numba import njit, prange
 from etna.core.device2d import EPS_0, K_B_J, Q
 from etna.core.sic_material import SiC4H_Parameters, intrinsic_concentration
 
-from .mg import Multigrid, apply_op, dual_widths, pcg
+from .mg import Multigrid, dual_widths, pcg
 from .structures import Structure3D
 
 LOG_MAX = 700.0  # exp overflow guard (energy -> inf, rejected by the line search)
