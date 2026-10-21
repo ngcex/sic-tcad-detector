@@ -10,6 +10,11 @@ uv run python lab/radiation_traps/bench/validate.py   (~10 s; numbers in ../note
    De Napoli 2022 review (20 um, 1e14: losses 7 % / 22.5 % at 1.3e14 / 7.3e14 cm^-2,
    14 MeV n; normalisation of those fluences to neq not checked).
 """
+# NOTE 2026-10-21: the defaults changed (NIEL convention sic-damage, damage model
+# "auto" = calibrated kinetic traps). The numbers logged from this bench predate the flip
+# (si-neq); pass niel_convention="si-neq" / niel_table=hardness_table("proton", "si-neq")
+# and radiation_traps=False or True explicitly to reproduce them.
+
 
 import logging
 

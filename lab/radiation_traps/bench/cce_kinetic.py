@@ -8,6 +8,11 @@ Default stack (10 um epi), 62 MeV protons (kappa 1.942), alpha CCE via
 run_radiation_damage. All PREDICTED; only the slow-removal rate of the
 radmanovac_calibrated presets is CALIBRATED (to 252.7 MeV C-V slopes, MECHANISMS.md).
 """
+# NOTE 2026-10-21: the defaults changed (NIEL convention sic-damage, damage model
+# "auto" = calibrated kinetic traps). The numbers logged from this bench predate the flip
+# (si-neq); pass niel_convention="si-neq" / niel_table=hardness_table("proton", "si-neq")
+# and radiation_traps=False or True explicitly to reproduce them.
+
 
 from __future__ import annotations
 

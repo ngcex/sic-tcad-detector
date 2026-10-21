@@ -6,6 +6,11 @@ spikes), compensation fluence. Prints RES lines.
 
 usage: uv run python lab/buffer_profile/bench/impact.py
 """
+# NOTE 2026-10-21: the defaults changed (NIEL convention sic-damage, damage model
+# "auto" = calibrated kinetic traps). The numbers logged from this bench predate the flip
+# (si-neq); pass niel_convention="si-neq" / niel_table=hardness_table("proton", "si-neq")
+# and radiation_traps=False or True explicitly to reproduce them.
+
 
 from __future__ import annotations
 

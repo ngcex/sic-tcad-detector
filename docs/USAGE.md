@@ -829,8 +829,10 @@ sources: GitHub issue #5.
 from etna import DeviceConfig
 from etna.core.trap_kinetics import KineticTrapSolver, hold, simulate_cv, neff_from_cv
 
-cfg = DeviceConfig(epi_thickness_um=50.0, doping_profile="uniform", N_D=4e13)
-s = KineticTrapSolver.from_config(cfg, [0.0, 1e12, 2e12], energy_MeV=252.7)  # p/cm2
+cfg = DeviceConfig(epi_thickness_um=50.0, doping_profile="uniform", N_D=4e13,
+                   radiation_traps=True)   # Burin table (the default "auto" = calibrated preset)
+s = KineticTrapSolver.from_config(cfg, [0.0, 1e12, 2e12], energy_MeV=252.7,
+                                  niel_convention="si-neq")  # p/cm2; numbers below: si-neq
 cv = simulate_cv(s, V_points, freq_Hz=1e6, occupancy="kinetic", initial="equilibrium",
                  storage=(hold(600.0, 0.0),), rate_V_per_s=1.0)
 cv.C_ac, cv.C_qs, neff_from_cv(V_points, cv.C_ac)   # F/cm2 (area 1), cm^-3
