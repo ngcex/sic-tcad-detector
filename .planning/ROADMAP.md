@@ -81,7 +81,7 @@ Full details: [milestones/v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md)
 - **TIER 4 (Phases 33-34)** — Stretch goal and milestone audit/synthesis
 
 - [x] **Phase 26: Graded Doping 2D Calibration** — Fix `device2d.py` reverse-bias solver failure with re-calibrated graded epi doping profile in 2D _(TIER 1, unblocker)_ — **4 plans planned** (completed 2026-06-16)
-- [~] **Phase 27: PSTAR+SRIM Stopping Power & Real κ** — Tabulated proton stopping power data with energy-dependent tissue-equivalence κ(E) _(TIER 1, unblocker)_ — **PARTIAL:** `sic_stopping_power_bragg`/`compute_kappa_table`/kinetic-energy kappa lookup built (commit 18e4005, 2026-06-16); real PSTAR/SRIM CSVs still placeholders (data-blocked); the GSD phase itself was not formally executed
+- [~] **Phase 27: PSTAR+SRIM Stopping Power & Real κ** — Tabulated proton stopping power data with energy-dependent tissue-equivalence κ(E) _(TIER 1, unblocker)_ — **PARTIAL:** `sic_stopping_power_bragg`/`compute_kappa_table`/kinetic-energy kappa lookup built (commit 18e4005, 2026-06-16); real PSTAR/SRIM CSVs still placeholders (data-blocked); the GSD phase itself was not formally executed. _Update 2026-10-21:_ real NIST PSTAR/ASTAR data now used (`data/nist_star/`, C-1 f6d7ade / merge 15b736f); kappa = SiC -> water LET ratio 0.426 (1 MeV) -> 0.375 (150 MeV), see `PHYSICS_AUDIT_v5.md` §10
 - [~] **Phase 28: Geant4 ROOT Integration with Golden Fixture** — RootSchemaMap + synthetic Geant4 fixture closing the MCCP-02 gap _(TIER 1, unblocker)_ — **PARTIAL:** `mc_coupling.py` reads ROOT via lazily imported `uproot`; no `RootSchemaMap` or golden fixture found in the code
 - [ ] **Phase 29: Complete Noise Analysis** — Shot + Johnson + 1/f McWhorter noise, ENC/NEE bands, y*min figure-of-merit *(TIER 2, depends on Phase 26)\_
 - [ ] **Phase 30: Build-up Over-Response 2D** — Depth-resolved near-surface CCE(z) and dead-layer correction on y-spectra _(TIER 2, depends on Phase 26)_
@@ -625,5 +625,5 @@ Plans:
 | 40. Geometry Viewer                             | v5.0      | 2/2            | Complete    | 2026-07-13 |
 | 41. Radiation Damage + Dark Current Pages       | v5.0      | 3/3            | Complete    | 2026-07-13 |
 | 42. Microdosimetry Page + Batch Sweep Page      | v5.0      | 3/3            | Complete    | 2026-07-14 |
-| 43. Integration Audit — All 20 Notebooks        | v5.0      | 2/2 | Complete    | 2026-07-15 |
-| v6.0 (campaign, no phases) | v6.0 | n/a | Complete | 2026-10-19 |
+| 43. Integration Audit — All 20 Notebooks        | v5.0      | 2/2            | Complete    | 2026-07-15 |
+| v6.0 (campaign, no phases)                      | v6.0      | n/a            | Complete    | 2026-10-19 |

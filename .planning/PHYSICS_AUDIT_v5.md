@@ -6,6 +6,8 @@
 
 **One-line vs v4:** v5 confirms all six v4 fixes (C1, C4, C7/C8, M4, M5, M6) held with **zero regressions**, re-confirms the v4 still-open criticals (FLASH plasma physics, EH6/7 sigma_n, NIEL kappa), and surfaces several **newly-found** defects — most importantly a paper-blocking inverted/fabricated tissue-equivalence kappa in the microdosimetry path that v4 never examined.
 
+> **Correction 2026-10-21 (kept below as written; see §10).** The tissue-equivalence kappa was fabricated but **not inverted**. The real NIST PSTAR data now in the repo (`data/nist_star/README.md`, `docs/USAGE.md`) give the lineal-energy kappa (SiC -> water LET ratio, the factor that converts y) as 0.426 at 1 MeV falling to 0.375 at 150 MeV. The "physical ~1.13–1.24" quoted in this audit is a **mass** stopping-power ratio (the dose-conversion factor, per g/cm²), not the lineal-energy factor, and even as a mass ratio the data give 1.37 (1 MeV) -> 1.20 (150 MeV), not 1.24 -> 1.13. The legacy flat 0.58 table was fabricated and too high (by ~1.4–1.5x against 0.43–0.375), but it was below 1 like the real linear ratio. §10 also records the later status of C-1, C-2, C-3 (Auger), C-5, Mj-4, Mj-5.
+
 ---
 
 ## 1. Executive Verdict
@@ -39,6 +41,7 @@ The simulator's **core device physics is sound and the v4 fixes all held** — e
 - **Severity reconciliation:** both verifiers confirmed **critical**; I concur. This is a sign-inverted, ~2× wrong, mis-shaped correction on the detector's headline clinical output.
 - **Downstream affected:** every tissue-equivalent lineal-energy spectrum, y_F, y_D, quality-factor/RBE estimate after `tissue_equivalence_correction`; Notebooks 18/19 microdosimetry outputs; the `kappa_constant=0.58` default path.
 - **Fix:** replace both CSVs with real NIST PSTAR liquid-water proton mass stopping powers and SiC (Bragg additivity from PSTAR Si and C, mass fractions Si 0.700 / C 0.300, or ASTAR/SRIM). Set `kappa_constant` default to ~1.2. Correct the docstring to "~1.13–1.32, increasing at lower energy." **Effort: M** (data sourcing + regen).
+- **Correction 2026-10-21:** the "kappa > 1" argument above (Z/A and I-value) applies to the **mass** stopping-power ratio. The lineal-energy kappa is the **linear** (LET) ratio, which also carries the density ratio rho_water/rho_SiC = 1.00/3.21; the real PSTAR data give 0.426 (1 MeV) -> 0.391 (10) -> 0.378 (62) -> 0.375 (150 MeV), and the mass ratio 1.368 -> 1.255 -> 1.215 -> 1.204 (`data/nist_star/README.md`, which also notes that the "1.24 -> 1.13" figure matched neither ratio). So the 0.58 table was fabricated and too high, not sign-inverted, and the proposed `kappa_constant ~1.2` and "1.0 < kappa < 1.4" test bound would have been wrong for y. Resolved 2026-10-20 (f6d7ade, merged 15b736f): see §10.
 
 ### C-2 [NEWLY-FOUND] kappa(E) indexed by deposited energy instead of particle kinetic energy
 
@@ -67,6 +70,7 @@ The simulator's **core device physics is sound and the v4 fixes all held** — e
 - **Severity reconciliation:** the two verifiers split hard. Code-reality (anchoring to _silicon_ RD48 values) kept it major, claiming ~3–5× too small. Literature-check **refuted** the 3–5× claim: the code normalizes to the _SiC_ 1-MeV-neutron NIEL (correct denominator for a SiC simulator), whereas the auditor compared against _silicon_-normalized factors; the SiC neutron denominator is ~2.5–3× larger, so SiC-normalized proton kappa of ~0.3–0.5 is _plausible_, not 3–5× low. **My resolution:** the specific "3–5× too small / should be ~1–2" claim is **not established** — it conflated Si and SiC normalization. What survives is the _original v4 truth_: these are unvalidated placeholders that must be replaced with SR-NIEL SiC data, and may be off by tens of percent (not 3–5×). I keep this **STILL-OPEN** and rate it **major→critical-for-absolute-numbers**: until replaced, no _absolute_ Phi*crit or defect-concentration number is citable, though the energy \_trend* is correct.
 - **Downstream affected:** CCE-vs-proton-fluence, N_Z12/N_EH67/N_EH4, Phi_crit headline, 62-MeV default predictions.
 - **Fix:** replace with SR-NIEL SiC proton NIEL at 30/62/70/150 MeV, expressed consistently as kappa(E)=NIEL_proton(E)/NIEL_neutron_SiC(1 MeV). Document the normalization convention explicitly to avoid the Si/SiC confusion. **Effort: M.**
+- **Update 2026-10-21:** partly resolved (B-07, fixed 2026-10-20, merged 2026-10-21 in 1142e9c). kappa(E) is now SR-NIEL-7 proton NIEL data, 1-1000 MeV, in the **Si 1-MeV-neq convention** of the Burin defect rates (kappa = 6.67 / 2.75 / 1.94 / 1.82 / 1.12 at 5.6 / 30 / 62 / 70 / 150 MeV; out-of-table energies raise). Still open: the SiC neutron normalisation (SiC/Si NIEL ratio of the reactor neutrons), which needs an SR-NIEL registered account or an NJOY SiC damage function (`docs/USAGE.md`, `.issues/TECH-DEBT-2026-10-18.md`). Every proton Phi_crit moved by 0.35/1.94 at 62 MeV; the default stack compensates at 3.48e12 p/cm² (62 MeV).
 
 ---
 
@@ -218,6 +222,34 @@ advisor-confirmed BEFORE implementation, TDD, then tested.
 **Deferred (advisor: off critical path for the deliverable):** Schottky/JBS device model (microdosimetry = geometry-only per PI decision), Mj-4 displacement current, Mj-5 Bragg profiles, kappa/Phase 27.
 
 **Still the gating item for both designs:** Phase 26 graded-doping 2D calibration (planned+approved, not executed).
+
+---
+
+## 10. Correction and status update (2026-10-21)
+
+Added after the fact; sections 1-9 are left as written. Sources: `data/nist_star/README.md`, `data/niel/`, `docs/USAGE.md`, `.issues/TECH-DEBT-2026-10-18.md` and the audit-v7 index files (`.issues/audit-v7/issues/{A,B,D}-INDEX.md`).
+
+**Correction to C-1 (and to §1, §6, §8 wherever it says "inverted").** The tissue-equivalence kappa was fabricated but not inverted. For lineal energy y the conversion factor is the SiC -> water **linear** stopping (LET) ratio; real NIST PSTAR (water) and PSTAR Si + C by Bragg additivity (SiC) give 0.426 at 1 MeV, 0.391 at 10, 0.378 at 62 and 0.375 at 150 MeV (`kappa_table("proton")`). The "physical ~1.13–1.24" was a **mass** stopping-power ratio (dose conversion), and even as a mass ratio the data give 1.368 at 1 MeV -> 1.204 at 150 MeV (`kappa_table("proton", ratio="mass")`). The legacy flat 0.575–0.587 table was fabricated and too high (about 1.4–1.5x), on the same side of 1 as the real linear ratio.
+
+| ID                            | Status 2026-10-21                                                                                                                                                                                                                                                                                                                                                                                                           | Where                                       |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| **C-1** kappa data            | **Resolved** (fixed 2026-10-20, merged 2026-10-21): real NIST PSTAR/ASTAR tables, SiC by Bragg additivity (error a few % for p > 1 MeV: an unverified literature estimate); kappa = SiC -> water LET ratio, 0.426 -> 0.375 (1 -> 150 MeV). (No silent `kappa_constant` default since the v6 honesty fix.)                                                                                                                                                                          | f6d7ade, merge 15b736f; `data/nist_star/`   |
+| **C-2** kappa lookup variable | **Resolved** (fixed 2026-10-20, merged 2026-10-21): kappa(E) is looked up at the particle kinetic energy; MC events carry the primary kinetic energy (optional `ekin_MeV` / `track_id` columns, `event_kinetic_MeV`)                                                                                                                                                                                                                                   | 5ba7c78, merge 15b736f                      |
+| **C-3** FLASH                 | Plasma / high-injection physics still **not implemented** (relabelled as a sensitivity bound on 2026-06-14, unchanged). Auger: the steady-state sweep had dropped the Auger term, fixed 2026-10-20 (afbf055); the transient sweep dropped it too, fixed 2026-10-21 (49cb003, merge bf6e970). Auger lowers CCE by a dose-rate-independent offset (3.4e-7 on the default stack at -30 V, up to 5.6e-5 on notebook 05b's grid) | `docs/USAGE.md` (`run_flash_recombination`) |
+| **C-5** NIEL kappa            | **Partly resolved** (fixed 2026-10-20, merged 2026-10-21): SR-NIEL-7 proton NIEL 1-1000 MeV, Si 1-MeV-neq convention (kappa(62 MeV) = 1.942). **Open:** SiC neutron normalisation (needs an SR-NIEL registered account or NJOY)                                                                                                                                                                                                                        | B-07, merge 1142e9c; `data/niel/`           |
+| **Mj-4** transient current    | **Resolved** (fixed and merged 2026-10-20): terminal current = conduction + displacement; I_peak, t_peak, t_collection from the total current; CCE / Q unchanged                                                                                                                                                                                                                                                                               | eba0801, merge d958408                      |
+| **Mj-5** generation profiles  | **Resolved / updated** (fixed 2026-10-20, merged 2026-10-21): (a) alpha default is the NIST ASTAR Bragg curve in SiC (CSDA range 18.43 um at 5.486 MeV; flat box kept as opt-out); (b) the 2D lateral scan no longer decays exponentially: it shares `alpha_depth_shape` with 1D (already in place before 2026-07-15); (c) protons: opt-in PSTAR energy dependence (B-10), the default SiC-dose mode stays energy-independent by construction          | 8acb0ec, merge 15b736f                      |
+
+Related audit-v7 items, as recorded in the index files:
+
+| ID   | Status                                                                                                                               | Where                  |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------ | ---------------------- |
+| B-07 | fixed 2026-10-20 (SR-NIEL NIEL table; SiC neutron normalisation still open, as C-5)                                                  | merge 1142e9c (2026-10-21) |
+| B-08 | fixed 2026-10-20 (Hurkx 1992 closed form, tau / (1 + Gamma); N_t refitted)                                                           | merge 1142e9c (2026-10-21) |
+| B-10 | fixed 2026-10-20 (PSTAR data; opt-in proton energy dependence)                                                                       | 8acb0ec, merge 15b736f (2026-10-21) |
+| B-11 | fixed 2026-10-20 (opt-in lateral CCE map in `process_mc_ensemble`)                                                                   | merge 1142e9c (2026-10-21) |
+| D-15 | closed 2026-10-18; follow-up fixed 2026-10-20 (Cauchy 4V/S finite SV, default width 100 um)                                          | merge 1142e9c (2026-10-21) |
+| A-02 | mitigated 2026-10-20, **opt-in** (`DeviceConfig(incomplete_ionization=True)`, default OFF); calibration with the model ON still open | merge 7308948 (2026-10-20) |
 
 ---
 
