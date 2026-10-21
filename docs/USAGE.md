@@ -6,6 +6,8 @@ not read this code. Every Python block below was run against this repository (ve
 5.0.0; re-run 2026-10-21); the numbers quoted come from those runs on an Apple M4 (10
 cores) and will differ slightly on other machines; timings are dated where given. File
 paths are relative to the repository root.
+The equations, constants, assumptions and status of every model are in the theory
+manual, [docs/THEORY.md](THEORY.md).
 
 Contents
 

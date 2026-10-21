@@ -17,6 +17,8 @@ measurement of this device (see [What to trust](#what-to-trust)).
 The full guide is **[docs/USAGE.md](docs/USAGE.md)**: every facade with a runnable
 example, presets, units, solver provenance, validity limits, the app, exports,
 notebooks, tests and troubleshooting. This README is the overview.
+The equations ETNA solves, with their constants, assumptions, validity limits and status
+labels, are in the theory manual **[docs/THEORY.md](docs/THEORY.md)**.
 
 ---
 
