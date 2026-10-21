@@ -21,7 +21,6 @@ class TestReverseBiasConvergence:
     """
 
     @pytest.mark.slow
-    @pytest.mark.exhaustive  # implied by the -50 V build (its ramp passes this bias)
     def test_converges_at_minus_15V_100um(self):
         from etna.core.charge_collection_2d import create_2d_dd_device
         from etna.core.devsim_reset import reset_devsim_fully
@@ -36,7 +35,6 @@ class TestReverseBiasConvergence:
             reset_devsim_fully()
 
     @pytest.mark.slow
-    @pytest.mark.exhaustive  # implied by the -50 V build (its ramp passes this bias)
     def test_converges_at_minus_30V_100um(self):
         from etna.core.charge_collection_2d import create_2d_dd_device
         from etna.core.devsim_reset import reset_devsim_fully
@@ -65,7 +63,7 @@ class TestReverseBiasConvergence:
             reset_devsim_fully()
 
     @pytest.mark.slow
-    @pytest.mark.exhaustive  # implied by the -50 V build (its ramp passes this bias)
+    @pytest.mark.exhaustive  # 300 um variants (~6 s each); the build is seeded (engine start), so the -50 V build no longer ramps through this bias; run with -m exhaustive
     def test_converges_at_minus_15V_300um(self):
         from etna.core.charge_collection_2d import create_2d_dd_device
         from etna.core.devsim_reset import reset_devsim_fully
@@ -80,7 +78,7 @@ class TestReverseBiasConvergence:
             reset_devsim_fully()
 
     @pytest.mark.slow
-    @pytest.mark.exhaustive  # implied by the -50 V build (its ramp passes this bias)
+    @pytest.mark.exhaustive  # 300 um variants (~6 s each); the build is seeded (engine start), so the -50 V build no longer ramps through this bias; run with -m exhaustive
     def test_converges_at_minus_30V_300um(self):
         from etna.core.charge_collection_2d import create_2d_dd_device
         from etna.core.devsim_reset import reset_devsim_fully

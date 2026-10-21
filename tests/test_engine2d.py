@@ -100,7 +100,9 @@ class TestOutsideValidity:
         assert Engine2DPunchThrough is Engine2DOutsideValidity
 
     def test_near_wall_defers_to_devsim(self):
-        # devsim's ramp stops at 54.5 V here; 55 V is inside the undecided band.
+        # The 0.5 V-step devsim ramp stops at 54.5-56.5 V here (scan.py); the seeded adaptive
+        # build was seen reaching ~67 V (2026-10-21, not re-verified). 55 V is in the band where
+        # the field rule defers to devsim (FIELD_ENGINE_MAX < field < FIELD_NAN_MIN).
         with pytest.raises(Engine2DFallback, match="non-convergence wall"):
             lateral_cce_scan_2d(25.0, 55.0, N_D_bulk=5e13, **LEGACY_GEOM)
 
