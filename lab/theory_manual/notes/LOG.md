@@ -1,14 +1,14 @@
 # Theory manual worked examples: run log
 
 Run 2026-10-21 on main at 7746e8d (Apple M-series, shared machine), the numbers quoted in
-`docs/THEORY.md`. devsim's own iteration printout and BLAS loader lines are removed.
+`docs/THEORY.md`. devsim's own iteration printout, model-replacement notices and BLAS loader lines are removed.
 
 ```bash
 uv run python lab/theory_manual/worked_examples.py
 ```
 
 The `device` section is `lab/theory_manual/device_example.py` (stack, ionization, V_bi,
-W(V), C-V inversion, thermal constants). Run time: about 10 s once numba has compiled
+W(V), C-V inversion, thermal constants). Run time: about a minute in all on a shared machine once numba has compiled
 (the first run compiles the track engine, about 30 s).
 
 ```text
@@ -63,6 +63,7 @@ C_v = c_p*rho = 0.69*3.21 = 2.2149 J/cm^3/K
 line source LET 1000 keV/um, w 10 nm, t 1e-12 s: dT axis = 24.22 K (hand E/(pi c_v (w^2+4 a t)) = 24.22)
 line source LET 1000 keV/um, w 10 nm, t 1e-11 s: dT axis = 2.68 K (hand E/(pi c_v (w^2+4 a t)) = 2.68)
 line source LET 1000 keV/um, w 10 nm, t 1e-10 s: dT axis = 0.27 K (hand E/(pi c_v (w^2+4 a t)) = 0.27)
+
 ## materials
 E_g(300 K) = 3.260000 eV (Varshni, E_g0 3.2965625)
 N_C = 1.6951e+19, N_V = 2.5088e+19 cm^-3; sqrt(NC NV) exp(-Eg/2kT) = 8.521e-09
@@ -73,6 +74,7 @@ N = 1.000e+17: mu_n c_axis 600.00 (hand 600.00), legacy_perp 585.73, mu_p 108.96
 N = 1.000e+19: mu_n c_axis 100.61 (hand 100.61), legacy_perp 115.35, mu_p 75.68 cm2/Vs
 mu_n(3.38e13, 350 K) = 811.3 cm2/Vs ((350/300)^-2.40 on mu_max)
 eps = 9.7 eps0, rho = 3.21 g/cm3, E_pair = 7.8 eV
+
 ## sg
 x        B(x) code        x/(e^x-1)
 -5.0e+01 5.000000000000000e+01 5.000000000000000e+01
@@ -85,6 +87,7 @@ x        B(x) code        x/(e^x-1)
  8.0e+02 0.000000000000000e+00 0.000000000000000e+00
 B(-x) - B(x) - x = [5.55111512e-17 0.00000000e+00 0.00000000e+00] (identity, 0)
 SG Jn (uniform n, dpsi 0.01 V over 0.1 um) = 1.602177e+01 A/cm2; q mu n E = 1.602177e+01
+
 ## recombination
 F_Gamma code 3.6878e+05 V/cm, hand 3.6884e+05; E_hurkx_max 1.084e+06 V/cm
 Gamma(5.0e+04) = 0.848  (hand 2 sqrt(3 pi) f exp(f^2) = 0.848)
@@ -96,11 +99,13 @@ tau_n(300) = 1.000e-09 s, tau_p = 6.000e-07 s
 tau_n(350) = 1.304e-09 s, tau_p = 7.822e-07 s
 Auger minority-hole lifetime in 1e19 n+: 1/(C_n N^2) = 2.00e-08 s
 Hecht CCE(40 V, 10 um) code 0.996415, hand 0.996415 (lambda_e 470 um, lambda_h 29705 um)
+
 ## avalanche
 E = 1e+06 V/cm: alpha_n 8.200e-07 (hand 8.200e-07), alpha_p 4.736e-03 (hand 4.736e-03) 1/cm
 E = 2e+06 V/cm: alpha_n 1.201e+01 (hand 1.201e+01), alpha_p 1.271e+03 (hand 1.271e+03) 1/cm
 E = 3e+06 V/cm: alpha_n 2.939e+03 (hand 2.939e+03), alpha_p 8.197e+04 (hand 8.197e+04) 1/cm
 default dosimeter V_BD = 2225.78 V, mesh_error_V = 0.105 V, E_max = 2.2897e+06 V/cm
+
 ## generation
 G per 1 Gy/s in SiC: 2.5689e+15 cm^-3 s^-1 (hand 3.21e4/(7.8*1.602e-12) = 2.5689e+15)
 p    5.6 MeV: L_SiC = 18.2136 keV/um (Bragg hand 18.2136), 2335.1 pairs/um
@@ -109,6 +114,7 @@ p  150.0 MeV: L_SiC = 1.4511 keV/um (Bragg hand 1.4511), 186.0 pairs/um
 62 MeV, 1e8 p/cm2/s: G = 3.5591e+14 cm^-3 s^-1 (fluence mode)
 alpha 5.486 MeV: CSDA range 18.429 um (ALPHA_RANGE_SIC_CM 18.429), Bohr sigma_R 0.165 um, peak/entrance 2.488 at 16.94 um, pairs 703333
 proton 62 MeV Bohr range straggling 147.5 um
+
 ## cce
 CCE(-10 V) = 0.999433
 CCE(-20 V) = 0.999706
@@ -117,15 +123,18 @@ CCE(-40 V) = 0.999847
 solver: batched
 CCE(LET) table 100 um, 50.0 V, mobility c_axis: CCE 0.999966..0.999974 over LET 0.5..500 keV/um
 Q_generated/LET = 0.10385 fC per keV/um (constant: 6.9e-17)
+
 ## flash
 CCE(20 Gy/s) = 0.999810726, CCE(230 Gy/s) = 0.999810740, no-Auger ref 0.999811068 (batched)
 dose-rate change 1.4e-08; Auger offset 3.41e-07
+
 ## niel
 NIEL_n,Si(1 MeV) = 95 MeV mb = 2.03701e-03 MeV cm2/g; NIEL_n,SiC(1 MeV) = 2.29889e-03; r_n = 1.0687
 62 MeV proton: NIEL Si 3.95580e-03, SiC 3.37920e-03 MeV cm2/g
   kappa[si-neq] = 1.9420 (hand 1.9420); 1e12 p/cm2 -> 1.942e+12 neq/cm2
   kappa[sic-damage] = 1.5523 (hand 1.5523); 1e12 p/cm2 -> 1.552e+12 neq/cm2
   kappa[sic-1mev] = 1.4699 (hand 1.4699); 1e12 p/cm2 -> 1.470e+12 neq/cm2
+
 ## damage
 v_th,n = 1.3310e+07 cm/s; K_tau,n = 1.7601e-05, K_tau,p = 4.1555e-06 cm2/s
 hand K_tau,n = 1.7601e-05
@@ -134,6 +143,7 @@ EH4: e_n = sigma v_th N_C exp(-E/kT) = 5.612e-04 /s, 1/e_n = 1.782e+03 s
 EH6/7: e_n = sigma v_th N_C exp(-E/kT) = 4.175e-15 /s, 1/e_n = 2.395e+14 s
 calibrated direct removal d (per neq): {'si-neq': (2.87, 0.22), 'sic-damage': (4.69, 0.3), 'sic-1mev': (5.1, 0.32)}
 compensation fluence, 62 MeV p: default 1.802e+12, legacy scalar + si-neq 3.484e+12 p/cm2
+
 ## microdosimetry
 l_bar(100x100x10 um) = 16.6667 um (4V/S = 16.6667), slab 2t = 20.0 um
 kappa_p(SiC->water, 1 MeV) = 0.4261
@@ -143,10 +153,22 @@ kappa_p(SiC->water, 150 MeV) = 0.3751
 y_F = 0.9952 (hand 0.9952) +- 0.0035, y_D = 1.2471 (hand 1.2471) +- 0.0054 keV/um
 shot-noise floor, 18 pA, 1 us: Q_min 0.0072 fC (3 sigma, hand 0.0072), E_min 0.351 keV, y_min 0.0210 keV/um
 N_e(SiC) = 9.6423e+23 cm^-3; Bohr sigma of a proton over 10 um SiC = 15.851 keV
+
 ## tracks
 gaussian(50 nm) F(r) = [4.0000e-04 3.9210e-02 9.8168e-01 1.0000e+00]
 core_penumbra(1 nm, 1 um) F(r) = [0.0675  0.37833 0.68917 1.     ]
 track LET 1000 keV/um, 50 V, gaussian 50 nm: CCE 0.999872, recombined 1.276e-04, ledger residual 1.1e-10
+
+## signal
+v_n = 3.1077e+07, v_p = 4.0791e+06 cm/s; hole transit 12.26 ps, electron transit 30.57 ps
+electron-only plateau: terminal current 5.0334 A/cm2, q N v_n / d = 4.9790 A/cm2
+conduction current in the same window: max 1.06e+00 A/cm2
+induced charge 1.60200e-10 C/cm2, conduction charge 1.60200e-10, q N = 1.60218e-10
+
+## uncertainty
+Phi = 1e+11 p/cm2 (62 MeV): CCE nominal 0.999793, bracket [0.999741, 0.999820]
+Phi = 1e+12 p/cm2 (62 MeV): CCE nominal 0.999374, bracket [0.998992, 0.999595]
+
 ## numerics
 solvers: batched / devsim
 V =    0.0: C engine 2.0760773506e-10 F, devsim 2.0760773692e-10 F, rel diff 9.0e-09

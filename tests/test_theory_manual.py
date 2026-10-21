@@ -5,12 +5,13 @@ in a given module is defined there, and every USAGE.md anchor it links to exists
 from __future__ import annotations
 
 import ast
+import functools
 import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 THEORY = ROOT / "docs" / "THEORY.md"
-SOURCE_DIRS = ("etna", "scripts", "tests", "lab", "app")
+SOURCE_DIRS = ("etna", "scripts", "lab")
 
 
 def _text():
@@ -18,6 +19,9 @@ def _text():
 
 
 def _code_spans(text):
+    """Code spans, without the GitHub inline math $`...`$ and the ```math blocks."""
+    text = re.sub(r"```math\n.*?```", "", text, flags=re.S)
+    text = re.sub(r"\$`[^`]*`\$", "", text)
     return re.findall(r"`([^`\n]+)`", text)
 
 
@@ -64,6 +68,7 @@ def test_quoted_identifiers_occur_in_sources():
     ), f"identifiers quoted in THEORY.md not found in the sources: {unknown}"
 
 
+@functools.lru_cache(maxsize=None)
 def _defined_names(path):
     tree = ast.parse(path.read_text(encoding="utf-8"))
     names = set()
@@ -126,3 +131,13 @@ def test_worked_examples_module_lists_every_chapter_function():
     keys = set(re.findall(r'^\s+"(\w+)": \w+,$', chapters_src, flags=re.M))
     assert cited <= keys, f"chapters cited but not in CHAPTERS: {cited - keys}"
     assert {"main"} <= funcs
+
+
+def test_math_uses_github_safe_delimiters():
+    """Inline math is written $`...`$ and display math as ```math blocks: plain $...$
+    next to a letter, a slash or a dash is not rendered by GitHub (checked with the
+    GitHub markdown API), and underscores inside it turn into emphasis."""
+    text = re.sub(r"```.*?```", "", _text(), flags=re.S)
+    text = re.sub(r"\$`[^`]*`\$", "", text)
+    text = re.sub(r"`[^`\n]*`", "", text)
+    assert "$" not in text, "plain $ math left in THEORY.md"

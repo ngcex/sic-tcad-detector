@@ -2,7 +2,7 @@
 
 Every example evaluates the code path the chapter documents and, next to it, the same
 quantity from the chapter's formula written out by hand, so the manual's equations are
-checked against the code. Run all (about 10 s on an M-series laptop):
+checked against the code. Run all (about a minute; the first run also compiles the numba engines):
 
     uv run python lab/theory_manual/worked_examples.py
     uv run python lab/theory_manual/worked_examples.py materials niel   # a subset
@@ -386,6 +386,68 @@ def device():
     mod.main()
 
 
+def signal():
+    """Ch. 9: Shockley-Ramo parallel plate. A sheet of 1e9 pairs/cm^2 0.5 um below the
+    junction of a fully depleted, uniform 1e12 epi with the cathode on the epi (the setup
+    of tests/test_displacement_current.py): the terminal current while only electrons
+    drift is q N v_n / d, the induced charge q N, and the conduction current alone is ~0
+    until the electrons arrive."""
+    import uuid
+
+    import devsim
+
+    from etna.core.devsim_reset import delete_device_and_mesh
+    from etna.core.drift_diffusion import create_dd_device, ramp_bias
+    from etna.core.single_particle import simulate_single_particle
+
+    info = create_dd_device(
+        doping_profile="uniform", N_D=1e12, device_name=f"we_{uuid.uuid4().hex[:8]}",
+        mobility="legacy_perp", nplus_thickness_cm=None,
+    )
+    try:
+        ramp_bias(info, -30.0, contact="anode")
+        dev, reg = info["device_name"], info["region_name"]
+        x = np.array(devsim.get_node_model_values(device=dev, region=reg, name="x"))
+        x0 = info["junction_pos"] + 0.5e-4
+        prof = np.exp(-0.5 * ((x - x0) / 0.1e-4) ** 2)
+        gen = prof / np.trapezoid(prof, x) * 1e9
+        E = np.array(devsim.get_edge_model_values(device=dev, region=reg, name="ElectricField"))
+        mu_n = np.array(devsim.get_edge_model_values(device=dev, region=reg, name="mu_n"))
+        mu_p = np.array(devsim.get_edge_model_values(device=dev, region=reg, name="mu_p"))
+        xm = 0.5 * (x[:-1] + x[1:])
+        k = int(np.argmin(np.abs(xm - (info["junction_pos"] + 0.5 * info["epi_thickness_cm"]))))
+        v_n, v_p = mu_n[k] * abs(E[k]), mu_p[k] * abs(E[k])
+        d = info["epi_thickness_cm"]
+        r = simulate_single_particle(
+            info, gen, dt_inject=1e-13, dt_min=1e-13, dt_max=2e-13, t_collect=60e-12,
+            contact="cathode",
+        )
+    finally:
+        delete_device_and_mesh(info["device_name"])
+    t, I_tot, I_cond, I_d = r["times"], r["currents_total"], r["currents"], r["I_dark"]
+    qN = Q * 1e9
+    t_h, t_e = 0.5e-4 / v_p, (d - 0.5e-4) / v_n
+    w = (t > 1.3 * t_h) & (t < 0.75 * t_e)
+    print(f"v_n = {v_n:.4e}, v_p = {v_p:.4e} cm/s; hole transit {t_h*1e12:.2f} ps, "
+          f"electron transit {t_e*1e12:.2f} ps")
+    print(f"electron-only plateau: terminal current {np.mean(np.abs(I_tot[w]-I_d)):.4f} "
+          f"A/cm2, q N v_n / d = {qN*v_n/d:.4f} A/cm2")
+    print(f"conduction current in the same window: max {np.max(np.abs(I_cond[w]-I_d)):.2e} A/cm2")
+    print(f"induced charge {r['Q_induced']:.5e} C/cm2, conduction charge "
+          f"{r['Q_collected']:.5e}, q N = {qN:.5e}")
+
+
+def uncertainty():
+    """Ch. 17: the CCE bracket of the legacy damage model over x0.5 / x2 on the three
+    introduction rates (cce_uncertainty_envelope, batched engine)."""
+    from etna.core.radiation_damage import cce_uncertainty_envelope
+
+    r = cce_uncertainty_envelope(np.array([1e11, 1e12]), V_bias=-40.0, energy_MeV=62.0)
+    for F, lo, nom, hi in zip(r["fluences"], r["cce_min"], r["cce_nominal"], r["cce_max"]):
+        print(f"Phi = {F:.0e} p/cm2 (62 MeV): CCE nominal {nom:.6f}, bracket "
+              f"[{lo:.6f}, {hi:.6f}]")
+
+
 def numerics():
     """Ch. 16: engine vs devsim parity of the small-signal C on the default device."""
     from etna import DeviceConfig, run_cv
@@ -412,6 +474,8 @@ CHAPTERS = {
     "damage": damage,
     "microdosimetry": microdosimetry,
     "tracks": tracks,
+    "signal": signal,
+    "uncertainty": uncertainty,
     "numerics": numerics,
 }
 

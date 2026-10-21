@@ -61,3 +61,10 @@ at first order in the contact cell: the builders now default to a graded depth m
 stack is checked and not affected. Benches: `default_1d.py`, `default_2d.py`,
 `alt_cathode_study.py` (reference by uniform bisection + Richardson), `nb19_metrics.py`,
 `telescope_devsim.py`, `gr_devsim_50v.py`; numbers in `notes/LOG.md`.
+
+## `lab/theory_manual`
+
+Worked examples of `docs/THEORY.md` (2026-10-21): `worked_examples.py` has one function per
+chapter that evaluates the documented code path next to the hand formula (device and
+electrostatics in `device_example.py`); a few seconds each after numba compilation. The run quoted in
+the manual is in `notes/LOG.md`.
