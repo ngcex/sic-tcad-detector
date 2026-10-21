@@ -26,7 +26,10 @@ Formulation (opt-in, ``RadiationTrapModel``; nothing here runs unless asked):
        c = sigma v_th, e_n = c_n n1, e_p = c_p p1,
        n1 = N_C exp(-(Ec - Et)/kT),  p1 = n_i^2 / n1,
    so that at equilibrium (n p = n_i^2 with the solver's own n_i) f is exactly the
-   Fermi-Dirac occupancy n / (n + n1). v_th = sqrt(3 kT / m*) with m_e 0.77 and m_h
+   Fermi-Dirac occupancy n / (n + n1). (The solver's n_i is the calibrated 5e-9 at
+   300 K, below sqrt(N_C N_V) exp(-Eg/2kT) ~ 7.6e-9: p1 is tied to it for detailed
+   balance, which makes e_p ~0.42x the N_V-based value; EH6/7 is then ~90 % ionized
+   in depletion instead of ~74 %.) v_th = sqrt(3 kT / m*) with m_e 0.77 and m_h
    1.0 m0, the convention of ``compute_K_tau`` (only c_p / c_n enters f). Degeneracy
    factor g = 1 (ASSUMED: Burin Table I gives none). Single-level traps: the Z1/2
    double acceptor (-/0 and =/-, negative-U) is one acceptor level as in Burin Table I.
@@ -47,8 +50,8 @@ KNOWN CONSEQUENCES (reported, not tuned; see docs/USAGE.md):
   252.7 MeV (Radmanovac et al., arXiv:2510.11304). Compensation (bulk Fermi level at the
   Z1/2 level) at ~N_D / 7.4 neq.
 - In the DEPLETED region the steady-state occupancy empties both acceptors (Z1/2
-  emission time ~40 ms, EH4 ~30 min at 300 K) and leaves EH6/7 ~74 % ionized: the
-  depleted space charge is N_D + ~1.19 Phi_neq, POSITIVE and growing with fluence. The
+  emission time ~40 ms, EH4 ~30 min at 300 K) and leaves EH6/7 ~90 % ionized: the
+  depleted space charge is N_D + ~1.43 Phi_neq, POSITIVE and growing with fluence. The
   model therefore never type-inverts (consistent with SiC; the neutral-bulk Fermi
   level stays above midgap, ~Ec-1.2 eV at 1e16 neq), but it does NOT reproduce the
   measured C-V removal (falling 1/C^2 slope) in the depleted region: that needs

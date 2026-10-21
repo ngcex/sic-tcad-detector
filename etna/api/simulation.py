@@ -1675,6 +1675,15 @@ def run_radiation_damage(
             "compensation_fluence": compensation_fluence(config, proton_energy_MeV),
             # damage model: "carrier_removal" (legacy scalar) or "charged_traps"
             "damage_model": "carrier_removal" if traps is None else "charged_traps",
+            **(
+                {}
+                if traps is None
+                else {
+                    "trap_compensation_fluence": trap_compensation_fluence(
+                        config, proton_energy_MeV
+                    )
+                }
+            ),
         },
         mesh=None,
     )
@@ -1713,6 +1722,30 @@ def default_fluence_grid(
         )
         return np.geomspace(lo * phi_c, top, TRAP_FLUENCE_GRID_POINTS)
     return np.geomspace(lo * phi_c, hi * phi_c, DEFAULT_FLUENCE_GRID_POINTS)
+
+
+def _min_epi_donors(config: DeviceConfig) -> float:
+    if config.donor_table is not None:
+        return min(n for _, n in config.donor_table)
+    if config.doping_profile == "uniform":
+        return config.N_D
+    return min(config.N_D_junction, config.N_D_bulk)
+
+
+def trap_compensation_fluence(config: DeviceConfig, proton_energy_MeV: float) -> float:
+    """Proton fluence (p/cm^2) at which the charged-trap model (``radiation_traps``)
+    compensates the lowest-doped epi: min N_D / (neutral_removal_rate * kappa(E)), the
+    emergent removal of the acceptor levels (7.4 /neq for the default traps, vs 5 of the
+    legacy scalar: 2.35e12 p/cm^2 at 62 MeV on the default stack, vs 3.48e12). Beyond
+    it the bulk is semi-insulating; the model still solves it."""
+    from etna.core.radiation_damage import get_hardness_factor
+    from etna.core.radiation_traps import DEFAULT_TRAP_MODEL
+
+    model = resolve_traps(config.radiation_traps) or DEFAULT_TRAP_MODEL
+    rate = model.neutral_removal_rate
+    if rate <= 0:  # no acceptor-like level: never compensated
+        return float("inf")
+    return float(_min_epi_donors(config) / (rate * get_hardness_factor(proton_energy_MeV)))
 
 
 def compensation_fluence(config: DeviceConfig, proton_energy_MeV: float) -> float:

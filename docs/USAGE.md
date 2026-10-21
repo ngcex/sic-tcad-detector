@@ -517,6 +517,14 @@ Bulk physics (N_D 3.38e13):
 - **Emergent neutral-region removal: 7.4 /neq** (both acceptors filled). For comparison,
   the legacy scalar is 5, and Radmanovac et al. (arXiv:2510.11304) measured 5-7.5 at
   252.7 MeV.
+- **This model's own compensation fluence** is therefore min N_D / (7.4 kappa):
+  **2.35e12 p/cm^2 at 62 MeV** on the default stack, below the legacy 3.48e12.
+  Metadata gives it as `trap_compensation_fluence`, and
+  `etna.api.simulation.trap_compensation_fluence` computes it. `compensation_fluence`
+  stays the legacy reference. The 3e12 column in the table above is already past it:
+  CCE still matches legacy because the epi is over-depleted at -40 V.
+- **N_eff below compensation does not match legacy.** Legacy N_eff falls with fluence,
+  while the trap model's depleted N_eff rises. Only CCE agrees there.
 - **Semi-insulating beyond compensation.** E_F reaches Ec-1.08 eV at 1e14 neq and
   Ec-1.20 eV at 1e16. The resistivity proxy is above 1e14 Ohm cm.
 - **No type inversion.** E_F stays above midgap.
@@ -537,8 +545,8 @@ Same decade, bias-dependent, not a fit.
 
 **Main assumption (read before using numbers beyond compensation).** In a depleted
 region, steady-state occupancy empties both acceptors (emission times: Z1/2 about 40 ms,
-EH4 about 30 min). EH6/7 stays about 74 % ionised. The depleted space charge is therefore
-N_D + 1.19 Phi_neq, which is positive and grows with fluence. Two consequences:
+EH4 about 30 min). EH6/7 stays about 90 % ionised. The depleted space charge is therefore
+N_D + 1.43 Phi_neq, which is positive and grows with fluence. Two consequences:
 
 - Full depletion needs more bias at high fluence. That bias need is what drives the CCE
   drop at -40 V.

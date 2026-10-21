@@ -253,6 +253,12 @@ def test_run_radiation_damage_facade():
         cfg, fluences=np.array([1e12, 1e14]), proton_energy_MeV=62.0
     )
     assert r.metadata["damage_model"] == "charged_traps"
+    # emergent 7.4 /neq removal: compensated earlier than the legacy 3.48e12
+    assert r.metadata["trap_compensation_fluence"] == pytest.approx(2.35e12, rel=5e-3)
+    assert r.metadata["compensation_fluence"] == pytest.approx(3.48e12, rel=5e-3)
+    from etna.api.run_all import _compensation_note
+
+    assert "charged traps" in _compensation_note(r)
     assert np.all(r.metadata["valid"])
     r0 = etna.run_radiation_damage(
         dataclasses.replace(cfg, radiation_traps=False),
