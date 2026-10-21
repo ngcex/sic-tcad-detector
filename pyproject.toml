@@ -9,6 +9,7 @@ dynamic = ["version"]
 description = "ETNA: Epitaxial Tcad Numerical Analysis — SiC TCAD simulator library for 4H-SiC detectors (INFN-LNS Petringa group)"
 readme = "README.md"
 license = "MIT"
+authors = [{ name = "Cesare Scalia" }]
 requires-python = ">=3.13"
 dependencies = [
     "devsim>=2.10.0",
