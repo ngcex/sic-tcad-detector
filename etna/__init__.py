@@ -32,6 +32,7 @@ from etna.api.simulation import (
     run_transient,
 )
 from etna.api.track import run_tilted_alpha_track, run_track_cce_let, run_track_event
+from etna.api.field3d import run_field_3d
 from etna.api.models import run_avalanche, run_breakdown, run_transit_time
 from etna.api.run_all import Report, SectionResult, run_all
 from etna.core.physics_models import PhysicsModels
@@ -75,6 +76,7 @@ __all__ = [
     "run_track_event",
     "run_track_cce_let",
     "run_tilted_alpha_track",
+    "run_field_3d",
     "ParametricSweep",
     "run_uq",
     "PhysicsModels",

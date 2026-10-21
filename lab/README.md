@@ -75,3 +75,12 @@ Worked examples of `docs/THEORY.md` (2026-10-21): `worked_examples.py` has one f
 chapter that evaluates the documented code path next to the hand formula (device and
 electrostatics in `device_example.py`); a few seconds each after numba compilation. The run quoted in
 the manual is in `notes/LOG.md`.
+
+## `lab/fv3d`
+
+3D Poisson on tensor grids, `etna/core/fv3d` (issue #4 follow-up, 2026-10-21): column
+lattices and square-cell microdosimeters. Benches: `validate.py` (fv2d parity, analytic,
+order of accuracy), `convergence.py` (Richardson), `scaling.py` (vs SuperLU,
+tractability), `design_maps.py` (depletion voltage vs pitch / radius against the
+axisymmetric proxy, low-field map), `gpu_smoother.py` (MLX, run with `--with mlx`).
+Numbers in `notes/LOG.md`.
