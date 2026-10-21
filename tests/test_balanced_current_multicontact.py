@@ -55,6 +55,10 @@ def guard_device():
         guard_ring_gap_um=2.0,
         guard_ring_width_um=2.0,
         epi_thickness_cm=5e-4,
+        # the legacy depth mesh (100 nm cathode cell): the share and direct-form checks
+        # below are about that coarse cell (graded mesh: share 1.1e-5, and the direct
+        # cathode flux across a 0.1 nm cell sits ~1e-5 from the balanced one)
+        depth_mesh="legacy",
     )
     try:
         setup_poisson(info)

@@ -1,0 +1,18 @@
+REF   10 V start {'first_cell_cm': 1e-07, 'junction_ps_cm': 1e-06}: last 0.963071326 increments [-2.425e-05 -1.228e-05 -6.180e-06] -> limit 0.963065146 +- 3.9e-08 (0.8s)
+REF   10 V start graded: last 0.963065735 increments [-2.429e-06 -1.222e-06 -6.129e-07] -> limit 0.963065122 +- 1.7e-09 (0.8s)
+REF   10 V: limits agree to 2.5e-08
+REF   50 V start {'first_cell_cm': 1e-07, 'junction_ps_cm': 1e-06}: last 0.999091117 increments [-1.814e-06 -9.374e-07 -4.773e-07] -> limit 0.999090640 +- 8.6e-09 (0.9s)
+REF   50 V start graded: last 0.999090680 increments [-8.657e-08 -6.787e-08 -4.100e-08] -> limit 0.999090639 +- 7.1e-09 (1.0s)
+REF   50 V: limits agree to 1.0e-09
+
+legacy (100 nm / 10 nm)          ny   85 cathode cell 100.000 nm | 10 V 0.96923717 err +6.17e-03 | 50 V 0.99987621 err +7.86e-04
+cathode 1 nm, junction 10 nm     ny  122 cathode cell   1.000 nm | 10 V 0.96360910 err +5.44e-04 | 50 V 0.99912077 err +3.01e-05
+cathode 1 nm, junction 1 nm      ny  140 cathode cell   1.000 nm | 10 V 0.96316363 err +9.85e-05 | 50 V 0.99912033 err +2.97e-05
+graded default (0.1 nm / 1 nm)   ny  146 cathode cell   0.100 nm | 10 V 0.96311124 err +4.61e-05 | 50 V 0.99907268 err -1.80e-05
+cathode 0.01 nm, junction 1 nm   ny  152 cathode cell   0.010 nm | 10 V 0.96310545 err +4.03e-05 | 50 V 0.99906783 err -2.28e-05
+default, near 100 nm             ny  124 cathode cell   0.100 nm | 10 V 0.96299242 err -7.27e-05 | 50 V 0.99907243 err -1.82e-05
+default, near 25 nm              ny  188 cathode cell   0.100 nm | 10 V 0.96315032 err +8.52e-05 | 50 V 0.99907284 err -1.78e-05
+default, ratio 1.25              ny  156 cathode cell   0.100 nm | 10 V 0.96312019 err +5.51e-05 | 50 V 0.99908814 err -2.50e-06
+default, near depth 1 um         ny  127 cathode cell   0.100 nm | 10 V 0.96310976 err +4.46e-05 | 50 V 0.99907229 err -1.84e-05
+nodes legacy : mesa 2380 (28 x 85), guard ring 11455 (145 x 79)
+nodes graded : mesa 4088 (28 x 146), guard ring 21025 (145 x 145)

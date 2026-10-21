@@ -33,6 +33,8 @@ import logging
 
 import devsim
 
+from etna.core.contact_mesh import contact_lines, resolve_depth_mesh
+
 from etna.core.sic_material import (
     SiC4H_Parameters,
     intrinsic_concentration,
@@ -221,6 +223,7 @@ def create_sic_2d_device(
     buffer_end_doping=_BUFFER_END_DOPING_DEFAULT,
     donor_table=None,
     incomplete_ionization=None,
+    depth_mesh="legacy",
 ):
     """Create a 2D p+/n- 4H-SiC diode device in devsim.
 
@@ -271,6 +274,15 @@ def create_sic_2d_device(
         Graded n-/n+ transition over the last ``buffer_thickness_cm`` of the epi, as
         ``etna.core.device.create_sic_device``: default DEFAULT_STACK (1.136634 um to
         4.516421e16); both None (explicit) = abrupt epi/n+ (previous default, legacy).
+    depth_mesh : {"legacy", "graded"} or dict
+        "graded" grades the depth lines toward the cathode down to a 0.1 nm contact
+        cell (``etna.core.contact_mesh``; the junction is already 1 nm here). "legacy"
+        (default: every pinned number, and the engine2d grid) keeps the 100 nm cathode
+        cell. Without an n+ layer the cathode is an ohmic contact on the n- epi and the
+        100 nm cell OVERESTIMATES the CCE (first order in the cell size; legacy-stack
+        planar at 10 / 50 V: +1.4e-3 / +6.8e-4, lab/mesh_contact/notes/LOG.md). With
+        the n+ layer (default stack) the cathode sits on the 1e19 n+ and the grading
+        changes nothing that matters (it exists there for the convergence check).
 
     Returns
     -------
@@ -346,8 +358,14 @@ def create_sic_2d_device(
     if nplus is not None:
         # n-/n+ step at the epi end (1 nm), then the n+ layer down to the cathode
         devsim.add_2d_mesh_line(mesh=mesh_name, dir="y", pos=epi_end, ps=1e-7)
-    # Cathode surface
-    devsim.add_2d_mesh_line(mesh=mesh_name, dir="y", pos=total_depth, ps=1e-5)
+    # Cathode surface (graded toward it on request when it sits on the n- epi)
+    if resolve_depth_mesh(depth_mesh) is not None:
+        for pos, ps in contact_lines(
+            total_depth, -1, depth_mesh, 0.5 * epi_thickness_cm
+        ):
+            devsim.add_2d_mesh_line(mesh=mesh_name, dir="y", pos=pos, ps=ps)
+    else:
+        devsim.add_2d_mesh_line(mesh=mesh_name, dir="y", pos=total_depth, ps=1e-5)
 
     # Bottom air buffer
     devsim.add_2d_mesh_line(
@@ -553,7 +571,7 @@ def create_sic_2d_device(
     logger.info(
         f"Created 2D device '{device_name}': {num_nodes} nodes, "
         f"half_width={half_width_um:.0f} um, "
-        f"junction at y={junction_pos*1e4:.1f} um, "
+        f"junction at y={junction_pos * 1e4:.1f} um, "
         f"N_A_ionized={N_A_ionized:.2e}, profile={doping_profile}"
     )
 
@@ -585,6 +603,7 @@ def create_sic_2d_device(
         "nplus_thickness_cm": nplus_thickness_cm,
         "N_D_nplus": N_D_nplus if nplus_thickness_cm is not None else None,
         "nplus_generation": bool(nplus_generation),
+        "depth_mesh": depth_mesh,
         "buffer_thickness_cm": buffer_thickness_cm if buffer is not None else None,
         "buffer_end_doping": buffer_end_doping if buffer is not None else None,
         "donor_table": (

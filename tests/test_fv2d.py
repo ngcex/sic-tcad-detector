@@ -161,7 +161,8 @@ def _psi_err(s, tag):
 def gr_solver():
     from etna.core.alternative_structures import create_guard_ring_device
 
-    mesh, _ = mesh_from_builder(create_guard_ring_device)
+    # the devsim references were made on the legacy depth mesh (parity is per mesh)
+    mesh, _ = mesh_from_builder(create_guard_ring_device, depth_mesh="legacy")
     return prepared_solver(mesh, {"cathode": REF["gr"]["V"]})
 
 
@@ -221,7 +222,7 @@ class TestDevsimParity:
     def test_mesa(self):
         from etna.core.alternative_structures import create_mesa_device
 
-        mesh, _ = mesh_from_builder(create_mesa_device)
+        mesh, _ = mesh_from_builder(create_mesa_device, depth_mesh="legacy")
         s = prepared_solver(mesh, {"cathode": REF["mesa"]["V"]})
         assert _psi_err(s, "mesa") < 1e-10
         sc = cce_lateral_scan_fv2d(s, n_points=len(REF["mesa"]["cce"]))
@@ -284,7 +285,7 @@ def test_graded_lines_hit_knots_and_grade():
 def test_adaptive_refinement_contact_cell_convergence():
     """The CCE of the contact-on-epi cathode converges at first order in the contact cell
     (LOG.md); the contact rule makes successive differences contract."""
-    st = mesa_structure(pillar_half_width_um=5.0)
+    st = mesa_structure(pillar_half_width_um=5.0, depth_mesh="legacy")
     r = adaptive_cce_scan(
         st, {"cathode": 10.0}, dict(x_positions_cm=[0.0]), tol=1e-12, max_levels=4
     )
