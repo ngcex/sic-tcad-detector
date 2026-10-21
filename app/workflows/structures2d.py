@@ -325,11 +325,11 @@ def render() -> None:
             "the Breakdown & Avalanche page (1D parallel-plane, an upper bound)."
         )
     st.plotly_chart(_scan_plot(r, pu), key="s2_scan_plot")
-    P.figure_block("s2_scan_fig", f"{pu['kind']}_cce_scan", _pub(r, pu, "scan"), tok)
+    P.figure_block("s2_scan_fig", f"{pu['kind']}_cce_scan", _pub(r, pu, "scan"), st.session_state.get("s2_tok"))
     what = st.radio("Map", ["|E| (kV/cm)", "Potential (V)", "log10 |net doping| (cm⁻³)"],
                     horizontal=True, key="s2_map")  # fmt: skip
     st.plotly_chart(_map_plot(r, what), key="s2_map_plot")
-    P.figure_block("s2_map_fig", f"{pu['kind']}_field_map", _pub(r, pu, "map"), tok)
+    P.figure_block("s2_map_fig", f"{pu['kind']}_field_map", _pub(r, pu, "map"), st.session_state.get("s2_tok"))
     cols = {"position_um": r["x_scan_um"]}
     for c, s in r["scans"].items():
         cols[f"CCE_{c}"] = s["cce_values"]

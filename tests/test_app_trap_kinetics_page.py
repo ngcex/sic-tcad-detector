@@ -70,6 +70,12 @@ def _start(monkeypatch, cfg=UNI20):
     return at
 
 
+def _fluence(at, name):
+    """The fluence input of an uploaded file (keyed by the upload's file_id)."""
+    (w,) = [n for n in at.number_input if n.label.startswith(f"Fluence of {name} ")]
+    return w
+
+
 def _csv(n=31):
     V = -np.linspace(0, 30, n)
     C = 3.0e-11 / np.sqrt(1 + np.abs(V))  # F, synthetic shape only
@@ -117,8 +123,8 @@ def test_calibration_from_uploaded_files_downsampled(monkeypatch):
     )
     at.run()
     assert at.exception == [], at.exception
-    at.number_input(key="cal_fl_0").set_value(3e12)
-    at.number_input(key="cal_fl_1").set_value(6e12)
+    _fluence(at, "cv_a.csv").set_value(3e12)
+    _fluence(at, "cv_b.csv").set_value(6e12)
     at.multiselect(key="cal_groups").set_value(["EH4", "Z1/2"])
     at.number_input(key="cal_nmax").set_value(8)
     at.run()
@@ -189,3 +195,26 @@ def test_poor_fit_is_flagged_not_reported_as_success(monkeypatch):
     assert at.exception == [], at.exception
     assert any("the fit is POOR" in e.value for e in at.error)
     assert not any("CALIBRATED" in s.value for s in at.success)
+
+
+def test_file_area_is_used_not_rejected_and_fluence_follows_the_file(monkeypatch):
+    at = _start(monkeypatch)
+    V = -np.linspace(0, 30, 11)
+    big = cv_csv(V, 6.0e-11 / np.sqrt(1 + np.abs(V)), area_cm2=0.09, sigma_rel=0.003,
+                 meta=["# frequency_hz: 100000"]).encode()  # fmt: skip
+    at.file_uploader(key="cal_files").set_value(
+        [("pad_3x3.csv", big, "text/csv"), ("cv_b.csv", _csv(), "text/csv")]
+    )
+    at.run()
+    assert at.exception == [] and not at.error, [e.value for e in at.error]
+    assert any("area 0.09 cm² (from the file)" in c.value for c in at.caption)
+    _fluence(at, "cv_b.csv").set_value(6e12)
+    at.run()
+    # removing a file leaves only the remaining one (inputs are keyed by file_id)
+    at.file_uploader(key="cal_files").set_value([("cv_b.csv", _csv(), "text/csv")])
+    at.run()
+    assert at.exception == []
+    at.button(key="cal_run").click()
+    at.run()
+    _, datasets, _ = SEEN["cv"]
+    assert len(datasets) == 1

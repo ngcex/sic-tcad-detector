@@ -28,7 +28,7 @@ DEFAULT_E = {"proton": 62.0, "alpha": 5.486, "c12": 1200.0}
 CCE_TABLES = {
     "none (CCE = 1)": None,
     "committed table, 100 µm cell (10 µm epi, 50 V)": "cce_let_table_100um.json",
-    "committed table, 300 µm cell": "cce_let_table_300um.json",
+    "committed table, 300 µm cell (10 µm epi, 50 V)": "cce_let_table_300um.json",
 }
 MAX_HIT_EVENTS = 5000
 
@@ -212,7 +212,15 @@ def _pulse_heights(out, p, tok):
         from etna._paths import data_path
         from etna.core.single_particle import load_cce_let_table
 
-        interp, _ = load_cce_let_table(data_path(CCE_TABLES[table]))
+        interp, meta = load_cce_let_table(data_path(CCE_TABLES[table]))
+        g = meta.get("geometry", {})
+        st.caption(
+            f"Table {CCE_TABLES[table]} as recorded in the file: half-width "
+            f"{g.get('half_width_um')} µm, epi {g.get('epi_um')} µm, reverse bias "
+            f"{abs(float(meta.get('bias_V', float('nan')))):g} V, mobility set "
+            f"{meta.get('mobility', 'not recorded')}; LET {min(meta['LET_keV_um']):g}-"
+            f"{max(meta['LET_keV_um']):g} keV/µm (outside: clamped). Not the sidebar device."
+        )
     # only events that deposited energy in the SV make a pulse (a track missing the SV
     # gives no signal, not a noise-only pulse)
     hit = np.asarray(out["edep_keV"]) > 0
@@ -419,7 +427,7 @@ def render() -> None:
             )
             sp = spectrum_with_errors(out["edep_keV"], out["l_bar_um"])
             st.plotly_chart(_spectrum_plot(sp, "Microdosimetric spectrum"), key="mc_sp_plot")
-            P.figure_block("mc_sp_fig", "mc_spectrum", _spectrum_pub(sp, out, p_used), tok)
+            P.figure_block("mc_sp_fig", "mc_spectrum", _spectrum_pub(sp, out, p_used), st.session_state.get("mc_tok"))
             st.download_button(
                 "Download spectrum CSV",
                 P.table_csv_bytes(
@@ -432,6 +440,6 @@ def render() -> None:
                 ),
                 "mc_spectrum.csv", "text/csv", key="mc_sp_csv", on_click="ignore",
             )  # fmt: skip
-            _pulse_heights(out, p_used, tok)
+            _pulse_heights(out, p_used, st.session_state.get("mc_tok"))
     _allpix(p)
 

@@ -302,7 +302,7 @@ def _breakdown_tab(cfg, mkw):
         ),
         "breakdown.csv", "text/csv", key="bd_csv",
     )  # fmt: skip
-    P.figure_block("bd_fig", "breakdown", _bd_pub(r), tok)
+    P.figure_block("bd_fig", "breakdown", _bd_pub(r), st.session_state.get("bd_tok"))
 
 
 def _avalanche_tab(cfg, mkw):
@@ -362,7 +362,7 @@ def _avalanche_tab(cfg, mkw):
                            f"solver: {md.get('solver')}"], r.config),  # fmt: skip
         "avalanche.csv", "text/csv", key="av_csv",
     )  # fmt: skip
-    P.figure_block("av_fig", "avalanche", _av_pub(r), tok)
+    P.figure_block("av_fig", "avalanche", _av_pub(r), st.session_state.get("av_tok"))
 
 
 def _transit_tab(cfg, mkw):
@@ -392,7 +392,7 @@ def _transit_tab(cfg, mkw):
         ),
         "transit_time.csv", "text/csv", key="tt_csv",
     )  # fmt: skip
-    P.figure_block("tt_fig", "transit_time", _tt_pub(r), tok)
+    P.figure_block("tt_fig", "transit_time", _tt_pub(r), st.session_state.get("tt_tok"))
 
 
 def render() -> None:

@@ -183,7 +183,7 @@ def _simulate_tab(cfg):
              f"storage {p['hold_s']:g} s, sweep {p['rate']:g} V/s; area {area:g} cm2."]  # fmt: skip
     P.figure_block("tk_fig", "kinetic_cv",
                    lambda size: P.publication_figure(draw, P.prov_for(config=cfg, solver="etna.core.trap_kinetics"), notes, size),
-                   tok)  # fmt: skip
+                   st.session_state.get("tk_tok"))  # fmt: skip
     cols = {"bias_V": np.tile(r["V"], len(r["fluences"])),
             "fluence": np.repeat(r["fluences"], len(r["V"])),
             "C_ac_F_per_cm2": r["C_ac"].ravel(), "C_qs_F_per_cm2": r["C_qs"].ravel(),
@@ -260,6 +260,14 @@ def _show_calibration(cal, label):
     )  # fmt: skip
 
 
+def _load_cv_file(raw, cfg):
+    """(CVData, note): the file's area, or the sidebar area when the file gives none."""
+    from app.workflows.measurements import _load_cv
+
+    d, note = _load_cv(raw, cfg)
+    return d, (f"no area in the file: sidebar area {cfg.area_cm2:g} cm² used" if note else None)
+
+
 def _calibrate_cv_tab(cfg):
     from etna import measurements as M
 
@@ -271,10 +279,12 @@ def _calibrate_cv_tab(cfg):
     )
     files = st.file_uploader("Measured C-V files (CSV)", type=["csv"], accept_multiple_files=True, key="cal_files")
     datasets = []
-    for i, f in enumerate(files or []):
+    for f in files or []:
         c = st.columns([3, 2])
         try:
-            d = M.load_cv_csv(f.getvalue(), area_cm2=float(cfg.area_cm2))
+            # the file's own area (C per area enters the fit); the sidebar area only
+            # when the file gives none (the Measurements page's rule)
+            d, area_note = _load_cv_file(f.getvalue(), cfg)
         except M.MeasurementFileError as e:
             c[0].error(f"{f.name}: does not follow the template ({len(e.issues)} problem(s)): "
                        + "; ".join(map(str, e.issues[:5])))  # fmt: skip
@@ -283,10 +293,11 @@ def _calibrate_cv_tab(cfg):
             c[0].error(f"{f.name}: {e}")
             continue
         fl = c[1].number_input(f"Fluence of {f.name} (p/cm², or neq)", 0.0, 1e17, 0.0,
-                               format="%.3e", key=f"cal_fl_{i}")  # fmt: skip
+                               format="%.3e", key=f"cal_fl_{f.file_id}")  # fmt: skip
         c[0].caption(
             f"{f.name}: {len(d.V)} points, V {np.min(d.V):.1f} to {np.max(d.V):.1f} V, "
-            f"frequency {d.frequency_Hz if d.frequency_Hz else 'not given'} Hz"
+            f"frequency {d.frequency_Hz if d.frequency_Hz else 'not given'} Hz, area "
+            f"{d.area_cm2:g} cm² ({area_note or 'from the file'})"
         )
         datasets.append((float(fl), d, f.name))
     c = st.columns(3)

@@ -141,3 +141,22 @@ def test_publication_figure_preview():
 def test_new_pages_in_main_navigation(url):
     src = Path("app/main.py").read_text()
     assert f'url_path="{url}"' in src
+
+
+def test_figure_key_is_the_token_of_the_displayed_result(monkeypatch):
+    """A stale result keeps its own figure-cache key, so a later run with the current
+    inputs can never be served the stale figure's bytes."""
+    import app.components.pubfig as P
+
+    seen = []
+    monkeypatch.setattr(P, "figure_block", lambda key, stem, build, tok=None, **k: seen.append((key, tok)))
+    at = _start(DeviceConfig())
+    at.checkbox(key="bd_mesh").uncheck()
+    at.run()
+    at.button(key="bd_run").click()
+    at.run()
+    tok_run = at.session_state["bd_tok"]
+    at.number_input(key="bd_n").set_value(12)  # inputs change, result is now stale
+    at.run()
+    assert any("different device or different page inputs" in w.value for w in at.warning)
+    assert [t for k, t in seen if k == "bd_fig"][-1] == tok_run

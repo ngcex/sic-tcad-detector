@@ -138,7 +138,7 @@ def _event_tab(cfg):
              f"{phys['radial']} s = {phys['s_nm']:g} nm (thermalization radius of 4H-SiC unknown: "
              "plasma loss conditional on it); mesh {phys['mesh']}."]  # fmt: skip
     P.figure_block("tr_fig", "track_event",
-                   lambda size: P.publication_figure(draw, P.prov_for(r), notes, size), tok)  # fmt: skip
+                   lambda size: P.publication_figure(draw, P.prov_for(r), notes, size), st.session_state.get("tr_tok"))  # fmt: skip
     st.download_button(
         "Download CSV",
         P.table_csv_bytes("single-ion track transient (run_track_event)",
@@ -197,7 +197,7 @@ def _let_tab(cfg):
     notes = [f"Radial {phys['radial']} s = {phys['s_nm']:g} nm; mesh {phys['mesh']}; "
              "PHD conditional on the radial model."]  # fmt: skip
     P.figure_block("tl_fig", "track_cce_let",
-                   lambda size: P.publication_figure(draw, P.prov_for(r), notes, size), tok)  # fmt: skip
+                   lambda size: P.publication_figure(draw, P.prov_for(r), notes, size), st.session_state.get("tl_tok"))  # fmt: skip
     st.download_button(
         "Download CSV",
         P.table_csv_bytes("CCE vs LET, track engine (run_track_cce_let)",
