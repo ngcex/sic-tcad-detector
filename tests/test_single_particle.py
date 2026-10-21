@@ -366,7 +366,13 @@ class TestCCEVsBias:
     checks are in tests/test_single_particle_legacy.py. Asserts on the RAW
     Q_collected / Q_generated, not the table value (clipped to 1, so <= 1 there would
     be vacuous). Before the backward-Euler estimator this read 0.9824 / 0.9772 at
-    10 / 50 V (non-monotone, hw 50); now 0.99978 / 0.99997 (hw 25).
+    10 / 50 V (non-monotone, hw 50); now 0.9998662 / 0.9999700 (hw 25).
+
+    Run at hw 2 (5 mesh columns, 3420 nodes against 8208 at hw 25, ~2.5x cheaper):
+    the device is laterally uniform with reflecting side boundaries and the transient
+    is linear, so the CCE depends on depth only. Measured 2026-10-21, LET 10, x = 0:
+    hw 2 gives 0.99986637 / 0.99997029 and hw 25 0.99986620 / 0.99996998 at
+    10 / 50 V (agreement 3e-7, same order, same 1.04e-4 margin).
     """
 
     def test_cce_le_one_and_monotone_in_bias(self):
@@ -382,8 +388,9 @@ class TestCCEVsBias:
             device_info = None
             try:
                 device_info = create_2d_dd_device(
-                    # hw 25: centred 1 um track on a laterally uniform device
-                    half_width_um=25.0,
+                    # hw 2: centred 1 um track on a laterally uniform device (the
+                    # CCE is hw-independent here, class docstring)
+                    half_width_um=2.0,
                     V_bias=V_bias,
                     device_name=f"test_bias_{int(V_bias)}",
                 )
@@ -452,26 +459,49 @@ class TestLinearSynthesis:
             build_cce_let_table(method="affine", half_width_um=2.0, n_let_points=4)
 
 
+_SMALL_MESH_KW = dict(
+    half_width_um=2.0, V_bias=50.0, n_let_points=5, let_min=0.5, let_max=500.0
+)
+
+
+@pytest.fixture(scope="class")
+def serial_full_table():
+    """Serial method="full" table on the small mesh (built once per class)."""
+    from etna.core.single_particle import build_cce_let_table
+
+    return build_cce_let_table(method="full", **_SMALL_MESH_KW)
+
+
+@pytest.fixture(scope="class")
+def serial_linear_table():
+    """Serial method="linear" table on the small mesh (built once per class)."""
+    from etna.core.single_particle import build_cce_let_table
+
+    return build_cce_let_table(method="linear", **_SMALL_MESH_KW)
+
+
 @pytest.mark.slow
 class TestBuildCCELetTableSmallMesh:
     """build_cce_let_table on a small mesh (hw 2 um, 5 mesh columns): the shared-device
-    table equals a fresh device per LET, and method="linear" equals method="full"
-    within the table tolerance (1e-6)."""
+    table equals a fresh device per LET, method="linear" equals method="full" within
+    the table tolerance (1e-6), and n_jobs > 1 reproduces the serial table.
 
-    def test_build_once_and_linear_parity(self):
+    The serial tables are class-scoped fixtures: the parallel parity test (formerly
+    tests/test_cce_let_parallel.py, timing: lab/perf_profile/bench_cce_let_parallel.py)
+    compares against the same serial tables the build-once / linear checks use instead
+    of rebuilding them in another xdist worker. The tables are DataFrames only (every
+    device is deleted by build_cce_let_table), so sharing them leaks no devsim state.
+    """
+
+    def test_build_once_and_linear_parity(self, serial_full_table, serial_linear_table):
         from etna.core.charge_collection_2d import create_2d_dd_device
         from etna.core.devsim_reset import delete_device_and_mesh
         from etna.core.single_particle import (
-            build_cce_let_table,
             ion_track_generation_2d,
             simulate_single_particle,
         )
 
-        kw = dict(
-            half_width_um=2.0, V_bias=50.0, n_let_points=5, let_min=0.5, let_max=500.0
-        )
-        full = build_cce_let_table(method="full", **kw)
-        lin = build_cce_let_table(method="linear", **kw)
+        full, lin = serial_full_table, serial_linear_table
         assert full["converged"].all() and full["simulated"].all()
         assert lin["simulated"].iloc[-1] and not lin["simulated"].all()
         d = (lin["CCE_raw"] - full["CCE_raw"]).abs()
@@ -495,3 +525,31 @@ class TestBuildCCELetTableSmallMesh:
         finally:
             delete_device_and_mesh(info["device_name"])
         assert abs(fresh - full["CCE_raw"][1]) < 1e-12
+
+    @pytest.mark.parametrize(
+        "method,n_jobs",
+        # "full" shares the prefetch path (every LET prefetched): exhaustive only, it
+        # costs two more small-mesh tables in the default suite
+        [("linear", 3), pytest.param("full", 2, marks=pytest.mark.exhaustive)],
+    )
+    def test_parallel_table_equals_serial(self, request, method, n_jobs):
+        """n_jobs > 1 reproduces the serial table: the workers build their own device
+        with the same builder and keywords, so every simulated row equals the serial
+        one; the assembly logic is the serial one, so the simulated / synthesised split
+        is unchanged. Tolerance 1e-12 in CCE_raw (a fresh device equals the shared
+        device to that level; the workers also run their native math libraries
+        single-threaded)."""
+        from etna.core.single_particle import build_cce_let_table
+
+        serial = request.getfixturevalue(
+            "serial_linear_table" if method == "linear" else "serial_full_table"
+        )
+        par = build_cce_let_table(method=method, n_jobs=n_jobs, **_SMALL_MESH_KW)
+        assert list(par.columns) == list(serial.columns)
+        assert (par["simulated"] == serial["simulated"]).all()
+        assert (par["converged"] == serial["converged"]).all()
+        for col in ("CCE_raw", "CCE", "Q_collected_fC", "t_collection_ns"):
+            d = np.abs(par[col].to_numpy() - serial[col].to_numpy())
+            assert d.max() < 1e-12, (col, d.tolist())
+        assert np.array_equal(par["LET_keV_um"], serial["LET_keV_um"])
+        assert np.array_equal(par["Q_generated_fC"], serial["Q_generated_fC"])

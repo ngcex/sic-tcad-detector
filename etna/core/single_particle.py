@@ -587,7 +587,7 @@ def build_cce_let_table(
         LET and the lowest n_jobs - 2 anchors, "full" every LET. The table is assembled
         by exactly the serial logic: a prefetched anchor above the bottom-up stop is
         discarded, an anchor not prefetched is simulated in the parent. Parity with
-        n_jobs=1: tests/test_cce_let_parallel.py.
+        n_jobs=1: tests/test_single_particle.py::TestBuildCCELetTableSmallMesh.
 
     Returns
     -------

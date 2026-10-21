@@ -38,7 +38,7 @@ SPLIT_PER_TEST = (
 
 # unit (file, file::Class or full nodeid of a split test) -> approx. seconds
 HEAVY = {
-    "tests/test_single_particle.py::TestCCEVsBias": 200,
+    "tests/test_single_particle.py::TestBuildCCELetTableSmallMesh": 160,
     "tests/test_device2d_convergence.py::TestReverseBiasConvergence::test_converges_at_minus_50V_300um": 150,
     "tests/test_engine2d.py::test_sweep_row_failing_config_hw25": 150,
     "tests/test_devsim_quiet.py::test_set_devsim_quiet_silences_direct_core_calls": 130,
@@ -51,6 +51,7 @@ HEAVY = {
     "tests/test_dark_current.py::TestDarkCurrentCalibration::test_calibration_point_unchanged_by_lag_fix": 90,
     "tests/test_charge_collection_2d.py::TestCCELateralScan": 90,
     "tests/test_api_device.py::TestBuildDevice": 80,
+    "tests/test_single_particle.py::TestCCEVsBias": 80,
     "tests/test_dark_current.py::TestDarkCurrentVsFluence": 75,
     "tests/test_device2d_convergence.py::TestReverseBiasConvergence::test_converges_at_minus_50V_100um": 67,
     "tests/test_nplus.py": 65,
