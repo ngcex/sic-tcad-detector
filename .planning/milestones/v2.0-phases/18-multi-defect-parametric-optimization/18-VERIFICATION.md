@@ -8,6 +8,12 @@ re_verification: false
 
 # Phase 18: Multi-Defect Parametric Optimization Verification Report
 
+> **Erratum 2026-10-21 (historical record kept as written).** NBKV-04 was marked satisfied against
+> references that do not hold: Burin et al. has no proton or CCE data, the reference curve
+> (0.95 / 0.70 / 0.40) and the onset "~1e12" were unsourced, and the Moscatelli / Raffi citations
+> resolve to unrelated papers. Notebook 14 was rewritten as a model-behaviour check without a
+> reference curve. See `.planning/CARRIER_REMOVAL_REVIEW.md`.
+
 **Phase Goal:** Users can run the full three-defect Burin TCAD model and optimize device design for radiation hardness
 **Verified:** 2026-03-26
 **Status:** PASSED
