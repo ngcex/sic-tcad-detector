@@ -1,0 +1,606 @@
+# ETNA benchmark registry (issue #3, P2.2). One [[benchmark]] table per golden quantity.
+#
+# Keys
+#   id          stable identifier (the V&V report and tests refer to it)
+#   quantity    what is compared;  unit  of S and D
+#   method      how S is computed (code path) and how D is obtained
+#   status      VERIFIED       code vs analytic limit
+#               CROSS-CHECKED  code vs code (independent solver / reference implementation)
+#               CALIBRATED     agreement with the data the model (or its input) was fitted to
+#               VALIDATED      comparison with a measurement that was NOT fitted
+#               EXPECTED-FAIL  documented disagreement with a measurement
+#               A CALIBRATED entry must never be relabelled VALIDATED (issue #3 non-goal);
+#               tests/test_benchmarks.py checks the report keeps every label.
+#   metric      "rel": E = S/D - 1;  "abs": E = S - D   (ASME V&V 20: E = S - D)
+#   tolerance   VERIFIED / CROSS-CHECKED: gate |E| <= tolerance (the existing test gate,
+#               never the measured value). Other classes: regression guard
+#               |E - golden_E| <= tolerance; E itself is reported, not judged.
+#   golden_E    E recorded on 2026-10-21 (macOS arm64, M4, etna 5.0.0)
+#   fail_threshold  EXPECTED-FAIL only: |E| <= this would be an UNEXPECTED-PASS
+#   speed       fast (default run, < 10 s each), slow (--slow), record (not evaluated:
+#               the number is quoted from the named lab LOG and its command)
+#   reference   value (fixed references only; computed ones come from the evaluator),
+#               uncertainty (same unit as D; omitted when not stated by the source),
+#               source (only sources opened and cited in the repository)
+#   provenance  where the comparison is documented in the repo
+#   evaluator   module:function in benchmarks/evaluators.py
+#   command     how to reproduce it outside the runner
+
+# ============================================================= VERIFIED (analytic)
+[[benchmark]]
+id = "AN-W-UNIFORM"
+quantity = "small-signal depletion width eps*A/C at -40 V, uniform 1e15, 30 um"
+unit = "um"
+method = "run_cv (batched engine) vs one-sided abrupt junction with the 2kT/q Debye-tail correction and the p+ share (1 + N_D/N_A-)"
+status = "VERIFIED"
+metric = "rel"
+tolerance = 1e-3
+speed = "fast"
+evaluator = "benchmarks.evaluators:an_depletion_width_uniform"
+reference = { source = "W = sqrt(2 eps (V_bi - V - 2kT/q)(1 + N_D/N_A-) / (q N_D)); Sze & Ng Ch. 2 (cited in etna/core/analytical.py)" }
+provenance = "etna/core/analytical.py:148 (depletion_width, without the kT term); the tolerance is the depletion-approximation remainder, which is -2e-3 at -5 V and falls with bias"
+domain = "uniform doping, reverse bias >= 5 V, 300 K"
+
+[[benchmark]]
+id = "AN-MS-ND"
+quantity = "N_D from the Mott-Schottky 1/C^2 slope (-5..-40 V), uniform 1e15"
+unit = "cm^-3"
+method = "linear fit of 1/C^2(V) from run_cv (batched) vs the input N_D"
+status = "VERIFIED"
+metric = "rel"
+tolerance = 5e-3
+speed = "fast"
+evaluator = "benchmarks.evaluators:an_mott_schottky_nd"
+reference = { source = "1/C^2 = 2 (V_bi - 2kT/q - V) / (q eps N_D A^2): N_D = 2 / (q eps A^2 slope)" }
+provenance = "tests/test_measurements_cv.py::test_depletion_profile_recovers_uniform_doping (rtol 0.03 on the local profile); scripts/validation/cv_vs_bruzzi2023.py panel 2"
+domain = "uniform doping; 1e14 / 3e14 give -5.3e-3 / -2.5e-3 with a global fit"
+
+[[benchmark]]
+id = "AN-VFD-KNEE"
+quantity = "full-depletion voltage of a uniform 1e14, 10 um epi (no n+)"
+unit = "V"
+method = "batched reverse_sweep, 1/C^2 linear fit below full depletion, knee where 1/C^2 reaches (d/eps)^2"
+status = "VERIFIED"
+metric = "rel"
+tolerance = 0.03
+speed = "fast"
+evaluator = "benchmarks.evaluators:an_full_depletion_knee_1e14"
+reference = { source = "V_fd = q N_D d^2 / (2 eps) - V_bi + 2kT/q (Sze & Ng Ch. 2; etna/core/analytical.py:23 without the kT term)" }
+provenance = "the Debye tail smooths the approach to reach-through: the edge-based criterion is NOT the analytic V_fd (USAGE §8 gives the two definitions)"
+domain = "uniform doping, no n+ substrate"
+
+[[benchmark]]
+id = "AN-MCINTYRE-AB"
+quantity = "multiplication M(x) for alpha = beta, alpha W = 0.5, constant field"
+method = "etna.core.avalanche.ionization_integrals (per-edge closed-form integration)"
+status = "VERIFIED"
+metric = "rel"
+tolerance = 1e-12
+speed = "fast"
+evaluator = "benchmarks.evaluators:an_mcintyre_alpha_eq_beta"
+reference = { source = "McIntyre 1966: M = 1 / (1 - alpha W) for alpha = beta (cited in etna/core/avalanche.py docstring)" }
+provenance = "tests/test_physics_models.py::test_integral_identity_and_constant_field_limits"
+
+[[benchmark]]
+id = "AN-MCINTYRE-N"
+quantity = "electron multiplication M_n, only electrons ionize, alpha W = 0.5"
+method = "etna.core.avalanche.ionization_integrals"
+status = "VERIFIED"
+metric = "rel"
+tolerance = 1e-12
+speed = "fast"
+evaluator = "benchmarks.evaluators:an_mcintyre_electrons_only"
+reference = { source = "M_n = exp(alpha W) (closed form, constant field)" }
+provenance = "tests/test_physics_models.py::test_integral_identity_and_constant_field_limits"
+
+[[benchmark]]
+id = "AN-BD-UNIFORM"
+quantity = "avalanche breakdown voltage, p+/1e12/n+ (nearly constant field), alpha = beta = a exp(-b/E)"
+unit = "V"
+method = "etna.core.avalanche.breakdown_voltage (Poisson + ionization integral, secant/Illinois to 1e-3 V)"
+status = "VERIFIED"
+metric = "rel"
+tolerance = 0.03
+speed = "fast"
+evaluator = "benchmarks.evaluators:an_breakdown_uniform_field"
+reference = { source = "a W exp(-b W / V) = 1  =>  V_BD = b W / ln(a W)" }
+provenance = "tests/test_physics_models.py::test_breakdown_nearly_uniform_field_analytic (rel 0.03: the field reaches ~0.1 um into p+ and n+)"
+
+[[benchmark]]
+id = "AN-HECHT"
+quantity = "two-carrier depth-averaged Hecht CCE, tau 2 ps, 50 V, 10 um"
+method = "etna.core.charge_collection.hecht_cce closed form vs an independent 20001-point trapezoid of q(x)/q0"
+status = "VERIFIED"
+metric = "rel"
+tolerance = 1e-6
+speed = "fast"
+evaluator = "benchmarks.evaluators:an_hecht_closed_form"
+reference = { source = "Hecht, Z. Physik 77, 235 (1932), as cited in etna/core/charge_collection.py" }
+provenance = "verifies the formula used by run_temperature_sweep(method='hecht'). SRH drift-diffusion does NOT reduce to Hecht away from CCE -> 1 (DD 1.75-2.6x Hecht at tau 2 ps; SRH needs both carriers): tests/test_charge_collection.py::TestCCEDDvsHecht uses abs 0.10 near CCE = 1 only"
+
+[[benchmark]]
+id = "AN-SRH-GEN"
+quantity = "midgap SRH generation current density at -40 V, p+/1e15/10 um, n_i inflated to 1e8"
+unit = "A/cm^2"
+method = "batched dark kernel (etna.core.batched.dark.dark_sweep), TAT and Hurkx off"
+status = "VERIFIED"
+metric = "rel"
+tolerance = 0.03
+speed = "fast"
+evaluator = "benchmarks.evaluators:an_srh_generation_current"
+reference = { source = "J = q n_i W_eff / (tau_n + tau_p), W_eff = W - dn - dp (generation only where n, p < n_i); Sze & Ng Ch. 2" }
+provenance = "no analytic generation-current test existed before; the code current is 0.70-0.90 of the naive q n_i W / 2 tau at -5..-40 V, i.e. the naive form overestimates by 11-42 % (edge correction). With the real n_i (5e-9) the SRH current is ~1e-49 A (etna/core/dark_current.py docstring)"
+domain = "partially depleted epi (the edge correction fails once reached-through)"
+
+[[benchmark]]
+id = "AN-BOHR-VAR"
+quantity = "energy-loss variance, 5.486 MeV alpha, 2 um SiC (kappa ~ 22), 50k events, seed 2"
+unit = "keV^2"
+method = "etna.core.mc_transport.sample_track_events (Geant4 11.3 Urban/Universal fluctuation port, delta rays off)"
+status = "VERIFIED"
+metric = "rel"
+tolerance = 0.2
+speed = "fast"
+evaluator = "benchmarks.evaluators:an_bohr_variance_alpha"
+reference = { source = "Bohr / Vavilov variance xi T_max (1 - beta^2/2) (etna.core.mc_transport.bohr_variance_keV2)" }
+provenance = "tests/test_mc_transport.py::test_variance_close_to_vavilov gate 0.8-1.2. The +3.9 % is a model-form difference of the fluctuation model (~6x the sampling error), not statistics; at kappa < 1 the ratio is 0.76-0.85 (heavy tail)"
+
+[[benchmark]]
+id = "AN-MEAN-DEP"
+quantity = "mean energy deposit, same sample as AN-BOHR-VAR"
+unit = "keV"
+method = "etna.core.mc_transport.sample_track_events"
+status = "VERIFIED"
+metric = "rel"
+tolerance = 2e-3
+speed = "fast"
+evaluator = "benchmarks.evaluators:an_mean_deposit_alpha"
+reference = { source = "CSDA integral of L_el/L_tot over the path (etna.core.mc_transport.mean_csda_deposit_keV; NIST ASTAR Bragg-additive SiC)" }
+provenance = "tests/test_mc_transport.py::test_mean_deposit_matches_csda_integral"
+
+[[benchmark]]
+id = "AN-VAVILOV"
+quantity = "second cumulant of the Vavilov density, kappa 0.5, beta^2 0.3"
+method = "etna.core.straggling.vavilov_pdf_lambda (numerical Fourier integral) + trapezoid moments"
+status = "VERIFIED"
+metric = "rel"
+tolerance = 1e-5
+speed = "fast"
+evaluator = "benchmarks.evaluators:an_vavilov_variance"
+reference = { source = "k_2 = kappa (1 - beta^2/2) in T_max units; Vavilov, Sov. Phys. JETP 5, 749 (1957), as cited in etna/core/straggling.py" }
+provenance = "tests/test_straggling.py::test_vavilov_cumulants"
+
+[[benchmark]]
+id = "AN-FV2D-ORDER"
+quantity = "observed order of accuracy, fv2d (r, z) coaxial Laplace on uniform r meshes 41 -> 81"
+method = "etna.core.fv2d box scheme; max potential error vs V ln(b/r)/ln(b/a); exact (8.9e-16 V) on a geometric mesh"
+status = "VERIFIED"
+metric = "abs"
+tolerance = 0.2
+speed = "fast"
+evaluator = "benchmarks.evaluators:an_fv2d_coaxial_order"
+reference = { source = "formal order 2 of the box (finite-volume) scheme; analytic coaxial potential" }
+provenance = "tests/test_fv2d.py::TestAnalytic::test_coaxial_laplace (order > 1.8)"
+
+# ======================================================== CROSS-CHECKED (code vs code)
+[[benchmark]]
+id = "CC-CV-DEVSIM"
+quantity = "max |C_engine/C_devsim - 1|, default stack, 0..-20 V (2.5 V lattice)"
+method = "run_cv (batched, exact linearisation dQ/dV) vs devsim cv_sweep (+-1 mV central difference); S = 1 + max rel dC"
+status = "CROSS-CHECKED"
+metric = "rel"
+tolerance = 1e-6
+speed = "fast"
+evaluator = "benchmarks.evaluators:cc_batched_vs_devsim_cv"
+reference = { source = "devsim (J. E. Sanchez), same mesh and physics" }
+provenance = "tests/test_api_engine_switch.py::test_run_cv_matches_devsim_on_lattice (rtol 1e-6; W rtol 1e-10). README quotes dC/C <~ 3e-8; this run measures 4.0e-8 (devsim's central difference)"
+domain = "inside _ENGINE_BOX (etna/api/simulation.py)"
+
+[[benchmark]]
+id = "CC-CCE-DEVSIM"
+quantity = "max |CCE_engine - CCE_devsim|, default stack, -10..-40 V, alpha"
+method = "run_cce (batched) vs devsim cce_vs_bias"
+status = "CROSS-CHECKED"
+metric = "abs"
+tolerance = 1e-5
+speed = "fast"
+evaluator = "benchmarks.evaluators:cc_batched_vs_devsim_cce"
+reference = { value = 0.0, source = "devsim cce_vs_bias, same mesh and physics" }
+provenance = "tests/test_api_engine_switch.py::test_run_cce_matches_devsim (atol 1e-5)"
+
+[[benchmark]]
+id = "CC-DARK-DEVSIM"
+quantity = "max |I_engine/I_devsim - 1|, default stack dark current 0..-100 V"
+method = "run_dark_current(solver='auto' -> batched) vs solver='devsim'; S = 1 + max rel dI"
+status = "CROSS-CHECKED"
+metric = "rel"
+tolerance = 1e-9
+speed = "fast"
+evaluator = "benchmarks.evaluators:cc_batched_vs_devsim_dark"
+reference = { source = "devsim dark-current path (SRH + TAT/Hurkx + SRV bookkeeping)" }
+provenance = "tests/test_dark_current_engine.py (I_total, I_TAT <= 1e-9 relative); USAGE §7"
+
+[[benchmark]]
+id = "CC-E2D-PSI"
+quantity = "max |psi_engine2d - psi_devsim|, 2D default stack, half width 25 um, -20 V"
+unit = "V"
+method = "run_field (engine2d) vs run_field(solver='devsim'), same node order"
+status = "CROSS-CHECKED"
+metric = "abs"
+tolerance = 1e-6
+speed = "fast"
+evaluator = "benchmarks.evaluators:cc_engine2d_vs_devsim_potential"
+reference = { value = 0.0, source = "devsim 2D, same mesh" }
+provenance = "tests/test_api_field_engine.py::test_engine_matches_devsim_hw25 (1e-6 V; marked slow)"
+
+[[benchmark]]
+id = "CC-FV2D-MESA"
+quantity = "max |dCCE| fv2d vs stored devsim, mesa (ALT_STACK, legacy depth mesh), 50 V, 9-point scan"
+method = "fv2d on devsim's imported mesh vs lab/geometry2d/notes/devsim_baselines.json"
+status = "CROSS-CHECKED"
+metric = "abs"
+tolerance = 1e-10
+speed = "fast"
+evaluator = "benchmarks.evaluators:cc_fv2d_vs_devsim_mesa"
+reference = { value = 0.0, source = "devsim baselines regenerated by lab/geometry2d/bench/devsim_baselines.py" }
+provenance = "tests/test_fv2d.py::TestDevsimParity::test_mesa; issue #4 (mesa 2.2e-16, guard ring 8.9e-16, 3D electrode 2.4e-12)"
+
+[[benchmark]]
+id = "CC-FV2D-E2D"
+quantity = "max |dCCE| fv2d vs engine2d, default n+ diode, hw 25 um, 20 V"
+method = "fv2d on devsim's create_sic_2d_device mesh vs engine2d lateral_cce_scan_2d"
+status = "CROSS-CHECKED"
+metric = "abs"
+tolerance = 1e-9
+speed = "fast"
+evaluator = "benchmarks.evaluators:cc_fv2d_vs_engine2d"
+reference = { value = 0.0, source = "engine2d (itself cross-checked against devsim)" }
+provenance = "tests/test_fv2d.py::test_cross_engine_parity_with_engine2d"
+
+[[benchmark]]
+id = "CC-AVAL-MCINTYRE"
+quantity = "(1 - 1/gain_DD) / (1 - 1/M_McIntyre), default dosimeter at 0.99 V_BD (M ~ 34)"
+method = "coupled DD with Hatakeyama impact ionization (ModelContinuityBatch) vs generation-weighted McIntyre M on the same potential"
+status = "CROSS-CHECKED"
+metric = "rel"
+tolerance = 1e-4
+speed = "fast"
+evaluator = "benchmarks.evaluators:cc_avalanche_dd_vs_mcintyre"
+reference = { source = "McIntyre ionization integral (etna.core.avalanche), independent discretisation" }
+provenance = "tests/test_physics_models.py::test_avalanche_dd_matches_mcintyre (rel 1e-4; measured 4.3e-6 to M ~ 400)"
+
+[[benchmark]]
+id = "CC-CSDA-P62"
+quantity = "CSDA range of 62 MeV protons in Si"
+unit = "g/cm^2"
+method = "ETNA's 1/S integration of the PSTAR stopping table (the path used for SiC) vs NIST's tabulated CSDA range"
+status = "CROSS-CHECKED"
+metric = "rel"
+tolerance = 2e-3
+speed = "fast"
+evaluator = "benchmarks.evaluators:cc_csda_integral_vs_nist_si"
+reference = { source = "NIST PSTAR (Berger et al.), data/nist_star/pstar_si.csv, downloaded 2026-10-20 (data/nist_star/README.md)" }
+provenance = "tests/test_stopping_power.py::test_integrated_csda_reproduces_nist_silicon"
+
+[[benchmark]]
+id = "CC-CSDA-A55"
+quantity = "CSDA range of 5.5 MeV alphas in Si"
+unit = "g/cm^2"
+method = "as CC-CSDA-P62 with ASTAR"
+status = "CROSS-CHECKED"
+metric = "rel"
+tolerance = 2e-3
+speed = "fast"
+evaluator = "benchmarks.evaluators:cc_csda_integral_vs_nist_si_alpha"
+reference = { source = "NIST ASTAR, data/nist_star/astar_si.csv (6.487e-3 g/cm^2 at 5.5 MeV)" }
+provenance = "tests/test_stopping_power.py::test_integrated_csda_reproduces_nist_silicon"
+
+[[benchmark]]
+id = "CC-KAPPA-62"
+quantity = "SiC -> water linear LET ratio kappa at 62 MeV (protons)"
+method = "etna.core.stopping_power.kappa_table vs an independent recomputation from the NIST CSVs"
+status = "CROSS-CHECKED"
+metric = "rel"
+tolerance = 1e-6
+speed = "fast"
+evaluator = "benchmarks.evaluators:cc_kappa_62mev_independent"
+reference = { source = "NIST PSTAR Si, C (amorphous), water; Bragg additivity 0.7004 Si + 0.2996 C, rho_SiC 3.21 g/cm3" }
+provenance = "checks the table pipeline only. The Bragg-additivity approximation for SiC is NOT validated (no SiC stopping measurement in the repo; a 'few percent' literature estimate is marked UNVERIFIED in data/nist_star/README.md). tests/test_stopping_power.py::TestKappa pins 0.378 at 62 MeV"
+
+[[benchmark]]
+id = "CC-CV-DEVSIM-DEEP"
+quantity = "max |C_engine/C_devsim - 1|, default stack, 0..-100 V (5 V lattice, 21 points)"
+method = "as CC-CV-DEVSIM to the deepest cross-checked bias of the n+ stack"
+status = "CROSS-CHECKED"
+metric = "rel"
+tolerance = 1e-6
+speed = "slow"
+evaluator = "benchmarks.evaluators:cc_batched_vs_devsim_cv_deep"
+reference = { source = "devsim cv_sweep, same mesh and physics" }
+provenance = "metadata['cross_checked_to_V'] = 100 V (USAGE §7)"
+
+[[benchmark]]
+id = "CC-FV2D-GUARD-RING"
+quantity = "max |dCCE| fv2d vs stored devsim, guard ring (ALT_STACK, legacy mesh), 10 V, 11-point anode scan"
+method = "fv2d on devsim's imported mesh with the mid-gap node-set cut vs lab/geometry2d/notes/devsim_baselines.json"
+status = "CROSS-CHECKED"
+metric = "abs"
+tolerance = 1e-10
+speed = "slow"
+evaluator = "benchmarks.evaluators:cc_fv2d_vs_devsim_guard_ring"
+reference = { value = 0.0, source = "devsim baselines regenerated by lab/geometry2d/bench/devsim_baselines.py" }
+provenance = "tests/test_fv2d.py::TestDevsimParity::test_guard_ring_scan_and_sharing; issue #4"
+
+# ================================================ CALIBRATED (fit quality, not validation)
+[[benchmark]]
+id = "CA-PHOTONS-PLATEAU"
+quantity = "rms residual of eps*A/C vs the digitised Photons Fig. 4b plateau (-5..-59 V, 208 points)"
+unit = "um"
+method = "run_cv (batched) on DeviceConfig() (area 0.04 cm2), 0.25 V grid"
+status = "CALIBRATED"
+metric = "abs"
+tolerance = 2e-3
+golden_E = 0.013264
+speed = "fast"
+evaluator = "benchmarks.evaluators:ca_photons_plateau_rms"
+reference = { value = 0.0, uncertainty = 0.02, source = "Petringa et al. 2025 'Photons' paper Fig. 4b, digitised in lab/cv_gap (notes/photons_w.csv); uncertainty = the digitisation sigma quoted in lab/mesh_contact/notes/LOG.md" }
+provenance = "the default doping profile IS a fit to this curve (lab/cv_gap/notes/LOG.md, lab/buffer_profile/notes/LOG.md §3): fit quality only. tests/test_measured_cv_preset.py::test_preset_reproduces_the_digitised_cv (<= 0.02)"
+
+[[benchmark]]
+id = "CA-W-LABEL-0"
+quantity = "eps*A/C at 0 V vs the printed Fig. 4b label"
+unit = "um"
+method = "etna.viz.validation.w_creep (run_cv batched, DeviceConfig())"
+status = "CALIBRATED"
+metric = "rel"
+tolerance = 5e-4
+golden_E = -0.015040
+speed = "fast"
+evaluator = "benchmarks.evaluators:ca_w_label_0"
+reference = { value = 1.68, uncertainty = 0.005, source = "Photons Fig. 4b W label (data/validation/photons_fig4b_w_labels.csv, rounding +-0.005 um)" }
+provenance = "regression of the C-V fit (USAGE §8 'Validation variants as figures'); tests/test_viz_figures.py::test_w_creep_validation_pinned"
+
+[[benchmark]]
+id = "CA-W-LABEL-10"
+quantity = "eps*A/C at -10 V vs the printed Fig. 4b label"
+unit = "um"
+method = "etna.viz.validation.w_creep"
+status = "CALIBRATED"
+metric = "rel"
+tolerance = 5e-4
+golden_E = -0.000155
+speed = "fast"
+evaluator = "benchmarks.evaluators:ca_w_label_m10"
+reference = { value = 9.52, uncertainty = 0.005, source = "Photons Fig. 4b W label (data/validation/photons_fig4b_w_labels.csv)" }
+provenance = "as CA-W-LABEL-0"
+
+[[benchmark]]
+id = "CA-W-LABEL-30"
+quantity = "eps*A/C at -30 V vs the printed Fig. 4b label"
+unit = "um"
+method = "etna.viz.validation.w_creep"
+status = "CALIBRATED"
+metric = "rel"
+tolerance = 5e-4
+golden_E = 0.002085
+speed = "fast"
+evaluator = "benchmarks.evaluators:ca_w_label_m30"
+reference = { value = 9.73, uncertainty = 0.005, source = "Photons Fig. 4b W label (data/validation/photons_fig4b_w_labels.csv)" }
+provenance = "as CA-W-LABEL-0"
+
+[[benchmark]]
+id = "CA-DARK-60"
+quantity = "dark current at -60 V, 300 K, 4 mm2, default stack"
+unit = "A"
+method = "run_dark_current (batched), N_t = SiC4H_Parameters.N_t"
+status = "CALIBRATED"
+metric = "rel"
+tolerance = 1e-4
+golden_E = -6.3e-7
+speed = "fast"
+evaluator = "benchmarks.evaluators:ca_dark_current_m60"
+reference = { value = 1.8e-11, source = "measured UPPER BOUND '< 18 pA up to -60 V' on the 4 mm2 dosimeter (etna/core/dark_current.py docstring)" }
+provenance = "N_t is fitted so that I(-60 V) = 18 pA: E ~ 0 by construction. The bias and temperature shapes are model assumptions (README 'What to trust')"
+
+[[benchmark]]
+id = "CA-RADMANOVAC-ONSEMI"
+quantity = "C-V removal slope g (per p/cm2) at fixed width 10-40 um, onsemi 50 um 4e13, 252.7 MeV protons"
+method = "removal_observable(trap_preset('radmanovac_calibrated')) in the default sic-damage convention, 3 of 5 published fluences"
+status = "CALIBRATED"
+metric = "rel"
+tolerance = 0.005
+golden_E = -0.13274
+speed = "fast"
+evaluator = "benchmarks.evaluators:ca_radmanovac_onsemi_slope"
+reference = { value = 5.60, uncertainty = 0.81, source = "Radmanovac et al., arXiv:2510.11304, Table 2 (as cited in etna/core/trap_presets.py)" }
+provenance = "the slow-removal rate d is FITTED to the three Table 2 slopes (sic-damage: d 4.69 +- 0.30, chi2 1.03 / 2 dof; etna/core/trap_presets.py). The removal mechanism is not identified. tests/test_niel_convention_calibration.py pins 4.858"
+
+[[benchmark]]
+id = "CA-HATAKEYAMA-1E17"
+quantity = "avalanche V_BD, p+/10 um/n+ at N_D 1e17, hatakeyama2004 set"
+unit = "V"
+method = "etna.core.avalanche.breakdown_voltage on make_batch"
+status = "CALIBRATED"
+metric = "rel"
+tolerance = 1e-3
+golden_E = 0.017667
+speed = "fast"
+evaluator = "benchmarks.evaluators:ca_hatakeyama_vbd_1e17"
+reference = { value = 307.47, source = "Hatakeyama et al., APL 85, 1380 (2004): measured V_BD = 1940 (1e16/N_D)^0.8 V (USAGE §18, primary opened)" }
+provenance = "the hatakeyama2004 coefficients were fitted on these diodes: consistency, not validation (USAGE §18). -0.6 / -0.3 / +1.8 / +7.0 % at 3e16 / 5e16 / 1e17 / 2e17"
+
+[[benchmark]]
+id = "CA-BRUZZI-W40-MATCHED"
+quantity = "eps*A/C at the paper's -40 V band bending (V_bi matched), Bruzzi diode configuration"
+unit = "um"
+method = "run_cv uniform N_D 2.46e15, 30 um, r 1 mm, 293.15 K; read at V_R = 40 + 1.2 - V_bi(p-n)"
+status = "CALIBRATED"
+metric = "rel"
+tolerance = 1e-3
+golden_E = 0.010006
+speed = "fast"
+evaluator = "benchmarks.evaluators:ca_bruzzi_w40_vbi_matched"
+reference = { value = 4.2, uncertainty = 0.05, source = "Bruzzi & Verroi, Materials 16 (2023) 3643, doi:10.3390/ma16103643: W 0.7-4.2 um over 0-40 V (2 significant figures)" }
+provenance = "SOLVER-SCALE check on a different device (Schottky). CIRCULAR: N_D 2.46e15 is the paper's own fit of the same C-V, so this is not an independent validation (.planning/VALIDATION_LITERATURE.md, scripts/validation/cv_vs_bruzzi2023.py)"
+
+[[benchmark]]
+id = "CA-BRUZZI-W40-RAW"
+quantity = "eps*A/C at -40 V (no V_bi matching), Bruzzi diode configuration"
+unit = "um"
+method = "as CA-BRUZZI-W40-MATCHED, read at -40 V"
+status = "CALIBRATED"
+metric = "rel"
+tolerance = 1e-3
+golden_E = 0.031027
+speed = "fast"
+evaluator = "benchmarks.evaluators:ca_bruzzi_w40_raw"
+reference = { value = 4.2, uncertainty = 0.05, source = "Bruzzi & Verroi, Materials 16 (2023) 3643" }
+provenance = "the +3.1 % is the Schottky (1.2 V) vs p-n (~2.9 V) built-in voltage difference (README 'What to trust')"
+
+[[benchmark]]
+id = "CA-TILTED-TAU-SCALE"
+quantity = "plasma-lifetime scale tau_scale fitted to the Micro Fig. 4b -20..-50 V tail (2.5D tilted track)"
+method = "etna.core.track.tilted.calibrate_tau_scale, free overall scale, sigma 1e-3"
+status = "CALIBRATED"
+metric = "abs"
+tolerance = 0.0
+golden_E = 0.0
+golden_S = 0.039
+speed = "record"
+reference = { source = "Petringa et al. 2025, Physica Medica 140, 105675, Fig. 4b (data/validation/micro_fig4b_tilted_alpha_cce.csv)" }
+provenance = "lab/track_plasma/notes/LOG.md §12 (tau_scale 0.039, 68 % 0.035-0.047, tau_p ~ 23 ns, chi2 6.4 / 2 at sigma 1e-3, 25.4 / 2 at the digitisation sigma 5e-4; systematic band 17-42 ns); USAGE §19.3. Not a preset. Not recomputed by the runner"
+command = "uv run python lab/track_plasma/bench/tilted_bench.py"
+
+# ================================================ VALIDATED (not fitted; E is model error)
+[[benchmark]]
+id = "VA-NIWA-3E16"
+quantity = "avalanche V_BD, p+/10 um/n+ at N_D 3e16, niwa2015 set (opt-in)"
+unit = "V"
+method = "etna.core.avalanche.breakdown_voltage"
+status = "VALIDATED"
+metric = "rel"
+tolerance = 1e-3
+golden_E = -0.06444
+speed = "fast"
+evaluator = "benchmarks.evaluators:va_niwa_vbd_3e16"
+reference = { value = 805.56, source = "Hatakeyama et al., APL 85, 1380 (2004): measured V_BD = 1940 (1e16/N_D)^0.8 V" }
+provenance = "niwa2015 coefficients come from a secondary source (Burin et al. review, arXiv:2410.06798 Table XIII) and were not fitted to these diodes (USAGE §18). Opt-in library, 1D parallel-plane; the default dosimeter V_BD is an extrapolated upper bound"
+domain = "(0001) p+n mesas, N_D 3e16-2e17, 300 K"
+
+[[benchmark]]
+id = "VA-NIWA-1E17"
+quantity = "avalanche V_BD at N_D 1e17, niwa2015 set (opt-in)"
+unit = "V"
+method = "etna.core.avalanche.breakdown_voltage"
+status = "VALIDATED"
+metric = "rel"
+tolerance = 1e-3
+golden_E = 0.05236
+speed = "fast"
+evaluator = "benchmarks.evaluators:va_niwa_vbd_1e17"
+reference = { value = 307.47, source = "Hatakeyama et al., APL 85, 1380 (2004)" }
+provenance = "as VA-NIWA-3E16; the spread over the five sets (about +-20 %) is the real model uncertainty"
+domain = "as VA-NIWA-3E16"
+
+[[benchmark]]
+id = "VA-GSPONER-1E15"
+quantity = "alpha CCE at 1e15 neq, -300 V, Gsponer-like diode (50 um, uniform 1.5e14), default damage model"
+method = "run_radiation_damage (calibrated kinetic traps, sic-damage), fluence entered as 62 MeV protons 1e15/kappa"
+status = "VALIDATED"
+metric = "abs"
+tolerance = 0.01
+golden_E = 0.45454
+speed = "fast"
+evaluator = "benchmarks.evaluators:va_gsponer_cce_1e15"
+reference = { value = 0.5, source = "Gsponer et al., arXiv:2310.02047 (abstract, opened 2026-10-21): 'A CCE better than 50% was able to be obtained for fluences up to 1e15 n_eq/cm2'; bias not stated in the abstract" }
+provenance = "qualitative: a lower BOUND on a different device, unstated bias; E > 0 means consistent with the bound. NOTE: lab/radiation_traps/notes/LOG.md §3 (and USAGE before 2026-10-21) quote 'above 80 %', which the abstract does not support (lab/radiation_traps/notes/MECHANISMS.md says > 50 %)"
+domain = "different device; neq normalisation of reactor neutrons vs the sic-damage convention"
+
+# ================================================ EXPECTED-FAIL (documented disagreements)
+[[benchmark]]
+id = "EF-PHOTONS-KNEE"
+quantity = "rms residual of eps*A/C vs the 13 digitised knee markers (-3.25..-0.25 V)"
+unit = "um"
+method = "run_cv (batched) on DeviceConfig(), 0.25 V grid"
+status = "EXPECTED-FAIL"
+metric = "abs"
+tolerance = 0.01
+golden_E = 0.23651
+fail_threshold = 0.06
+speed = "fast"
+evaluator = "benchmarks.evaluators:ef_photons_knee_rms"
+reference = { value = 0.0, uncertainty = 0.03, source = "Photons Fig. 4b knee markers, lab/cv_gap/notes/photons_w_markers.csv" }
+provenance = "lab/buffer_profile/notes/LOG.md §3: knee gate 'within the digitisation uncertainty' FAILS (max 3.9 sigma; the exponential epi cannot make the 1.3e13 dip at 4-6 um; the 19-knot tabulated profile would be needed)"
+
+[[benchmark]]
+id = "EF-TILTED-ALPHA-RMS"
+quantity = "rms shape residual, microdosimeter tilted-alpha CCE(V) normalised at -50 V vs Micro Fig. 4b (7 points)"
+method = "etna.viz.validation.tilted_alpha_shape (run_cce_tilted_alpha, microdosimeter_config(), 65 deg)"
+status = "EXPECTED-FAIL"
+metric = "abs"
+tolerance = 0.002
+golden_E = 0.035384
+fail_threshold = 0.002
+speed = "fast"
+evaluator = "benchmarks.evaluators:ef_tilted_alpha_shape_rms"
+reference = { value = 0.0, uncertainty = 0.0005, source = "Petringa et al. 2025, Physica Medica 140, 105675, Fig. 4b, digitised (data/validation/micro_fig4b_tilted_alpha_cce.csv, +-0.0005)" }
+provenance = "USAGE §8 'Microdosimeter alpha test not reproduced'; no drift-diffusion variant fits (chi2 >= 228, lab/microdosimeter/notes/LOG.md §9)"
+
+[[benchmark]]
+id = "EF-TILTED-ALPHA-0V"
+quantity = "normalised tilted-alpha CCE at 0 V"
+method = "as EF-TILTED-ALPHA-RMS"
+status = "EXPECTED-FAIL"
+metric = "abs"
+tolerance = 0.003
+golden_E = 0.084494
+fail_threshold = 0.002
+speed = "fast"
+evaluator = "benchmarks.evaluators:ef_tilted_alpha_0v"
+reference = { value = 0.9083, uncertainty = 0.0005, source = "Micro Fig. 4b, 0 V point (data/validation/micro_fig4b_tilted_alpha_cce.csv)" }
+provenance = "model 0.9928 vs data 0.9083 (USAGE §8)"
+
+[[benchmark]]
+id = "EF-TILTED-TRACK-ALL7"
+quantity = "chi2 of the best single tau_scale over all 7 Micro Fig. 4b points (2.5D tilted track)"
+method = "etna.core.track.tilted.calibrate_tau_scale, sigma 1e-3"
+status = "EXPECTED-FAIL"
+metric = "abs"
+tolerance = 0.0
+golden_E = 371.0
+golden_S = 371.0
+fail_threshold = 11.1
+speed = "record"
+reference = { value = 0.0, source = "Petringa et al. 2025, Physica Medica 140, 105675, Fig. 4b" }
+provenance = "lab/track_plasma/notes/LOG.md §12: chi2 371 for 5 dof (tau_scale 0.24); the 0..-10 V points lie outside the 2.5D model's validity (E_perp < 1e4 V/cm). fail_threshold = the chi2(5) 95 % point. Not recomputed by the runner"
+command = "uv run python lab/track_plasma/bench/tilted_bench.py"
+
+[[benchmark]]
+id = "EF-DENAPOLI-LOSS-729"
+quantity = "relative alpha-CCE loss at 7.29e14 n/cm2 (14 MeV neutrons), 20 um uniform 1e14, -300 V, default damage model"
+method = "run_radiation_damage(particle='neutron', proton_energy_MeV=14, V_bias=-300), loss = 1 - CCE(Phi)/CCE(0)"
+status = "EXPECTED-FAIL"
+metric = "rel"
+tolerance = 0.02
+golden_E = -0.90638
+fail_threshold = 0.5
+speed = "fast"
+evaluator = "benchmarks.evaluators:ef_denapoli_loss_729"
+reference = { value = 0.225, source = "De Napoli, Front. Phys. 10 (2022) 898833 (review, opened 2026-10-21): 14 MeV neutrons on 20 um, 1e14 Schottky diodes; 'At 300 V, the CCE measured with alpha from a 239Pu source decreased by about 7.0% and 22.5% at fluences of 1.31e14 n/cm2 and 7.29e14 n/cm2'" }
+provenance = "the model loses 2.1 % where 22.5 % was measured (about 10x less). Before the 2026-10-21 default flip (si-neq, steady traps, fluence read as neq) the repo's lab bench gave about 10 % at -300 V (lab/radiation_traps/notes/LOG.md §3, 'same decade' in USAGE). Different device and particle; a Schottky diode and an alpha source of different range. Open: issue #5"
+domain = "different device (Schottky), 14 MeV neutron NIEL from NJOY (no published SiC value to compare)"
+
+[[benchmark]]
+id = "EF-DENAPOLI-LOSS-131"
+quantity = "relative alpha-CCE loss at 1.31e14 n/cm2 (14 MeV neutrons), same device and model"
+method = "as EF-DENAPOLI-LOSS-729"
+status = "EXPECTED-FAIL"
+metric = "rel"
+tolerance = 0.02
+golden_E = -0.93745
+fail_threshold = 0.5
+speed = "fast"
+evaluator = "benchmarks.evaluators:ef_denapoli_loss_131"
+reference = { value = 0.070, source = "De Napoli, Front. Phys. 10 (2022) 898833 (as EF-DENAPOLI-LOSS-729)" }
+provenance = "as EF-DENAPOLI-LOSS-729"
+domain = "as EF-DENAPOLI-LOSS-729"
