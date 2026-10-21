@@ -181,3 +181,20 @@ class TestRunDesign:
         assert md["problem"] == "microdosimeter" and md["solver"] == "fv2d"
         assert md["pareto"] and md["pareto_configs"] == []
         assert "annular-trench" in md["notes"][0]
+
+    def test_damage_objective_without_cache(self, tmp_path):
+        """String per-point metrics (solver_damage) survive the uncached path and the
+        checkpoint (regression: they broke the Pareto rows)."""
+        kw = dict(
+            objectives=["sensitivity_nC_per_Gy", "cce_fluence"], constraints=[],
+            n_init=3, n_iter=0,
+            seed=2, cache=False, alt_physics=False, breakdown_check=False,
+            bounds={"epi_thickness_um": (8.0, 10.0)}, checkpoint=tmp_path / "d.npz",
+        )  # fmt: skip
+        r = run_design(method="random", **kw)
+        md = r.metadata
+        assert md["n_evaluations"] == 3 and md["pareto"]
+        assert set(md["history"]["metrics"]["solver_damage"]) <= {"batched+traps", ""}
+        assert "solver_damage" not in md["pareto"][0]["metrics"]
+        r2 = run_design(method="random", **kw)  # resumed from the checkpoint
+        assert np.array_equal(r2.metadata["history"]["P"], md["history"]["P"])

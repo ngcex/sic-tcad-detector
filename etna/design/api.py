@@ -216,6 +216,7 @@ def run_design(
             settings=settings, robust=rspec, layout_params=layout_params,
         )  # fmt: skip
     problem = prob
+    misses0 = _CACHE.misses
     hist = optimize(
         problem, n_init=n_init, n_iter=n_iter, batch_size=batch_size, seed=seed,
         method=method, cache=_CACHE if cache else None, checkpoint=checkpoint,
@@ -230,7 +231,7 @@ def run_design(
         return {
             "variables": dict(zip(names, map(float, hist.P[i]))),
             "metrics": {k: float(hist.metrics[k][i]) for k in metric_names
-                        if np.asarray(hist.metrics[k]).dtype != object},
+                        if np.asarray(hist.metrics[k]).dtype.kind in "fbiu"},
             "feasible": bool(hist.feasible[i]),
             "iteration": int(hist.iteration[i]),
         }  # fmt: skip
@@ -300,6 +301,8 @@ def run_design(
     n_ok = int(hist.ok.sum())
     t_eval = float(sum(t[1] for t in hist.timings))
     n_eval_pts = int(sum(t[0] for t in hist.timings))
+    if cache:  # points actually solved in this call (cache hits cost nothing)
+        n_eval_pts = _CACHE.misses - misses0
     if m_obj == 1:
         x = np.arange(1, hist.n + 1, dtype=float)
         fb = np.where(feas, F[:, 0], np.inf)
@@ -340,7 +343,9 @@ def run_design(
         "eval_time_s": t_eval,
         "model_time_s": float(sum(t[2] for t in hist.timings)),
         "wall_time_s": time.perf_counter() - t_start,
-        "throughput_designs_per_s": n_eval_pts / t_eval if t_eval > 0 else None,
+        "throughput_designs_per_s": (
+            n_eval_pts / t_eval if t_eval > 0 and n_eval_pts > 0 else None
+        ),
         "cache": {"hits": _CACHE.hits, "misses": _CACHE.misses} if cache else None,
         "problem": "microdosimeter" if micro else "dosimeter",
         "solver": "fv2d" if micro else "batched",
