@@ -19,9 +19,10 @@ from pathlib import Path
 
 import numpy as np
 
+from etna._paths import data_path
 from etna.api.results import SimResult
 
-DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "validation"
+DATA_DIR = data_path("validation")
 MICRO_FIG4B = DATA_DIR / "micro_fig4b_tilted_alpha_cce.csv"
 PHOTONS_W_LABELS = DATA_DIR / "photons_fig4b_w_labels.csv"
 

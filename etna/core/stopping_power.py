@@ -32,7 +32,9 @@ from pathlib import Path
 
 import numpy as np
 
-DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "nist_star"
+from etna._paths import data_path
+
+DATA_DIR = data_path("nist_star")  # repo data/ in a checkout, etna/_data in a wheel
 
 # 4H-SiC mass fractions (Si 28.0855, C 12.011 g/mol; 1:1 stoichiometry).
 SIC_MASS_FRACTION_SI = 0.7004

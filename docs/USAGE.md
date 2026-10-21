@@ -130,6 +130,58 @@ import etna
 print(etna.__version__, importlib.metadata.version("etna"))  # 5.0.0 5.0.0
 ```
 
+### Installing without a checkout
+
+ETNA is distributed from GitHub only (no PyPI release; the name `etna` is taken there).
+Into an existing uv-managed environment:
+
+```bash
+uv pip install "git+https://github.com/ngcex/sic-tcad-detector"                  # library
+uv pip install "etna[viz] @ git+https://github.com/ngcex/sic-tcad-detector"      # + gdstk / manim
+uv pip install "git+https://github.com/ngcex/sic-tcad-detector@<commit-or-tag>"  # pinned
+```
+
+Or build a wheel from a checkout with `uv build` (writes `dist/etna-*.whl` and the
+sdist), then `uv pip install dist/etna-*.whl`.
+
+- **The runtime data is in the wheel.** The hatch `force-include` table in
+  `pyproject.toml` copies the runtime subset of `data/` to `etna/_data/`: the NIST
+  PSTAR/ASTAR CSVs, the SR-NIEL CSVs, the legacy stopping-power tables, the CCE(LET)
+  tables, the digitised validation points, `foundry/layout_params.toml`, the measurement
+  templates and the provenance READMEs. Raw provenance (`data/nist_star/raw/`, the
+  SR-NIEL `.html` pages and fetch script) and notebook inputs (`synthetic_mc_events.csv`)
+  stay in the sdist and the repository. `etna/_paths.py` resolves every data file in
+  this order: `$ETNA_DATA_DIR` if set, then the packaged `etna/_data/`, then the
+  checkout's `data/` (source checkout, editable install). Scripts, notebooks and `lab/`
+  therefore keep reading `data/` in the repository. `tests/test_packaging.py` fails when
+  a new runtime CSV or JSON in `data/` is missing from the table.
+- **The layout parameter file stays user-editable.** In a wheel the default is package
+  data. Copy it out and point `ETNA_LAYOUT_PARAMS` at the copy (section 10):
+
+  ```bash
+  cp "$(python -c 'import etna.export as e; print(e.LAYOUT_PARAMS_PATH)')" my_layout.toml
+  export ETNA_LAYOUT_PARAMS=$PWD/my_layout.toml
+  ```
+
+- **Not in the wheel:** the Streamlit app (`app/`), notebooks, scripts, tests and `lab/`.
+  Use a checkout for those.
+- The CI job `wheel-smoke` (`.github/workflows/ci.yml`) does the following:
+  - builds the sdist and the wheel, and checks the metadata with `twine check`
+  - installs the wheel into a clean venv outside the checkout
+  - runs `scripts/wheel_smoke.py --app` with `python -I`
+
+  The script checks that `etna` is imported from site-packages with the packaged data,
+  then runs `run_cv`, `run_cce`, `run_all`, the SiC->water kappa, `w_creep()`, and the
+  layout params with SVG/GDS and the spec PDF. It also runs the app, copied next to the
+  installed package: the entry script, the measurement templates, the LET tables and
+  `/_stcore/health`. To run it locally:
+
+  ```bash
+  uv build -o /tmp/dist && uv venv /tmp/v -p 3.13
+  VIRTUAL_ENV=/tmp/v uv pip install /tmp/dist/etna-*.whl gdstk
+  cd /tmp && /tmp/v/bin/python -I "$OLDPWD/scripts/wheel_smoke.py" --app
+  ```
+
 The version is defined once, in `etna/_version.py`; `pyproject.toml` reads it through
 hatch (`dynamic = ["version"]`).
 
@@ -1152,7 +1204,9 @@ drawing values, **not foundry dimensions**. Replace them with the mask data and 
 - Other file: `ex.load_layout_params(path)`, the `layout_params=` argument of
   `build_spec` / `spec_to_pdf` / `cross_section_svg` / `cross_section_png` /
   `layout_svg` / `layout_gds` (path, mapping or `LayoutParams`), the environment
-  variable `ETNA_LAYOUT_PARAMS`, or the upload box on the Export page.
+  variable `ETNA_LAYOUT_PARAMS`, or the upload box on the Export page. In an installed
+  wheel the default (`ex.LAYOUT_PARAMS_PATH`, under `etna/_data/foundry/`) is package
+  data: copy it out, edit the copy and set `ETNA_LAYOUT_PARAMS` (section 3).
 - Validation (`LayoutParamsError`, the message names the field, e.g.
   `dosimeter.guard_ring_width.value: must be > 0`): schema version, required keys, units,
   positive values, integer counts, known classes, die larger than the active area, rings
@@ -1373,9 +1427,9 @@ uv run pytest -n0 -x tests/test_api_cce.py        # serial, e.g. with --pdb
 uv run pytest -n auto -q --durations=20           # slowest tests
 ```
 
-- 119 modules and 1517 tests (2026-10-21). `pytest.ini` deselects the `exhaustive` marker
+- 120 modules and 1531 tests (2026-10-21). `pytest.ini` deselects the `exhaustive` marker
   (6 redundant deep variants, each implied by a kept test), so the default run collects
-  1511: all pass with `--extra dev --extra viz`; with `--extra dev` only, 1503 pass and 8
+  1525: all pass with `--extra dev --extra viz`; with `--extra dev` only, 1517 pass and 8
   skip (the manim and gdstk tests). The `slow` marker labels the devsim integration tests
   but does not deselect them.
 - `pytest.ini` adds `--dist loadgroup --no-loadscope-reorder` (inert without `-n`), so

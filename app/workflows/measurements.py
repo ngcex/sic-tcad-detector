@@ -12,14 +12,14 @@ PNGs and the SIMS profile-vs-model metric are memoised in the session per result
 
 from __future__ import annotations
 
-from pathlib import Path
 
 import streamlit as st
 
 import etna.measurements as M
+from etna._paths import data_path
 from app.components.page_utils import about, require_config
 
-TEMPLATES = Path(__file__).resolve().parents[2] / "data" / "measurements" / "templates"
+TEMPLATES = data_path("measurements", "templates")
 INTRO = (
     "Load a measurement file (CSV, units in the column names; header-only templates "
     "below, columns in data/measurements/README.md), check it, and compare it with the "

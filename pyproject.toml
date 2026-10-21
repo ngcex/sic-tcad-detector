@@ -53,5 +53,37 @@ packages = ["etna"]
 # they are build artefacts, never package data.
 exclude = ["etna/figures"]
 
+# Runtime data shipped in the wheel. data/ stays at the repository root (scripts,
+# notebooks and lab/ use it there); a wheel gets this subset as etna/_data/, found by
+# etna/_paths.py (packaged copy first, repository data/ in a source checkout). Raw
+# provenance (data/nist_star/raw/, the SR-NIEL .html pages, fetch_sr_niel.py) and
+# notebook-only inputs (synthetic_mc_events.csv) go to the sdist only. Mixed directories
+# are listed file by file; tests/test_packaging.py fails when a new runtime csv/json in
+# data/ is missing here.
+[tool.hatch.build.targets.wheel.force-include]
+"data/nist_star/README.md" = "etna/_data/nist_star/README.md"
+"data/nist_star/astar_c_amorphous.csv" = "etna/_data/nist_star/astar_c_amorphous.csv"
+"data/nist_star/astar_c_graphite.csv" = "etna/_data/nist_star/astar_c_graphite.csv"
+"data/nist_star/astar_muscle_icru.csv" = "etna/_data/nist_star/astar_muscle_icru.csv"
+"data/nist_star/astar_si.csv" = "etna/_data/nist_star/astar_si.csv"
+"data/nist_star/astar_water.csv" = "etna/_data/nist_star/astar_water.csv"
+"data/nist_star/pstar_c_amorphous.csv" = "etna/_data/nist_star/pstar_c_amorphous.csv"
+"data/nist_star/pstar_c_graphite.csv" = "etna/_data/nist_star/pstar_c_graphite.csv"
+"data/nist_star/pstar_muscle_icru.csv" = "etna/_data/nist_star/pstar_muscle_icru.csv"
+"data/nist_star/pstar_si.csv" = "etna/_data/nist_star/pstar_si.csv"
+"data/nist_star/pstar_water.csv" = "etna/_data/nist_star/pstar_water.csv"
+"data/niel/README.md" = "etna/_data/niel/README.md"
+"data/niel/sr_niel_proton_si_Ed21.csv" = "etna/_data/niel/sr_niel_proton_si_Ed21.csv"
+"data/niel/sr_niel_proton_sic_Ed21-21.csv" = "etna/_data/niel/sr_niel_proton_sic_Ed21-21.csv"
+"data/niel/sr_niel_proton_sic_Ed35-21.csv" = "etna/_data/niel/sr_niel_proton_sic_Ed35-21.csv"
+"data/stopping_power_sic.csv" = "etna/_data/stopping_power_sic.csv"
+"data/stopping_power_water.csv" = "etna/_data/stopping_power_water.csv"
+"data/cce_let_table_100um.json" = "etna/_data/cce_let_table_100um.json"
+"data/cce_let_table_300um.json" = "etna/_data/cce_let_table_300um.json"
+"data/validation" = "etna/_data/validation"
+"data/foundry" = "etna/_data/foundry"
+"data/measurements/README.md" = "etna/_data/measurements/README.md"
+"data/measurements/templates" = "etna/_data/measurements/templates"
+
 [tool.pytest.ini_options]
 pythonpath = ["."]

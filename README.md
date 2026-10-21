@@ -42,6 +42,20 @@ Always sync with `--extra dev`: a plain `uv sync` removes the dev tools from `.v
 `uv run pytest` may then run a system pytest with the wrong interpreter. A later
 `uv sync --extra dev` without `--extra viz` also removes manim and gdstk again.
 
+Without a checkout (library only; ETNA is distributed from GitHub, not PyPI):
+
+```bash
+uv pip install "git+https://github.com/ngcex/sic-tcad-detector"               # into the active venv
+uv pip install "etna[viz] @ git+https://github.com/ngcex/sic-tcad-detector"   # + gdstk / manim
+# or from a checkout: uv build, then uv pip install dist/etna-*.whl
+```
+
+The wheel carries the runtime data (NIST tables, SR-NIEL CSVs, validation points, layout
+defaults, measurement templates) as `etna/_data/`. Raw provenance files (scraped HTML)
+are only in the sdist and the repository. The Streamlit app, notebooks, scripts and tests
+are not in the wheel: run them from a checkout. Details:
+[USAGE §3](docs/USAGE.md#3-installation).
+
 Python API (there is no command-line tool; `etna` is an importable package):
 
 ```python
@@ -183,6 +197,10 @@ To use the mask data, edit that file (or a copy) and set `class = "DOCUMENTED"` 
   builders, or
 - the upload box on the app's Export page.
 
+In an installed wheel the default file is read-only package data. Copy it out first with
+`cp "$(python -c 'import etna.export as e; print(e.LAYOUT_PARAMS_PATH)')" my_layout.toml`,
+then set `ETNA_LAYOUT_PARAMS=$PWD/my_layout.toml`.
+
 The file is validated on load (`LayoutParamsError` names the field). While a device has
 any `PLACEHOLDER` dimension, its GDSII top cell ends in `REFERENCE-NOT-FAB`, the exports
 list the placeholder names and raise a `PlaceholderDimensionWarning`. Details:
@@ -198,15 +216,16 @@ MEASURED-FROM-FIGURE or PLACEHOLDER.
 
 ## Environment variables
 
-| Variable                          | Effect                                                                                                                                 |
-| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `ETNA_FIGURE_DIR`                 | where notebook figures (`etna.core.plotting.save_figure`) and rebuilt CCE(LET) tables go; default `./figures` of the working directory |
-| `ETNA_LAYOUT_PARAMS`              | alternative layout parameter TOML for `etna.export`                                                                                    |
-| `ETNA_DEVSIM_VERBOSE=1`           | show devsim's per-solve log (silenced by default)                                                                                      |
-| `ETNA_DEVSIM_STOCK_SOLVER=1`      | keep devsim's stock UMFPACK callback instead of ETNA's cached one (results are bit-identical either way)                               |
-| `ETNA_REBUILD_CCE_TABLES=1`       | notebook 16 rebuilds the CCE(LET) tables (~40 min) instead of loading `data/cce_let_table_*.json`                                      |
-| `ETNA_CCE_TABLE_JOBS`             | worker processes for that rebuild (default min(8, CPU count))                                                                          |
-| `ETNA_REPORT_DEVSIM_LEAKS=<file>` | tests: list the tests that leave devsim devices behind                                                                                 |
+| Variable                          | Effect                                                                                                                                      |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ETNA_FIGURE_DIR`                 | where notebook figures (`etna.core.plotting.save_figure`) and rebuilt CCE(LET) tables go; default `./figures` of the working directory      |
+| `ETNA_LAYOUT_PARAMS`              | alternative layout parameter TOML for `etna.export`                                                                                         |
+| `ETNA_DATA_DIR`                   | read runtime data from this directory (laid out like the repository `data/`) instead of the packaged `etna/_data` or the checkout's `data/` |
+| `ETNA_DEVSIM_VERBOSE=1`           | show devsim's per-solve log (silenced by default)                                                                                           |
+| `ETNA_DEVSIM_STOCK_SOLVER=1`      | keep devsim's stock UMFPACK callback instead of ETNA's cached one (results are bit-identical either way)                                    |
+| `ETNA_REBUILD_CCE_TABLES=1`       | notebook 16 rebuilds the CCE(LET) tables (~40 min) instead of loading `data/cce_let_table_*.json`                                           |
+| `ETNA_CCE_TABLE_JOBS`             | worker processes for that rebuild (default min(8, CPU count))                                                                               |
+| `ETNA_REPORT_DEVSIM_LEAKS=<file>` | tests: list the tests that leave devsim devices behind                                                                                      |
 
 ---
 
@@ -218,9 +237,9 @@ uv run pytest -n auto -q -m exhaustive     # the 6 deselected deep variants
 uv run pytest -n0 -x tests/test_api_cce.py # serial, e.g. with --pdb
 ```
 
-1517 tests in 119 modules. `pytest.ini` deselects the 6 `exhaustive` ones, so the default
-run is 1511 tests: all pass with `--extra dev --extra viz`, and with `--extra dev` only
-1503 pass and 8 skip (manim/gdstk). On a 10-core Apple M4 shared with other jobs, `-n auto`
+1531 tests in 120 modules. `pytest.ini` deselects the 6 `exhaustive` ones, so the default
+run is 1525 tests: all pass with `--extra dev --extra viz`, and with `--extra dev` only
+1517 pass and 8 skip (manim/gdstk). On a 10-core Apple M4 shared with other jobs, `-n auto`
 took 169–205 s on 2026-10-21: plan on about 3 minutes. `pytest.ini` supplies the tuned
 xdist scheduler; use `-n0` for pdb.
 

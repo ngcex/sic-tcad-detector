@@ -120,3 +120,47 @@ jobs:
         run: |
           uv export --frozen --no-hashes --all-extras --no-emit-project > /tmp/req-all.txt
           uvx pip-audit --no-deps --disable-pip -r /tmp/req-all.txt
+
+  # Issue #3 P0: the BUILT wheel works outside the checkout. Builds sdist + wheel (uv
+  # builds the wheel from the sdist, so this also proves the sdist carries the data),
+  # checks the metadata, installs the wheel (+ gdstk for the GDS step) into a clean venv
+  # in $RUNNER_TEMP and runs scripts/wheel_smoke.py there with `python -I`: import from
+  # site-packages, packaged etna/_data in use, run_cv / run_cce / run_all, kappa, w_creep,
+  # layout params + GDS + spec PDF, and the Streamlit app (copied, not in the wheel).
+  wheel-smoke:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: System libraries for devsim (BLAS / LAPACK)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libopenblas-dev liblapack-dev
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Build sdist + wheel
+        run: uv build -o dist
+
+      - name: Package metadata check
+        run: uvx twine check --strict dist/*
+
+      - name: Wheel contents (runtime data in, raw provenance out)
+        run: |
+          unzip -l dist/*.whl | tee /tmp/wheel.txt
+          grep -q 'etna/_data/nist_star/pstar_water.csv' /tmp/wheel.txt
+          grep -q 'etna/_data/foundry/layout_params.toml' /tmp/wheel.txt
+          ! grep -E '\.html$|/raw/|synthetic_mc_events' /tmp/wheel.txt
+
+      - name: Install the wheel into a clean venv outside the checkout
+        run: |
+          uv venv "$RUNNER_TEMP/wheel-venv" -p 3.13
+          VIRTUAL_ENV="$RUNNER_TEMP/wheel-venv" uv pip install dist/*.whl gdstk
+
+      - name: Smoke test the installed wheel (library + app)
+        working-directory: ${{ runner.temp }}
+        run: '"$RUNNER_TEMP/wheel-venv/bin/python" -I "$GITHUB_WORKSPACE/scripts/wheel_smoke.py" --app'

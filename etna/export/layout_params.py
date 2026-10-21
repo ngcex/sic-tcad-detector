@@ -30,9 +30,11 @@ import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from etna._paths import data_path
+
 ENV_VAR = "ETNA_LAYOUT_PARAMS"
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_PARAMS_PATH = REPO_ROOT / "data" / "foundry" / "layout_params.toml"
+DEFAULT_PARAMS_PATH = data_path("foundry", "layout_params.toml")  # packaged in a wheel
 SCHEMA_VERSION = 1
 CLASSES = ("DOCUMENTED", "MEASURED_FROM_FIGURE", "PLACEHOLDER")
 DEVICES = ("dosimeter", "microdosimeter")

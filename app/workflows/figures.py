@@ -21,7 +21,6 @@ from __future__ import annotations
 import io
 import tempfile
 import zipfile
-from pathlib import Path
 
 import numpy as np
 import plotly.graph_objects as go
@@ -31,6 +30,7 @@ import etna
 import etna.viz
 import etna.viz.maps
 import etna.viz.validation
+from etna._paths import data_path
 from app.components.page_utils import (
     about,
     require_config,
@@ -132,10 +132,9 @@ OBSERVABLES = {
 }
 DEFAULT_1D = ("cv", "field", "cce", "dark")
 DEFAULT_2D = ("maps",)
-_REPO = Path(__file__).resolve().parents[2]
-LET_TABLES = {  # resolved against the repo root: the app may be launched from anywhere
-    "100 um half-width": _REPO / "data" / "cce_let_table_100um.json",
-    "300 um half-width": _REPO / "data" / "cce_let_table_300um.json",
+LET_TABLES = {  # via the data resolver: the app may be launched from anywhere
+    "100 um half-width": data_path("cce_let_table_100um.json"),
+    "300 um half-width": data_path("cce_let_table_300um.json"),
 }
 
 
