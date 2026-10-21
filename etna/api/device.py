@@ -110,16 +110,19 @@ class DeviceConfig:
     # Paths without the model in their engine (dark current, FLASH, fluence, C-V at
     # fluence) run on devsim when it is on. Why it is not the default: docs/USAGE.md.
     incomplete_ionization: Union[bool, IonizationModel] = False
-    # OPT-IN charged radiation-induced deep traps in Poisson for the fluence sweeps
-    # (run_radiation_damage / cce_vs_fluence; etna.core.radiation_traps): False (default)
-    # = the LEGACY donor-removal scalar, which refuses points at or beyond the
-    # compensation fluence (every baseline pinned on it). True = the Burin Table I levels
-    # (Z1/2, EH4 acceptors, EH6/7 donor) as charged species with dark steady-state SRH
-    # occupancy, donors not removed: the compensated epi turns semi-insulating and is
-    # solved. A RadiationTrapModel sets custom traps. It only acts where a fluence is
-    # applied (a pristine device has no traps), batched 1D engine only, exclusive with
-    # incomplete_ionization. Not a device-builder keyword. See docs/USAGE.md.
-    radiation_traps: Union[bool, RadiationTrapModel] = False
+    # Damage model of the fluence sweeps (run_radiation_damage; etna.core.radiation_traps,
+    # docs/USAGE.md). "auto" (DEFAULT since 2026-10-21, issue #5) = the CALIBRATED kinetic
+    # trap preset trap_presets.radmanovac_calibrated (Capan Z1/Z2 + Burin EH4/EH6/7,
+    # kinetic occupancy, occupancy lifetimes, direct donor removal d fitted to the
+    # Radmanovac slopes in the run's NIEL convention): every fluence is solved, also
+    # beyond compensation (semi-insulating epi); outside the batched engine's scope
+    # (incomplete_ionization, T outside 250-400 K, ...) "auto" runs the legacy model and
+    # says so in the result metadata. False / "legacy" = the scalar donor removal
+    # (eta_removal 5 /neq, points beyond compensation refused; the default until
+    # 2026-10-21). True = Burin Table I steady state; a preset name or RadiationTrapModel
+    # sets custom traps (explicit trap models: batched engine only, exclusive with
+    # incomplete_ionization). Acts only where a fluence is applied. Not a builder keyword.
+    radiation_traps: Union[bool, str, RadiationTrapModel] = "auto"
 
     def __post_init__(self) -> None:
         """Normalise the derived fields, then reject meaningless values (``validate``).
@@ -261,8 +264,13 @@ class DeviceConfig:
         except TypeError as e:
             problems.append(str(e))
         try:
-            traps_on = resolve_traps(self.radiation_traps) is not None
-        except TypeError as e:
+            # "auto" falls back to the legacy model where the trap engine cannot run
+            # (e.g. incomplete_ionization), so only an EXPLICIT trap model is exclusive
+            traps_on = (
+                resolve_traps(self.radiation_traps) is not None
+                and self.radiation_traps != "auto"
+            )
+        except (TypeError, ValueError) as e:
             problems.append(str(e))
             traps_on = False
         if traps_on and self.incomplete_ionization not in (False, None):

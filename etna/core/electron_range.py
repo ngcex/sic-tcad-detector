@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import functools
 import re
-from pathlib import Path
 
 import numpy as np
 

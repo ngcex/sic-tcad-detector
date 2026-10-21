@@ -121,6 +121,7 @@ def calibrate_cv(
     sigma_rel_default=DEFAULT_SIGMA_REL,
     bounds=(0.02, 50.0),
     max_nfev=30,
+    niel_convention=None,
 ):
     """Fit introduction-rate scale factors to measured C-V at known fluences.
 
@@ -128,7 +129,9 @@ def calibrate_cv(
     or neq with ``energy_MeV=None``. A pristine (0) curve may be included: it does not
     constrain the scales but checks the device. ``groups``: the scaled rates, e.g.
     ("all",) or ("EH4", "Z1/2"). Every other argument is the kinetic C-V model of
-    ``trap_kinetics.simulate_cv``. Returns ``TrapCalibration``.
+    ``trap_kinetics.simulate_cv``. ``niel_convention``: the hardness convention of
+    the p -> neq conversion (None = default); the fitted scales are per neq of it.
+    Returns ``TrapCalibration``.
     """
     from scipy.optimize import least_squares
 
@@ -144,7 +147,17 @@ def calibrate_cv(
     P = len(groups)
     base = resolve_traps(trap_model) or DEFAULT_TRAP_MODEL
     scaled_model(base, groups, np.ones(P))  # validates the group names
-    kappa = 1.0 if energy_MeV is None else get_hardness_factor(float(energy_MeV))
+    from etna.core.radiation_damage import hardness_table
+    from etna.core.radiation_damage import resolve_niel_convention
+    from etna.core.radiation_traps import check_trap_convention
+
+    conv = resolve_niel_convention(niel_convention)
+    check_trap_convention(base, conv)
+    kappa = (
+        1.0
+        if energy_MeV is None
+        else get_hardness_factor(float(energy_MeV), hardness_table("proton", conv))
+    )
     fl = np.array([float(f) for f, _ in datasets])
     if np.any(fl < 0):
         raise ValueError("fluences must be >= 0")
@@ -278,8 +291,10 @@ class RemovalObservation:
     - "flat_fluence": the fluence at which the neutral epi's dielectric relaxation
       time eps / sigma reaches 1 / (2 pi ``freq_Hz``) (the C-V turns flat at eps A / d);
       ``value`` and ``sigma`` are log10(fluence) and its 1-sigma.
-    Fluences are p/cm^2 at ``energy_MeV`` (kappa from ``get_hardness_factor``), or neq
-    when ``energy_MeV`` is None. ``source``: citation and location of the number."""
+    Fluences are p/cm^2 at ``energy_MeV`` (kappa in ``niel_convention``, None = the
+    default convention), or neq when ``energy_MeV`` is None. ``source``: citation and
+    location of the number. A slope per PROTON is convention independent; the fitted
+    per-neq parameters are not (docs/USAGE.md, "NIEL convention")."""
 
     name: str
     kind: str
@@ -296,8 +311,12 @@ class RemovalObservation:
     rate_V_per_s: float = 1.0
     T: float = 300.0
     source: str = ""
+    niel_convention: Optional[str] = None
 
     def __post_init__(self):
+        from etna.core.radiation_damage import resolve_niel_convention
+
+        resolve_niel_convention(self.niel_convention)  # strict
         if self.kind not in ("slope", "flat_fluence"):
             raise ValueError("RemovalObservation.kind must be 'slope' or 'flat_fluence'")
         if not (self.sigma > 0 and np.isfinite(self.value)):
@@ -307,9 +326,14 @@ class RemovalObservation:
 
     @property
     def kappa(self):
-        from etna.core.radiation_damage import get_hardness_factor
+        """neq per proton at ``energy_MeV`` in ``niel_convention`` (None = default)."""
+        from etna.core.radiation_damage import get_hardness_factor, hardness_table
 
-        return 1.0 if self.energy_MeV is None else get_hardness_factor(self.energy_MeV)
+        if self.energy_MeV is None:
+            return 1.0
+        return get_hardness_factor(
+            self.energy_MeV, hardness_table("proton", self.niel_convention)
+        )
 
 
 def neff_window(V, C_per_area, window_um=(10.0, 40.0)):
@@ -365,7 +389,10 @@ def removal_observable(obs: RemovalObservation, model):
         T=obs.T,
     )  # fmt: skip
     F = np.asarray(obs.fluences, dtype=float)
-    s = KineticTrapSolver.from_config(cfg, F, energy_MeV=obs.energy_MeV, trap_model=model)
+    s = KineticTrapSolver.from_config(
+        cfg, F, energy_MeV=obs.energy_MeV, trap_model=model,
+        niel_convention=obs.niel_convention,
+    )  # fmt: skip
     V = -np.arange(0.0, obs.V_max + 0.5 * obs.V_step, obs.V_step)
     cv = simulate_cv(
         s, V, obs.freq_Hz, rate_V_per_s=obs.rate_V_per_s, dV_max=obs.V_step

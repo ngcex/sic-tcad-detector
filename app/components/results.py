@@ -535,16 +535,37 @@ def to_csv_bytes(result: SimResult) -> bytes:
             cols["valid"] = np.asarray(result.metadata["valid"], dtype=bool)
             cols["reason"] = result.metadata.get("reason") or [""] * len(result.x)
         df = pd.DataFrame(cols)
+        md = result.metadata
+        traps = md.get("damage_model") == "charged_traps"
         extra_header_lines = [
-            f"# V_bias: {result.metadata['V_bias']}",
-            f"# energy_MeV: {result.metadata['energy_MeV']}",
+            f"# V_bias: {md['V_bias']}",
+            f"# energy_MeV: {md['energy_MeV']}",
+            *(
+                [
+                    f"# damage_model: {md['damage_model']}"
+                    + (f" ({md['damage_model_label']})" if md.get("damage_model_label") else "")
+                ]
+                if "damage_model" in md
+                else []
+            ),
+            *(
+                [f"# damage_model_note: {md['damage_model_note']}"]
+                if md.get("damage_model_note")
+                else []
+            ),
             *(
                 [
                     f"# compensation_fluence_p_per_cm2: "
-                    f"{result.metadata['compensation_fluence']:.4g} (epi fully "
-                    "compensated at or beyond it; such points are not solved)"
+                    f"{md['compensation_fluence']:.4g} "
+                    + (
+                        "(neutral epi compensated; beyond it semi-insulating, still "
+                        "solved)"
+                        if traps
+                        else "(epi fully compensated at or beyond it; such points "
+                        "are not solved)"
+                    )
                 ]
-                if "compensation_fluence" in result.metadata
+                if "compensation_fluence" in md
                 else []
             ),
             *(
@@ -558,10 +579,11 @@ def to_csv_bytes(result: SimResult) -> bytes:
                 else []
             ),
             "# WARNING: kappa (NIEL hardness factor) is SR-NIEL proton / NJOY neutron "
-            "NIEL; in the default Si-neq convention it overstates the SiC damage per "
-            "proton by r_n/r_p (opt-in 'sic-damage' removes that). The introduction "
-            "rates are unvalidated literature values, so absolute SiC Phi_crit "
-            "numbers are unvalidated.",
+            "NIEL, default convention 'sic-damage' (SiC damage of the reactor-neq "
+            "fluence of the rates, r_n = 1.069; 'si-neq' overstates it by r_n/r_p). The "
+            "literature introduction rates are unvalidated and the default model's "
+            "removal is CALIBRATED on other devices' 252.7 MeV C-V (one temperature); "
+            "CCE vs fluence is a prediction, absolute Phi_crit numbers are unvalidated.",
         ]
     elif result.sim_type in ("dark_current", "dark_current_vs_T"):
         md = result.metadata

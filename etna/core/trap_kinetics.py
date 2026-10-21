@@ -418,23 +418,37 @@ class KineticTrapSolver:
 
     # ---------------------------------------------------------------- constructors
     @classmethod
-    def from_config(cls, config, fluences_p, energy_MeV=62.0, trap_model=None):
+    def from_config(cls, config, fluences_p, energy_MeV=62.0, trap_model=None,
+                    niel_convention=None):  # fmt: skip
         """Solver for ``DeviceConfig`` ``config`` at proton fluences ``fluences_p``
-        (p/cm^2, converted to neq with ``get_hardness_factor(energy_MeV)``);
-        ``energy_MeV=None``: the fluences are already 1-MeV-neq (e.g. reactor
-        neutrons)."""
+        (p/cm^2, converted to neq with the proton hardness factor at ``energy_MeV`` in
+        ``niel_convention``, None = the default convention); ``energy_MeV=None``: the
+        fluences are already 1-MeV-neq (e.g. reactor neutrons). ``trap_model`` None:
+        ``config.radiation_traps`` ("legacy" / False -> the Burin table, True as given),
+        resolved in that convention; a model calibrated in another convention raises."""
         from etna.api.device import device_kwargs
         from etna.core.charge_collection import _fluence_reference
-        from etna.core.radiation_damage import get_hardness_factor
+        from etna.core.radiation_damage import (
+            get_hardness_factor,
+            hardness_table,
+            resolve_niel_convention,
+        )
+        from etna.core.radiation_traps import check_trap_convention, resolve_traps
 
         if config.incomplete_ionization not in (None, False):
             raise ValueError(
                 "trap kinetics and incomplete_ionization are exclusive (as radiation_traps)"
             )
-        ref = _fluence_reference(device_kwargs(config))
-        kappa = 1.0 if energy_MeV is None else get_hardness_factor(float(energy_MeV))
+        conv = resolve_niel_convention(niel_convention)
         if trap_model is None:
-            trap_model = config.radiation_traps or True
+            trap_model = resolve_traps(config.radiation_traps, conv) or True
+        check_trap_convention(resolve_traps(trap_model, conv), conv)
+        ref = _fluence_reference(device_kwargs(config))
+        kappa = (
+            1.0
+            if energy_MeV is None
+            else get_hardness_factor(float(energy_MeV), hardness_table("proton", conv))
+        )
         return cls(ref, np.asarray(fluences_p, dtype=float) * kappa, trap_model)
 
     # ---------------------------------------------------------------- core solve

@@ -90,7 +90,7 @@ FIELD_LABELS = {
     "buffer_end_doping": "N_D at the epi end (cm⁻³)",
     "donor_table": "tabulated epi profile (knots)",
     "incomplete_ionization": "Incomplete ionization",
-    "radiation_traps": "Charged deep traps",
+    "radiation_traps": "Damage model (radiation_traps)",
 }
 
 

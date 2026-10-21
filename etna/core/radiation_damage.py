@@ -11,8 +11,9 @@ Pure-Python module (NO devsim dependency) implementing:
 All units in CGS (cm, cm^-3, eV, s) per project convention.
 Defect parameters from Burin et al., arXiv:2407.16710 (2024).
 
-NIEL hardness factors: SR-NIEL proton NIEL (data/niel/, 1-1000 MeV), Si-normalised
-1-MeV-neq convention of the introduction-rate source; see NIEL_HARDNESS_PROTON_SIC.
+NIEL hardness factors: SR-NIEL proton NIEL (data/niel/, 1-1000 MeV); default
+convention "sic-damage" (DEFAULT_NIEL_CONVENTION, since 2026-10-21), the Si-neq table
+NIEL_HARDNESS_PROTON_SIC selectable (hardness_table).
 The module works with any NIEL table -- values are data, not code.
 
 References:
@@ -57,7 +58,7 @@ _M_H_DOS = _sic.m_h_dos  # 1.0 m0
 # 1-1000 MeV, interpolated log-log. Replaces the four 30-150 MeV placeholders
 # (0.50 / 0.35 / 0.33 / 0.22).
 #
-# CONVENTION (default table): kappa(E) = NIEL_p,Si(E) / NIEL_n,Si(1 MeV), with the
+# CONVENTION (Si-neq table, the default until 2026-10-21): kappa(E) = NIEL_p,Si(E) / NIEL_n,Si(1 MeV), with the
 # ASTM E722 normalisation 95 MeV mb = 2.037e-3 MeV cm^2/g. This is the convention of
 # the 1-MeV-neq fluence the introduction rates below are quoted in: Burin et al.
 # (arXiv:2407.16710) fit TRIGA reactor-neutron data labelled in neq (Gsponer et al.,
@@ -70,9 +71,9 @@ _M_H_DOS = _sic.m_h_dos  # 1.0 m0
 # protons (r_p: 0.94 at 5.6 MeV, 0.85 at 62 MeV, 0.82 at 150 MeV, niel_ratio_sic_si)
 # equals that of the reactor neutrons (r_n). r_n is computed since 2026-10-21 (NJOY
 # HEATR on ENDF/B-VIII.0, data/niel/README.md): 1.069 for a fission spectrum, range
-# 1.02-1.20 for reactor-like spectra. r_n > r_p, so this default kappa OVERSTATES the
-# SiC damage per proton by r_n / r_p; the opt-in "sic-damage" convention (below,
-# hardness_table) removes it. The default is kept for continuity. This reopens the v5 C-5 note that
+# 1.02-1.20 for reactor-like spectra. r_n > r_p, so this Si-neq kappa OVERSTATES the
+# SiC damage per proton by r_n / r_p; the "sic-damage" convention (below,
+# hardness_table) removes it and is the DEFAULT since 2026-10-21. This reopens the v5 C-5 note that
 # "SiC-normalised kappa ~0.3-0.5 is plausible": that note assumed SiC-neq rates, while
 # the rate source is Si-neq labelled. The old placeholders were 3.5-5.5x lower.
 # Known systematic: measured Si proton hardness factors are 35-50 % below the NIEL
@@ -86,9 +87,10 @@ NIEL_PROTON_SIC: dict[float, float] = dict(SR_NIEL_PROTON_SIC)
 NIEL_HARDNESS_PROTON_SIC: dict[float, float] = {
     E: niel / NIEL_NEUTRON_1MEV_SI_MEV_CM2_G for E, niel in NIEL_PROTON_SI.items()
 }
-"""Default proton hardness factors (Si-normalised 1-MeV-neq, see the block above).
-The name is kept for API compatibility: these are the factors used for SiC devices,
-computed with the silicon NIEL convention of the introduction-rate source."""
+"""Si-neq proton hardness factors (Si-normalised 1-MeV-neq, see the block above) =
+``hardness_table("proton", "si-neq")``. The DEFAULT until 2026-10-21; the default is
+now "sic-damage" (``DEFAULT_NIEL_CONVENTION``). Name kept for API compatibility."""
+NIEL_HARDNESS_PROTON_SI_NEQ = NIEL_HARDNESS_PROTON_SIC
 
 
 def niel_ratio_sic_si(energy_MeV: float) -> float:
@@ -105,9 +107,9 @@ def niel_ratio_sic_si(energy_MeV: float) -> float:
 # and caveats in data/niel/README.md). r_n = SiC/Si NIEL ratio of a Watt fission
 # spectrum = R_N_SIC_SI_FISSION (1.069). Conventions (all give "neq per particle"):
 #
-# "si-neq" (DEFAULT, unchanged): kappa = NIEL_x,Si(E) / NIEL_n,Si(1 MeV, ASTM 95 MeV mb)
-#     -- the label convention of the introduction-rate source (silicon NIEL).
-# "sic-damage": kappa = NIEL_x,SiC(E) / (r_n * NIEL_n,Si(1 MeV)) -- the Si-labelled
+# "si-neq" (the default until 2026-10-21; selectable): kappa = NIEL_x,Si(E) /
+#     NIEL_n,Si(1 MeV, ASTM 95 MeV mb) -- the silicon-NIEL label convention.
+# "sic-damage" (DEFAULT since 2026-10-21): kappa = NIEL_x,SiC(E) / (r_n * NIEL_n,Si(1 MeV)) -- the Si-labelled
 #     reactor-neq fluence that produces the SAME SiC damage (proton: kappa_Si * r_p/r_n).
 #     Assumes the calibration spectrum is fission-like; see README for the spread.
 # "sic-1mev": kappa = NIEL_x,SiC(E) / NIEL_n,SiC(1 MeV) -- SiC-native 1-MeV-neq, for
@@ -116,21 +118,71 @@ def niel_ratio_sic_si(energy_MeV: float) -> float:
 NIEL_CONVENTIONS = ("si-neq", "sic-damage", "sic-1mev")
 NIEL_PARTICLES = ("proton", "neutron")
 
+# DEFAULT CONVENTION (maintainer decision 2026-10-21, issue #8): "sic-damage". The
+# introduction rates of the shipped trap table (Burin et al. arXiv:2407.16710 Table I,
+# footnote b: Hazdra et al., "Point defects in 4H-SiC epilayers introduced by neutron
+# irradiation" -- title read on the arXiv page, paper not opened) are NEUTRON-anchored:
+# a reactor-neutron fluence has the same kappa in "si-neq" and "sic-damage" (the latter
+# is normalised by r_n exactly so), so those per-neq rates carry over unchanged and the
+# SiC damage per PROTON drops by r_p(E) / r_n (x0.80 at 62 MeV). Proton-calibrated
+# numbers (the Radmanovac-calibrated slow removal of etna.core.trap_presets) are
+# per-proton facts and are re-fitted per convention (docs/USAGE.md, "NIEL convention").
+# The previous default is selectable: niel_convention="si-neq".
+DEFAULT_NIEL_CONVENTION = "sic-damage"
 
-def hardness_table(particle: str = "proton", convention: str = "si-neq") -> dict:
-    """Hardness factor table {energy MeV: kappa} for ``particle`` and ``convention``.
 
-    proton: SR-NIEL, 1-1000 MeV. neutron: NJOY HEATR / ENDF/B-VIII.0, lethargy
-    averages (20 bins/decade) tabulated at the bin centres, ~1e-5-18.9 MeV; resonance
-    structure below a few MeV is averaged over each bin. ``("proton", "si-neq")``
-    returns NIEL_HARDNESS_PROTON_SIC itself (the default of every damage function).
-    """
-    if particle not in NIEL_PARTICLES:
-        raise ValueError(f"particle must be one of {NIEL_PARTICLES} (got {particle!r})")
+def resolve_niel_convention(convention) -> str:
+    """``None`` -> DEFAULT_NIEL_CONVENTION; a name of NIEL_CONVENTIONS as is; anything
+    else ValueError (strict)."""
+    if convention is None:
+        return DEFAULT_NIEL_CONVENTION
     if convention not in NIEL_CONVENTIONS:
         raise ValueError(
             f"convention must be one of {NIEL_CONVENTIONS} (got {convention!r})"
         )
+    return convention
+
+
+_TABLE_CACHE: dict = {}
+
+
+def hardness_table(particle: str = "proton", convention: str | None = None) -> dict:
+    """Hardness factor table {energy MeV: kappa} for ``particle`` and ``convention``
+    (None = DEFAULT_NIEL_CONVENTION, "sic-damage" since 2026-10-21).
+
+    proton: SR-NIEL, 1-1000 MeV. neutron: NJOY HEATR / ENDF/B-VIII.0, lethargy
+    averages (20 bins/decade) tabulated at the bin centres, ~1e-5-18.9 MeV; resonance
+    structure below a few MeV is averaged over each bin. ``("proton", "si-neq")``
+    returns NIEL_HARDNESS_PROTON_SIC (the Si-neq table, the pre-2026-10-21 default).
+    The same (particle, convention) always returns the same dict object (cached; do
+    not mutate it), so callers can tell which convention a table belongs to
+    (``table_convention``).
+    """
+    if particle not in NIEL_PARTICLES:
+        raise ValueError(f"particle must be one of {NIEL_PARTICLES} (got {particle!r})")
+    convention = resolve_niel_convention(convention)
+    key = (particle, convention)
+    if key not in _TABLE_CACHE:
+        _TABLE_CACHE[key] = _build_hardness_table(particle, convention)
+    return _TABLE_CACHE[key]
+
+
+def table_convention(niel_table) -> str | None:
+    """NIEL convention of a table returned by ``hardness_table`` (None = the default
+    convention's proton table, as every damage function reads ``niel_table=None``);
+    None for a user-built table (unknown convention)."""
+    if niel_table is None:
+        return DEFAULT_NIEL_CONVENTION
+    for p in NIEL_PARTICLES:
+        for c in NIEL_CONVENTIONS:
+            if (p, c) in _TABLE_CACHE and _TABLE_CACHE[(p, c)] is niel_table:
+                return c
+    if niel_table is NIEL_HARDNESS_PROTON_SIC:
+        return "si-neq"
+    return None
+
+
+def _build_hardness_table(particle: str, convention: str) -> dict:
     if particle == "proton":
         if convention == "si-neq":
             return NIEL_HARDNESS_PROTON_SIC
@@ -529,9 +581,9 @@ def get_hardness_factor(energy_MeV: float, niel_table: dict | None = None) -> fl
     energy_MeV : float
         Proton energy (MeV).
     niel_table : dict, optional
-        Mapping energy (MeV) -> hardness factor. Defaults to
-        NIEL_HARDNESS_PROTON_SIC (Si-normalised 1-MeV-neq factors, see the module
-        block above it for the convention and its open SiC/Si assumption).
+        Mapping energy (MeV) -> hardness factor. Defaults to the proton table of
+        DEFAULT_NIEL_CONVENTION ("sic-damage" since 2026-10-21; the previous default,
+        NIEL_HARDNESS_PROTON_SIC = hardness_table("proton", "si-neq"), is selectable).
 
     Returns
     -------
@@ -544,7 +596,7 @@ def get_hardness_factor(energy_MeV: float, niel_table: dict | None = None) -> fl
         ``energy_MeV`` outside the table range (or not finite).
     """
     if niel_table is None:
-        niel_table = NIEL_HARDNESS_PROTON_SIC
+        niel_table = hardness_table("proton", DEFAULT_NIEL_CONVENTION)
     return _loglog(energy_MeV, niel_table)
 
 
@@ -562,7 +614,7 @@ def scale_to_proton_energy(
     energy_MeV : float
         Proton energy (MeV).
     niel_table : dict, optional
-        Custom NIEL table. Defaults to NIEL_HARDNESS_PROTON_SIC.
+        Custom NIEL table. Defaults to the DEFAULT_NIEL_CONVENTION proton table.
 
     Returns
     -------
@@ -598,7 +650,7 @@ def compute_phi_crit(
     energy_MeV : float
         Proton energy (MeV). Default 62.0.
     niel_table : dict, optional
-        Custom NIEL hardness table. Defaults to NIEL_HARDNESS_PROTON_SIC.
+        Custom NIEL hardness table. Defaults to the DEFAULT_NIEL_CONVENTION proton table.
 
     Returns
     -------
@@ -760,7 +812,7 @@ def compute_damaged_params(
         where removal emerges from the trap charge and must not be applied twice).
     niel_table : dict, optional
         Hardness table {E: kappa} (``hardness_table(particle, convention)``); None =
-        NIEL_HARDNESS_PROTON_SIC (protons, Si-neq), the unchanged default.
+        the proton table of DEFAULT_NIEL_CONVENTION ("sic-damage" since 2026-10-21).
 
     Returns
     -------

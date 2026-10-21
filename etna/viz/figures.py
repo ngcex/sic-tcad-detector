@@ -16,7 +16,7 @@ so simulated curves have no error band. What IS drawn, when the result carries i
 - results outside the engine/devsim cross-check box, truncated sweeps, dark-current
   points past reach-through, unsolved (fully compensated) damage points with their reason;
 - per-observable honesty notes (dark current = calibrated budget, FLASH = sensitivity
-  bound, kappa = Si-neq SR-NIEL with the SiC normalisation open, tilted alpha does not
+  bound, kappa = SR-NIEL in the sic-damage convention (r_n computed), tilted alpha does not
   reproduce the data, ...);
 - error bars on digitised measured points (their read-off uncertainty).
 
@@ -77,9 +77,10 @@ NOTES = {
         "physics not modelled."
     ),
     "damage": (
-        "kappa (NIEL hardness): SR-NIEL proton NIEL, Si 1-MeV-neq convention by "
-        "default (overstates SiC damage by r_n/r_p, r_n = 1.069 from NJOY); "
-        "absolute SiC fluence scale unvalidated."
+        "kappa (NIEL hardness): SR-NIEL proton NIEL, 'sic-damage' convention by "
+        "default (r_n = 1.069 from NJOY; 'si-neq' overstates the SiC damage by "
+        "r_n/r_p); default damage model: calibrated kinetic traps (removal fitted to "
+        "other devices' C-V); absolute SiC fluence scale unvalidated."
     ),
     "temperature": "CCE vs T: model trend, not validated against a T measurement.",
     "cce_let": (
@@ -616,6 +617,12 @@ def _damage(fig, res, notes, **_):
             color="#555555",
             lw=0.9,
             label=f"compensation {phi_c:.2g} cm$^{{-2}}$",
+        )
+    if md.get("damage_model"):
+        notes.append(
+            f"damage model: {md['damage_model']}"
+            + (f" ({md.get('niel_convention')})" if md.get("niel_convention") else "")
+            + (f"; {md['damage_model_note']}" if md.get("damage_model_note") else "")
         )
     ax.set_ylim(0, 1.08)
     neutron = md.get("particle") == "neutron"

@@ -149,11 +149,12 @@ def test_truncated_sweep_is_flagged_in_the_summary(monkeypatch):
     ids=["default", "tabulated", "legacy"],
 )
 def test_damage_default_grid_adapts_to_the_compensation_fluence(factory):
-    """The default fluence grid starts below the device's compensation fluence (the old
-    fixed 1e13..1e16 grid was entirely beyond it on the default and tabulated stacks)."""
+    """LEGACY damage model (radiation_traps=False): the default fluence grid starts
+    below the device's compensation fluence (the old fixed 1e13..1e16 grid was entirely
+    beyond it on the default and tabulated stacks)."""
     from etna.api import simulation as s
 
-    cfg = factory()
+    cfg = factory(radiation_traps=False)
     phi_c = s.compensation_fluence(cfg, 5.6)
     grid = s.default_fluence_grid(cfg, 5.6)
     assert grid.size == s.DEFAULT_FLUENCE_GRID_POINTS == 8
@@ -177,9 +178,37 @@ def test_damage_explicit_grid_is_used_unchanged():
 
     # default 5.6 MeV: compensation 1.01e12 p/cm2 with the SR-NIEL kappa (2026-10-20)
     grid = np.array([1e10, 3e11, 5e14])
+    # re-pinned 2026-10-21: the default (calibrated traps) solves beyond compensation
     res = s.run_radiation_damage(etna.DeviceConfig(), fluences=grid)
     np.testing.assert_array_equal(res.x, grid)
+    assert list(res.metadata["valid"]) == [True, True, True]
+    res = s.run_radiation_damage(etna.DeviceConfig(radiation_traps=False), fluences=grid)
     assert list(res.metadata["valid"]) == [True, True, False]
+
+
+@pytest.mark.parametrize(
+    "factory",
+    [etna.DeviceConfig, etna.measured_cv_tabulated_config, etna.legacy_config],
+    ids=["default", "tabulated", "legacy"],
+)
+def test_damage_default_grid_is_the_calibrated_trap_grid(factory):
+    """Default model ("auto" -> calibrated kinetic traps, sic-damage): 10 points from
+    0.01x its compensation fluence to 1e16 neq, every one solved."""
+    from etna.api import simulation as s
+
+    cfg = factory()
+    phi_c = s.compensation_fluence(cfg, 5.6)
+    grid = s.default_fluence_grid(cfg, 5.6)
+    assert grid.size == s.TRAP_FLUENCE_GRID_POINTS == 10
+    assert grid[0] == pytest.approx(1e-2 * phi_c, rel=1e-12)
+    assert grid[-1] * s._kappa(5.6) == pytest.approx(1e16, rel=1e-9)
+    rep = etna.run_all(cfg, ("damage",))
+    sec = rep.get("damage")
+    res = sec.result
+    assert res.metadata["damage_model"] == "charged_traps"
+    assert np.asarray(res.metadata["valid"]).all(), res.metadata["reason"]
+    assert sec.status == "ok", (sec.status, sec.reason)
+    assert f"charged traps: bulk compensated at ~{phi_c:.3g} p/cm^2" in sec.summary
 
 
 def test_all_nan_section_is_a_labelled_warning(monkeypatch):

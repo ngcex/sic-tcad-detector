@@ -78,7 +78,9 @@ def _check(config: DeviceConfig, models, facade: str) -> PhysicsModels:
             f"{facade}: bandgap_narrowing is registered but not coupled into the "
             "solvers yet (see docs/USAGE.md)"
         )
-    if config.radiation_traps not in (False, None):
+    # the default "auto" / "legacy" only act in fluence sweeps (a pristine device has no
+    # traps); an explicit trap model is not supported by these facades
+    if config.radiation_traps not in (False, None, "auto", "legacy"):
         raise NotImplementedError(f"{facade}: radiation_traps is not supported here")
     models.check_temperature(config.T)
     return models

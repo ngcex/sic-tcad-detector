@@ -149,10 +149,14 @@ def test_radiation_energy_kappa_and_trap_texts(monkeypatch):
     assert at.exception == []
     k = get_hardness_factor(5.6)
     assert any(f"{k:.3g}" in (c.value or "") for c in at.caption)
+    # default model (calibrated traps, since 2026-10-21) and its compensation fluence
     phi_c = compensation_fluence(DeviceConfig(), 5.6)
     assert any(f"{phi_c:.2e}" in (i.value or "") for i in at.info)
-    at.checkbox(key="rad_traps").check()
-    at.run()
+    at.selectbox(key="rad_damage_model").set_value("Legacy carrier removal").run()
+    phi_l = compensation_fluence(DeviceConfig(radiation_traps=False), 5.6)
+    assert any(f"{phi_l:.2e}" in (i.value or "") for i in at.info)
+    sel = at.selectbox(key="rad_damage_model")
+    sel.set_value("Burin Table I traps (steady state)").run()
     phi_t = trap_compensation_fluence(DeviceConfig(radiation_traps=True), 5.6)
     assert any(f"{phi_t:.2e}" in (i.value or "") for i in at.info)
 
@@ -162,7 +166,15 @@ def test_radiation_traps_disabled_with_incomplete_ionization(monkeypatch):
     at = _app("radiation_damage", "DeviceConfig(incomplete_ionization=True)")
     at.run()
     assert at.exception == []
-    assert at.checkbox(key="rad_traps").disabled
+    # the default "auto" runs the legacy model there and says why
+    assert any(
+        "legacy scalar donor removal" in (c.value or "")
+        and "incomplete_ionization" in (c.value or "")
+        for c in at.caption
+    )
+    sel = at.selectbox(key="rad_damage_model")
+    sel.set_value("Burin Table I traps (steady state)").run()
+    assert at.exception == []
     assert any("exclusive" in (c.value or "") for c in at.caption)
 
 
@@ -185,10 +197,11 @@ def test_refused_points_suggest_the_trap_model(monkeypatch):
     monkeypatch.setattr(etna, "run_radiation_damage", _fake)
     at = _app("radiation_damage")
     at.run()
+    at.selectbox(key="rad_damage_model").set_value("Legacy carrier removal").run()
     at.button[0].click()
     at.run()
     assert at.exception == []
-    assert any("Charged deep traps" in (w.value or "") for w in at.warning)
+    assert any("charged-trap damage model" in (w.value or "") for w in at.warning)
 
 
 # ------------------------------------------------------------------ dark current

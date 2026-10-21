@@ -151,7 +151,10 @@ def test_compensated_points_listed_and_defaults_below_compensation(monkeypatch):
     at = AppTest.from_function(_run_radiation_damage_page)
     at.session_state["device_config"] = DeviceConfig()
     at.run()
-    phi_c = compensation_fluence(DeviceConfig(), 62)
+    # the legacy carrier-removal model (the default until 2026-10-21) refuses points
+    at.selectbox(key="rad_damage_model").set_value("Legacy carrier removal").run()
+    phi_c = compensation_fluence(DeviceConfig(radiation_traps=False), 62)
+    assert phi_c == pytest.approx(4.358e12, rel=1e-3)  # sic-damage default
     assert any(f"{phi_c:.2e}" in (i.value or "") for i in at.info)
 
     at.button[0].click()
@@ -225,9 +228,12 @@ def test_invalid_fluence_range_is_rejected_before_the_facade(monkeypatch):
     assert calls == []
 
 
-def test_charged_traps_checkbox_opt_in(monkeypatch):
-    """The opt-in charged-trap checkbox (default off) passes radiation_traps=True and
-    widens the default range to 1e16 neq; off, the config is the sidebar one."""
+def test_damage_model_selector(monkeypatch):
+    """Re-pinned 2026-10-21 (was the opt-in charged-trap checkbox): the default model is
+    the calibrated kinetic preset ("auto", the sidebar config unchanged) with a range
+    from 0.01x its compensation fluence to 1e16 neq; "Legacy carrier removal" passes
+    radiation_traps="legacy", "Burin Table I traps" passes True."""
+    from etna.api.simulation import compensation_fluence
     from etna.core.radiation_damage import get_hardness_factor
 
     seen = {}
@@ -240,20 +246,26 @@ def test_charged_traps_checkbox_opt_in(monkeypatch):
     at = AppTest.from_function(_run_radiation_damage_page)
     at.session_state["device_config"] = DeviceConfig()
     at.run()
-    assert at.checkbox[0].value is False
-    at.button[0].click()
-    at.run()
-    assert seen["cfg"].radiation_traps is False
-    at.checkbox[0].check()
-    at.run()
+    assert at.selectbox(key="rad_damage_model").value.startswith("Calibrated")
     at.button[0].click()
     at.run()
     assert at.exception == []
-    assert seen["cfg"].radiation_traps is True
+    assert seen["cfg"].radiation_traps == "auto"
+    phi = compensation_fluence(DeviceConfig(), 62)
+    assert phi == pytest.approx(1.802e12, rel=2e-3)
+    assert seen["fluences"].min() == pytest.approx(1e-2 * phi, rel=1e-2)
     assert seen["fluences"].max() == pytest.approx(
         1e16 / get_hardness_factor(62), rel=1e-2
     )
     assert any("semi-insulating" in (i.value or "") for i in at.info)
+    assert any(f"{phi:.2e}" in (i.value or "") for i in at.info)
+    for label, spec in (("Legacy carrier removal", "legacy"),
+                        ("Burin Table I traps (steady state)", True)):  # fmt: skip
+        at.selectbox(key="rad_damage_model").set_value(label).run()
+        at.button[0].click()
+        at.run()
+        assert at.exception == []
+        assert seen["cfg"].radiation_traps == spec
 
 
 def test_neutron_sic_damage_choices_reach_the_facade(monkeypatch):
@@ -272,15 +284,16 @@ def test_neutron_sic_damage_choices_reach_the_facade(monkeypatch):
     at.session_state["device_config"] = DeviceConfig()
     at.run()
     at.radio(key="rad_particle").set_value("neutron").run()
-    at.selectbox(key="rad_niel_convention").set_value("sic-damage").run()
+    assert at.selectbox(key="rad_niel_convention").value == "sic-damage"  # default
+    at.selectbox(key="rad_niel_convention").set_value("si-neq").run()
     assert at.exception == []
-    assert any("neutron" in (c.value or "") and "sic-damage" in (c.value or "")
+    assert any("neutron" in (c.value or "") and "si-neq" in (c.value or "")
                for c in at.caption)
     at.button[0].click()
     at.run()
     assert at.exception == []
     assert seen["particle"] == "neutron"
-    assert seen["niel_convention"] == "sic-damage"
+    assert seen["niel_convention"] == "si-neq"
     assert seen["proton_energy_MeV"] == pytest.approx(1.0)
     assert "damage_result" in at.session_state
 

@@ -275,10 +275,10 @@ def _compensation_note(res: SimResult) -> str:
     if res.sim_type != "damage" or phi_c is None:
         return ""
     if res.metadata.get("damage_model") == "charged_traps":
-        phi_t = res.metadata.get("trap_compensation_fluence", float("nan"))
+        phi_l = res.metadata.get("legacy_compensation_fluence", float("nan"))
         return (
-            f"; charged traps: bulk compensated at ~{phi_t:.3g} p/cm^2, solved beyond "
-            f"(legacy removal limit {phi_c:.3g})"
+            f"; charged traps: bulk compensated at ~{phi_c:.3g} p/cm^2, solved beyond "
+            f"(legacy removal limit {phi_l:.3g})"
         )
     return f"; full donor compensation at {phi_c:.3g} p/cm^2"
 

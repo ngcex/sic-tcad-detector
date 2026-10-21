@@ -132,15 +132,31 @@ def test_sic_heavier_damage_per_gram_than_si_for_fission_neutrons():
         assert niel_ratio_sic_si(e) < nt.R_N_SIC_SI_FISSION
 
 
-def test_hardness_table_default_is_the_legacy_table():
-    assert hardness_table() is NIEL_HARDNESS_PROTON_SIC
-    assert get_hardness_factor(62.0) == pytest.approx(1.942, abs=1e-3)
+def test_hardness_table_default_is_sic_damage():
+    # re-pinned 2026-10-21 (issue #8 decision): default si-neq -> sic-damage
+    from etna.core.radiation_damage import DEFAULT_NIEL_CONVENTION, table_convention
+
+    assert DEFAULT_NIEL_CONVENTION == "sic-damage"
+    assert hardness_table() is hardness_table("proton", "sic-damage")
+    assert get_hardness_factor(62.0) == pytest.approx(1.552, abs=1e-3)
+    # the previous default stays selectable, unchanged
+    assert hardness_table("proton", "si-neq") is NIEL_HARDNESS_PROTON_SIC
+    assert get_hardness_factor(62.0, NIEL_HARDNESS_PROTON_SIC) == pytest.approx(
+        1.942, abs=1e-3
+    )
+    assert table_convention(None) == "sic-damage"
+    assert table_convention(NIEL_HARDNESS_PROTON_SIC) == "si-neq"
+    assert table_convention(hardness_table("neutron", "sic-1mev")) == "sic-1mev"
+    assert table_convention({1.0: 1.0, 10.0: 1.0}) is None
+    with pytest.raises(ValueError, match="convention"):
+        hardness_table("proton", "si")
 
 
 @pytest.mark.parametrize("E", [1.0, 5.6, 62.0, 250.0])
 def test_proton_sic_damage_convention(E):
     k = get_hardness_factor(E, hardness_table("proton", "sic-damage"))
-    expect = get_hardness_factor(E) * niel_ratio_sic_si(E) / nt.R_N_SIC_SI_FISSION
+    si = hardness_table("proton", "si-neq")
+    expect = get_hardness_factor(E, si) * niel_ratio_sic_si(E) / nt.R_N_SIC_SI_FISSION
     assert k == pytest.approx(expect, rel=1e-3)
 
 
@@ -180,15 +196,19 @@ def test_api_compensation_fluence_scales_with_the_convention():
     from etna import DeviceConfig
     from etna.api.simulation import compensation_fluence
 
-    cfg = DeviceConfig()
-    base = compensation_fluence(cfg, 62.0)
-    sic = compensation_fluence(cfg, 62.0, niel_convention="sic-damage")
+    # legacy scalar model (pinned: 3.48e12 -> 4.36e12 p/cm^2 at 62 MeV)
+    cfg = DeviceConfig(radiation_traps=False)
+    base = compensation_fluence(cfg, 62.0, niel_convention="si-neq")
+    sic = compensation_fluence(cfg, 62.0)  # default: sic-damage
+    assert base == pytest.approx(3.484e12, rel=1e-3)
+    assert sic == pytest.approx(4.358e12, rel=1e-3)
     assert sic / base == pytest.approx(
         nt.R_N_SIC_SI_FISSION / niel_ratio_sic_si(62.0), rel=1e-3
     )
-    n = compensation_fluence(cfg, 1.0, particle="neutron")
+    si = hardness_table("proton", "si-neq")
+    n = compensation_fluence(cfg, 1.0, particle="neutron", niel_convention="si-neq")
     k = get_hardness_factor(1.0, hardness_table("neutron", "si-neq"))
-    assert n == pytest.approx(base * get_hardness_factor(62.0) / k, rel=1e-9)
+    assert n == pytest.approx(base * get_hardness_factor(62.0, si) / k, rel=1e-9)
 
 
 def test_damage_figures_label_neutron_runs():
