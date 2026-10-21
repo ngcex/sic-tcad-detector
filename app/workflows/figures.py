@@ -31,7 +31,12 @@ import etna
 import etna.viz
 import etna.viz.maps
 import etna.viz.validation
-from app.components.page_utils import require_config, show_error, show_result_notes
+from app.components.page_utils import (
+    about,
+    require_config,
+    show_error,
+    show_result_notes,
+)
 from app.components import results as R
 
 CACHE_KEY = "figures_cache"
@@ -50,9 +55,21 @@ PRESETS = {
 
 # key: (label, dims, slow, honesty note)
 OBSERVABLES = {
-    "cv": ("C-V, depletion width, Mott-Schottky", "1D", False, ""),
+    "cv": (
+        "C-V, depletion width, Mott-Schottky",
+        "1D",
+        False,
+        "The default doping is fitted to the measured C-V: agreement with it is fit "
+        "quality, not a prediction.",
+    ),
     "field": ("Field / potential profile", "1D", False, ""),
-    "cce": ("CCE vs reverse bias", "1D", False, ""),
+    "cce": (
+        "CCE vs reverse bias",
+        "1D",
+        False,
+        "Am-241 alpha (NIST ASTAR Bragg profile, 18.43 µm range); predicted, not "
+        "validated against a measured CCE(V).",
+    ),
     "dark": (
         "Dark current vs reverse bias",
         "1D",
@@ -64,15 +81,25 @@ OBSERVABLES = {
         "FLASH steady-state CCE vs dose rate",
         "1D",
         False,
+        "SRH + Auger (Galeckas 1997) at the single bias above, 62 MeV protons. "
         "Numerical sensitivity bound, not a validated FLASH plasma-recombination "
         "prediction.",
     ),
-    "temperature": ("CCE vs temperature (Hecht)", "1D", False, ""),
+    "temperature": (
+        "CCE vs temperature (Hecht)",
+        "1D",
+        False,
+        "Analytical Hecht CCE on the depletion width at the single bias, 250-350 K; "
+        "not a drift-diffusion CCE.",
+    ),
     "transient": (
         "FLASH transient CCE (devsim, slow: ~1 s per dose rate)",
         "1D",
         True,
-        "Low-injection drift-diffusion pulse; high-injection plasma not modelled.",
+        "One trapezoidal pulse per dose rate (SRH + Auger), from the dark bias point "
+        "(engine-seeded where possible); CCE = time-integrated contact conduction current / generated "
+        "charge (the displacement current dQ/dt is tracked separately). "
+        "Low-injection drift-diffusion; high-injection plasma not modelled.",
     ),
     "tilted_alpha": (
         "Tilted-alpha CCE vs bias (microdosimeter test geometry)",
@@ -199,12 +226,12 @@ def run_observables(cfg, chosen, p, progress=None) -> "list[tuple]":
 # --------------------------------------------------------------------------- views
 
 
-def _generic_plotly(res, kind) -> go.Figure:
-    x = np.asarray(getattr(res, "x", []), dtype=float)
-    y = np.asarray(getattr(res, "y", []), dtype=float)
-    fig = go.Figure(go.Scatter(x=x, y=y, mode="lines+markers"))
-    fig.update_layout(title=etna.viz.KINDS[kind], xaxis_title="x", yaxis_title="y")
-    return fig
+def _generic_plotly(res, kind) -> "go.Figure | None":
+    """Labelled line plot of a result without a dedicated view (None: no 1D curve, the
+    publication preview is shown instead)."""
+    if not hasattr(res, "sim_type"):
+        return None
+    return R.build_result_figure(res, etna.viz.KINDS[kind])
 
 
 def _plotly(obj, kind):
@@ -213,6 +240,10 @@ def _plotly(obj, kind):
         return R.build_cv_figure(obj)
     if kind == "mott_schottky":
         return R.build_mott_schottky_figure(obj)
+    if kind == "depletion":
+        return R.build_depletion_figure(obj)
+    if kind in ("map_electrons", "map_holes"):
+        return None  # carrier maps: publication preview only
     if kind == "field":
         return R.build_field_figures(obj)[0]
     if kind == "cce":
@@ -496,6 +527,16 @@ def render() -> None:
         "box), explore the interactive charts and download publication figures (PNG / SVG / "
         "PDF), the data as CSV and an animation."
     )
+    about(
+        "- **Device:** the sidebar one or a named preset (a preset keeps the "
+        "sidebar's dimensionality).\n"
+        "- **Parameters:** sweeps run 0 V → 'Sweep V_stop'; FLASH, temperature, "
+        "transient, field and 2D maps use 'Single bias'.\n"
+        "- **Caching:** results are kept per (device hash, observable, parameters) for "
+        "the session: re-running with the same inputs is instant.\n"
+        "- Each result carries its solver badge and its validity note (calibrated / "
+        "predicted / validation-shape-only). Figures carry the same labels."
+    )
     sidebar_cfg = require_config()
     cfg, _ = _device(sidebar_cfg)
     _engine_box(cfg)
@@ -523,6 +564,7 @@ def render() -> None:
                     max_value=-1.0,
                     step=5.0,
                     key="fig_vstop",
+                    help="End of the 0 V → V_stop sweeps (C-V, CCE, dark, tilted alpha).",
                 )
             ),
             n_points=int(
@@ -537,6 +579,8 @@ def render() -> None:
                     max_value=0.0,
                     step=5.0,
                     key="fig_bias",
+                    help="Bias of the field, FLASH, transient, temperature and 2D-map "
+                    "observables (negative = reverse).",
                 )
             ),
             let_table=c[3].selectbox("LET table", list(LET_TABLES), key="fig_let"),

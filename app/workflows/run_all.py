@@ -17,14 +17,18 @@ import streamlit as st
 
 import etna
 from etna.api.run_all import DEFAULT_SECTIONS, SECTION_NAMES, _sections
-from app.components.page_utils import require_config, show_error, show_stale_warning
+from app.components.page_utils import (
+    about,
+    require_config,
+    show_error,
+    show_stale_warning,
+)
+from app.components.results import build_result_figure
 
 
-def _curve(sec) -> go.Figure:
-    r = sec.result
-    fig = go.Figure(go.Scatter(x=r.x, y=r.y, mode="lines+markers"))
-    fig.update_layout(title=sec.title, xaxis_title="x", yaxis_title="y")
-    return fig
+def _curve(sec) -> "go.Figure | None":
+    """The section's primary curve with labelled axes (None: no 1D curve)."""
+    return build_result_figure(sec.result, sec.title)
 
 
 def render() -> None:
@@ -33,6 +37,23 @@ def render() -> None:
         "Runs every simulation for the device in the sidebar and reports one "
         "table. Sections that fail or do not apply (the 1D-only ones on a 2D "
         "device) are listed with the reason; the rest still run."
+    )
+    about(
+        "Each section runs its facade with the library defaults (the single-run pages "
+        "let you change them):\n"
+        "- **C-V** 0 → −50 V; **CCE** −10 → −40 V (Am-241 alpha); **Field** at −50 V.\n"
+        "- **Radiation damage**: 5.6 MeV protons, 8 fluences from 0.01× to 3× the "
+        "compensation fluence; the points beyond it are refused (NaN with a reason); "
+        "the charged-trap option of the Radiation Damage page is not used here.\n"
+        "- **Dark current** 0 → −100 V: calibrated budget estimate (N_t fitted to "
+        "< 18 pA at −60 V).\n"
+        "- **Temperature sweep**: Hecht CCE at −30 V, 250-350 K.\n"
+        "- **FLASH**: steady-state CCE vs dose rate at −30 V, 62 MeV, SRH + Auger; a "
+        "numerical sensitivity bound, not a validated plasma-recombination "
+        "prediction.\n"
+        "- **Microdosimetry sweep** (opt-in): 2D engine only, half-widths 25/50 µm at "
+        "20/40/60 V.\n"
+        "Status 'warning' = the section ran but returned no valid point."
     )
     cfg = require_config()
 
@@ -64,8 +85,11 @@ def render() -> None:
     st.dataframe(pd.DataFrame(report.rows()), hide_index=True)
     for sec in report.sections:
         if sec.result is not None and sec.status == "ok":
+            fig = _curve(sec)
+            if fig is None:  # 2D field: no 1D curve (see the Field Map page)
+                continue
             with st.expander(f"{sec.title} ({sec.solver})"):
-                st.plotly_chart(_curve(sec))
+                st.plotly_chart(fig, key=f"ra_fig_{sec.name}")
     buf = io.StringIO()
     pd.DataFrame(report.rows()).to_csv(buf, index=False)
     c1, c2 = st.columns(2)

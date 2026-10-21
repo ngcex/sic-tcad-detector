@@ -65,15 +65,17 @@ def assemble_config(values: dict) -> DeviceConfig:
         ),
         # opt-in tabulated epi profile (the measured-C-V knots preset); default none
         donor_table=values.get("donor_table", DeviceConfig.donor_table),
+        # opt-in carrier-dependent incomplete ionization (False = the legacy scalar)
+        incomplete_ionization=values.get("incomplete_ionization", False),
     )
 
 
 # Sidebar labels for DeviceConfig fields, used to phrase validation errors.
 FIELD_LABELS = {
     "epi_thickness_um": "Epi thickness (µm)",
-    "substrate_thickness_um": "Substrate thickness (µm)",
+    "substrate_thickness_um": "p+ anode thickness (µm)",
     "half_width_um": "Half-width (µm)",
-    "N_A": "N_A substrate (cm⁻³)",
+    "N_A": "N_A p+ anode (cm⁻³)",
     "N_D_junction": "N_D junction (cm⁻³)",
     "N_D_bulk": "N_D bulk (cm⁻³)",
     "N_D": "N_D uniform (cm⁻³)",
@@ -87,6 +89,8 @@ FIELD_LABELS = {
     "buffer_thickness_um": "n-/n+ transition thickness (µm)",
     "buffer_end_doping": "N_D at the epi end (cm⁻³)",
     "donor_table": "tabulated epi profile (knots)",
+    "incomplete_ionization": "Incomplete ionization",
+    "radiation_traps": "Charged deep traps",
 }
 
 
@@ -113,10 +117,21 @@ def render_device_sidebar() -> None:
 
     # --- Group 1: reactive mode selectors (rendered plainly, no submit gate) ---
     dim = st.sidebar.radio(
-        "Dimensionality", ["1D", "2D"], index=0, key="cfg_dimensionality"
+        "Dimensionality",
+        ["1D", "2D"],
+        index=0,
+        key="cfg_dimensionality",
+        help="1D: vertical p+/n-/n+ stack (C-V, CCE, damage, dark current, FLASH). "
+        "2D: adds a lateral half-width (Field Map, 2D maps); the other pages are 1D-only.",
     )
     profile = st.sidebar.selectbox(
-        "Doping profile", ["graded", "uniform"], index=0, key="cfg_doping_profile"
+        "Doping profile",
+        ["graded", "uniform"],
+        index=0,
+        key="cfg_doping_profile",
+        help="graded: N_D(y) falls exponentially from 'N_D junction' to 'N_D bulk' over "
+        "the transition length (the default, fitted on the measured C-V). uniform: one "
+        "N_D over the whole epi (no graded n-/n+ transition unless set).",
     )
 
     st.sidebar.divider()
@@ -133,14 +148,16 @@ def render_device_sidebar() -> None:
         step=0.5,
         format="%.2f",
         key="cfg_epi_thickness_um",
+        help="n- epitaxial layer (the sensitive volume). Default 10 µm (the dosimeter).",
     )
     substrate_thickness_um = st.sidebar.number_input(
-        "Substrate thickness (µm)",
+        "p+ anode thickness (µm)",
         value=DeviceConfig.substrate_thickness_um,
         step=0.1,
         format="%.2f",
         key="cfg_substrate_thickness_um",
-        help="p+ anode layer (not the n+ substrate, see 'n+ layer under the epi').",
+        help="p+ anode layer on top of the epi (DeviceConfig.substrate_thickness_um; "
+        "not the n+ substrate under the epi, which is fixed at 1 µm, 1e19 cm⁻³).",
     )
     legacy_on = st.sidebar.checkbox(
         "historical model (cathode directly on n- epi)",
@@ -158,7 +175,7 @@ def render_device_sidebar() -> None:
         value=False,
         key="cfg_nplus_cal_on",
         help="Applies the previous default (etna.nplus_calibrated_config, 2026-10-17): "
-        "exponential epi calibrated on two C-V points (N_D_junction 2.958237e15, N_D_bulk "
+        "exponential epi calibrated on two C-V points, 0 and -10 V (N_D_junction 2.958237e15, N_D_bulk "
         "8.252732e13, L 0.987 um held), ABRUPT 1e19 n+ at the epi end (no graded "
         f"transition), N_t {NPLUS_CALIBRATED_PRESET['N_t']:.6e} (overrides the doping "
         "fields). Its C-V knee is at "
@@ -188,6 +205,8 @@ def render_device_sidebar() -> None:
             step=5.0,
             format="%.1f",
             key="cfg_half_width_um",
+            help="Lateral half-width of the 2D cross-section (symmetric about the "
+            "centre). The 2D engine serves 25-150 µm; outside it devsim (slow).",
         )
     else:
         half_width_um = None
@@ -197,11 +216,14 @@ def render_device_sidebar() -> None:
     # --- Group 3: doping ---
     st.sidebar.header("Doping")
     N_A = st.sidebar.number_input(
-        "N_A substrate (cm⁻³)",
+        "N_A p+ anode (cm⁻³)",
         value=1e19,
         step=1e18,
         format="%.3e",
         key="cfg_N_A",
+        help="Al acceptor doping of the p+ anode (>= 1e17, above every epi N_D). "
+        "Ionized fraction: the legacy scalar (13 % at 1e19, 300 K) unless "
+        "'Incomplete ionization' is on.",
     )
     if profile == "uniform":
         N_D = st.sidebar.number_input(
@@ -210,6 +232,8 @@ def render_device_sidebar() -> None:
             step=1e14,
             format="%.3e",
             key="cfg_N_D",
+            help="Uniform epi donor doping; required with the uniform profile (the "
+            "graded fields below are not used).",
         )
         # Graded triplet hidden this mode — fall back to DeviceConfig defaults.
         N_D_junction = DeviceConfig.N_D_junction
@@ -222,6 +246,7 @@ def render_device_sidebar() -> None:
             step=1e9,  # the 7-digit exact-solve value must lie on the step grid
             format="%.3e",
             key="cfg_N_D_junction",
+            help="Epi donor doping at the p+/n- junction (start of the exponential).",
         )
         N_D_bulk = st.sidebar.number_input(
             "N_D bulk (cm⁻³)",
@@ -229,6 +254,8 @@ def render_device_sidebar() -> None:
             step=1e7,  # idem
             format="%.3e",
             key="cfg_N_D_bulk",
+            help="Asymptotic epi donor doping deep in the epi; sets the full-depletion "
+            "voltage and the compensation fluence.",
         )
         L_transition_um = st.sidebar.number_input(
             "Transition length (µm)",
@@ -236,6 +263,7 @@ def render_device_sidebar() -> None:
             step=1e-7,  # idem (0.4638630)
             format="%.7f",
             key="cfg_L_transition_um",
+            help="Decay length of the exponential N_D_junction -> N_D_bulk.",
         )
         # N_D hidden this mode — programmatically set to default; assemble_config
         # also forces N_D=None for "graded", this default is a harmless input.
@@ -257,6 +285,7 @@ def render_device_sidebar() -> None:
             step=1e-6,
             format="%.6f",
             key="cfg_buffer_thickness_um",
+            help="Width of the log-linear rise at the epi end (default: the C-V fit).",
         )
         buffer_end_doping = st.sidebar.number_input(
             "N_D at the epi end (cm⁻³)",
@@ -264,9 +293,15 @@ def render_device_sidebar() -> None:
             step=1e9,
             format="%.3e",
             key="cfg_buffer_end_doping",
+            help="Donor doping reached at the epi/n+ interface (n+ 1e19 beyond).",
         )
     else:
         buffer_thickness_um = buffer_end_doping = None
+    if buffer_on and profile == "uniform":
+        st.sidebar.caption(
+            "Uniform profile: the default transition (fitted with the graded epi) is not "
+            "applied; change its values to apply a transition explicitly."
+        )
 
     st.sidebar.divider()
 
@@ -278,6 +313,8 @@ def render_device_sidebar() -> None:
         step=5.0,
         format="%.1f",
         key="cfg_T",
+        help="Device temperature, 100-600 K. The fast engines serve 150-450 K; outside "
+        "it devsim runs (slower).",
     )
     area_cm2 = st.sidebar.number_input(
         "Area (cm²)",
@@ -288,6 +325,28 @@ def render_device_sidebar() -> None:
         help="Default: the 4 mm² dosimeter (4.000e-02 cm²). Capacitance and "
         "leakage scale with area.",
     )
+
+    st.sidebar.divider()
+
+    # --- Group 5: opt-in physics models ---
+    st.sidebar.header("Physics models")
+    incomplete_ionization = st.sidebar.checkbox(
+        "Incomplete ionization (opt-in)",
+        value=False,
+        key="cfg_incomplete_ionization",
+        help="Carrier-dependent ionization of the N donors (Kagamihara 2004) and Al "
+        "acceptors (Achatz 2008) in Poisson: depleted dopants are fully ionized, only "
+        "neutral regions freeze out (p+ 1e19: 2.9 % ionized at 300 K). Off (default) = "
+        "the legacy model every calibration is pinned on (one scalar Al fraction, "
+        "donors fully ionized). With it on, C-V / CCE keep the batched engine; the 1D "
+        "field, dark current, FLASH and the fluence sweep run on devsim (slower). "
+        "Exclusive with the charged deep traps of the Radiation Damage page.",
+    )
+    if incomplete_ionization:
+        st.sidebar.caption(
+            "Incomplete ionization on (opt-in): not the calibrated baseline; the 1D "
+            "field, dark current, FLASH and fluence pages run on devsim."
+        )
 
     values = {
         "epi_thickness_um": epi_thickness_um,
@@ -305,6 +364,7 @@ def render_device_sidebar() -> None:
         "N_D_nplus": N_D_nplus,
         "buffer_thickness_um": buffer_thickness_um,
         "buffer_end_doping": buffer_end_doping,
+        "incomplete_ionization": bool(incomplete_ionization),
     }
 
     if legacy_on:
@@ -323,7 +383,8 @@ def render_device_sidebar() -> None:
     elif nplus_cal_on:
         values.update(NPLUS_CALIBRATED_PRESET)
         st.sidebar.info(
-            "Previous calibrated model active: 3-point n+ calibration, abrupt epi/n+ step "
+            "Previous calibrated model active: 2-point C-V calibration (0 / -10 V), abrupt "
+            "epi/n+ step "
             f"(no graded transition), N_t {NPLUS_CALIBRATED_PRESET['N_t']:.6e}. Its C-V knee "
             "(-8..-10 V) disagrees "
             "with the digitised measurement (-1..-4 V)."

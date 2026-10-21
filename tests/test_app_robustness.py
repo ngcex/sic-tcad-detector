@@ -413,7 +413,7 @@ def test_invalid_sidebar_value_blocks_pages():
     at.sidebar.number_input(key="cfg_substrate_thickness_um").set_value(0.0)
     at.run()
     assert at.exception == []
-    assert any("'Substrate thickness (µm)' must be > 0" in e.value for e in at.sidebar.error)
+    assert any("'p+ anode thickness (µm)' must be > 0" in e.value for e in at.sidebar.error)
     assert not any("substrate_thickness_um" in e.value for e in at.sidebar.error)
     assert "device_config" not in at.session_state  # no stale valid config
     assert any(

@@ -30,7 +30,9 @@ from etna import DeviceConfig, SimResult
 from streamlit.testing.v1 import AppTest
 
 
-def _fake_run_microdosimetry(cfg, mc_csv_path, sv_thickness_um=10.0, sv_width_um=100.0):
+def _fake_run_microdosimetry(
+    cfg, mc_csv_path, sv_thickness_um=10.0, sv_width_um=100.0, **kwargs
+):
     """Clean fake: 300-point log-x spectrum with a valid y_F/y_D readout."""
     return SimResult(
         config=cfg,

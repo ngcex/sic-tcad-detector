@@ -20,7 +20,12 @@ import streamlit as st
 
 import etna
 from etna import export as ex
-from app.components.page_utils import require_config, show_error, show_stale_warning
+from app.components.page_utils import (
+    about,
+    require_config,
+    show_error,
+    show_stale_warning,
+)
 
 # Session cache of the page's file bytes (Streamlit reruns the whole script on every
 # widget change): the cross-section PNG (0.1-0.5 s) and SVG are keyed by config / layout
@@ -177,6 +182,7 @@ def _profile_block(cfg) -> None:
         max_value=0.0,
         step=5.0,
         key="ex_bias",
+        help="Single bias of the exported solution (negative = reverse).",
     )
     if st.button("Compute profile", key="ex_field_btn"):
         try:
@@ -224,9 +230,7 @@ def _animation_block(cfg) -> None:
         st.info(f"Animations are unavailable: {why}")
         return
     if cfg.half_width_um is not None:
-        st.info(
-            "Animations need a 1D device (set the half-width to none in the sidebar)."
-        )
+        st.info("Animations need a 1D device (set Dimensionality to 1D in the sidebar).")
         return
     st.write(
         "Two short low-quality (480p) videos from real solver data at 0 to -60 V: the "
@@ -235,7 +239,7 @@ def _animation_block(cfg) -> None:
     )
     if st.button("Export animation", key="ex_anim_btn"):
         try:
-            with st.spinner("Solving 13 biases and rendering (about 10 s)..."):
+            with st.spinner("Solving 13 biases and rendering two videos (about 10-20 s)..."):
                 data = viz.animation_data(cfg)
                 vids = {}
                 for scene in viz.SCENES:
@@ -306,6 +310,18 @@ def _layout_block(params=None) -> None:
 def render() -> None:
     st.title("Export")
     st.info(ex.VALIDATION_LABEL)
+    about(
+        "- **Spec sheet:** the layer stack, area, full-depletion numbers, C-V, CCE, "
+        "field and dark current of the sidebar device with each section's solver and "
+        "validity (dark current: calibrated budget estimate).\n"
+        "- **Cross-section / layout:** depth to scale; lateral dimensions from the "
+        "layout parameter file, each with its class (DOCUMENTED / "
+        "MEASURED_FROM_FIGURE / PLACEHOLDER). While any PLACEHOLDER is left the "
+        "layout is **REFERENCE-NOT-FAB**: not a fabrication layout; the missing "
+        "dimensions must come from the foundry mask data.\n"
+        "- **Mesh / profile:** per-node solution for cross-checks with other TCAD "
+        "tools (units in the file headers)."
+    )
     cfg = require_config()
     params = _layout_params_block()
     st.divider()

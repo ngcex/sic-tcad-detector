@@ -11,7 +11,9 @@ Only the TOTAL current is shown. The absolute level is a calibration input
 (the trap generation rate N_t is fitted to the experimental leakage bound), the
 bias/temperature dependence is heuristic, and the SRH/TAT split is a modelling
 partition rather than a measured decomposition. The surface (SRV) term is
-identically zero at the ohmic cathode, so S_n/S_p are not exposed.
+identically zero at the ohmic cathode, so S_n/S_p are not exposed. The solver label
+is taken from the per-temperature results (batched engine inside its box, devsim
+outside it or on fallback).
 
 `etna.ParametricSweep` and `etna.run_dark_current` are referenced as MODULE
 ATTRIBUTES so tests can monkeypatch `run_dark_current` while the real
@@ -25,6 +27,7 @@ import streamlit as st
 
 import etna
 from app.components.page_utils import (
+    about,
     require_config,
     show_error,
     show_stale_warning,
@@ -42,8 +45,22 @@ CALIBRATION_BANNER = (
 
 def render() -> None:
     st.title("Dark Current")
-
+    st.caption(
+        "Total reverse leakage current (A, for the sidebar area) at one bias vs "
+        "temperature."
+    )
     st.warning(CALIBRATION_BANNER)
+    about(
+        "- **Model:** SRH generation in the depleted epi plus a trap-assisted (TAT) "
+        "effective-generation term with rate N_t at level E_t below E_c (sidebar "
+        "presets), solved in the dark field of the device.\n"
+        "- **Calibrated, not predicted:** N_t is fitted so the total equals the "
+        "< 18 pA bound at −60 V, 4 mm², 300 K; I scales linearly with N_t. The "
+        "temperature and bias dependence follow the model, not a fit, and are "
+        "heuristic.\n"
+        "- **Solver:** batched engine for 150-450 K inside its box, devsim otherwise "
+        "(badge under the plot)."
+    )
 
     cfg = require_config()
 
@@ -57,6 +74,7 @@ def render() -> None:
         max_value=600.0,
         value=250.0,
         key="dc_t_min",
+        help="100-600 K (DeviceConfig range).",
     )
     T_max = st.number_input(
         "Max temperature (K)",
@@ -64,6 +82,7 @@ def render() -> None:
         max_value=600.0,
         value=400.0,
         key="dc_t_max",
+        help="100-600 K (DeviceConfig range).",
     )
     n_temperatures = st.number_input(
         "Number of temperature points",
@@ -72,6 +91,7 @@ def render() -> None:
         step=1,
         value=6,
         key="dc_n_temps",
+        help="Equally spaced between the min and max temperature.",
     )
     V_bias = st.number_input(
         "Operating bias V_bias (V)",
@@ -118,6 +138,8 @@ def render() -> None:
 
             T_ok: list[float] = []
             I_total: list[float] = []
+            solvers: list[str] = []
+            fallbacks: list[str] = []
             errors: list[str] = []
             notes: list[str] = []
             for T_value, result in zip(temperatures, sweep_results):
@@ -139,6 +161,11 @@ def render() -> None:
                     continue
                 T_ok.append(float(T_value))
                 I_total.append(float(result.y[0]))
+                solvers.append(result.metadata.get("solver") or "devsim")
+                if result.metadata.get("fallback_reason"):
+                    fallbacks.append(
+                        f"T={T_value:g} K: {result.metadata['fallback_reason']}"
+                    )
                 if result.metadata.get("validated_domain") is False:
                     notes.append(
                         result.metadata.get("domain_note") or f"T={T_value:g} K"
@@ -160,7 +187,13 @@ def render() -> None:
                     y=np.array(I_total),
                     metadata={
                         "V_bias": V_bias,
-                        "solver": "devsim",
+                        # the solver(s) that actually produced the points
+                        "solver": " + ".join(dict.fromkeys(solvers)),
+                        **(
+                            {"fallback_reason": "; ".join(fallbacks)}
+                            if fallbacks
+                            else {}
+                        ),
                         "validated_domain": not notes,
                         "domain_note": "; ".join(dict.fromkeys(notes)) or None,
                     },

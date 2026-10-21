@@ -165,7 +165,7 @@ def build_microdosimetry_figure(result: SimResult) -> go.Figure:
         title="Microdosimetric Spectrum",
         xaxis_title="Lineal energy y (keV/µm)",
         xaxis_type="log",
-        yaxis_title="y · d(y)",
+        yaxis_title="y · d(y) (dimensionless)",
     )
     return fig
 
@@ -173,8 +173,9 @@ def build_microdosimetry_figure(result: SimResult) -> go.Figure:
 # Human labels for the sweepable DeviceConfig fields (Batch Sweep).
 PARAM_LABELS = {
     "epi_thickness_um": "Epi thickness (µm)",
-    "substrate_thickness_um": "Substrate thickness (µm)",
-    "N_A": "N_A substrate (cm⁻³)",
+    "substrate_thickness_um": "p+ anode thickness (µm)",
+    "N_A": "N_A p+ anode (cm⁻³)",
+    "N_D": "N_D uniform (cm⁻³)",
     "N_D_junction": "N_D junction (cm⁻³)",
     "N_D_bulk": "N_D bulk (cm⁻³)",
     "L_transition_um": "Transition length (µm)",
@@ -287,6 +288,76 @@ ENGINE2D_TEXT = (
 )
 
 
+# x / y axis titles of the result types without a dedicated builder (sim_type key).
+AXIS_TITLES = {
+    "temperature": ("Temperature (K)", "Charge Collection Efficiency"),
+    "flash": ("Dose rate (Gy/s)", "Steady-state CCE"),
+    "transient": ("Dose rate (Gy/s)", "Transient CCE (pulse)"),
+    "sweep": ("Reverse bias |V| (V)", "Best centre CCE over the half-widths"),
+}
+
+
+def build_depletion_figure(result: SimResult) -> go.Figure:
+    """Depletion edge (n/N_D = 0.5) and ε·A/C vs bias of a C-V result (µm)."""
+    md = result.metadata
+    fig = go.Figure()
+    if md.get("depletion_widths") is not None:
+        fig.add_trace(
+            go.Scatter(
+                x=result.x,
+                y=np.asarray(md["depletion_widths"], dtype=float) * 1e4,
+                mode="lines+markers",
+                name="depletion edge (n/N_D = 0.5)",
+            )
+        )
+    if md.get("W_from_C") is not None:
+        fig.add_trace(
+            go.Scatter(
+                x=result.x,
+                y=np.asarray(md["W_from_C"], dtype=float) * 1e4,
+                mode="lines+markers",
+                name="ε·A/C",
+            )
+        )
+    fig.update_layout(
+        title="Depletion Width vs Bias",
+        xaxis_title="Voltage (V)",
+        yaxis_title="Depletion Width (µm)",
+    )
+    return fig
+
+
+def build_result_figure(result: SimResult, title: str = "") -> "go.Figure | None":
+    """The interactive figure of any 1D SimResult: the dedicated builder of its
+    sim_type, else a labelled line plot (AXIS_TITLES). None for a 2D field result
+    (no x / y curve; use the geometry viewer)."""
+    st_ = result.sim_type
+    if st_ == "cv":
+        return build_cv_figure(result)
+    if st_ == "cce":
+        return build_cce_figure(result)
+    if st_ == "damage":
+        return build_damage_figure(result)
+    if st_ in ("dark_current", "dark_current_vs_T"):
+        return build_dark_current_figure(result)
+    if st_ == "microdosimetry":
+        return build_microdosimetry_figure(result)
+    if st_ == "field":
+        if result.mesh is not None and result.mesh.y_coords is not None:
+            return None
+        return build_field_figures(result)[0]
+    x_title, y_title = AXIS_TITLES.get(st_, ("x", "y"))
+    fig = go.Figure(
+        go.Scatter(
+            x=np.asarray(result.x, dtype=float),
+            y=np.asarray(result.y, dtype=float),
+            mode="lines+markers",
+        )
+    )
+    fig.update_layout(title=title or st_, xaxis_title=x_title, yaxis_title=y_title)
+    return fig
+
+
 def provenance_text(metadata: dict) -> str:
     """Solver-specific statement of what a result was (and was not) checked against."""
     solver = metadata.get("solver")
@@ -303,6 +374,17 @@ def provenance_text(metadata: dict) -> str:
         return ENGINE2D_TEXT
     if solver is None or solver == "failed":
         return ""
+    if "traps" in str(solver):
+        # the charged-trap fluence model exists on the batched engine only
+        return (
+            "charged deep-trap model on the batched engine only (no devsim reference "
+            "for it); not validated against measurement"
+        )
+    if " + " in str(solver):
+        return (
+            "points from different solvers (batched engine inside its cross-check box, "
+            "devsim outside it); not validated against measurement"
+        )
     text = (
         DEVSIM_ONLY_TEXT
         if solver == "devsim"

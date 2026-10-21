@@ -34,12 +34,37 @@ import io
 import streamlit as st
 
 import etna
-from app.components.page_utils import require_config, show_error, show_stale_warning
+from app.components.page_utils import (
+    about,
+    require_config,
+    show_error,
+    show_stale_warning,
+)
 from app.components.results import build_microdosimetry_figure, to_csv_bytes
 
 
 def render() -> None:
     st.title("Microdosimetry")
+    st.caption(
+        "Lineal-energy spectrum y·d(y) of Monte Carlo energy depositions in a "
+        "sensitive volume (SV), with the frequency- and dose-mean y_F and y_D."
+    )
+    about(
+        "- **Model:** per-event energy ε (keV, steps summed per event_id) divided by "
+        "the SV mean chord length l̄: y = ε / l̄ (ICRU 36). No device physics: the "
+        "sidebar device does not enter, and full charge collection is assumed "
+        "(geometry-only).\n"
+        "- **Mean chord:** 'cauchy' (default) l̄ = 4V/S of the finite box "
+        "width × thickness × depth (depth = width); 'slab' the infinite-slab limit "
+        "2 × thickness. Both are means for isotropic irradiation; for a normally "
+        "incident beam the chord is the thickness itself.\n"
+        "- **y is in SiC:** no tissue conversion is applied. The SiC → water "
+        "lineal-energy factor is the LET ratio κ = L_water / L_SiC (NIST PSTAR, SiC by "
+        "Bragg additivity; "
+        "protons: 0.43 at 1 MeV, 0.39 at 10 MeV, 0.375 at 150 MeV; "
+        "etna.core.microdosimetry.compute_kappa_table(source='bragg')), so y_water "
+        "≈ 0.38-0.43 × y_SiC."
+    )
 
     cfg = require_config()
 
@@ -53,6 +78,7 @@ def render() -> None:
         value=10.0,
         min_value=0.1,
         key="micro_sv_t",
+        help="Depth of the SV along the beam (the depleted epi for the microdosimeter).",
     )
     sv_width = st.number_input(
         "Sensitive-volume width (µm)",
@@ -66,6 +92,14 @@ def render() -> None:
             "× 10 µm gives l̄ = 16.67 µm (slab limit 2 × thickness = 20 µm)."
         ),
     )
+    chord_model = st.selectbox(
+        "Mean chord model",
+        ["cauchy", "slab"],
+        index=0,
+        key="micro_chord",
+        help="cauchy: l̄ = 4V/S of the finite box (default). slab: l̄ = 2 × thickness "
+        "(the infinite-slab limit, the value used before 2026-10-20).",
+    )
     st.caption(
         "The spectrum depends only on the uploaded events and the sensitive-"
         "volume geometry above, not on the sidebar device settings."
@@ -78,6 +112,7 @@ def render() -> None:
         ),
         "sensitive-volume thickness": float(sv_thickness),
         "sensitive-volume width": float(sv_width),
+        "mean chord model": chord_model,
     }
     if st.button("Run simulation"):
         if uploaded is None:
@@ -91,6 +126,7 @@ def render() -> None:
                     mc_csv_path=io.BytesIO(uploaded.getvalue()),
                     sv_thickness_um=sv_thickness,
                     sv_width_um=sv_width,
+                    chord_model=chord_model,
                 )
             st.session_state["microdosimetry_inputs"] = inputs
         except (ValueError, KeyError) as e:
@@ -107,9 +143,11 @@ def render() -> None:
             None, None, st.session_state.get("microdosimetry_inputs"), inputs
         )
         st.plotly_chart(build_microdosimetry_figure(result))
+        l_bar = result.metadata.get("l_bar_um")
         st.caption(
             f"y_F = {result.metadata['y_F']:.2f} keV/µm    "
-            f"y_D = {result.metadata['y_D']:.2f} keV/µm"
+            f"y_D = {result.metadata['y_D']:.2f} keV/µm (in SiC)"
+            + ("" if l_bar is None else f"    l̄ = {float(l_bar):.2f} µm")
         )
         st.download_button(
             "Download CSV",

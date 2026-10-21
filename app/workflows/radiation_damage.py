@@ -32,9 +32,10 @@ import numpy as np
 import streamlit as st
 
 import etna
-from etna.api.simulation import compensation_fluence
+from etna.api.simulation import compensation_fluence, trap_compensation_fluence
 from etna.core.radiation_damage import get_hardness_factor
 from app.components.page_utils import (
+    about,
     require_config,
     show_error,
     show_stale_warning,
@@ -45,6 +46,27 @@ from app.components.results import build_damage_figure, to_csv_bytes
 
 def render() -> None:
     st.title("Radiation Damage")
+    st.caption(
+        "CCE of the alpha test signal (as on the Charge Collection page) at one reverse "
+        "bias vs the proton fluence the device has received."
+    )
+    about(
+        "- **Damage scale:** 1 MeV-neutron-equivalent fluence Φ_neq = κ(E)·Φ_p, with "
+        "κ(E) the SR-NIEL proton NIEL hardness factor (1-1000 MeV, Si 1-MeV-neq "
+        "convention of the introduction rates).\n"
+        "- **Default model (carrier removal):** each Φ_neq removes donors at a constant "
+        "rate and adds SRH lifetime damage. When the removal reaches the lowest epi "
+        "N_D (the *compensation fluence*) the epi is fully compensated: those points "
+        "are **refused**, not solved (the model is ill-posed there).\n"
+        "- **Opt-in charged deep traps:** Z1/2, EH4, EH6/7 (Burin Table I) as charged "
+        "species with dark SRH occupancy; the compensated epi turns semi-insulating and "
+        "is solved up to 1e16 neq. Batched engine only; exclusive with incomplete "
+        "ionization.\n"
+        "- **Validity:** introduction rates are literature values with a wide spread "
+        "and the SiC neutron normalisation of κ is open, so absolute fluences "
+        "(Φ_crit) are not validated hardness predictions; at low energies (~5 MeV) "
+        "NIEL scaling overpredicts measured Si proton damage by tens of percent."
+    )
 
     st.warning(
         "**NIEL normalisation open:** kappa (NIEL hardness factor) is "
@@ -67,23 +89,44 @@ def render() -> None:
 
     # Energy first: the compensation fluence (and thus the default range)
     # depends on it and on the sidebar doping.
-    proton_energy_MeV = st.selectbox(
-        "Proton energy (MeV)",
-        [30, 62, 70, 150],
-        index=1,
-        key="rad_proton_energy",
+    proton_energy_MeV = float(
+        st.number_input(
+            "Proton energy (MeV)",
+            min_value=1.0,
+            max_value=1000.0,
+            value=62.0,
+            step=1.0,
+            format="%g",
+            key="rad_proton_energy",
+            help="Kinetic energy of the incident protons; sets κ(E) (SR-NIEL table, "
+            "1-1000 MeV). 62 MeV: the CATANA / LNS proton line.",
+        )
     )
+    kappa = get_hardness_factor(proton_energy_MeV)
     phi_c = compensation_fluence(cfg, proton_energy_MeV)
+    ii_on = cfg.incomplete_ionization not in (False, None)
     use_traps = st.checkbox(
         "Charged deep traps in Poisson (opt-in, solves beyond compensation)",
         value=False,
         key="rad_traps",
+        disabled=ii_on,
         help=(
             "Replaces the donor-removal scalar by the Burin Table I deep levels "
             "(Z1/2, EH4, EH6/7) as charged species with dark steady-state SRH "
             "occupancy: the compensated epi turns semi-insulating and is solved. "
-            "See docs/USAGE.md for what is calibrated and what is assumed."
+            "Batched engine only. See docs/USAGE.md for what is calibrated and what "
+            "is assumed."
         ),
+    )
+    if ii_on:
+        st.caption(
+            "Charged deep traps are unavailable while 'Incomplete ionization' is on in "
+            "the sidebar (the two models are exclusive)."
+        )
+        use_traps = False
+    st.caption(
+        f"κ({proton_energy_MeV:g} MeV) = {kappa:.3g} (1 MeV neq per proton), so "
+        f"1e12 p/cm² ≙ {kappa * 1e12:.3g} neq/cm²."
     )
     run_cfg = cfg
     if use_traps:
@@ -92,18 +135,20 @@ def render() -> None:
         except ValueError as e:
             show_error(e, "Turn off incomplete ionization in the sidebar.")
             st.stop()
-        top = 1e16 / get_hardness_factor(proton_energy_MeV)
+        top = 1e16 / kappa
+        phi_t = trap_compensation_fluence(run_cfg, proton_energy_MeV)
         st.info(
-            f"Charged-trap model: the legacy compensation fluence "
-            f"(**{phi_c:.2e} p/cm²**) is only a reference; beyond it the epi is "
-            "semi-insulating (Fermi level pinned by the deep levels) and still "
-            f"solved. The default range reaches 1e16 neq ({top:.2e} p/cm²)."
+            f"Charged-trap model: the epi is compensated at about **{phi_t:.2e} "
+            f"p/cm²** (emergent acceptor removal; legacy carrier-removal reference "
+            f"{phi_c:.2e} p/cm²); beyond it the epi is semi-insulating (Fermi level "
+            "pinned by the deep levels) and still solved. The default range reaches "
+            f"1e16 neq ({top:.2e} p/cm²)."
         )
         default_min, default_max = 1e-2 * phi_c, top
     else:
         st.info(
             f"Full donor compensation at about **{phi_c:.2e} p/cm²** for this device "
-            f"at {proton_energy_MeV} MeV (carrier removal × κ(E) × Φ reaches the "
+            f"at {proton_energy_MeV:g} MeV (carrier removal × κ(E) × Φ reaches the "
             "lowest epi N_D). Beyond it the epi is fully compensated and the model "
             "is ill-posed, so those points are not solved. The default range spans "
             "three decades up to 0.7× that fluence."
@@ -111,7 +156,7 @@ def render() -> None:
         default_min, default_max = 0.7e-3 * phi_c, 0.7 * phi_c
     # Defaults are keyed on (energy, compensation fluence, model) so they refresh when
     # either changes; user edits persist while all stay the same.
-    ctx = f"{proton_energy_MeV}_{phi_c:.4g}_{int(use_traps)}"
+    ctx = f"{proton_energy_MeV:g}_{phi_c:.4g}_{int(use_traps)}"
     col1, col2, col3 = st.columns(3)
     with col1:
         fluence_min = st.number_input(
@@ -119,6 +164,8 @@ def render() -> None:
             format="%.3e",
             value=float(f"{default_min:.3g}"),
             key=f"rad_fluence_min_{ctx}",
+            help="Proton fluence Φ_p (not neq); the default follows the energy and the "
+            "model.",
         )
     with col2:
         fluence_max = st.number_input(
@@ -126,6 +173,8 @@ def render() -> None:
             format="%.3e",
             value=float(f"{default_max:.3g}"),
             key=f"rad_fluence_max_{ctx}",
+            help="Without charged deep traps keep it below the compensation fluence "
+            "above: points beyond it are refused.",
         )
     with col3:
         n_points = st.number_input(
@@ -135,12 +184,14 @@ def render() -> None:
             step=1,
             value=6,
             key="rad_n_points",
+            help="Log-spaced between the min and max fluence.",
         )
 
     V_bias = st.number_input(
         "Reverse bias V_bias (V)",
         value=-20.0,
         key="rad_v_bias",
+        help="Bias at which the CCE is computed for every fluence (negative = reverse).",
     )
 
     inputs = {
@@ -207,11 +258,18 @@ def render() -> None:
                     + ")"
                     for fl, reason in excluded
                 )
+                + (
+                    ". Enable 'Charged deep traps' to solve beyond the compensation "
+                    "fluence."
+                    if any("compensation" in r for _, r in excluded) and not use_traps
+                    else ""
+                )
             )
         if not valid.any():
             st.error(
                 "No valid fluence point: lower the fluence range below the "
-                "compensation fluence shown above."
+                "compensation fluence shown above"
+                + ("." if use_traps else ", or enable 'Charged deep traps'.")
             )
         st.plotly_chart(build_damage_figure(result))
         st.download_button(

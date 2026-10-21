@@ -14,6 +14,7 @@ import streamlit as st
 
 import etna
 from app.components.page_utils import (
+    about,
     require_config,
     show_error,
     show_result_notes,
@@ -29,6 +30,22 @@ FORWARD_BIAS_ERROR = (
 
 def render() -> None:
     st.title("Charge Collection (CCE)")
+    st.caption(
+        "Charge collection efficiency (collected / generated charge, 0-1) vs reverse "
+        "bias for an Am-241 alpha (5.486 MeV) whose Bragg generation profile starts at "
+        "the p⁺/n⁻ junction and runs into the epi."
+    )
+    about(
+        "- **Model:** steady-state 1D drift-diffusion (SRH recombination) under "
+        "a generation profile following the alpha Bragg curve in SiC (NIST ASTAR Si + C "
+        "by Bragg additivity, CSDA range 18.43 µm); CCE = collected contact current / "
+        "generated current.\n"
+        "- **Predicted, not validated** against a measured CCE(V) curve; the doping it "
+        "uses is fitted to the measured C-V.\n"
+        "- **Dimensionless:** CCE does not depend on the device area.\n"
+        "- **Full depletion:** beyond the dotted line the collected charge saturates.\n"
+        "- **Solver:** batched engine inside its cross-check box, devsim otherwise."
+    )
 
     cfg = require_config()
 
@@ -60,6 +77,7 @@ def render() -> None:
             max_value=400,
             step=1,
             key="cce_n_points",
+            help="Equally spaced in V between V_start and V_stop.",
         )
     st.caption("Reverse bias is negative (e.g. −40 V means 40 V reverse bias).")
 
@@ -102,6 +120,7 @@ def render() -> None:
             mime="text/csv",
         )
         st.caption(
-            "Generated current (NIST ASTAR alpha Bragg profile, 18.43 µm range): "
+            "Generated current density (normalisation of the CCE; NIST ASTAR alpha "
+            "Bragg profile, 18.43 µm range): "
             f"{float(result.metadata.get('I_generated', float('nan'))):.3e} A/cm²"
         )
