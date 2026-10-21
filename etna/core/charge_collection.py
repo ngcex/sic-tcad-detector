@@ -660,8 +660,13 @@ def cce_vs_fluence(
     device_kwargs=None,
     solver="auto",
     radiation_traps=None,
+    niel_table=None,
 ):
     """Compute CCE vs proton fluence at fixed reverse bias.
+
+    ``niel_table`` (opt-in): hardness table of
+    ``etna.core.radiation_damage.hardness_table(particle, convention)`` (e.g. neutrons
+    or the SiC-damage convention); None = the default Si-neq proton table.
 
     Each fluence point is a separate damaged device (damaged lifetimes and donor
     profile applied before the Poisson equilibrium). By default all points are
@@ -750,6 +755,7 @@ def cce_vs_fluence(
         device_kwargs=device_kwargs,
         solver=solver,
         radiation_traps=radiation_traps,
+        niel_table=niel_table,
     )[0]
 
 
@@ -1073,6 +1079,7 @@ def _cce_vs_fluence_multi(
     device_kwargs=None,
     solver="auto",
     radiation_traps=None,
+    niel_table=None,
 ):
     """cce_vs_fluence for several damage-parameter sets on one device and bias.
 
@@ -1122,6 +1129,7 @@ def _cce_vs_fluence_multi(
                     lifetime_model=lifetime_model,
                     T=T_dev,
                     carrier_removal=trap_model is None,
+                    niel_table=niel_table,
                 )
             except Exception as e:
                 logger.warning(f"cce_vs_fluence: failed at fluence={fluence:.2e}: {e}")
@@ -1230,8 +1238,11 @@ def cce_vs_bias_at_fluence(
     lifetime_model="linear",
     damage_params=None,
     device_kwargs=None,
+    niel_table=None,
 ):
     """Compute CCE vs reverse bias voltage at a fixed proton fluence.
+
+    ``niel_table``: as in ``cce_vs_fluence`` (None = default Si-neq proton table).
 
     Creates a single damaged DD device using staged creation, then sweeps
     bias voltage to show how higher reverse bias recovers CCE at a given
@@ -1342,6 +1353,7 @@ def cce_vs_bias_at_fluence(
         energy_MeV=energy_MeV,
         damage_params=damage_params,
         lifetime_model=lifetime_model,
+        niel_table=niel_table,
     )
     reason = full_compensation_reason(damaged)
     if reason:

@@ -27,7 +27,9 @@ import logging
 import numpy as np
 
 from etna.core.niel_tables import (
+    NIEL_NEUTRON_1MEV_SIC_MEV_CM2_G,
     NIEL_NEUTRON_1MEV_SI_MEV_CM2_G,
+    R_N_SIC_SI_FISSION,
     SR_NIEL_PROTON_SI,
     SR_NIEL_PROTON_SIC,
 )
@@ -63,13 +65,14 @@ _M_H_DOS = _sic.m_h_dos  # 1.0 m0
 # (Radmanovac et al., arXiv:2510.11304: 252.7 MeV, k ~ 0.9; SR-NIEL here: 0.855).
 # kappa(62 MeV) = 1.942, kappa(5.6 MeV) = 6.672, kappa(150 MeV) = 1.119.
 #
-# WHAT IS STILL OPEN: the factor that maps a proton fluence onto the SiC damage of the
+# SiC NORMALISATION: the factor that maps a proton fluence onto the SiC damage of the
 # reactor-neutron calibration equals this Si ratio only if the SiC/Si NIEL ratio of the
-# protons (r_p, measured here: 0.94 at 5.6 MeV, 0.85 at 62 MeV, 0.82 at 150 MeV, see
-# niel_ratio_sic_si) equals that of the reactor neutrons (r_n). r_n is NOT available
-# offline (SR-NIEL's NJOY SiC neutron calculator needs a registered login; no open
-# table found) and is not fabricated. If r_n > r_p (lighter C recoils), this kappa
-# OVERSTATES the SiC damage per proton by r_n / r_p. This reopens the v5 C-5 note that
+# protons (r_p: 0.94 at 5.6 MeV, 0.85 at 62 MeV, 0.82 at 150 MeV, niel_ratio_sic_si)
+# equals that of the reactor neutrons (r_n). r_n is computed since 2026-10-21 (NJOY
+# HEATR on ENDF/B-VIII.0, data/niel/README.md): 1.069 for a fission spectrum, range
+# 1.02-1.20 for reactor-like spectra. r_n > r_p, so this default kappa OVERSTATES the
+# SiC damage per proton by r_n / r_p; the opt-in "sic-damage" convention (below,
+# hardness_table) removes it. The default is kept for continuity. This reopens the v5 C-5 note that
 # "SiC-normalised kappa ~0.3-0.5 is plausible": that note assumed SiC-neq rates, while
 # the rate source is Si-neq labelled. The old placeholders were 3.5-5.5x lower.
 # Known systematic: measured Si proton hardness factors are 35-50 % below the NIEL
@@ -91,8 +94,61 @@ computed with the silicon NIEL convention of the introduction-rate source."""
 def niel_ratio_sic_si(energy_MeV: float) -> float:
     """SiC/Si proton NIEL ratio r_p(E) (SR-NIEL, both E_d = 21 eV), log-log
     interpolated; 1-1000 MeV, ValueError outside. The SiC analogue of the default
-    kappa is kappa(E) * r_p(E) / r_n with the (unavailable) reactor-neutron ratio r_n."""
+    kappa is kappa(E) * r_p(E) / r_n with the reactor-neutron ratio r_n
+    (niel_tables.R_N_SIC_SI_FISSION; hardness_table("proton", "sic-damage"))."""
     return _loglog(energy_MeV, NIEL_PROTON_SIC) / _loglog(energy_MeV, NIEL_PROTON_SI)
+
+
+# ---------------------------------------------------------------------------
+# NIEL conventions (opt-in, 2026-10-21): the SiC neutron normalisation, computed with
+# NJOY HEATR on ENDF/B-VIII.0 (data/niel/neutron_*, etna.core.neutron_niel; checks
+# and caveats in data/niel/README.md). r_n = SiC/Si NIEL ratio of a Watt fission
+# spectrum = R_N_SIC_SI_FISSION (1.069). Conventions (all give "neq per particle"):
+#
+# "si-neq" (DEFAULT, unchanged): kappa = NIEL_x,Si(E) / NIEL_n,Si(1 MeV, ASTM 95 MeV mb)
+#     -- the label convention of the introduction-rate source (silicon NIEL).
+# "sic-damage": kappa = NIEL_x,SiC(E) / (r_n * NIEL_n,Si(1 MeV)) -- the Si-labelled
+#     reactor-neq fluence that produces the SAME SiC damage (proton: kappa_Si * r_p/r_n).
+#     Assumes the calibration spectrum is fission-like; see README for the spread.
+# "sic-1mev": kappa = NIEL_x,SiC(E) / NIEL_n,SiC(1 MeV) -- SiC-native 1-MeV-neq, for
+#     introduction rates quoted per SiC 1-MeV-neq (none of the shipped ones are).
+# ---------------------------------------------------------------------------
+NIEL_CONVENTIONS = ("si-neq", "sic-damage", "sic-1mev")
+NIEL_PARTICLES = ("proton", "neutron")
+
+
+def hardness_table(particle: str = "proton", convention: str = "si-neq") -> dict:
+    """Hardness factor table {energy MeV: kappa} for ``particle`` and ``convention``.
+
+    proton: SR-NIEL, 1-1000 MeV. neutron: NJOY HEATR / ENDF/B-VIII.0, lethargy
+    averages (20 bins/decade) tabulated at the bin centres, ~1e-5-18.9 MeV; resonance
+    structure below a few MeV is averaged over each bin. ``("proton", "si-neq")``
+    returns NIEL_HARDNESS_PROTON_SIC itself (the default of every damage function).
+    """
+    if particle not in NIEL_PARTICLES:
+        raise ValueError(f"particle must be one of {NIEL_PARTICLES} (got {particle!r})")
+    if convention not in NIEL_CONVENTIONS:
+        raise ValueError(
+            f"convention must be one of {NIEL_CONVENTIONS} (got {convention!r})"
+        )
+    if particle == "proton":
+        if convention == "si-neq":
+            return NIEL_HARDNESS_PROTON_SIC
+        sic = NIEL_PROTON_SIC
+    else:
+        from etna.core.neutron_niel import neutron_niel_table
+
+        if convention == "si-neq":
+            return {
+                E: v / NIEL_NEUTRON_1MEV_SI_MEV_CM2_G
+                for E, v in neutron_niel_table("si")
+            }
+        sic = dict(neutron_niel_table("sic"))
+    if convention == "sic-damage":
+        denom = R_N_SIC_SI_FISSION * NIEL_NEUTRON_1MEV_SI_MEV_CM2_G
+    else:
+        denom = NIEL_NEUTRON_1MEV_SIC_MEV_CM2_G
+    return {E: v / denom for E, v in sic.items()}
 
 
 def _loglog(energy_MeV: float, table: dict) -> float:
@@ -662,6 +718,7 @@ def compute_damaged_params(
     lifetime_model: str = "linear",
     T: float = 300.0,
     carrier_removal: bool = True,
+    niel_table: dict | None = None,
 ) -> dict:
     """Compute all radiation-degraded device parameters for a given fluence.
 
@@ -690,6 +747,9 @@ def compute_damaged_params(
         True (default): N_D_profile is the donor-removed profile. False: N_D_profile is
         returned unchanged (the opt-in charged-trap model, etna.core.radiation_traps,
         where removal emerges from the trap charge and must not be applied twice).
+    niel_table : dict, optional
+        Hardness table {E: kappa} (``hardness_table(particle, convention)``); None =
+        NIEL_HARDNESS_PROTON_SIC (protons, Si-neq), the unchanged default.
 
     Returns
     -------
@@ -715,8 +775,9 @@ def compute_damaged_params(
     if damage_params is None:
         damage_params = RadiationDamageParams()
 
-    # Convert proton fluence to 1-MeV-neq equivalent
-    kappa = get_hardness_factor(energy_MeV)
+    # Convert the particle fluence to 1-MeV-neq equivalent (niel_table: see
+    # hardness_table; None = the default Si-neq proton table)
+    kappa = get_hardness_factor(energy_MeV, niel_table)
     fluence_neq = fluence * kappa
 
     # Lifetime degradation
@@ -765,6 +826,7 @@ def compute_annealed_params(
     anneal_params: AnnealingParams | None = None,
     lifetime_model: str = "linear",
     T_device: float = 300.0,
+    niel_table: dict | None = None,
 ) -> dict:
     """Compute device parameters after irradiation + thermal annealing.
 
@@ -820,6 +882,7 @@ def compute_annealed_params(
             damage_params,
             lifetime_model,
             T_device,
+            niel_table=niel_table,
         )
 
     if damage_params is None:
@@ -835,6 +898,7 @@ def compute_annealed_params(
         damage_params,
         lifetime_model,
         T_device,
+        niel_table=niel_table,
     )
 
     # Short-circuit: zero fluence means nothing to anneal

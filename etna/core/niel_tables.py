@@ -138,3 +138,26 @@ SR_NIEL_PROTON_SIC = (
     (950.0, 0.0011092),
     (1000.0, 0.0010927),
 )
+
+
+# ---------------------------------------------------------------------------
+# Neutron NIEL (issue: SiC neutron 1-MeV normalisation), NJOY2016.78 HEATR on
+# ENDF/B-VIII.0, Lindhard/Robinson partition, E_d 21 eV (Si) / 21 eV (C); computed by
+# scripts/build_neutron_niel.py, stored in data/niel/neutron_*.csv(.gz).
+# tests/test_neutron_niel.py recomputes every constant below from those files.
+# Checks (data/niel/README.md): Si pointwise 1 MeV = 0.998 x the ASTM E722 95 MeV mb;
+# Si Watt-fission average within 0.7 % of the Griffin (SAND92-0094) damage function;
+# an independent Python elastic integration reproduces HEATR to 1e-4; E_d 35/21 eV
+# changes nothing at the 5th digit; ENDF/B-VII.1 changes r_n by -0.16 %.
+#
+# Spectrum average: Watt fission spectrum (a 0.988 MeV, b 2.249 /MeV), 1 keV-20 MeV.
+
+# Si, pointwise at 1.000 MeV (cf. ASTM 95 MeV mb = NIEL_NEUTRON_1MEV_SI_MEV_CM2_G)
+NIEL_NEUTRON_1MEV_SI_NJOY_MEV_CM2_G = 2.03224e-3
+# 4H-SiC (1:1, natural abundance), pointwise at 1.000 MeV
+NIEL_NEUTRON_1MEV_SIC_MEV_CM2_G = 2.29889e-3
+# Watt-fission-spectrum averages
+NIEL_NEUTRON_FISSION_SI_MEV_CM2_G = 2.18058e-3
+NIEL_NEUTRON_FISSION_SIC_MEV_CM2_G = 2.33030e-3
+# SiC/Si neutron NIEL ratio of the fission spectrum (the "r_n" of data/niel/README.md)
+R_N_SIC_SI_FISSION = NIEL_NEUTRON_FISSION_SIC_MEV_CM2_G / NIEL_NEUTRON_FISSION_SI_MEV_CM2_G

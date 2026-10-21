@@ -1562,8 +1562,18 @@ def run_radiation_damage(
     fluences: "np.ndarray | None" = None,
     V_bias: float = -40.0,
     proton_energy_MeV: float = 5.6,
+    *,
+    particle: str = "proton",
+    niel_convention: str = "si-neq",
 ) -> SimResult:
     """Run a CCE-vs-proton-fluence damage sweep and return a SimResult.
+
+    Opt-in NIEL options (2026-10-21; defaults reproduce the previous behaviour):
+    ``particle="neutron"`` treats ``fluences`` as neutron fluences and
+    ``proton_energy_MeV`` as the neutron energy (NJOY/ENDF-B-VIII.0 table, ~1e-5 to
+    18.9 MeV); ``niel_convention`` = "si-neq" (default), "sic-damage" or "sic-1mev"
+    selects the hardness convention (``etna.core.radiation_damage.hardness_table``,
+    data/niel/README.md). Metadata records "particle", "niel_convention" and "kappa".
 
     Bucket-a config->kwargs adapter over
     `etna.core.charge_collection.cce_vs_fluence`, which builds AND deletes
@@ -1620,17 +1630,21 @@ def run_radiation_damage(
     -------
     The NIEL kappa hardness factors in `etna.core.radiation_damage` are SR-NIEL
     proton NIEL data (data/niel/) in the Si-normalised 1-MeV-neq convention of the
-    introduction-rate source (Burin et al.). The SiC/Si NIEL ratio of the reactor
-    neutrons behind that calibration is NOT available, so the SiC-specific
-    normalisation is unvalidated (kappa may overstate the SiC damage per proton by
-    r_n / r_p); the defect introduction rates themselves are literature values with
-    a wide spread. Absolute critical-fluence (Phi_crit) numbers are therefore not
+    introduction-rate source (Burin et al.). The SiC/Si NIEL ratio of fission
+    neutrons is computed (NJOY HEATR, ENDF/B-VIII.0: r_n = 1.069), so the default
+    kappa overstates the SiC damage per proton by r_n / r_p (+25 % at 62 MeV);
+    ``niel_convention="sic-damage"`` removes that factor. The defect introduction
+    rates themselves are literature values with a wide spread. Absolute critical-fluence (Phi_crit) numbers are therefore not
     validated radiation-hardness predictions.
     """
     _require_1d(config, "run_radiation_damage")
 
+    from etna.core.radiation_damage import get_hardness_factor, hardness_table
+
+    niel = dict(particle=particle, niel_convention=niel_convention)
+    table = hardness_table(particle, niel_convention)
     if fluences is None:
-        fluences = default_fluence_grid(config, proton_energy_MeV)
+        fluences = default_fluence_grid(config, proton_energy_MeV, **niel)
 
     # Bucket-a: cce_vs_fluence builds AND deletes its own device per fluence.
     # Forward config doping/geometry (D-01) so this facade is self-consistent
@@ -1644,6 +1658,7 @@ def run_radiation_damage(
         epi_thickness_cm=kw.pop("epi_thickness_cm"),
         energy_MeV=proton_energy_MeV,
         device_kwargs=kw,
+        niel_table=table,
         **extra,
     )
 
@@ -1672,7 +1687,12 @@ def run_radiation_damage(
                 else np.asarray(valid, dtype=bool)
             ),
             "reason": list(reason) if reason is not None else [""] * n,
-            "compensation_fluence": compensation_fluence(config, proton_energy_MeV),
+            "compensation_fluence": compensation_fluence(
+                config, proton_energy_MeV, **niel
+            ),
+            "particle": particle,
+            "niel_convention": niel_convention,
+            "kappa": get_hardness_factor(proton_energy_MeV, table),
             # damage model: "carrier_removal" (legacy scalar) or "charged_traps"
             "damage_model": "carrier_removal" if traps is None else "charged_traps",
             **(
@@ -1680,7 +1700,7 @@ def run_radiation_damage(
                 if traps is None
                 else {
                     "trap_compensation_fluence": trap_compensation_fluence(
-                        config, proton_energy_MeV
+                        config, proton_energy_MeV, **niel
                     )
                 }
             ),
@@ -1697,7 +1717,11 @@ TRAP_FLUENCE_GRID_POINTS = 10
 
 
 def default_fluence_grid(
-    config: DeviceConfig, proton_energy_MeV: float = 5.6
+    config: DeviceConfig,
+    proton_energy_MeV: float = 5.6,
+    *,
+    particle: str = "proton",
+    niel_convention: str = "si-neq",
 ) -> np.ndarray:
     """Default fluence grid of ``run_radiation_damage`` for this device (p/cm^2).
 
@@ -1709,16 +1733,15 @@ def default_fluence_grid(
     Streamlit page proposes a narrower range (0.7e-3x .. 0.7x, every point solvable)
     on purpose: there the user edits the range.
     """
-    phi_c = compensation_fluence(config, proton_energy_MeV)
+    niel = dict(particle=particle, niel_convention=niel_convention)
+    phi_c = compensation_fluence(config, proton_energy_MeV, **niel)
     lo, hi = DEFAULT_FLUENCE_GRID_SPAN
     if resolve_traps(config.radiation_traps) is not None:
         # charged-trap model: every point is solvable; reach the measured
         # semi-insulating decade (1e16 neq, Gsponer arXiv:2310.02047)
-        from etna.core.radiation_damage import get_hardness_factor
-
         top = max(
             hi * phi_c,
-            TRAP_FLUENCE_GRID_TOP_NEQ / get_hardness_factor(proton_energy_MeV),
+            TRAP_FLUENCE_GRID_TOP_NEQ / _kappa(proton_energy_MeV, **niel),
         )
         return np.geomspace(lo * phi_c, top, TRAP_FLUENCE_GRID_POINTS)
     return np.geomspace(lo * phi_c, hi * phi_c, DEFAULT_FLUENCE_GRID_POINTS)
@@ -1732,23 +1755,42 @@ def _min_epi_donors(config: DeviceConfig) -> float:
     return min(config.N_D_junction, config.N_D_bulk)
 
 
-def trap_compensation_fluence(config: DeviceConfig, proton_energy_MeV: float) -> float:
+def _kappa(energy_MeV: float, particle: str = "proton", niel_convention: str = "si-neq"):
+    """Hardness factor (neq per particle) of the chosen particle / NIEL convention."""
+    from etna.core.radiation_damage import get_hardness_factor, hardness_table
+
+    return get_hardness_factor(energy_MeV, hardness_table(particle, niel_convention))
+
+
+def trap_compensation_fluence(
+    config: DeviceConfig,
+    proton_energy_MeV: float,
+    *,
+    particle: str = "proton",
+    niel_convention: str = "si-neq",
+) -> float:
     """Proton fluence (p/cm^2) at which the charged-trap model (``radiation_traps``)
     compensates the lowest-doped epi: min N_D / (neutral_removal_rate * kappa(E)), the
     emergent removal of the acceptor levels (7.4 /neq for the default traps, vs 5 of the
     legacy scalar: 2.35e12 p/cm^2 at 62 MeV on the default stack, vs 3.48e12). Beyond
     it the bulk is semi-insulating; the model still solves it."""
-    from etna.core.radiation_damage import get_hardness_factor
     from etna.core.radiation_traps import DEFAULT_TRAP_MODEL
 
     model = resolve_traps(config.radiation_traps) or DEFAULT_TRAP_MODEL
     rate = model.neutral_removal_rate
     if rate <= 0:  # no acceptor-like level: never compensated
         return float("inf")
-    return float(_min_epi_donors(config) / (rate * get_hardness_factor(proton_energy_MeV)))
+    kappa = _kappa(proton_energy_MeV, particle, niel_convention)
+    return float(_min_epi_donors(config) / (rate * kappa))
 
 
-def compensation_fluence(config: DeviceConfig, proton_energy_MeV: float) -> float:
+def compensation_fluence(
+    config: DeviceConfig,
+    proton_energy_MeV: float,
+    *,
+    particle: str = "proton",
+    niel_convention: str = "si-neq",
+) -> float:
     """Proton fluence (p/cm^2) at which carrier removal fully compensates the epi.
 
     Full compensation is eta_removal * kappa(E) * Phi >= min N_D over the epi
@@ -1758,7 +1800,7 @@ def compensation_fluence(config: DeviceConfig, proton_energy_MeV: float) -> floa
     value is a slightly conservative lower bound on the mesh-level threshold.
     At or beyond it run_radiation_damage returns NaN with a reason.
     """
-    from etna.core.radiation_damage import RadiationDamageParams, get_hardness_factor
+    from etna.core.radiation_damage import RadiationDamageParams
 
     if config.donor_table is not None:
         nd_min = min(n for _, n in config.donor_table)
@@ -1767,7 +1809,7 @@ def compensation_fluence(config: DeviceConfig, proton_energy_MeV: float) -> floa
     else:
         nd_min = min(config.N_D_junction, config.N_D_bulk)
     eta = RadiationDamageParams().eta_removal
-    return float(nd_min / (eta * get_hardness_factor(proton_energy_MeV)))
+    return float(nd_min / (eta * _kappa(proton_energy_MeV, particle, niel_convention)))
 
 
 @serialized

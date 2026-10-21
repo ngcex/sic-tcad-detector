@@ -77,8 +77,9 @@ NOTES = {
         "physics not modelled."
     ),
     "damage": (
-        "kappa (NIEL hardness): SR-NIEL proton NIEL, Si 1-MeV-neq convention; "
-        "SiC neutron normalisation still open, absolute SiC fluence scale unvalidated."
+        "kappa (NIEL hardness): SR-NIEL proton NIEL, Si 1-MeV-neq convention by "
+        "default (overstates SiC damage by r_n/r_p, r_n = 1.069 from NJOY); "
+        "absolute SiC fluence scale unvalidated."
     ),
     "temperature": "CCE vs T: model trend, not validated against a T measurement.",
     "cce_let": (
