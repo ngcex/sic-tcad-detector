@@ -137,17 +137,25 @@ cv = simulate_cv(sA, VR, 1e6, rate_V_per_s=1.0, dV_max=5.0)
 print(
     f"  {'ALTERNATIVE table: EH6/7 acceptor, kinetic':42s}: g = {slope(FR, neff_window(VR, cv.C_ac)):5.2f} /p"
 )
-for grp in (("all",), ("EH4",)):
-    gs = []
-    for sc in (1.0, 2.0):
-        m = scaled_model(DEFAULT_TRAP_MODEL, grp, [sc])
-        so = KineticTrapSolver.from_config(cfgR, FR[:3], energy_MeV=252.7, trap_model=m)
-        cv = simulate_cv(so, VR, 1e6, rate_V_per_s=1.0, dV_max=5.0)
-        gs.append(slope(FR[:3], neff_window(VR, cv.C_ac)))
-    # g is linear in the scale below compensation: solve g(s) = 5.60 +- 0.81
-    a = (gs[1] - gs[0]) / 1.0
-    s_fit = 1.0 + (5.60 - gs[0]) / a
-    s_sig = 0.81 / abs(a)
+G_MEAS, G_SIG = 5.60, 0.81
+
+
+def g_scaled(grp, sc, cfg=cfgR):
+    m = scaled_model(DEFAULT_TRAP_MODEL, grp, [sc])
+    so = KineticTrapSolver.from_config(cfg, FR[:3], energy_MeV=252.7, trap_model=m)
+    cv = simulate_cv(so, VR, 1e6, rate_V_per_s=1.0, dV_max=5.0)
+    return slope(FR[:3], neff_window(VR, cv.C_ac))
+
+
+g1 = g_scaled(("all",), 1.0)  # unscaled, on the 3-fluence subset (linear regime)
+sens = {}
+for grp in (("all",), ("EH4",), ("Z1/2",)):
+    g2 = g_scaled(grp, 2.0)
+    sens[grp[0]] = g2 - g1  # dg / ds (g is linear in s below compensation)
+    if grp[0] == "Z1/2":
+        continue
+    s_fit = 1.0 + (G_MEAS - g1) / sens[grp[0]]
+    s_sig = G_SIG / abs(sens[grp[0]])
     nrem = sum(
         t.eta
         for t in scaled_model(DEFAULT_TRAP_MODEL, grp, [s_fit]).traps
@@ -158,19 +166,32 @@ for grp in (("all",), ("EH4",)):
         f"  -> PREDICTED neutral-bulk removal {nrem * kappa:.1f} /p, compensation of 4e13 at"
         f" {4e13 / (nrem * kappa):.2e} p/cm2 (N0/g_measured = {4e13 / 5.6:.2e})"
     )
-
-# two-number reading (Z1/2, EH4 scales) of the same data: EH4 from g (Z1/2 empties in
-# a depleted region, so g does not see it), Z1/2 from the compensation fluence N0 / g
-# ASSUMING the measured linear N_eff(Phi) extrapolates to compensation (as for CNM W4:
-# 8.8e13 p/cm2 ~ N0 / g in Radmanovac et al.)
-s4, s4s = s_fit, s_sig  # last loop iteration: the 'EH4' group
-eta_tot = 5.60 / kappa  # neutral removal per neq implied by g
-sZ = (eta_tot - 2.4 * s4) / 5.0
-sZs = np.hypot(0.81 / kappa, 2.4 * s4s) / 5.0
 print(
-    f"  2-number reading: s_EH4 = {s4:.2f} +- {s4s:.2f}, s_Z1/2 = {sZ:.2f} +- {sZs:.2f}"
-    " (Z1/2 consistent with NO removal role at RT; an assumption-laden reading, not a fit)"
+    f"  sensitivities dg/ds (/p per unit scale, 3-fluence subset, g(1) = {g1:.2f}): "
+    + ", ".join(f"{k} {v:.2f}" for k, v in sens.items())
 )
+# two-number reading (Z1/2, EH4 scales) of the same measured g: (i) the C-V slope,
+# linear in both scales, g = g1 + a4 (s4 - 1) + aZ (sZ - 1); (ii) the compensation
+# fluence N0 / g, i.e. neutral removal kappa (5 sZ + 2.4 s4) = g, ASSUMING the measured
+# linear N_eff(Phi) extrapolates to compensation (as CNM W4: 8.8e13 p/cm2 ~ N0 / g in
+# Radmanovac et al.). Both rows use the same g: sigma by dg propagation (correlated).
+a4, aZ = sens["EH4"], sens["Z1/2"]
+M = np.array([[a4, aZ], [2.4 * kappa, 5.0 * kappa]])
+rhs = np.array([G_MEAS - g1 + a4 + aZ, G_MEAS])
+s4, sZ = np.linalg.solve(M, rhs)
+ds = np.linalg.solve(M, np.array([1.0, 1.0])) * G_SIG
+print(
+    f"  2-number reading: s_EH4 = {s4:.2f} +- {abs(ds[0]):.2f}, s_Z1/2 = {sZ:.2f} +- "
+    f"{abs(ds[1]):.2f} (assumption-laden, not a fit)"
+)
+print(
+    "\n== 3b. PREDICTED temperature dependence of the kinetic C-V removal (same device)"
+)
+for T in (300.0, 325.0, 350.0):
+    cT = DeviceConfig(epi_thickness_um=50.0, doping_profile="uniform", N_D=4e13, T=T)
+    print(
+        f"  T {T:5.1f} K: g = {g_scaled(('all',), 1.0, cT):.2f} /p (EH4 emission speeds up)"
+    )
 print(f"[{time.time() - T0:.1f} s]")
 # ----------------------------------------------------------------------- 4. history
 print(

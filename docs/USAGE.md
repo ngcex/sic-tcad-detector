@@ -663,11 +663,22 @@ cv.C_ac, cv.C_qs, neff_from_cv(V_points, cv.C_ac)   # F/cm2 (area 1), cm^-3
   - CALIBRATED to that single g, the global rate scale is 2.06 +- 0.28. That predicts
     compensation at 3.1e12 p/cm2, against N0/g = 7.1e12.
   - Scaling EH4 alone gives 2.50 +- 0.39.
-  - The data are consistent with a slow acceptor at about 6 /neq, with Z1/2 playing no
-    removal role at room temperature (s_Z1/2 = 0.1 +- 0.3). This rests on an assumption,
-    not a fit. It is in line with Li et al. and Zhao et al., who report that Z1/2
-    barely contributes.
+  - The g sensitivities per unit scale (3-fluence subset, g = 2.51 there) are
+    EH4 2.06, Z1/2 0.69 and all 2.92: Z1/2 near the depletion edge still adds to g.
+  - A two-number reading solves the C-V slope and the compensation fluence N0/g
+    together. It assumes the measured linear N_eff(Phi) extrapolates to compensation, as
+    it does for CNM W4. Result: s_EH4 = 2.86 +- 0.39 and s_Z1/2 = -0.06, which is about
+    zero.
+    - The sigma of s_Z1/2 from g alone vanishes, because both rows scale with g. Its
+      real uncertainty is set by that assumption.
+    - So the data are consistent with a slow acceptor at about 7 /neq carrying the
+      removal, and Z1/2 carrying none at room temperature.
+    - This is an assumption-laden reading, not a fit. Li et al. (arXiv:2503.09016)
+      likewise report that Z1/2 does "not appear to significantly contribute".
   - The open question is in issue #5.
+- **Temperature (PREDICTED, testable).** The kinetic g falls from 2.51 /p at 300 K to
+  1.95 /p at 325 K and 0.77 /p at 350 K: EH4 emission speeds up with T. No measurement
+  of this was found.
 - **History.** After 1 h at -150 V, a down-sweep shows N_eff within 1 % of the
   up-sweep. Edge traps re-capture in microseconds, so no significant C-V hysteresis is
   predicted. No opened source reports any.
@@ -679,9 +690,11 @@ cv.C_ac, cv.C_qs, neff_from_cv(V_points, cv.C_ac)   # F/cm2 (area 1), cm^-3
 - **Loss of rectification (ohmic bound).** At 1 kV forward the bound is
   I_fwd <= 1.5e-11 A at 1e15 neq and 1.4e-12 A at 1e16. Measured: < 1 nA, and equal to
   the reverse floor (< 10 pA). Qualitative only; double injection is not modelled.
-- **Leakage.** Bulk trap generation is 1e-25 to 1e-21 A, far below the ~1e-11 A floor
-  of every measurement opened. It is not testable, and it is consistent with the
-  measured "no increase".
+- **Leakage.** Bulk trap generation rises with fluence but stays at 1e-25 to 1e-21 A,
+  far below the ~1e-11 A floor of every measurement opened, so it cannot be tested. The
+  measurements show reverse leakage unchanged (Radmanovac et al.) or falling with
+  fluence (Kroll et al., Li et al.). This module does not address that: the dominant
+  measured leakage mechanism is not in it.
 
 **Calibration** (`etna.core.trap_calibration.calibrate_cv`). It fits only multiplicative
 scales on the unmeasured introduction rates, globally (`"all"`) or per trap name, to
@@ -696,7 +709,10 @@ measured C-V curves.
     frequency.
 - The device itself (geometry, pristine N_D) is input from pristine C-V or SIMS and is
   not fitted. The initial occupancy and the history are stated inputs.
-- Tested by recovering a SYNTHETIC truth within 3 sigma through the CSV loader.
+- Tested by recovering a SYNTHETIC truth through the CSV loader: 1.7025 +- 0.0037 for
+  1.7, within 1 sigma; the test bound is 3 sigma. The same model, mesh and protocol
+  generate and fit those data, so this validates the plumbing and the covariance, not
+  whether the model is adequate.
 - No measured irradiated C-V curve ships with the repository, so no calibrated 62 MeV
   number exists yet. The INFN-LNS C-V vs fluence data
   (`.planning/CARRIER_REMOVAL_REVIEW.md` §6) would provide it.

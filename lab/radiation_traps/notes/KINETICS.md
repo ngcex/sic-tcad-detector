@@ -40,7 +40,11 @@ Measured g = 5.60 +- 0.81 /p (arXiv:2510.11304, onsemi).
 - **CALIBRATED to that single g:**
   - Scale "all": 2.06 +- 0.28. That predicts compensation at 3.09e12 p/cm^2, against N0/g = 7.14e12.
   - Scale "EH4": 2.50 +- 0.39. That predicts compensation at 4.27e12.
-- **Two-number reading.** EH4 is set from g, and Z1/2 from the compensation fluence, assuming the linear N_eff(Phi) extrapolates (as for CNM W4). Result: s_EH4 = 2.50 +- 0.39, s_Z1/2 = 0.11 +- 0.27.
+- **Sensitivities dg/ds** (3-fluence subset, where g(1) = 2.51): EH4 2.06, Z1/2 0.69, all 2.92.
+- **Two-number reading** (2x2 linear solve). It uses the C-V slope and the compensation fluence N0/g, assuming the linear N_eff(Phi) extrapolates as for CNM W4.
+  - Result: s_EH4 = 2.86 +- 0.39, s_Z1/2 = -0.06.
+  - The sigma from g alone vanishes, because both rows scale with g. The real uncertainty is the assumption.
+- **Temperature (kinetic g):** 2.51 /p at 300 K, 1.95 at 325 K, 0.77 at 350 K.
 
 ## 4. History (2e12 p/cm^2, same device)
 

@@ -141,6 +141,16 @@ def test_kinetic_neff_falls_steady_state_does_not(uni):
     assert 1.5 < g < 4.0
     g_ss = (ns[0] - ns[2]) / 6e12
     assert g_ss < 0.4 * g  # steady state: little or no removal (wrong-sign trend)
+    # hotter: EH4 (Ec-1.03) empties during the sweep, the kinetic removal shrinks
+    hot = KineticTrapSolver.from_config(
+        DeviceConfig(
+            epi_thickness_um=20.0, doping_profile="uniform", N_D=1e14, T=350.0
+        ),
+        [0.0, 6e12],
+        energy_MeV=None,
+    )
+    nh = np.median(neff_from_cv(V, simulate_cv(hot, V, 1e5).C_ac)[:, sel], axis=1)
+    assert (nh[0] - nh[1]) / 6e12 < 0.7 * g
 
 
 def test_illumination_refills_acceptors(uni):
