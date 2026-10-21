@@ -921,11 +921,19 @@ def _trap_dark_states(ref, fluences_neq, V_bias, trap_model):
     from etna.core.batched.sweeps import _Ramp
     from etna.core.radiation_traps import neutral_state, trap_fields
 
+    if trap_model.occupancy == "kinetic" or trap_model.multilevel:
+        return _trap_dark_states_kinetic(ref, fluences_neq, V_bias, trap_model)
     info, x = ref["info"], ref["x"]
     fluences_neq = np.asarray(fluences_neq, dtype=float)
     B, N = fluences_neq.size, x.size
     donors = np.zeros((B, N))
     donors[:, ref["epi_mask"]] = ref["pristine_N_D_profile"]
+    if trap_model.donor_removal > 0:  # direct donor deactivation (opt-in)
+        donors[:, ref["epi_mask"]] = np.maximum(
+            donors[:, ref["epi_mask"]]
+            - trap_model.donor_removal * fluences_neq[:, None],
+            0.0,
+        )
     acceptors = np.broadcast_to(ref["acceptors"], (B, N))
     n_i = float(info["n_i"])
     fields = [
@@ -950,6 +958,55 @@ def _trap_dark_states(ref, fluences_neq, V_bias, trap_model):
         donors=donors,
         acceptors=acceptors,
         converged=converged,
+        fluences_neq=fluences_neq,
+    )
+
+
+def _trap_dark_states_kinetic(ref, fluences_neq, V_bias, trap_model):
+    """``_trap_dark_states`` with the KINETIC occupancy (``trap_model.occupancy ==
+    "kinetic"`` or two-level traps; etna.core.trap_kinetics): the ``initial`` state at
+    0 V, a ramp to ``V_bias`` at ``ramp_V_per_s``, a hold of ``hold_s`` s. With
+    ``occupancy="steady"`` and two-level traps: the kinetic solver's steady limit.
+    Same return dict (``res`` carries psi, n, p of the final state)."""
+    from types import SimpleNamespace
+
+    from etna.core.trap_kinetics import KineticTrapSolver, Segment, hold
+
+    s = KineticTrapSolver(ref, fluences_neq, trap_model)
+    V = float(V_bias)
+    if V > 0:
+        raise ValueError("kinetic trap dark state: reverse bias (V <= 0) only")
+    if trap_model.occupancy == "steady":
+        st = s.steady_state(V)
+    else:
+        st = s.initial_state(trap_model.initial)
+        prot = []
+        if V < 0:
+            prot.append(
+                Segment(abs(V) / trap_model.ramp_V_per_s, V, V_start=0.0, record=0)
+            )
+        if trap_model.hold_s > 0:
+            prot.append(hold(trap_model.hold_s, V, record=0))
+        if prot:
+            try:
+                st = s.run(st, prot, tol=1e-3, dV_max=_TRAP_ENGINE_STEP_V).final
+            except RuntimeError:  # a failed implicit step: every point NaN + reason
+                ok = np.zeros(s.B, bool)
+                res = SimpleNamespace(psi=st.psi, n=st.n, p=st.p, converged=ok)
+                return dict(pb=s.pb, res=res, rho_trap=st.rho_trap, donors=s.donors,
+                            acceptors=s.acceptors, converged=ok, state=st,
+                            fluences_neq=s.fluences_neq)  # fmt: skip
+    ok = np.ones(s.B, bool)
+    res = SimpleNamespace(psi=st.psi, n=st.n, p=st.p, converged=ok)
+    return dict(
+        pb=s.pb,
+        res=res,
+        rho_trap=st.rho_trap,
+        donors=s.donors,
+        acceptors=s.acceptors,
+        converged=ok,
+        state=st,
+        fluences_neq=s.fluences_neq,
     )
 
 
@@ -959,6 +1016,26 @@ _TRAP_ENGINE_STEP_V = 5.0
 # Gummel cap with traps: a semi-insulating epi at low field converges slowly (258
 # iterations at -1 V, 4e14 p/cm^2) to the same fixed point; one iteration is ~50 us.
 _TRAP_ENGINE_GUMMEL_MAX_ITER = 3000
+
+
+def _occupancy_taus(ref, dark, trap_model):
+    """(tau_n, tau_p) (B,) of the dark trap states with occupancy-weighted capture
+    (``RadiationTrapModel.lifetimes == "occupancy"``; radiation_traps.occupancy_lifetimes)
+    and the pristine SRH lifetimes at the device T."""
+    from etna.core.radiation_traps import occupancy, occupancy_lifetimes, trap_fields
+
+    T = float(ref["info"]["T"])
+    n_i = float(ref["info"]["n_i"])
+    t0n, t0p = srh_lifetime(T, "electron"), srh_lifetime(T, "hole")
+    st = dark.get("state")
+    out_n, out_p = [], []
+    for b, F in enumerate(dark["fluences_neq"]):
+        fl = trap_fields(trap_model, F, ref["epi_mask"], T, n_i)
+        f = st.f[b] if st is not None else occupancy(fl, dark["res"].n[b], dark["res"].p[b])
+        tn, tp = occupancy_lifetimes(trap_model, fl, f, ref["epi_mask"], T, t0n, t0p)
+        out_n.append(tn)
+        out_p.append(tp)
+    return np.array(out_n), np.array(out_p)
 
 
 def _cce_fluence_engine_traps(
@@ -985,13 +1062,11 @@ def _cce_fluence_engine_traps(
     mu_n, mu_p = edge_mobilities(
         donors, acceptors, info["N_A"], info["T"], mobility=info["params"].mobility
     )
-    cb = ContinuityBatch(
-        frozen,
-        mu_n,
-        mu_p,
-        np.array([d["tau_n"] for d in damaged_list], dtype=float),
-        np.array([d["tau_p"] for d in damaged_list], dtype=float),
-    )
+    tau_n = np.array([d["tau_n"] for d in damaged_list], dtype=float)
+    tau_p = np.array([d["tau_p"] for d in damaged_list], dtype=float)
+    if trap_model.lifetimes == "occupancy":
+        tau_n, tau_p = _occupancy_taus(ref, dark, trap_model)
+    cb = ContinuityBatch(frozen, mu_n, mu_p, tau_n, tau_p)
     G = _alpha_generation_values(info, x, alpha_range_cm, generation_rate)
     tr = cb.solve(
         dark["res"].psi,

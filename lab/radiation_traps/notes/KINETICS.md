@@ -41,6 +41,7 @@ Measured g = 5.60 +- 0.81 /p (arXiv:2510.11304, onsemi).
   - Scale "all": 2.06 +- 0.28. That predicts compensation at 3.09e12 p/cm^2, against N0/g = 7.14e12.
   - Scale "EH4": 2.50 +- 0.39. That predicts compensation at 4.27e12.
 - **Sensitivities dg/ds** (3-fluence subset, where g(1) = 2.51): EH4 2.06, Z1/2 0.69, all 2.92.
+- **Superseded (2026-10-21 follow-up, see MECHANISMS.md):** with onsemi's own flat-C-V bracket the Z1/2 scale is 0.8 +- 0.65 and the slow component is EH4 + a calibrated permanent removal (~5.3 /neq); the reading below assumed an extrapolated compensation fluence.
 - **Two-number reading** (2x2 linear solve). It uses the C-V slope and the compensation fluence N0/g, assuming the linear N_eff(Phi) extrapolates as for CNM W4.
   - Result: s_EH4 = 2.86 +- 0.39, s_Z1/2 = -0.06.
   - The sigma from g alone vanishes, because both rows scale with g. The real uncertainty is the assumption.

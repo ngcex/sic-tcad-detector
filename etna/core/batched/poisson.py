@@ -684,6 +684,11 @@ class PoissonBatch:
         iters = np.zeros(B, dtype=np.int64)
         conv = np.zeros(B, dtype=np.bool_)
         if self.traps is not None:
+            if any(f.multilevel for f in self.trap_fields):
+                raise NotImplementedError(
+                    "PoissonBatch: two-level traps are solved by etna.core.trap_kinetics "
+                    "(KineticTrapSolver.steady_state is the steady limit)"
+                )
             # the trap charge is a steep sigmoid of u (N_t switches over a few V_t when
             # the Fermi level crosses a level): smaller Newton steps, more of them
             _newton_batch_tr(

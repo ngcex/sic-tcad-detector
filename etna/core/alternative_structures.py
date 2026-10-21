@@ -59,6 +59,12 @@ from etna.core.sic_material import (
     srh_lifetime,
 )
 from etna.core.incomplete_ionization import ionized_acceptor_concentration
+from etna.core.contact_mesh import (
+    DEPTH_MESH_DEFAULT,
+    contact_lines,
+    resolve_depth_mesh,
+)
+from etna.core.contact_mesh import junction_ps as mesh_junction_ps
 from etna.core.device2d import (
     set_doping_profile_2d,
     set_graded_doping_2d,
@@ -104,6 +110,12 @@ logger = logging.getLogger(__name__)
 # values below, every ramp point on the strict tier for epi spacings up to 4e-5; at
 # 5e-5 the hole-equation update stalls at ~1e-7 relative on EVERY point (accepted on
 # the aggressive tier, CCE 0.9987196), and (2e-6, 1e-4) fails the DD equilibrium.
+# Since 2026-10-21 these are the LEGACY depth mesh (depth_mesh="legacy"). The default
+# depth_mesh="graded" (etna.core.contact_mesh) keeps the epi spacing but uses a 1 nm
+# junction line and grades the cathode (an ohmic contact on the n- epi) down to a
+# 0.1 nm contact cell: the 100 nm cathode cell overestimated the centre CCE by 6.2e-3
+# at 10 V and 7.9e-4 at 50 V (that "0.9987201" above carries it too);
+# lab/mesh_contact/notes/LOG.md.
 ALT_JUNCTION_PS = 1e-6
 ALT_EPI_PS = 4e-5
 # Lateral (x) spacing at an abrupt implant edge. devsim grades ~8 %/line away from a
@@ -389,11 +401,18 @@ def _add_depth_mesh_lines(
     junction_pos,
     total_depth,
     air_buffer,
-    junction_ps=ALT_JUNCTION_PS,
+    junction_ps=None,
     epi_ps=ALT_EPI_PS,
+    depth_mesh=DEPTH_MESH_DEFAULT,
 ):
     """Add the depth (y) mesh lines of one p+/n- layer (device2d.py pattern, coarser
-    defaults: see ALT_JUNCTION_PS / ALT_EPI_PS)."""
+    defaults: see ALT_JUNCTION_PS / ALT_EPI_PS). ``depth_mesh`` grades the lines
+    toward the cathode at ``total_depth`` (an ohmic contact on the n- epi):
+    ``etna.core.contact_mesh``; "legacy" = the single 100 nm cell before 2026-10-21.
+    ``junction_ps`` None = the junction spacing of ``depth_mesh`` (1 nm graded, 10 nm
+    legacy = ALT_JUNCTION_PS)."""
+    if junction_ps is None:
+        junction_ps = mesh_junction_ps(depth_mesh)
     # Top air buffer
     devsim.add_2d_mesh_line(mesh=mesh_name, dir="y", pos=-air_buffer, ps=air_buffer)
 
@@ -420,8 +439,10 @@ def _add_depth_mesh_lines(
     if epi_mid2 < total_depth - 1e-6:
         devsim.add_2d_mesh_line(mesh=mesh_name, dir="y", pos=epi_mid2, ps=epi_ps)
 
-    # Cathode surface
-    devsim.add_2d_mesh_line(mesh=mesh_name, dir="y", pos=total_depth, ps=1e-5)
+    # Cathode surface (+ the graded lines above it)
+    _add_cathode_lines(
+        mesh_name, total_depth, depth_mesh, 0.5 * (total_depth - junction_pos)
+    )
 
     # Bottom air buffer
     devsim.add_2d_mesh_line(
@@ -430,6 +451,12 @@ def _add_depth_mesh_lines(
         pos=total_depth + air_buffer,
         ps=air_buffer,
     )
+
+
+def _add_cathode_lines(mesh_name, y_cathode, depth_mesh, max_depth_cm):
+    """The cathode line at ``y_cathode`` and its graded lines above it (contact_mesh)."""
+    for pos, ps in contact_lines(y_cathode, -1, depth_mesh, max_depth_cm):
+        devsim.add_2d_mesh_line(mesh=mesh_name, dir="y", pos=pos, ps=ps)
 
 
 # ---------------------------------------------------------------------------
@@ -451,6 +478,7 @@ def create_mesa_device(
     N_D_junction=None,
     N_D_bulk=None,
     L_transition=None,
+    depth_mesh=DEPTH_MESH_DEFAULT,
 ):
     """Create a mesa-etched SiC microdosimeter (half-device with symmetry).
 
@@ -515,7 +543,9 @@ def create_mesa_device(
     devsim.add_2d_mesh_line(mesh=mesh_name, dir="x", pos=total_width, ps=2e-4)
 
     # -- Depth (y) mesh lines --
-    _add_depth_mesh_lines(mesh_name, junction_pos, total_depth, air_buffer)
+    _add_depth_mesh_lines(
+        mesh_name, junction_pos, total_depth, air_buffer, depth_mesh=depth_mesh
+    )
 
     # Add mesh line at trench bottom if it doesn't coincide with existing lines. The
     # trench and sub_trench regions are inert, so this is only a region boundary: a
@@ -709,6 +739,7 @@ def create_mesa_device(
         f"pillar_hw={pillar_half_width_um:.0f} um, trench={trench_width_um:.0f} um x "
         f"{trench_depth_um:.0f} um"
     )
+    device_info["depth_mesh"] = depth_mesh
     return device_info
 
 
@@ -835,7 +866,10 @@ def create_3d_electrode_device(
     )
 
     # -- Depth (y) mesh lines --
-    _add_depth_mesh_lines(mesh_name, junction_pos, total_depth, air_buffer)
+    # the bottom is not a contact here (cathode = n+ column): lines unchanged
+    _add_depth_mesh_lines(
+        mesh_name, junction_pos, total_depth, air_buffer, depth_mesh="legacy"
+    )
 
     # -- Regions --
     devsim.add_2d_region(
@@ -1032,6 +1066,7 @@ def create_delta_e_e_device(
     N_D_junction=None,
     N_D_bulk=None,
     L_transition=None,
+    depth_mesh=DEPTH_MESH_DEFAULT,
 ):
     """Create a stacked delta-E/E telescope SiC microdosimeter.
 
@@ -1108,18 +1143,25 @@ def create_delta_e_e_device(
             mesh=mesh_name, dir="y", pos=de_junction - 5e-6, ps=1e-6
         )
     devsim.add_2d_mesh_line(
-        mesh=mesh_name, dir="y", pos=de_junction, ps=ALT_JUNCTION_PS
+        mesh=mesh_name, dir="y", pos=de_junction, ps=mesh_junction_ps(depth_mesh)
     )
     de_mid = de_junction + 2e-4
     if de_mid < de_total - 1e-6:
         devsim.add_2d_mesh_line(mesh=mesh_name, dir="y", pos=de_mid, ps=ALT_EPI_PS)
     # Delta-E bottom / spacer / E-stop top
     devsim.add_2d_mesh_line(mesh=mesh_name, dir="y", pos=de_total, ps=spacer_cm)
+    if resolve_depth_mesh(depth_mesh) is not None:
+        # graded lines above the delta-E cathode (its contact cell, contact_mesh)
+        _add_cathode_lines(
+            mesh_name, de_total, depth_mesh, 0.5 * (de_total - de_junction)
+        )
     devsim.add_2d_mesh_line(mesh=mesh_name, dir="y", pos=e_start, ps=spacer_cm)
     # E-stop junction
     if e_junction - 5e-6 > e_start + 1e-8:
         devsim.add_2d_mesh_line(mesh=mesh_name, dir="y", pos=e_junction - 5e-6, ps=1e-6)
-    devsim.add_2d_mesh_line(mesh=mesh_name, dir="y", pos=e_junction, ps=ALT_JUNCTION_PS)
+    devsim.add_2d_mesh_line(
+        mesh=mesh_name, dir="y", pos=e_junction, ps=mesh_junction_ps(depth_mesh)
+    )
     # E-stop epi
     e_mid1 = e_junction + 2e-4
     e_mid2 = e_junction + 5e-4
@@ -1130,7 +1172,10 @@ def create_delta_e_e_device(
         devsim.add_2d_mesh_line(mesh=mesh_name, dir="y", pos=e_mid2, ps=ALT_EPI_PS)
     if e_deep < e_total - 1e-6:
         devsim.add_2d_mesh_line(mesh=mesh_name, dir="y", pos=e_deep, ps=5e-5)
-    devsim.add_2d_mesh_line(mesh=mesh_name, dir="y", pos=e_total, ps=5e-5)
+    if resolve_depth_mesh(depth_mesh) is None:
+        devsim.add_2d_mesh_line(mesh=mesh_name, dir="y", pos=e_total, ps=5e-5)
+    else:
+        _add_cathode_lines(mesh_name, e_total, depth_mesh, 0.5 * (e_total - e_junction))
     devsim.add_2d_mesh_line(
         mesh=mesh_name, dir="y", pos=e_total + air_buffer, ps=air_buffer
     )
@@ -1286,6 +1331,9 @@ def create_delta_e_e_device(
         f"delta_e={delta_e_thickness_um:.0f} um, e_stop={e_stop_thickness_um:.0f} um, "
         f"two independent diodes"
     )
+    device_info["depth_mesh"] = depth_mesh
+    for _L in device_info["layers"].values():
+        _L["depth_mesh"] = depth_mesh
     return device_info
 
 
@@ -1312,6 +1360,7 @@ def create_guard_ring_device(
     L_transition=None,
     with_guard=True,
     lateral_straggle_cm=0.0,
+    depth_mesh=DEPTH_MESH_DEFAULT,
 ):
     """Create a planar SiC microdosimeter with a p+ guard ring (half-device).
 
@@ -1382,7 +1431,9 @@ def create_guard_ring_device(
     devsim.add_2d_mesh_line(mesh=mesh_name, dir="x", pos=gr_outer, ps=1e-5)
 
     # -- Depth (y) mesh lines --
-    _add_depth_mesh_lines(mesh_name, junction_pos, total_depth, air_buffer)
+    _add_depth_mesh_lines(
+        mesh_name, junction_pos, total_depth, air_buffer, depth_mesh=depth_mesh
+    )
 
     # Add mesh line at guard ring depth if distinct
     if gr_depth_cm > 1e-8 and abs(gr_depth_cm - junction_pos) > 1e-8:
@@ -1556,6 +1607,7 @@ def create_guard_ring_device(
         f"depth={guard_ring_depth_um:.0f} um, N_A_guard={N_A_guard:.1e}, "
         f"with_guard={with_guard}"
     )
+    device_info["depth_mesh"] = depth_mesh
     return device_info
 
 

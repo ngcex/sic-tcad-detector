@@ -25,10 +25,11 @@ import numpy as np
 
 from etna.core.alternative_structures import (
     ALT_EPI_PS,
-    ALT_JUNCTION_PS,
     ALT_LATERAL_EDGE_PS,
     ALT_STACK,
 )
+from etna.core.contact_mesh import DEPTH_MESH_DEFAULT, contact_lines
+from etna.core.contact_mesh import junction_ps as mesh_junction_ps
 from etna.core.device import DEFAULT_N_A, acceptor_total_scale, edge_mobility
 from etna.core.incomplete_ionization import ionized_acceptor_concentration
 from etna.core.sic_material import (
@@ -118,16 +119,18 @@ def _base_info(T, epi, sub, half_width, name, coordinate_system, **extra):
     return info
 
 
-def _depth_knots(junction, total, extra=()):
-    """Depth lines of alternative_structures._add_depth_mesh_lines (region part)."""
+def _depth_knots(junction, total, extra=(), depth_mesh=DEPTH_MESH_DEFAULT):
+    """Depth lines of alternative_structures._add_depth_mesh_lines (region part),
+    including the cathode grading of ``depth_mesh`` (etna.core.contact_mesh)."""
+    jps = mesh_junction_ps(depth_mesh)
     k = [(0.0, 1e-5)]
     if junction - 5e-6 > 1e-8:
-        k.append((junction - 5e-6, max(1e-6, ALT_JUNCTION_PS)))
-    k.append((junction, ALT_JUNCTION_PS))
+        k.append((junction - 5e-6, max(1e-6, jps)))
+    k.append((junction, jps))
     for y in (junction + 2e-4, junction + 5e-4):
         if y < total - 1e-6:
             k.append((y, ALT_EPI_PS))
-    k.append((total, 1e-5))
+    k.extend(contact_lines(total, -1, depth_mesh, 0.5 * (total - junction)))
     k.extend(extra)
     return k
 
@@ -149,6 +152,7 @@ def guard_ring_structure(
     L_transition=None,
     with_guard=True,
     lateral_straggle_cm=0.0,
+    depth_mesh=DEPTH_MESH_DEFAULT,
 ):
     """Twin of create_guard_ring_device (same keywords and doping)."""
     _check_graded(doping_profile)
@@ -203,7 +207,7 @@ def guard_ring_structure(
         doping,
         contacts,
         xk,
-        _depth_knots(yj, total, extra),
+        _depth_knots(yj, total, extra, depth_mesh),
         "cartesian",
         T,
         info,
@@ -220,6 +224,7 @@ def mesa_structure(
     N_D_junction=None,
     N_D_bulk=None,
     L_transition=None,
+    depth_mesh=DEPTH_MESH_DEFAULT,
     **_trench,
 ):
     """Twin of create_mesa_device: the solved region is the pillar (the trench carries no
@@ -254,7 +259,7 @@ def mesa_structure(
         doping,
         contacts,
         xk,
-        _depth_knots(yj, total),
+        _depth_knots(yj, total, depth_mesh=depth_mesh),
         "cartesian",
         T,
         info,
@@ -319,7 +324,8 @@ def electrode3d_structure(
         doping,
         contacts,
         xk,
-        _depth_knots(yj, total),
+        # no contact at the bottom (cathode = n+ column): the legacy depth lines
+        _depth_knots(yj, total, depth_mesh="legacy"),
         "cylindrical",
         T,
         info,

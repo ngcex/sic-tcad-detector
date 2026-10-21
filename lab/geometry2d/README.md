@@ -20,4 +20,6 @@ bench/axisym_validity.py    square 3D-column cell vs the equal-area cylinder (pr
 bench/tractability_3d.py    SuperLU / CG cost on 3D 7-point systems, extrapolated
 ```
 
-`tests/test_fv2d.py` reads `notes/devsim_baselines.json` and `notes/devsim_psi.npz`, so do not delete them. After changing `ALT_STACK` or the builders, regenerate them with `bench/devsim_baselines.py`. The test `test_reference_stack_pin` fails until you do.
+`tests/test_fv2d.py` reads `notes/devsim_baselines.json` and `notes/devsim_psi.npz`, so do not delete them. After changing `ALT_STACK` or the builders, regenerate them with `bench/devsim_baselines.py`. The test `test_reference_stack_pin` fails until you do. The references, and the benches
+that reproduce the LOG tables, are on the LEGACY depth mesh (`depth_mesh="legacy"`,
+before 2026-10-21); the builders' default is now the graded mesh (`lab/mesh_contact`).

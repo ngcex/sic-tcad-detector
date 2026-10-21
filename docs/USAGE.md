@@ -783,6 +783,10 @@ cv.C_ac, cv.C_qs, neff_from_cv(V_points, cv.C_ac)   # F/cm2 (area 1), cm^-3
     - This is an assumption-laden reading, not a fit. Li et al. (arXiv:2503.09016)
       likewise report that Z1/2 does "not appear to significantly contribute".
   - The open question is in issue #5.
+  - **Superseded** by the next subsection and `lab/radiation_traps/notes/MECHANISMS.md`. With
+    onsemi's own flat-C-V bracket, the Z1/2 scale is 0.8 +- 0.65 (consistent with nominal),
+    and the slow component (EH4 plus the calibrated permanent removal) is about 5.3 /neq.
+    The "Z1/2 carries none" reading came from an extrapolated compensation fluence.
 - **Temperature (PREDICTED, testable).** The kinetic g falls from 2.51 /p at 300 K to
   1.95 /p at 325 K and 0.77 /p at 350 K: EH4 emission speeds up with T. No measurement
   of this was found.
@@ -829,8 +833,114 @@ measured C-V curves.
 - AC trap response (the lambda effect).
 - Transport-limited quasi-Fermi splitting in a semi-insulating epi under bias.
 - Poole-Frenkel emission.
-- Negative-U two-level Z1/2.
+- Negative-U two-level Z1/2 in the default table (available as an opt-in two-level
+  trap, next subsection).
 - Temperature changes within a run.
+
+#### Missing C-V removal: two-level traps, direct removal, presets, calibration (opt-in)
+
+Follow-up of issue #5. The kinetic Burin table gives about half of the measured
+depleted-region removal (g 2.6 vs 5.6 +- 0.8 per p/cm2, Radmanovac et al.,
+arXiv:2510.11304). Evidence, every number and its source:
+`lab/radiation_traps/notes/MECHANISMS.md`; benches `bench/mechanisms.py` (about
+4 min) and `bench/cce_kinetic.py` (about 50 s). Every default is unchanged
+(`DeviceConfig().radiation_traps is False`; `radiation_traps=True` is still the
+steady Burin table).
+
+**New model pieces** (fields of `RadiationTrapModel` / `DeepTrap`):
+
+- **Two-level traps.** `DeepTrap(..., E2_below_Ec=, sigma_n2=, sigma_p2=)` adds the
+  level of the second electron (negative U: E2 deeper). Example: Z1/2 = V_C(=/-/0).
+  - Occupancy is carried per level row as g1 = P(>= 1 e) and g2 = P(2 e).
+  - Steady state: the zero-flux chain. Kinetics: a 2x2 backward-Euler system in the
+    numba kernel, with an analytic Jacobian.
+  - Tests: the steady state equals the analytic chain and Fermi-Dirac; the relaxation
+    converges to the matrix exponential.
+  - The steady Poisson kernel refuses two-level traps. The CCE path routes them through
+    `trap_kinetics`, whose steady limit is identical.
+- **`donor_removal`** (cm^-1 per neq): direct, occupancy-independent donor loss on the
+  epi.
+- **`occupancy="kinetic"`**: CCE uses the kinetic dark state. That state is the
+  `initial` state at 0 V, a ramp at `ramp_V_per_s`, then a hold of `hold_s`; its trap
+  charge is then frozen. The default is `"steady"`.
+- **`lifetimes="occupancy"`**: CCE lifetimes count only levels able to capture. A
+  filled level cannot capture an electron. The default is `"legacy"`, which uses
+  `compute_K_tau`.
+
+**Presets** (`etna.core.trap_presets.trap_preset(name)`; pass the returned model as
+`DeviceConfig(radiation_traps=...)`):
+
+| Preset | Content | Label |
+| --- | --- | --- |
+| `burin_steady` | the default trap table | literature |
+| `burin_kinetic` | same table, kinetic occupancy | literature |
+| `literature_kinetic` | Z1/Z2 two-level (Capan et al. JAP 124 (2018) 245701, Table I: energies and Arrhenius emission, [Z2]:[Z1] = 4.4, 2.5 V_C/neq assumed) + EH4 + EH6/7 (sigma_n 1e-13) + kinetic + occupancy lifetimes | PREDICTED |
+| `radmanovac_calibrated` | `literature_kinetic` + direct removal 2.87 +- 0.22 /neq | CALIBRATED to Radmanovac Table 2 |
+| `radmanovac_calibrated_deep_acceptor` | same rate on a midgap acceptor (Ec-1.9) | CALIBRATED; identical C-V |
+
+**Calibration on published numbers** (`trap_calibration.calibrate_removal`):
+
+- `RemovalObservation` takes either a removal slope g read at fixed depletion width
+  (`kind="slope"`) or the fluence at which the C-V turns flat (`kind="flat_fluence"`,
+  `semi_insulating_fluence`).
+- The fit is linear in the parameters: scales of trap rates, or the absolute
+  `donor_removal`. It uses bounded least squares with re-linearisation.
+- It reports sigma, correlation, singular values and the weakest parameter
+  direction.
+
+**Results** (PREDICTED unless CALIBRATED):
+
+- **Negative-U Z1/2 does not close the gap.** Z1/Z2 empty within about 0.1 s in
+  depletion, so the slope does not see them. g is 2.41 /p with 2.5 V_C/neq and 3.13 /p
+  with 5.0 V_C/neq.
+- **EH4 as a donor collapses g** to 0.35 /p. This follows the CAV(+/0) assignment of
+  Karsthof et al. (arXiv:2007.03985).
+- **Hazdra's EH4 pair** changes g by less than 0.2.
+- **EH6/7 as an acceptor** gives g = 3.8 /p.
+- **Identifiability.**
+  - On the 3 Radmanovac slopes, a slow EH4-like acceptor and a permanent removal
+    (direct, or a midgap acceptor) are degenerate, with correlation -0.999.
+  - Direct removal and a midgap acceptor give identical C-V below about 500 K.
+  - Fast acceptors (Z1/2) are seen only through the flat-C-V fluence: scale 0.8 +- 0.65.
+- **Calibrated fits.**
+  - Direct removal: d = 2.87 +- 0.22 /neq, chi2 = 1.13 for 2 dof. Model g:
+    onsemi 4.94, W2 4.81, W4 4.40.
+  - EH4 scale instead: 2.28 +- 0.10, chi2 = 2.06. The chi2 difference does not
+    discriminate (the sigmas are width spreads). The preset uses direct removal
+    because the EH4-only fit needs EH4 at 2.3x its DLTS rate, and the removal
+    literature points to a permanent compensating species.
+- **Predicted flat-C-V fluences**, all inside the measured brackets:
+  - onsemi: 4.95e12 p/cm2;
+  - W4: above 3.5e13;
+  - Kroll et al.: 1.2e13 neq;
+  - Gsponer et al.: below 5e14 neq.
+- **Discriminating prediction: temperature.** g(onsemi) at 300 / 325 / 350 K:
+  - direct removal: 4.94 / 4.56 / 3.22;
+  - EH4-scale alternative: 5.19 / 4.32 / 1.32.
+- **EH6/7 sigma_n.** 9e-12 (Gaggl/Burin) emits 40-160x faster than measured EH6/7 DLTS
+  peaks in this code's prefactor, and its cited source has no EH6/7 value. 1.4e-14
+  (audit C-4) has no primary source and emits 4-15x too slowly. About 1e-13 is
+  emission-consistent at 1.60 eV.
+  - C-V removal is insensitive to sigma_n.
+  - The default stays 1.4e-14 (MECHANISMS.md section 4).
+- **CCE beyond compensation** (default stack, 62 MeV), at -40 V, for 1e15 / 5e15
+  p/cm2:
+
+  | Model | CCE at 1e15 | CCE at 5e15 |
+  | --- | --- | --- |
+  | steady traps | 0.355 | 0.152 |
+  | kinetic, legacy lifetimes | 0.831 | 0.472 |
+  | kinetic, occupancy lifetimes (calibrated) | 0.919 | 0.686 |
+
+  - The steady-to-kinetic step dominates.
+  - The calibrated removal itself changes CCE by less than 0.01 up to 1e15.
+  - The unknown post-irradiation occupancy of EH6/7 dominates beyond about 3e14. With
+    an in-beam start and a 1 h hold, CCE is 0.477 at 1e15. Report CCE as a range.
+
+**Not modelled.** AC trap response, Poole-Frenkel emission, temperature changes within
+a run, degeneracy factors (all 1), and trap-assisted leakage beyond SRH. The removal
+species' identity is still open: the C-V data cannot fix it, but a C-V at 350 K or
+EH4 DLTS at the same beam could.
 
 ### `run_dark_current(config, v_start=0.0, v_stop=-100.0, n_points=20, N_t=None, S_n=None, S_p=None, solver="auto")`
 
@@ -1016,8 +1126,9 @@ from the scan's alpha-stripe generation), the centroid stands for the whole trac
 default 2D device is laterally uniform, so its scan gives f = 1 (no edge physics); a
 structure with an edge does: the guard-ring device (`alternative_structures.
 create_guard_ring_device`, SV half-width 50 µm, 3 µm gap, 10 V, anode read-out) gives
-f = 0.9959 at 41 µm, 0.977 at 46 µm and 0.49 at 51.5 µm (middle of the gap;
-`lab/edge_cce/notes/LOG.md`).
+f = 0.9948 at 41 µm, 0.9726 at 46 µm and 0.488 at 51.5 µm (middle of the gap; graded depth
+mesh, NIST Bragg alpha; `lab/edge_cce/notes/LOG.md`). The f ratios move by <= 4e-4 with
+the depth mesh; the absolute CCE moved by -5.7e-3 (2026-10-21, `lab/mesh_contact`).
 `run_microdosimetry` does not apply it (it has no CCE step).
 
 #### Energy-deposition sampler, event-by-event pulse heights, Allpix Squared exchange (core API, issue #7)
@@ -1712,13 +1823,40 @@ notebook 19 does.
   5x (mesa), 13x (guard ring) and 27x (3D electrode) in one shared load window. Comparing
   each tool's best observed time, the factors are about 15x, 33x and 78x.
 
-**Mesh caveat (finding).** The ALT_STACK cathode is an ohmic contact on the n- epi. The
-CCE converges at first order in the size of that contact cell. On devsim's mesh this
-overestimates the guard-ring and mesa CCE by 6.3e-3 at 10 V. At 50 V the overestimate is about
-8e-4 and not yet asymptotic. devsim reproduces this itself when given a graded cathode
-mesh (`lab/geometry2d/bench/devsim_cathode_refine.py`).
-The AMR-converged centre CCE at 10 V is 0.96294 for the mesa and 0.96281 for the guard
-ring.
+**Depth mesh at a contact on the epi (`depth_mesh`, since 2026-10-21).** The ALT_STACK
+cathode is an ohmic contact directly on the n- epi, a perfect sink for holes: holes
+generated within its boundary layer (the undepleted epi at partial depletion, a layer of
+~kT/(qE) once depleted) are lost, and the CCE converges at FIRST order in the size of the
+contact cell. The builders `create_mesa_device`, `create_guard_ring_device`,
+`create_delta_e_e_device` and their fv2d twins therefore take
+`depth_mesh="graded"` (default; `etna.core.contact_mesh`): a 0.1 nm cathode cell growing
+by 1.25x to 50 nm, 50 nm over the last 1 um of the epi, and 1 nm junction lines.
+`depth_mesh="legacy"` gives the meshes before 2026-10-21 (100 nm cathode cell, 10 nm
+junction) for reproducing earlier numbers; a dict overrides single grading keys.
+`create_sic_2d_device` takes the same keyword with default `"legacy"` (every pinned number
+and the engine2d grid); use `"graded"` for the legacy-stack planar diode (`nplus_thickness_cm=None`).
+
+| mesa centre CCE (ALT_STACK) | 10 V | 50 V |
+| --- | --- | --- |
+| converged (uniform-bisection limit, two starting meshes agree to 2.5e-8) | 0.9630651 | 0.9990906 |
+| graded mesh (default) | +5.4e-5 | -2.9e-6 |
+| legacy mesh | +6.17e-3 | +7.86e-4 |
+| legacy-stack planar `create_sic_2d_device`, legacy mesh (27.5 nm cathode cell) | +1.4e-3 | +6.8e-4 |
+
+At 50 V the converged 1 - CCE (9.1e-4) is mostly this cathode sink; the default n+ stack,
+which has no such contact, gives 1.25e-4. Cost: the guard ring goes from 11.5k to 20.4k
+nodes (devsim 10 V ramp and scan about 110 s, fv2d 2.4 s). The default n+ stack is not
+affected: bisecting the contact cells of the 1D engine moves the CCE by < 2.3e-10, a 0.1 nm
+2D cathode cell by 4e-10 (the cathode sits on the 1e19 n+, no generation reaches it), so
+the 1D/2D default meshes and the CCE(LET) tables are unchanged. Details, the 1D general
+mesh error (C 2.7e-3 at -1 V, CCE 1.7e-4 at -1 V, < 1e-6 beyond -5 V) and every number
+that moved: `lab/mesh_contact/notes/LOG.md`.
+
+The AMR values quoted here before (0.96294 mesa, 0.96281 guard ring at 10 V, estimate
+5e-6) were 1.2e-4 / 2.6e-4 off: `refine.adaptive_cce_scan`'s geometric-extrapolation
+estimate is a heuristic and underestimated the error 15-20x on this pre-asymptotic
+sequence. Use uniform bisection with Richardson (`lab/mesh_contact/bench/alt_cathode_study.py`)
+for a reference value.
 
 **Validity of the axisymmetric proxy.** The (r, z) 3D electrode with a p+ wall is a
 faithful model of annular-trench cells. It is not a model of column-lattice 3D
@@ -1825,6 +1963,9 @@ calibrated constants in `etna/` cite these logs (`lab/README.md`).
 | `lab/microdosimeter`    | the microdosimeter preset; why its alpha CCE shape is not reproduced                                 |
 | `lab/engine_box`        | widening the engine T and epi boxes; devsim ramp steps                                               |
 | `lab/solver2d`          | the 2D numba engine spike (promoted to `etna/core/engine2d/`)                                        |
+| `lab/geometry2d`        | the general 2D engine `etna/core/fv2d`: parity, AMR, axisymmetric proxy, 3D tractability            |
+| `lab/mesh_contact`      | contact-cell mesh convergence: graded depth mesh of the contact-on-epi builders, what moved          |
+| `lab/edge_cce`          | lateral (edge) CCE map of the guard ring for the MC weighting                                        |
 | GPU spike (archived)    | tag `archive/gpu-solver-lab`: numba beat the GPU for 1D batches                                      |
 
 Where decisions and evidence live:
@@ -1853,9 +1994,9 @@ uv run pytest -n0 -x tests/test_api_cce.py        # serial, e.g. with --pdb
 uv run pytest -n auto -q --durations=20           # slowest tests
 ```
 
-- 132 modules and 1723 tests (2026-10-21). `pytest.ini` deselects the `exhaustive` marker
+- 133 modules and 1721 tests (2026-10-21). `pytest.ini` deselects the `exhaustive` marker
   (6 redundant deep variants, each implied by a kept test), so the default run collects
-  1717: all pass with `--extra dev --extra viz`; with `--extra dev` only, 1709 pass and 8
+  1715: all pass with `--extra dev --extra viz`; with `--extra dev` only, 1707 pass and 8
   skip (the manim and gdstk tests). The `slow` marker labels the devsim integration tests
   but does not deselect them.
 - `pytest.ini` adds `--dist loadgroup --no-loadscope-reorder` (inert without `-n`), so

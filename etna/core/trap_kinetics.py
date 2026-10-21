@@ -70,14 +70,55 @@ KINETIC_MAX_ITER = 2000
 
 
 # --------------------------------------------------------------------------- kernel
+@njit(cache=True, inline="always")
+def _pair_occ(Rpa, Rma, Rpb, Rmb, dRpa, dRma, dRpb, dRmb, g1o, g2o, Aa, Ab):
+    """Two-level trap (rows a, b): occupancies g1 = P(>= 1 e), g2 = P(2 e) and their
+    derivatives along u. Rate equations (scaled by c_n of each level and N0):
+        dg1/dt ~ Rpa (1 - g1) - Rma (g1 - g2),  dg2/dt ~ Rpb (g1 - g2) - Rmb g2,
+    R+ = n + r p1, R- = n1 + r p. Backward Euler (Aa = dt c_na N0 >= 0):
+        [[1 + Aa Da, -Aa Rma], [-Ab Rpb, 1 + Ab Db]] g = [g1o + Aa Rpa, g2o],
+    steady state (Aa < 0): [[Da, -Rma], [-Rpb, Db]] g = [Rpa, 0] (row scaling by the
+    c_n of each level drops out). D = R+ + R-. dg = M^-1 (drhs - dM g)."""
+    Da = Rpa + Rma
+    Db = Rpb + Rmb
+    dDa = dRpa + dRma
+    dDb = dRpb + dRmb
+    if Aa >= 0.0:
+        sa = Aa
+        sb = Ab
+        M11 = 1.0 + Aa * Da
+        M22 = 1.0 + Ab * Db
+        r1 = g1o + Aa * Rpa
+        r2 = g2o
+    else:
+        sa = 1.0
+        sb = 1.0
+        M11 = Da
+        M22 = Db
+        r1 = Rpa
+        r2 = 0.0
+    M12 = -sa * Rma
+    M21 = -sb * Rpb
+    det = M11 * M22 - M12 * M21
+    g1 = (r1 * M22 - M12 * r2) / det
+    g2 = (M11 * r2 - M21 * r1) / det
+    w1 = sa * dRpa - sa * dDa * g1 + sa * dRma * g2
+    w2 = sb * dRpb * g1 - sb * dDb * g2
+    dg1 = (w1 * M22 - M12 * w2) / det
+    dg2 = (M11 * w2 - M21 * w1) / det
+    return g1, g2, dg1, dg2
+
+
 @njit(cache=True)
 def _kin_column(
-    bi, u, u_n, u_p, D, xn, xp, tN, tn1, tp1, tr, tdon, fold, A, lnni, lam2, inv_h, v,
-    tol, max_iter, clamp, iters, conv,
+    bi, u, u_n, u_p, D, xn, xp, tN, tn1, tp1, tr, tdon, pair, fold, A, lnni, lam2,
+    inv_h, v, tol, max_iter, clamp, iters, conv,
 ):  # fmt: skip
     """Newton loop of device bi: Poisson with the backward-Euler trap occupancy
     f = (f_old + A (n + r p1)) / (1 + A (n + n1 + r (p + p1))) (scaled by N0; A = dt c_n
-    N0) and extra (photo) carriers xn, xp that do not depend on u."""
+    N0) of single levels, the 2x2 system of ``_pair_occ`` of two-level traps (``pair``
+    (L,): row of the second level, -2 for a second level, -1 single), and extra (photo)
+    carriers xn, xp that do not depend on u."""
     N = u.shape[1]
     a = np.empty(N)
     b = np.empty(N)
@@ -101,10 +142,24 @@ def _kin_column(
             drho = 0.0
             for k in range(K):
                 Nk = tN[bi, k, i]
-                if Nk == 0.0:
+                if Nk == 0.0 or pair[k] == -2:
                     continue
                 Ak = A[bi, k, i]
                 r = tr[bi, k, i]
+                if pair[k] >= 0:
+                    q = pair[k]
+                    rq = tr[bi, q, i]
+                    g1, g2, dg1, dg2 = _pair_occ(
+                        n_hat + r * tp1[bi, k, i], tn1[bi, k, i] + r * p_hat,
+                        n_hat + rq * tp1[bi, q, i], tn1[bi, q, i] + rq * p_hat,
+                        n_e, -r * p_e, n_e, -rq * p_e,
+                        fold[bi, k, i], fold[bi, q, i], Ak, A[bi, q, i],
+                    )  # fmt: skip
+                    rho += Nk * (tdon[bi, k, i] - g1) + tN[bi, q, i] * (
+                        tdon[bi, q, i] - g2
+                    )
+                    drho += Nk * dg1 + tN[bi, q, i] * dg2
+                    continue
                 num = n_hat + r * tp1[bi, k, i]
                 den = n_hat + tn1[bi, k, i] + r * (p_hat + tp1[bi, k, i])
                 g = 1.0
@@ -160,16 +215,33 @@ def _kin_par(u, *args):
 
 
 @njit(cache=True, parallel=True)
-def _be_occupancy(n_hat, p_hat, tn1, tp1, tr, fold, A, out):
-    """f_new (B, K, N) of the backward-Euler step at the converged carriers."""
+def _be_occupancy(n_hat, p_hat, tn1, tp1, tr, pair, fold, A, out):
+    """f_new (B, L, N) of the backward-Euler step at the converged carriers (two-level
+    rows by ``_pair_occ``)."""
     B, K, N = out.shape
     for bi in prange(B):
         for k in range(K):
+            if pair[k] == -2:
+                continue
             for i in range(N):
                 Ak = A[bi, k, i]
                 r = tr[bi, k, i]
-                num = n_hat[bi, i] + r * tp1[bi, k, i]
-                den = n_hat[bi, i] + tn1[bi, k, i] + r * (p_hat[bi, i] + tp1[bi, k, i])
+                nh = n_hat[bi, i]
+                ph = p_hat[bi, i]
+                if pair[k] >= 0:
+                    q = pair[k]
+                    rq = tr[bi, q, i]
+                    g1, g2, _, _ = _pair_occ(
+                        nh + r * tp1[bi, k, i], tn1[bi, k, i] + r * ph,
+                        nh + rq * tp1[bi, q, i], tn1[bi, q, i] + rq * ph,
+                        0.0, 0.0, 0.0, 0.0, fold[bi, k, i], fold[bi, q, i], Ak,
+                        A[bi, q, i],
+                    )  # fmt: skip
+                    out[bi, k, i] = g1
+                    out[bi, q, i] = g2
+                    continue
+                num = nh + r * tp1[bi, k, i]
+                den = nh + tn1[bi, k, i] + r * (ph + tp1[bi, k, i])
                 if Ak >= 0.0:
                     num = fold[bi, k, i] + Ak * num
                     den = 1.0 + Ak * den
@@ -287,6 +359,8 @@ class KineticTrapSolver:
         from etna.core.radiation_traps import resolve_traps
         from etna.core.sic_material import SiC4H_Parameters
 
+        from etna.core.radiation_traps import level_table
+
         self.model = resolve_traps(trap_model) or DEFAULT_TRAP_MODEL
         self.ref = ref
         info, x = ref["info"], ref["x"]
@@ -294,9 +368,19 @@ class KineticTrapSolver:
         self.T = float(info["T"])
         self.fluences_neq = np.atleast_1d(np.asarray(fluences_neq, dtype=float))
         B, N = self.fluences_neq.size, x.size
-        self.B, self.N, self.K = B, N, len(self.model.traps)
+        # one row per LEVEL (a two-level trap has two rows: g1, g2; level_table)
+        self.levels = level_table(self.model)
+        self.K = len(self.levels)
+        self.B, self.N = B, N
+        self.pair = np.array([r["pair"] for r in self.levels], dtype=np.int64)
         donors = np.zeros((B, N))
         donors[:, ref["epi_mask"]] = ref["pristine_N_D_profile"]
+        # direct donor deactivation (RadiationTrapModel.donor_removal, default 0)
+        if self.model.donor_removal > 0:
+            rm = self.model.donor_removal * self.fluences_neq[:, None]
+            donors[:, ref["epi_mask"]] = np.maximum(
+                donors[:, ref["epi_mask"]] - rm, 0.0
+            )
         acceptors = np.ascontiguousarray(np.broadcast_to(ref["acceptors"], (B, N)))
         self.donors, self.acceptors = donors, acceptors
         n_i = float(info["n_i"])
@@ -316,7 +400,7 @@ class KineticTrapSolver:
         )
         prm = SiC4H_Parameters()
         vn = _vth(self.T, prm.m_e_dos)
-        cn = np.array([t.sigma_n * vn for t in self.model.traps])  # (K,) cm^3/s
+        cn = np.array([r["sigma_n"] * vn for r in self.levels])  # (L,) cm^3/s
         self.c_n = cn
         # dt -> A = dt * c_n * N0 (B, K, 1)
         self._cnN0 = cn[None, :, None] * self.pb.N0[:, None, None]
@@ -390,15 +474,15 @@ class KineticTrapSolver:
         conv = np.zeros(B, dtype=np.bool_)
         kern = _kin_par if use_prange(B, N, NEWTON_PAR_NODES) else _kin_seq
         kern(
-            u, u_n, u_p, pb._D_static_hat, xn_h, xp_h, tN, tn1, tp1, tr, tdon, fold,
-            A, pb.log_ni_hat, pb.lam2, pb._inv_h, pb.v, tol,
+            u, u_n, u_p, pb._D_static_hat, xn_h, xp_h, tN, tn1, tp1, tr, tdon,
+            self.pair, fold, A, pb.log_ni_hat, pb.lam2, pb._inv_h, pb.v, tol,
             KINETIC_MAX_ITER if max_iter is None else max_iter, TRAP_CLAMP, iters, conv,
         )  # fmt: skip
         lnni = pb.log_ni_hat[:, None]
         n_h = np.exp(np.minimum(u - u_n + lnni, EXP_CLAMP)) + xn_h
         p_h = np.exp(np.minimum(u_p - u + lnni, EXP_CLAMP)) + xp_h
         f = np.empty((B, self.K, N))
-        _be_occupancy(n_h, p_h, tn1, tp1, tr, fold, A, f)
+        _be_occupancy(n_h, p_h, tn1, tp1, tr, self.pair, fold, A, f)
         return u * Vt, n_h * N0, p_h * N0, f, conv
 
     def trap_charge(self, f):
@@ -464,8 +548,11 @@ class KineticTrapSolver:
             if policy == "equilibrium":
                 return self.steady_state(V)
             if policy == "in_beam":
-                r = np.stack([f.r for f in self.fields])
-                return self.frozen_state(1.0 / (1.0 + r), V)
+                from etna.core.radiation_traps import occupancy
+
+                big = np.full(self.N, 1e25)  # n = p >> n1, p1 of every level
+                f = np.stack([occupancy(fl, big, big) for fl in self.fields])
+                return self.frozen_state(f, V)
             if policy == "neutral":
                 from etna.core.radiation_traps import neutral_state, occupancy
 
@@ -681,23 +768,31 @@ class KineticTrapSolver:
           emission transient after a bias step. (The electron twin is not returned: it
           is the difference of two ~1e19 cm^-3 s^-1 terms in the n+ layer.)
         """
-        from etna.core.radiation_traps import _vth
+        from etna.core.radiation_traps import _vth, occupancy
         from etna.core.sic_material import SiC4H_Parameters
 
         vp = _vth(self.T, SiC4H_Parameters().m_h_dos)
-        cp = np.array([t.sigma_p * vp for t in self.model.traps])[None, :, None]
-        cn = self.c_n[None, :, None]
-        n1 = np.stack([fl.n1 for fl in self.fields])
+        cp = np.array([r["sigma_p"] * vp for r in self.levels])[None, :, None]
         p1 = np.stack([fl.p1 for fl in self.fields])
-        n = state.n[:, None, :]
         p = state.p[:, None, :]
-        U = (
-            self.N_t * cn * cp * (self.n_i**2 - n * p) / (cn * (n + n1) + cp * (p + p1))
-        ).sum(axis=1)
-        Uh = (self.N_t * (cp * p1 * (1 - state.f) - cp * p * state.f)).sum(axis=1)
+
+        def hole_net(f):
+            # per level row: net hole emission e_p F_lower - c_p p F_upper, with the
+            # populations below / above that level's transition (two-level rows: the
+            # lower state of the second level is the 1-electron state g1 - g2)
+            lo, up = 1.0 - f, f.copy()
+            for a in np.nonzero(self.pair >= 0)[0]:
+                b = self.pair[a]
+                up[:, a] = f[:, a] - f[:, b]
+                lo[:, b] = f[:, a] - f[:, b]
+            return (self.N_t * (cp * p1 * lo - cp * p * up)).sum(axis=1)
+
+        f_ss = np.stack(
+            [occupancy(fl, state.n[b], state.p[b]) for b, fl in enumerate(self.fields)]
+        )
         return dict(
-            J_srh=self._Q * np.trapezoid(U, self.x, axis=1),
-            J_h=self._Q * np.trapezoid(Uh, self.x, axis=1),
+            J_srh=self._Q * np.trapezoid(hole_net(f_ss), self.x, axis=1),
+            J_h=self._Q * np.trapezoid(hole_net(state.f), self.x, axis=1),
         )
 
     def flatband_resistance(self):

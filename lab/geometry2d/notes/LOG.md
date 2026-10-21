@@ -225,3 +225,20 @@ So a 3D engine needs a different architecture:
 - Slotboom or log-density variables to tame the 1e30 dynamic range of the SG Jacobians.
 
 A Poisson-only 3D field solver (field maps of the Allpix² kind) with PCG is cheap and would be the first step. It is not built here.
+
+## 9. Correction and follow-up (2026-10-21, lab/mesh_contact/notes/LOG.md)
+
+- The builders now grade the depth mesh at the cathode (`depth_mesh="graded"`, a 0.1 nm
+  contact cell and 1 nm junction lines; `"legacy"` keeps the meshes used above). The
+  parity numbers of section 2 and `notes/devsim_baselines.json` are on the legacy mesh;
+  `tests/test_fv2d.py` builds those references with `depth_mesh="legacy"`.
+- Converged mesa centre CCE (uniform bisection of the depth lines to 17.5k lines from two
+  different starting meshes, increments asymptotically first order, limits agree to
+  2.5e-8): **0.9630651 at 10 V, 0.9990906 at 50 V**. Devsim's legacy mesh is +6.17e-3 /
+  +7.86e-4 off (section 5's "+6.3e-3" used the AMR value as the reference).
+- The AMR values of section 6 (0.962943 mesa, 0.962805 guard ring, estimate 5.1e-6) were
+  NOT converged: -1.2e-4 and -2.6e-4 from the reference. The geometric-extrapolation
+  estimate underestimated the error 15-20x (the contact rule overshoots a pre-asymptotic
+  sequence). Treat section 6's error estimates as heuristics. The 3D electrode result
+  (no contact on the epi) is not affected by the cathode issue, but its 2.8e-6 estimate
+  carries the same caveat.

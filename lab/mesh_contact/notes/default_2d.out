@@ -1,0 +1,13 @@
+DEFAULT (n+): ny 684 -> 1081, cathode cell 13.4 -> 0.10 nm
+      2 V: centre 0.993713656 -> 0.993713657 (d +3.72e-10); edge d +3.72e-10
+      5 V: centre 0.998831546 -> 0.998831546 (d +3.83e-10); edge d +3.83e-10
+     10 V: centre 0.999429142 -> 0.999429143 (d +3.88e-10); edge d +3.88e-10
+     50 V: centre 0.999874919 -> 0.999874920 (d +4.03e-10); edge d +4.03e-10
+   engine2d    5 V: [0.998831546 0.998831585 0.998831682] (fv2d legacy mesh - engine2d 9.2e-15)
+   engine2d   10 V: [0.999429142 0.999429149 0.999429174] (fv2d legacy mesh - engine2d 5.6e-15)
+   engine2d   50 V: [0.999874919 0.999874919 0.99987492 ] (fv2d legacy mesh - engine2d 1.9e-15)
+legacy stack (cathode on epi): ny 327 -> 381, cathode cell 27.5 -> 0.10 nm
+      2 V: centre 0.555630359 -> 0.554704007 (d -9.26e-04); edge d -9.26e-04
+      5 V: centre 0.759538381 -> 0.758273418 (d -1.26e-03); edge d -1.26e-03
+     10 V: centre 0.964521921 -> 0.963100091 (d -1.42e-03); edge d -1.42e-03
+     50 V: centre 0.999768228 -> 0.999089504 (d -6.79e-04); edge d -6.79e-04

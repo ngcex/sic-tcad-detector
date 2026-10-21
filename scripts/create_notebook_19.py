@@ -74,6 +74,21 @@ the contact-on-epi cathode at ~3 V and the guard-ring diode fails at 5.0 V on ev
 solver tier (measured 2026-10-18). The comparison here is structure vs structure on one
 stack; moving the structures to the default stack needs n+/transition support in each
 builder.
+
+**Depth mesh (since 2026-10-21, `depth_mesh="graded"`).** The cathode of this stack is
+an ohmic contact directly on the n- epi: a perfect sink for holes. Holes generated
+within its boundary layer are lost (at 50 V, a drift-diffusion layer of ~kT/(qE), tens
+of nm; at 10 V, the undepleted epi next to the contact), and the CCE converges at FIRST
+order in the size of the contact cell. The builders now grade the depth lines to a
+0.1 nm cathode cell (1 nm junction lines), and the planar baseline uses the same grading
+(`depth_mesh="graded"` in `LEGACY_STACK` below). Converged centre CCE (uniform
+bisection, lab/mesh_contact/notes/LOG.md): 0.963065 at 10 V, 0.999091 at 50 V; the
+graded meshes are within 5e-5. The previous meshes (`depth_mesh="legacy"`, still
+selectable) OVERESTIMATED it: by 6.1e-3 (10 V) and 7.9e-4 (50 V) on the structure
+builders, by 1.4e-3 and 6.8e-4 on the planar diode (whose legacy cathode cell was
+finer), so the planar and mesa "agreed" only to 1e-4-6e-3. Edge/centre ratios and
+current-sharing fractions move by < 1e-3. The 3D electrode has no contact on the epi
+(cathode = n+ column) and is unchanged.
 """
 )
 
@@ -160,6 +175,7 @@ V_STEP_MAX = 2.5          # adaptive ramp start step; measured cheaper than 5 V 
 # transition and the measured-C-V doping: the planar baseline pins the abrupt epi end and
 # the alternative structures' doping (the previous default's, NPLUS_CALIBRATION).
 LEGACY_STACK = dict(
+    depth_mesh="graded",  # cathode-cell grading of the structure builders (see the intro)
     substrate_thickness_cm=1e-4,
     nplus_thickness_cm=None,
     buffer_thickness_cm=None,
@@ -254,13 +270,17 @@ collected current by the box-rule integral of the generation over ALL mesh nodes
 on the contact nodes the contact equation replaces the continuity equation (Dirichlet
 carrier densities): pairs assigned there are counted and never injected. With the
 default normalisation that leaves a purely mesh-dependent CCE deficit equal to the
-cathode nodes' share of the generation -- measured at 50 V: 1.3e-3 on this planar
-device (50 nm cells at the cathode), 4.6e-3 on the coarser mesh of the alternative
-builders -- which would masquerade as a structure difference. The library now
+cathode nodes' share of the generation -- measured at 50 V on the legacy depth mesh:
+1.3e-3 on this planar device, 4.6e-3 on the coarser mesh of the alternative builders
+(about 1e-5 with the graded 0.1 nm cathode cell) -- which would masquerade as a
+structure difference. The library now
 normalises by the injected (non-contact) generation and `alpha_stripe_generation` /
 `cce_lateral_scan` zero the contact nodes by default (`zero_on_contacts=True`), so
-I_generated is what the model injects and the five meshes are comparable; the remaining
-1 - CCE (~1e-4-2e-4) is the SRH loss of the model.
+I_generated is what the model injects and the five meshes are comparable. The remaining
+1 - CCE at 50 V (~9e-4) is mostly the cathode sink (holes generated within ~kT/(qE) of
+the ohmic contact on the n- epi; resolved by the graded depth mesh, see the intro); SRH
+in the bulk accounts for ~1e-4 (the default n+ stack, which has no such sink, gives
+1 - CCE = 1.25e-4 at 50 V).
 """
 )
 
@@ -497,7 +517,8 @@ overhang floats (~11-12 V, every tolerance tier fails: a Newton breakdown, not t
 limit cycle below); 10 V is at the full-depletion voltage of the 10 um epi, where
 the lateral field beyond the anode edge is still weak, so a few per cent (ring) to
 ~20 % (overhang, mid-gap stripe) of an edge event recombines before collection; at
-50 V the loss is ~1e-4.
+50 V the loss is ~1e-3, the cathode sink that every stripe sees (on the legacy depth
+mesh it showed as ~1e-4).
 
 **Model notes.** Dark leakage is ~0 in this SRH-only SiC model (n_i ~ 1e-9 cm^-3),
 so "edge leakage" here means charge generated beyond the anode edge, not a surface
@@ -646,6 +667,11 @@ The thin stage is fully depleted below 1 V and its Newton fails in deep reach-th
 at 47 V, so it is biased at `V_BIAS_DELTA_E` = 10 V; the E stage at 50 V. Each
 stage's CCE is relative to the pairs generated **in that stage** (the alpha stripe
 enters at its own junction): for the thin stage this is the 1 um of active epi.
+Both cathodes are ohmic contacts on n- epi. The thin stage's cathode sink (holes
+generated within ~kT/(qE) of it) is ~2e-3 of its 1 um epi: centre CCE 0.99773 on the
+graded depth mesh (0.99771 with a 10x finer contact cell), 0.99987 on the legacy mesh
+(10 nm cathode cell). The E stage (alpha range ~18 um, far above its cathode) does
+not see its cathode cell (0.999509 on both meshes).
 """
 )
 
