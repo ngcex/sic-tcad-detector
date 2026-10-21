@@ -141,9 +141,10 @@ def test_null_point_weighting_sum_and_direct_jump():
     p.equilibrium()
     s = p.solve({"cathode": 60.0})  # direct jump from 0 V: line search + bisection
     assert p.depleted_fraction(s) > 0.99
-    # the symmetric saddle between two anode columns is a null point of E
+    # the |E| minimum sits on the symmetric point between two anode columns
     sad = p.saddles(s, 1, exclude_contact_layers=2)
-    assert sad and sad[0]["E"] < 1e-6
+    a = small_cell().info["pitch"] / 2
+    assert sad and {round(sad[0]["x"] / a, 6), round(sad[0]["y"] / a, 6)} == {0.0, 1.0}
     wc, _ = p.weighting_potential("cathode")
     wa, _ = p.weighting_potential("anode")
     assert np.abs(wc + wa - 1.0).max() < 1e-8
@@ -178,3 +179,33 @@ def test_ramo_signal_pair_collects_one_charge():
     h = ramo_signal(p, s, w, start, "hole")
     assert e["stopped"] == "electrode" and h["stopped"] == "electrode"
     assert e["Q"][-1] + h["Q"][-1] == pytest.approx(-1.0, abs=0.05)
+
+
+def test_null_point_field_vanishes_under_refinement():
+    """Without the face-normal zeroing (raw one-sided np.gradient) the field at the
+    point (a, 0) between two anode columns falls with h: a null point, not a saddle of
+    finite field (issue #4's 90-360 V/cm)."""
+    raw = []
+    for h in (1.0, 0.5):
+        p = Poisson3D(small_cell(h_fine=0.5e-4 * h, h_bulk=1e-4 * h))
+        p.equilibrium()
+        s = p.solve({"cathode": 40.0})
+        Ez, Ey, Ex = np.gradient(s.psi, p.zs, p.ys, p.xs)
+        raw.append(np.hypot(Ex, Ey)[1, 0, -1])
+    assert raw[1] < 0.7 * raw[0]
+
+
+def test_facade_trench_partial_columns_linear_and_secant():
+    import etna
+
+    g = dict(pitch=20, thickness=4, h_fine=0.5, h_bulk=1.0, N_D=ND)
+    t = etna.run_field_3d(None, "trench", V_bias=(1.0, 10.0), r_n=2, wall=2,
+                          find_depletion_voltage=True, weighting=(), **g)  # fmt: skip
+    assert t.metadata["structure_info"]["kind"] == "trench_cell"
+    assert 1.0 < t.metadata["V_depletion"] < 10.0 and t.y[-1] > 0.99
+    c = etna.run_field_3d(None, "column", V_bias=(50.0,), r_n=2, r_p=2, depth_n=2,
+                          depth_p=2, back="p+", carriers=False, **g)  # fmt: skip
+    assert np.isnan(c.y).all() and c.metadata["max_E"][0] > 0
+    b = etna.run_field_3d(None, "column", V_bias=(5.0, 20.0), r_n=2, r_p=2, depth_n=3,
+                          depth_p=3, p_from="bottom", weighting=(), **g)  # fmt: skip
+    assert b.y[1] > b.y[0]

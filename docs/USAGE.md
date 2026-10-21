@@ -2028,17 +2028,22 @@ quarter cell of a square lattice is the periodic lattice.
 **Solver.** Newton with an energy line search (globally convergent) and inexact
 CG preconditioned by a matrix-free geometric multigrid V-cycle (red-black Gauss-Seidel,
 numba prange). Memory is linear (91 B/node per linear solve, 271 B/node for the
-nonlinear solver); time is ~linear.
+nonlinear solver); the iteration count does not grow with N, so the time grows about linearly.
 
 ```python
 import etna
 r = etna.run_field_3d(None, "column", V_bias=(10, 50, 75, 100), pitch=50, r_n=5, r_p=5,
-                      thickness=50, depth_n=30, depth_p=30, back="p+")  # lengths in um
+                      thickness=50, depth_n=30, depth_p=30, back="p+",
+                      N_D=8.252732e13)  # lengths in um; N_D in cm^-3
 r.y                          # depleted bulk fraction per bias
 r.metadata["V_depletion"]    # bias of 99 % depletion (interpolated; or find_depletion_voltage=True)
 r.metadata["saddles"]        # |E| local minima {x, y, z cm, E V/cm} at the last bias
 r.metadata["weighting"]["cathode"]   # Ramo weighting potential on the (nz, ny, nx) grid
 ```
+
+The bulk is UNIFORM N_D: by default the config's bulk epi value (`N_D` if uniform, else
+`N_D_bulk`, 3.38e13 for `DeviceConfig()`); the graded junction region, buffer and
+tabulated profiles are not used. All numbers below are at N_D = 8.252732e13 (issue #4).
 
 Structures: `"column"` (n+ column at the cell centre, p+ at the corners; through,
 single- or double-sided, optional planar `back`), `"trench"` (central n+ column, p+
@@ -2062,7 +2067,8 @@ depletion-voltage level. devsim 3D was not run.
 - Through columns: 99 % depletion at 74.5 +- 0.25 V.
 - 30 um single-sided columns with a p+ back plane, 50 um thick: 62.0 +- 0.15 V.
 - The edge midpoint between two anode columns is a null point (|E| = 0). About 0.1 % of
-  the bulk stays below 1 kV/cm at 150 V.
+  the bulk stays below 1 kV/cm at 150 V. With partial columns the top-surface null
+  point also relies on the zero-flux surface: surface / oxide charge would move it.
 - The equal-area axisymmetric proxy underestimates the column-lattice depletion voltage
   2.5-5.4x (pitch 30-80 um, r 2.5-5 um; e.g. 74.5 vs 22.7 V at 50 / 5 um).
 - For the square-trench microdosimeter cell the annular proxy is within 10 % at 50-80 um

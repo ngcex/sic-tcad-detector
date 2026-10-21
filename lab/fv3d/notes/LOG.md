@@ -118,7 +118,7 @@ PCG to 1e-10; peak = tracemalloc of numpy allocations (setup + solve):
 | 200^3 = 8.0e6 | 5         | 13     | 9.19  | 724     | 91     | -                          |
 
 MG and SuperLU solutions agree to 1e-11. Memory is exactly linear (91 B/node for a
-linear solve); time ~ N^1 for N >= 2.5e5 (iterations bounded). At the issue #4 named
+linear solve); iterations are bounded (9-13), the fitted time exponent for N >= 2.5e5 is 0.58-0.75 over two runs (load averages 40-50; thread efficiency grows with N, so the true serial cost is ~N^1; rerun 2: 1.3 s at 0.9 M, 8.3 s at 8 M). At the issue #4 named
 point (0.9 M nodes) one linear solve is ~1.1 s and 80 MB, against the extrapolated
 780 s / 31 GB per SuperLU factorisation.
 
@@ -126,7 +126,9 @@ Full nonlinear solve of the true-3D column cell (30 um columns + p+ back, 50 um)
 870 000 nodes (87 x 100 x 100): setup + equilibrium 10.8 s, 50 V 14.9 s (22 Newton,
 129 CG), 100 V 10.5 s (11 Newton, 105 CG); peak 0.24 GB = 271 B/node.
 
-Largest tractable cell: memory is the limit only far out. At 271 B/node an 8 GB budget
+Largest tractable cell (EXTRAPOLATED, solver only: `run_field_3d`'s post-processing,
+field arrays, np.gradient temporaries, the saddle filters, adds several N-sized arrays
+on top): memory is the limit only far out. At 271 B/node an 8 GB budget
 holds ~3e7 nodes (e.g. 300 x 300 x 330 lines); one bias then costs ~100-130 CG
 iterations at ~2.6 s each (8 M nodes: 0.7 s per iteration measured, linear in N) =
 roughly 5 min per bias on this machine, a full depletion scan ~1 h. Practical sweet
@@ -196,12 +198,12 @@ prange kernel:
 
 | grid  | numba f64 sweep | MLX f32 sweep | ratio                           |
 | ----- | --------------- | ------------- | ------------------------------- |
-| 64^3  | 25 ms           | 3.2 ms        | 7.9x (CPU timing load-inflated) |
 | 128^3 | 24.8 ms         | 25.7 ms       | 0.97x                           |
 | 192^3 | 23.1 ms         | 47.9 ms       | 0.48x                           |
 | 256^3 | 88.8 ms         | 90.9 ms       | 0.98x                           |
 
-f32 vs f64 single-sweep difference 1e-7 relative. Used as the finest-level smoother
+(64^3 dropped: its CPU time, 25 ms like 128^3, was load-contaminated, load average
+~40.) Per node at 256^3: CPU 5.3 ns, GPU 5.4 ns per sweep. f32 vs f64 single-sweep difference 1e-7 relative. Used as the finest-level smoother
 inside the f64 PCG: SAME iteration count (10 at 128^3 and 192^3), true residual 4e-11 /
 9e-11, solution identical to 8e-15 relative: the f32 smoother costs no accuracy because
 the outer Krylov iteration is f64. But the end-to-end PCG is 3-4x SLOWER (10.9 vs 2.6 s,

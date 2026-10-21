@@ -66,7 +66,8 @@ def run_field_3d(
     builder's keywords with LENGTHS IN um (pitch, r_n, r_p, thickness, depth_n,
     depth_p, wall, depth_wall, h_fine, h_bulk, h_z, ...); defaults: N_D = the
     config's bulk epi doping (``N_D`` if uniform, else ``N_D_bulk``), T = config.T,
-    thickness = config.epi_thickness_um.
+    thickness = config.epi_thickness_um. The bulk is UNIFORM N_D: the config's graded
+    junction region, buffer and tabulated profile are not used.
 
     ``carriers=False``: the fully-depleted (depletion-approximation) field, one linear
     solve per bias (valid above full depletion only). ``weighting``: contacts whose
