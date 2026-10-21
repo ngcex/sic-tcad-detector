@@ -28,6 +28,7 @@ Contents
 17. [Measurement inputs (`etna.measurements`)](#17-measurement-inputs-etnameasurements)
 18. [Physical-model library (opt-in): high-field mobility, anisotropy, avalanche and breakdown](#18-physical-model-library-opt-in-high-field-mobility-anisotropy-avalanche-and-breakdown)
 19. [Single-ion track engine (opt-in, `etna.core.track`)](#19-single-ion-track-engine-opt-in-etnacoretrack)
+20. [Uncertainty quantification and global sensitivity (`etna.uq`, `run_uq`)](#20-uncertainty-quantification-and-global-sensitivity-etnauq-run_uq)
 
 ---
 
@@ -2100,6 +2101,7 @@ calibrated constants in `etna/` cite these logs (`lab/README.md`).
 | `lab/geometry2d`        | the general 2D engine `etna/core/fv2d`: parity, AMR, axisymmetric proxy, 3D tractability             |
 | `lab/mesh_contact`      | contact-cell mesh convergence: graded depth mesh of the contact-on-epi builders, what moved          |
 | `lab/edge_cce`          | lateral (edge) CCE map of the guard ring for the MC weighting                                        |
+| `lab/uq`                | `etna.uq` bench: Ishigami convergence, throughput, bands and Sobol indices of the default dosimeter |
 | GPU spike (archived)    | tag `archive/gpu-solver-lab`: numba beat the GPU for 1D batches                                      |
 
 Where decisions and evidence live:
@@ -2128,9 +2130,9 @@ uv run pytest -n0 -x tests/test_api_cce.py        # serial, e.g. with --pdb
 uv run pytest -n auto -q --durations=20           # slowest tests
 ```
 
-- 137 modules and 1793 tests (2026-10-21). `pytest.ini` deselects the `exhaustive` marker
+- 138 modules and 1812 tests (2026-10-21). `pytest.ini` deselects the `exhaustive` marker
   (6 redundant deep variants, each implied by a kept test), so the default run collects
-  1787: all pass with `--extra dev --extra viz`; with `--extra dev` only, 1779 pass and 8
+  1806: all pass with `--extra dev --extra viz`; with `--extra dev` only, 1798 pass and 8
   skip (the manim and gdstk tests). The `slow` marker labels the devsim integration tests
   but does not deselect them.
 - `pytest.ini` adds `--dist loadgroup --no-loadscope-reorder` (inert without `-n`), so
@@ -2767,3 +2769,166 @@ This lifetime is about 100x below good-epi ambipolar lifetimes (~2 µs, arXiv:10
 - The singular values of the scale-projected Jacobian show ONE constrained direction: the plasma SRH lifetime.
 - **The core radius is not constrained:** Δχ² < 0.2 between s = 1 and 50 nm.
 - Hence no preset: `tau_scale` is a user knob of `run_tilted_alpha_track`.
+
+---
+
+## 20. Uncertainty quantification and global sensitivity (`etna.uq`, `run_uq`)
+
+`etna.run_uq(config, observable, params=None, n=64, ...)` draws the uncertain inputs,
+evaluates one observable for every sample on the numba engines, and returns a
+`SimResult` (`sim_type="uq"`) with output bands and Sobol' first-order and total indices
+with bootstrap CIs. Issue #11; numbers and the bench are in `lab/uq/notes/LOG.md`.
+
+```python
+from etna import DeviceConfig, run_uq
+from etna.uq import indices_table
+
+r = run_uq(DeviceConfig(), "v_fd", n=64)          # Saltelli: (4 + 2) x 64 = 384 evaluations
+md = r.metadata
+print(md["nominal"], md["band_low"], md["band_high"])   # [3.096] [1.221] [8.346] V (5-95 %)
+print([(q["factor"], round(q["ST"], 2)) for q in indices_table(r)])
+# [('N_D_bulk', 0.01), ('N_D_junction', 0.06), ('L_transition_um', 0.88), ('epi_thickness_um', 0.02)]
+```
+
+**Observables** (`etna.uq.OBSERVABLES`, keyword arguments of the evaluator in brackets):
+
+| key | output | engine | default inputs |
+| --- | --- | --- | --- |
+| `v_fd` | full-depletion \|V\| (`run_cv` rule, interpolated on a 0.25 V grid) [`v_max`, `step`] | batched Poisson | N_D_bulk, N_D_junction, L, epi |
+| `cv` | C (F) vs bias [`voltages`] | batched Poisson | same |
+| `cce` | alpha CCE vs bias (`run_cce` model) [`voltages`, `gummel_tol`] | batched DD | + mu_n, mu_p, alpha range |
+| `alpha_charge` | collected charge of one Am-241 alpha (fC) | batched DD | + E_pair |
+| `dark_current` | I (A) vs bias (`run_dark_current` model) [`voltages`] | batched dark | + mobilities, N_t |
+| `transit_time` | low-field drift transit time (s) [`voltages`, `carrier`] | batched Poisson | + mobilities |
+| `breakdown` | V_BD (V) [`impact_ionization`] | batched avalanche | doping, epi |
+| `compensation_fluence` | full-compensation proton fluence [`proton_energy_MeV`] | closed form | N_D_bulk, d, r_n |
+| `cce_fluence` | CCE vs proton fluence [`fluences`, `V_bias`, `proton_energy_MeV`] | `run_radiation_damage` per sample | N_D_bulk, epi, d, r_n |
+| `microdosimetry` | (y_F, y_D) from MC events [`mc_csv_path` (default: the checkout's `data/synthetic_mc_events.csv`, not in the wheel), `sv_width_um`, `chord_model`] | none | epi (= SV thickness) |
+
+**The registry** (`etna.uq.default_parameters(config)`) holds only spreads that the
+repository documents. Each entry carries a distribution, its truncation, a `source` (file
+and section) and a label: `spec tolerance` (DESIGN-1 §2: N_D ±20 %, L ±0.3 µm, epi
+±1 µm; the window the fab is asked to hold, not a measured spread), `documented`
+(electron mobility ±8 %, holes −35/+0 %, r_n 1.02–1.20, E_pair 7.7–7.8 eV),
+`calibrated` (d = 4.69 ± 0.30 /neq; the ± is the spread of the three Radmanovac slopes,
+not a fit error), `computed` (alpha range 18.43 µm with the Bohr range straggling) and
+`assumed` (the lower decade of N_t, whose fit gives only an upper bound). Inputs
+mapped onto `DeviceConfig` fields are truncated to the engine box (`_ENGINE_BOX`): L is
+cut at 0.3 µm, so 23 % of its spec window is dropped (`truncated_mass`). `tau_scale`
+(§19.3) is registered for the track facades only and refused by the batched
+observables. T, N_A, E_t and the area have no documented spread and are not defaults.
+The defaults follow the doping profile: a uniform epi (e.g. `microdosimeter_config()`)
+samples `N_D` (±20 %, truncated to the engine box: half of the window below 1e14 is cut
+for the 1e14 preset), a tabulated profile samples no doping input. An input that sets
+a field the profile does not read raises `ValueError` instead of giving a band with a
+zero index. `metadata["assumed_inputs"]` lists the `assumed` inputs in a run (the
+default dark-current band is mostly the assumed N_t decade).
+Pass your own inputs as `UncertainParameter(name, nominal, dist, a, b,
+"config:<field>" | "model:<name>", ...)`.
+
+**r_n and d are tied.** The calibrated d is re-fitted per NIEL convention (§6, "NIEL
+convention and the calibrated removal"). A sample of r_n moves kappa by s = 1.069 / r_n,
+and d is re-fitted to first order so that the 252.7 MeV per-proton calibration holds
+(`etna.uq.tied_removal`, with G_lit = 2.56 /neq taken from that section's table). r_n
+then moves only the share carried by the literature levels.
+
+**Designs.**
+
+- `method="saltelli"` (default): bands AND indices from (F + 2)·n evaluations, where F is
+  the number of factors.
+- `"sobol"`, `"lhs"` or `"mc"`: bands only, n evaluations.
+- `n` should be a power of 2.
+- `seed` makes every draw and bootstrap reproducible.
+- `target_ci=w`: doubles n, continuing the same scrambled Sobol' sequence and reusing
+  every earlier evaluation, until the widest 95 % CI of all S1 and ST is ≤ w, or n would
+  exceed `n_max`.
+  - The S1 intervals are the wide ones.
+  - On `compensation_fluence`: 0.26 at n = 256, 0.099 at 2048, 0.052 at 8192.
+- Correlated inputs: `ParameterSpace.with_covariance(params, names, mean, cov)`, for
+  example the Gauss-Newton covariance of `etna.core.trap_calibration.calibrate_cv`, or
+  `correlation=` on `run_uq`.
+  - They are drawn through a Gaussian copula.
+  - A correlated block is one Sobol' factor (its name joins the members with `+`): the
+    indices of dependent inputs taken one by one are not defined.
+
+**Estimators.**
+
+- S1: Saltelli 2010. ST: Jansen.
+- Both are computed on outputs centred on their mean. Without centring, CCE ≈ 0.9998
+  gave nonsense S1.
+- CIs: percentile bootstrap over the base points.
+- A Saltelli block with any non-finite output is dropped for that output column
+  (`n_used`).
+- A column whose spread is below the observable's resolution gets NaN indices
+  (`below_resolution`; the CCE resolution is 1e-6).
+- Checked against the closed-form Ishigami indices (error 2e-4 on ST at n = 8192) and
+  against `scipy.stats.sobol_indices`.
+
+**No devsim.**
+
+- The evaluators call the engine kernels directly (`_engine_batch` → `reverse_sweep`,
+  the CCE Gummel, `dark_sweep`, `breakdown_voltage`).
+- Per-device mobility factors are applied to the edge mobilities, and per-device alpha
+  generation is supported.
+- A sample outside the engine box, or one that does not converge, is NaN and counted
+  (`info["n_outside_box"]`, `n_failed`). It is never re-run on devsim.
+- At nominal, every evaluator equals its facade: C to 1e-12, CCE to 1e-9 (measured
+  2.6e-15), dark current to 1e-10, V_BD to 1e-6 V, and the compensation fluence exactly.
+  V_fd is within the facade's 0.05 V lattice. y_F / y_D are exact event moments vs the
+  facade's binned ones: 0.04 % each (`tests/test_uq.py`).
+- The epi thickness changes the mesh, so it is snapped to a 0.02 µm lattice and samples
+  are batched per snapped value (`epi_quantum_um`, largest snap in
+  `info["epi_snap_max_um"]`).
+
+**Throughput** (warm, 2026-10-21, M4 under load average 7–13; evaluations per second):
+
+| observable | rate (/s) | note |
+| --- | --- | --- |
+| C-V, doping-only (one batch) | ~1000 | a `run_cv` loop gives 110 /s |
+| C-V with the epi tolerance | 412 | |
+| V_fd | 204 | |
+| CCE | 196 | |
+| dark current | 405 | |
+| transit time | 834 | |
+| breakdown | 51 | |
+| `cce_fluence` | ~6 | one damage sweep per sample |
+| closed form and MC moments | ~25 000-30 000 | |
+
+`uv run python lab/uq/bench.py` (50 s).
+
+**Reported alongside the bands.**
+
+- `numerical_error`: |f(h) − f(h/2)| at nominal, with the engine mesh bisected once.
+  Examples: V_fd 1.7e-3 V, CCE at −1 V 8.2e-5, V_BD 0.10 V.
+- `model_form`: categorical choices that are not Sobol' factors.
+  - V_BD over the impact-ionization sets: 1825.6–2225.8 V, wider than the 5–95 % input
+    band of 2042–2407 V.
+  - y_F / y_D with the slab chord, and the bootstrap CI of the MC statistics.
+- Metadata also holds:
+  - the samples and outputs (`samples`, `outputs`);
+  - every quantile, `mean`, `std`, `nominal`;
+  - the registry records (`parameters`);
+  - `samples_per_s`.
+
+**Figures**: `etna.uq.plots.uq_figure(r, "band" | "indices")` in the `etna.viz` house
+style with the provenance footer; export with `etna.viz.export_figure`.
+
+**From an app page** (`app/` is not changed here): call `run_uq(sidebar_config,
+observable, n=..., seed=...)` inside a spinner, then show:
+
+- `uq_figure(r, "band")` and `uq_figure(r, "indices")` with `st.pyplot`;
+- `indices_table(r)` with `st.dataframe`;
+- `r.metadata["parameters"]` as the provenance table.
+
+Budget about (F + 2)·n / rate seconds, e.g. CCE with n = 64: 576 evaluations, about 3 s.
+`cce_fluence` needs a much smaller n or a background job.
+
+**What a band means.**
+
+- It is a model prediction under the registry's input spreads: not a measured spread,
+  and not a validation.
+- The DESIGN-1 doping tolerances are a spec window, not a posterior of the C-V fit. For
+  example, V_fd 1.25–8.4 V on the default device is set by L ±0.3 µm.
+- The N_t range lies below its fitted value by construction.
+
+Open items: `lab/uq/notes/LOG.md`.

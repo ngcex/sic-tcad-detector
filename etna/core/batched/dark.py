@@ -128,10 +128,14 @@ def dark_sweep(
     max_iter=DARK_GUMMEL_MAX_ITER,
     max_step_V=MAX_STEP_V,
     mobility=None,
+    mu_n_scale=None,
+    mu_p_scale=None,
 ):
     """Dark-current components of B devices on mesh ``x`` at each anode bias of
     ``voltages`` (<= 0, in the order given). ``mobility``: the low-field mobility set
-    (None = default; the devsim device's ``params.mobility``).
+    (None = default; the devsim device's ``params.mobility``). ``mu_n_scale`` /
+    ``mu_p_scale`` (scalar or (B,), None = 1: bit-identical): per-device factors on the
+    edge mobilities (uncertainty studies, etna.uq).
 
     ``donors`` / ``acceptors`` (B, N): the doping the devsim device carries (acceptors
     ionized, as devsim's Acceptors model); ``T``, ``N_A`` (total, for the local mobility),
@@ -153,6 +157,10 @@ def dark_sweep(
         raise ValueError("voltages must be finite reverse biases (<= 0)")
     pb = PoissonBatch(x, donors, acceptors, n_i, thermal_voltage(T))
     mu_n, mu_p = edge_mobilities(donors, acceptors, N_A, T, mobility=mobility)
+    if mu_n_scale is not None:
+        mu_n = mu_n * _col(mu_n_scale, B)[None, :]
+    if mu_p_scale is not None:
+        mu_p = mu_p * _col(mu_p_scale, B)[None, :]
     n1, p1 = _col(n1, B), _col(p1, B)
     cb = ContinuityBatch(pb, mu_n, mu_p, _col(tau_n, B), _col(tau_p, B), n1=n1, p1=p1)
     mask = np.ones(N) if epi_end is None else (epi_end - x >= 0).astype(float)

@@ -148,6 +148,7 @@ full-depletion definitions in [USAGE §8](docs/USAGE.md#8-validity-and-limits).
 | Presets                         | `DeviceConfig()` (= `etna.measured_cv_config()`), `measured_cv_tabulated_config()`, `nplus_calibrated_config()`, `legacy_config()`, `microdosimeter_config()`                                                                                          | [USAGE §5.2](docs/USAGE.md#52-presets)                                |
 | Publication figures, animations | `etna.viz` (`figure_for`, `export_figure`, `animate`)                                                                                                                                                                                                  | [USAGE §10](docs/USAGE.md#publication-figures-and-animations-etnaviz) |
 | Engineering exports             | `etna.export` (spec sheet JSON/CSV/MD/PDF, cross-section, mesh CSV/VTK/VTU, reference GDSII/SVG)                                                                                                                                                       | [USAGE §10](docs/USAGE.md#10-exports-python)                          |
+| Uncertainty / sensitivity       | `etna.run_uq(config, observable, n=...)`: output bands and Sobol' indices over the documented input tolerances, on the batched engines | [USAGE §20](docs/USAGE.md#20-uncertainty-quantification-and-global-sensitivity-etnauq-run_uq) |
 | Measurement inputs              | `etna.measurements` (C-V, SIMS/SRP and I(T) CSV loaders, model comparison, C-V inversion)                                                                                                                                                              | [USAGE §17](docs/USAGE.md#17-measurement-inputs-etnameasurements)     |
 | Notebooks                       | 21 notebooks in `notebooks/`, committed without outputs                                                                                                                                                                                                | [USAGE §12](docs/USAGE.md#12-notebooks)                               |
 
@@ -262,9 +263,9 @@ uv run pytest -n auto -q -m exhaustive     # the 6 deselected deep variants
 uv run pytest -n0 -x tests/test_api_cce.py # serial, e.g. with --pdb
 ```
 
-1793 tests in 137 modules. `pytest.ini` deselects the 6 `exhaustive` ones, so the default
-run is 1787 tests: all pass with `--extra dev --extra viz`, and with `--extra dev` only
-1779 pass and 8 skip (manim/gdstk). On a 10-core Apple M4 shared with other jobs, `-n auto`
+1812 tests in 138 modules. `pytest.ini` deselects the 6 `exhaustive` ones, so the default
+run is 1806 tests: all pass with `--extra dev --extra viz`, and with `--extra dev` only
+1798 pass and 8 skip (manim/gdstk). On a 10-core Apple M4 shared with other jobs, `-n auto`
 took 169–205 s on 2026-10-21 (600 s on a heavily loaded machine): plan on about 3 minutes. `pytest.ini` supplies the tuned
 xdist scheduler; use `-n0` for pdb.
 

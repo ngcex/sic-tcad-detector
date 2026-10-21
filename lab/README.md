@@ -61,3 +61,10 @@ at first order in the contact cell: the builders now default to a graded depth m
 stack is checked and not affected. Benches: `default_1d.py`, `default_2d.py`,
 `alt_cathode_study.py` (reference by uniform bisection + Richardson), `nb19_metrics.py`,
 `telescope_devsim.py`, `gr_devsim_50v.py`; numbers in `notes/LOG.md`.
+
+## `lab/uq`
+
+Bench of `etna.uq` / `etna.run_uq` (issue #11, 2026-10-21): Ishigami convergence of the
+Sobol' estimators against the closed form, throughput (samples/s) of every observable on
+the batched engines, and the bands / indices of the default dosimeter: `bench.py`,
+numbers in `notes/LOG.md`.
