@@ -247,6 +247,8 @@ def run_uq(
         "parameter_names": space.names,
         "factor_names": space.factor_names,
         "parameters": space.describe(),
+        # inputs whose spread (or one end of it) nothing in the repository documents
+        "assumed_inputs": [p.name for p in space.params if p.label == "assumed"],
         "correlation": None if space.correlation is None else space.correlation.copy(),
         "sobol": None if sob is None else sob.as_dict(),
         "adaptive": adaptive,

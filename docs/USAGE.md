@@ -2796,7 +2796,7 @@ print([(q["factor"], round(q["ST"], 2)) for q in indices_table(r)])
 | `breakdown` | V_BD (V) [`impact_ionization`] | batched avalanche | doping, epi |
 | `compensation_fluence` | full-compensation proton fluence [`proton_energy_MeV`] | closed form | N_D_bulk, d, r_n |
 | `cce_fluence` | CCE vs proton fluence [`fluences`, `V_bias`, `proton_energy_MeV`] | `run_radiation_damage` per sample | N_D_bulk, epi, d, r_n |
-| `microdosimetry` | (y_F, y_D) from MC events [`mc_csv_path`, `sv_width_um`, `chord_model`] | none | epi (= SV thickness) |
+| `microdosimetry` | (y_F, y_D) from MC events [`mc_csv_path` (default: the checkout's `data/synthetic_mc_events.csv`, not in the wheel), `sv_width_um`, `chord_model`] | none | epi (= SV thickness) |
 
 **The registry** (`etna.uq.default_parameters(config)`) holds only spreads that the
 repository documents. Each entry carries a distribution, its truncation, a `source` (file
@@ -2810,6 +2810,12 @@ mapped onto `DeviceConfig` fields are truncated to the engine box (`_ENGINE_BOX`
 cut at 0.3 µm, so 23 % of its spec window is dropped (`truncated_mass`). `tau_scale`
 (§19.3) is registered for the track facades only and refused by the batched
 observables. T, N_A, E_t and the area have no documented spread and are not defaults.
+The defaults follow the doping profile: a uniform epi (e.g. `microdosimeter_config()`)
+samples `N_D` (±20 %, truncated to the engine box: half of the window below 1e14 is cut
+for the 1e14 preset), a tabulated profile samples no doping input. An input that sets
+a field the profile does not read raises `ValueError` instead of giving a band with a
+zero index. `metadata["assumed_inputs"]` lists the `assumed` inputs in a run (the
+default dark-current band is mostly the assumed N_t decade).
 Pass your own inputs as `UncertainParameter(name, nominal, dist, a, b,
 "config:<field>" | "model:<name>", ...)`.
 

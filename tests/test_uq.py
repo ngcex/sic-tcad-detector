@@ -318,3 +318,28 @@ def test_run_uq_model_form_breakdown_and_figures():
                voltages=[-2.0, -10.0], numerical_error=False)  # fmt: skip
     assert uq_figure(r, "indices").etna_kind == "uq_indices"
     assert uq_figure(r, "band").etna_kind == "uq_band"
+
+
+def test_uniform_and_tabulated_profiles_sample_the_doping_they_read():
+    from etna import measured_cv_tabulated_config, microdosimeter_config
+
+    mc = microdosimeter_config()
+    r = run_uq(mc, "v_fd", n=8, n_boot=20, numerical_error=False)
+    assert r.metadata["factor_names"][0] == "N_D"
+    assert np.nanstd(r.metadata["outputs"]) > 0
+    r = run_uq(mc, "cv", n=8, n_boot=0, voltages=[0.0, -5.0], numerical_error=False)
+    assert r.metadata["factor_names"] == ["N_D", "epi_thickness_um"]
+    assert np.all(np.nanstd(r.metadata["outputs"], axis=0) > 0)
+    with pytest.raises(ValueError, match="does not read"):
+        run_uq(mc, "cv", params=["N_D_bulk"], n=4)
+    with pytest.raises(ValueError, match="does not read"):  # evaluator guard too
+        O.eval_cv(
+            mc, np.array([[3e13]]), ParameterSpace([default_parameters()["N_D_bulk"]])
+        )
+    assert resolve_space("cv", measured_cv_tabulated_config()).names == [
+        "epi_thickness_um"
+    ]
+    r = run_uq(
+        CFG, "dark_current", n=4, n_boot=0, voltages=[-10.0], numerical_error=False
+    )
+    assert r.metadata["assumed_inputs"] == ["N_t"]

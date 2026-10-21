@@ -74,6 +74,9 @@ def _model_values(space: ParameterSpace, values, name, default):
 def sample_configs(config, values, space: ParameterSpace, epi_quantum_um=None):
     """One DeviceConfig per sample (``config:`` targets replaced), plus the largest epi
     snap (um)."""
+    from etna.uq.params import check_targets
+
+    check_targets(space, config)
     q = DEFAULT_EPI_QUANTUM_UM if epi_quantum_um is None else float(epi_quantum_um)
     cols = [(j, p.target.split(":", 1)[1]) for j, p in enumerate(space.params)
             if p.target.startswith("config:")]  # fmt: skip
@@ -546,7 +549,14 @@ def _event_energies(mc_csv_path):
     from etna._paths import data_path
     from etna.core.mc_coupling import load_mc_events_csv
 
-    path = data_path("synthetic_mc_events.csv") if mc_csv_path is None else mc_csv_path
+    path = mc_csv_path
+    if path is None:  # the repository's synthetic events (sdist / checkout only)
+        path = data_path("synthetic_mc_events.csv")
+        if not path.is_file():
+            raise ValueError(
+                "microdosimetry UQ: pass mc_csv_path= (the default "
+                "data/synthetic_mc_events.csv is not shipped in the wheel)"
+            )
     ev = load_mc_events_csv(path)
     e = ev.groupby("event_id")["edep_keV"].sum().to_numpy(dtype=float)
     return e[e > 0]

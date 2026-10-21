@@ -295,10 +295,15 @@ def default_parameters(config=None) -> dict:
     D1 = "deliverables/DESIGN-1-dosimetry-pn.md §2"
     out = {}
 
+    unread = set(unread_doping_fields(cfg))
+
     def add(p):
-        out[p.name] = p
+        if p is not None:
+            out[p.name] = p
 
     def boxed(name, field_, a, b, **kw):
+        if field_ in unread:  # doping inputs the profile does not read: not registered
+            return None
         lo, hi = _box(field_)
         return UncertainParameter(name, a=a, b=b, target=f"config:{field_}",
                                   lower=lo, upper=hi, **kw)  # fmt: skip
@@ -318,6 +323,16 @@ def default_parameters(config=None) -> dict:
               note="truncated to the engine box (0.3-3 um): about a quarter of the "
                    "spec window lies below the cross-checked range",
               applies_to=_ELECTROSTATIC + ("cce_fluence",)))  # fmt: skip
+    if cfg.N_D is not None:  # uniform epi: the one doping the solver reads
+        lo, hi = _box("N_D_uniform")
+        add(UncertainParameter(
+            "N_D", cfg.N_D, "uniform", 0.8 * cfg.N_D, 1.2 * cfg.N_D, "config:N_D",
+            unit="cm^-3", label="spec tolerance", lower=lo, upper=hi,
+            source="deliverables/DESIGN-2-microdosimetry-geometry.md §2: the validity gate's "
+                   "20 % margin covers the +-20 % doping tolerance of DESIGN-1 §2",
+            note="uniform epi (doping_profile='uniform'); truncated to the engine box "
+                 "N_D_uniform",
+            applies_to=_ELECTROSTATIC + ("compensation_fluence", "cce_fluence")))  # fmt: skip
     e = cfg.epi_thickness_um
     add(boxed("epi_thickness_um", "epi_thickness_um", e - 1.0, e + 1.0, nominal=e,
               dist="uniform", unit="um", label="spec tolerance", source=f"{D1}: +-1 um",
@@ -406,20 +421,72 @@ DEFAULT_PARAMS = {
 }
 
 
+GRADED_DOPING = ("N_D_bulk", "N_D_junction", "L_transition_um")
+
+
+def unread_doping_fields(config) -> tuple:
+    """DeviceConfig doping fields the solvers do NOT read for this config's profile
+    (sampling them would give a band without that input and a zero index, silently)."""
+    if config.donor_table is not None:  # the table IS the epi profile
+        return GRADED_DOPING + ("N_D",)
+    if config.doping_profile == "uniform":
+        return GRADED_DOPING
+    return ("N_D",)
+
+
+def check_targets(space: "ParameterSpace", config) -> None:
+    """ValueError if a ``config:`` target is a field the config's profile ignores."""
+    unread = set(unread_doping_fields(config))
+    bad = [p.name for p in space.params
+           if p.target.startswith("config:") and p.target.split(":", 1)[1] in unread]  # fmt: skip
+    if bad:
+        kind = ("donor_table" if config.donor_table is not None
+                else f"doping_profile={config.doping_profile!r}")  # fmt: skip
+        raise ValueError(
+            f"parameters {bad} set DeviceConfig fields that a {kind} device does not "
+            f"read (unread: {sorted(unread)}); use "
+            + ("'N_D'" if config.doping_profile == "uniform" and config.donor_table is None
+               else "the graded doping inputs" if config.donor_table is None
+               else "no doping input (the tabulated profile is fixed)")  # fmt: skip
+        )
+
+
+def default_param_names(observable, config) -> tuple:
+    """``DEFAULT_PARAMS[observable]`` adapted to the config's doping profile: the graded
+    inputs become 'N_D' for a uniform epi and are dropped for a tabulated profile."""
+    names = list(DEFAULT_PARAMS[observable])
+    unread = set(unread_doping_fields(config))
+    first = next((i for i, n in enumerate(names) if n in GRADED_DOPING), None)
+    names = [n for n in names if n not in unread]
+    if first is not None and config.doping_profile == "uniform" and config.donor_table is None:
+        names.insert(first, "N_D")
+    return tuple(names)
+
+
 def resolve_space(observable, config=None, params=None, correlation=None) -> ParameterSpace:
-    """ParameterSpace for ``observable``: ``params`` None = DEFAULT_PARAMS; else a list
-    of names (registry entries) and/or UncertainParameter objects, or a ParameterSpace
-    (returned as is)."""
+    """ParameterSpace for ``observable``: ``params`` None = the defaults
+    (``default_param_names``); else a list of names (registry entries) and/or
+    UncertainParameter objects, or a ParameterSpace (used as is). Every ``config:``
+    target is checked against the config's doping profile (``check_targets``)."""
+    from etna.api.device import DeviceConfig
+
+    cfg = DeviceConfig() if config is None else config
     if isinstance(params, ParameterSpace):
+        check_targets(params, cfg)
         return params
-    reg = default_parameters(config)
+    reg = default_parameters(cfg)
     if params is None:
-        params = DEFAULT_PARAMS[observable]
+        params = default_param_names(observable, cfg)
     out = []
     for p in params:
         if isinstance(p, UncertainParameter):
             out.append(p)
         elif isinstance(p, str):
+            if p not in reg and p in unread_doping_fields(cfg):
+                kind = ("donor_table" if cfg.donor_table is not None
+                        else f"doping_profile={cfg.doping_profile!r}")  # fmt: skip
+                raise ValueError(f"parameter {p!r}: a {kind} device does not read this "
+                                 "DeviceConfig field")  # fmt: skip
             if p not in reg:
                 raise KeyError(f"unknown parameter {p!r} (registry: {sorted(reg)})")
             out.append(reg[p])
@@ -431,5 +498,7 @@ def resolve_space(observable, config=None, params=None, correlation=None) -> Par
                 f"parameter {p.name!r} does not enter observable {observable!r} "
                 f"(applies to {list(p.applies_to)})"
             )
-    return ParameterSpace(out, correlation=correlation)
+    space = ParameterSpace(out, correlation=correlation)
+    check_targets(space, cfg)
+    return space
 
