@@ -1,5 +1,6 @@
-"""Batched 1D engine: the fused carrier-solve kernel equals the numpy assembly + Thomas
-reference, and the serial / prange drivers (chosen by batch size) give identical results."""
+"""Batched 1D engine: the fused carrier-solve kernel matches the numpy assembly + Thomas
+reference to rounding (rtol 1e-12), and the serial / prange drivers (chosen by batch size)
+give bit-identical results."""
 
 import numpy as np
 import pytest
@@ -34,7 +35,12 @@ def test_fused_carrier_solve_equals_numpy_reference(B, auger):
     for which, other, bc in (("n", p_T, cb.n_bc), ("p", n_T, cb.p_bc)):
         x = cb._solve_carrier(psi_T, other, which, G, denom, bc, aug)
         r = cb._solve_carrier_numpy(psi_T, other, which, G, denom, bc, aug)
-        np.testing.assert_array_equal(x, r)
+        # numba (LLVM/libm expm1) vs numpy (its own, CPU-dispatched ufunc loops) are
+        # bit-equal on macOS arm64 but not on the x86-64 Linux CI runner: there the max
+        # deviation is 5.9e-15 relative (~27 ulp after the Thomas recurrence). A +-2 ulp
+        # perturbation of psi alone moves the numpy reference by up to 5.5e-13, so
+        # rtol 1e-12 is rounding-level; any assembly/BC/Auger mistake is orders larger.
+        np.testing.assert_allclose(x, r, rtol=1e-12, atol=0.0)
 
 
 def test_serial_and_prange_drivers_identical():

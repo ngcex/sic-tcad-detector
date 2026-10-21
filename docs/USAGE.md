@@ -2170,13 +2170,14 @@ uv run pytest -n auto -q --durations=20           # slowest tests
   presets (`test_default_stack.py`, `test_nplus_calibration.py`,
   `test_measured_cv_preset.py`, `test_measured_cv_tabulated.py`,
   `test_microdosimeter_preset.py`) and the core physics modules.
-- CI (`.github/workflows/ci.yml`) runs the lock check, ruff (`ruff check .` with
+- CI (`.github/workflows/ci.yml`) installs `--extra dev --extra viz` (apt cairo/pango so
+  pycairo and manimpango build) and runs the lock check, ruff (`ruff check .` with
   `ruff.toml`: pyflakes F, E9, W6 over etna/, app/, tests/, scripts/), notebook hygiene, the generator check and the default run with
   `-n 4`. It runs only on pushes to `main`, pull requests and manual dispatch, not on
   every branch push, because the local run is the gate. The numba cache is kept in
   `actions/cache`, keyed on the exact hash of `etna/**/*.py` + `uv.lock`, with source
-  mtimes pinned so numba accepts it. The test timeout is 45 min and has not been
-  re-measured since the leak fix (it was 37-52 min before). A nightly job runs
+  mtimes pinned so numba accepts it. The test timeout is 45 min; the test job took 14 min on 2026-10-21
+  (37-52 min before the leak fix). A nightly job runs
   `-m exhaustive` and a `pip-audit` of the locked set.
 
 ---

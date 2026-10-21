@@ -150,10 +150,22 @@ def test_reference_stack_pin():
     assert REF["stack"] == {k: v for k, v in ALT_STACK.items()}
 
 
+def _nearest_node(grid, pts):
+    """Index of the grid line nearest each stored coordinate. Not an exact-float
+    searchsorted: the reference coordinates were written on macOS arm64 and the Linux CI
+    mesh lands ~1 ulp off, which shifted searchsorted by one node (psi off by volts)."""
+    k = np.clip(np.searchsorted(grid, pts), 1, len(grid) - 1)
+    k -= (pts - grid[k - 1]) < (grid[k] - pts)
+    # same mesh, not a re-match: every coordinate agrees far below the node spacing
+    assert np.max(np.abs(grid[k] - pts)) < 1e-6 * np.min(np.diff(grid))
+    return k
+
+
 def _psi_err(s, tag):
     m = s.mesh
-    i = np.searchsorted(m.xs, PSI[f"{tag}_x"])
-    j = np.searchsorted(m.ys, PSI[f"{tag}_y"])
+    assert len(m.xs) * len(m.ys) == REF[tag]["nodes"] == PSI[f"{tag}_psi"].size
+    i = _nearest_node(m.xs, PSI[f"{tag}_x"])
+    j = _nearest_node(m.ys, PSI[f"{tag}_y"])
     return np.max(np.abs(s.potential()[j, i] - PSI[f"{tag}_psi"]))
 
 

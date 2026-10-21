@@ -9,8 +9,9 @@
 #   nightly  (schedule / manual): the `exhaustive` tests (redundant deep variants) and a
 #            dependency audit of the locked set (audit C-05).
 #
-# Installs `--extra dev` only (no `viz`): the GDSII and manim tests skip themselves when
-# gdstk / manim are absent.
+# Installs `--extra dev --extra viz` so the GDSII (gdstk) and manim tests run instead of
+# skipping. pycairo and manimpango have no cp313 manylinux wheels in uv.lock, so they
+# build from source against libcairo2-dev / libpango1.0-dev (uv caches the built wheels).
 name: CI
 
 on:
@@ -43,8 +44,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: System libraries for devsim (BLAS / LAPACK)
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libopenblas-dev liblapack-dev
+      - name: System libraries (BLAS / LAPACK for devsim; cairo / pango to build manim deps)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libopenblas-dev liblapack-dev libcairo2-dev libpango1.0-dev pkg-config
 
       - uses: astral-sh/setup-uv@v6
         with:
@@ -55,8 +56,8 @@ jobs:
       - name: Lock file is up to date
         run: uv lock --check
 
-      - name: Install (dev extra)
-        run: uv sync --locked --extra dev
+      - name: Install (dev + viz extras)
+        run: uv sync --locked --extra dev --extra viz
 
       # numba validates a cached kernel by its source file's mtime + size. A fresh
       # checkout (and every PR merge commit) gives each file a new mtime, so pin the
@@ -92,8 +93,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: System libraries for devsim (BLAS / LAPACK)
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libopenblas-dev liblapack-dev
+      - name: System libraries (BLAS / LAPACK for devsim; cairo / pango to build manim deps)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libopenblas-dev liblapack-dev libcairo2-dev libpango1.0-dev pkg-config
 
       - uses: astral-sh/setup-uv@v6
         with:
@@ -101,8 +102,8 @@ jobs:
           enable-cache: true
           cache-dependency-glob: uv.lock
 
-      - name: Install (dev extra)
-        run: uv sync --locked --extra dev
+      - name: Install (dev + viz extras)
+        run: uv sync --locked --extra dev --extra viz
 
       - name: Pin source mtimes for the numba cache (see the test job)
         run: git ls-files -z etna | xargs -0 touch -d @1700000000
@@ -150,11 +151,20 @@ jobs:
         run: uvx twine check --strict dist/*
 
       - name: Wheel contents (runtime data in, raw provenance out)
+        # The six NIST ESTAR pages (etna/_data/nist_estar/raw/*.html) ship on purpose:
+        # electron_range parses them at run time (b964321). Any other html, raw/ dir or
+        # notebook-only input in the wheel is a packaging regression. Explicit if/exit:
+        # `bash -e` does not stop on a failing `!`-negated command that is not last.
         run: |
           unzip -l dist/*.whl | tee /tmp/wheel.txt
           grep -q 'etna/_data/nist_star/pstar_water.csv' /tmp/wheel.txt
           grep -q 'etna/_data/foundry/layout_params.toml' /tmp/wheel.txt
-          ! grep -E '\.html$|/raw/|synthetic_mc_events' /tmp/wheel.txt
+          estar='etna/_data/nist_estar/raw/estar_[A-Za-z]+_[0-9]+\.html$'
+          n=$(grep -cE "$estar" /tmp/wheel.txt || true)
+          if [ "$n" -ne 6 ]; then echo "expected 6 ESTAR html files in the wheel, found $n"; exit 1; fi
+          if grep -E '\.html$|/raw/|synthetic_mc_events' /tmp/wheel.txt | grep -vE "$estar"; then
+            echo "raw provenance / notebook-only file in the wheel (listed above)"; exit 1
+          fi
 
       - name: Install the wheel into a clean venv outside the checkout
         run: |
