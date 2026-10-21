@@ -565,18 +565,20 @@ fluence (`lab/radiation_traps/bench/default_flip.py`):
 
 | x Phi_comp | 0.1 | 0.5 | 0.9 | 1.5 | 10 |
 | --- | --- | --- | --- | --- | --- |
-| old default (legacy, si-neq; Phi_comp 3.48e12) | 0.999618 | 0.998882 | 0.998294 | NaN | NaN |
-| legacy, sic-damage (4.36e12) | 0.999618 | 0.998882 | 0.998294 | NaN | NaN |
-| calibrated traps, si-neq, d 2.87 (1.70e12) | 0.999787 | 0.999572 | 0.999377 | 0.999113 | 0.996910 |
-| **new default** (calibrated traps, sic-damage, d 4.69; 1.80e12) | 0.999798 | 0.999619 | 0.999456 | 0.999237 | 0.997448 |
+| old default (legacy, si-neq; Phi_comp 3.48e12) | 0.999625 | 0.998930 | 0.998391 | NaN | NaN |
+| legacy, sic-damage (4.36e12) | 0.999625 | 0.998930 | 0.998391 | NaN | NaN |
+| calibrated traps, si-neq, d 2.87 (1.70e12) | 0.999792 | 0.999592 | 0.999412 | 0.999171 | 0.997444 |
+| **new default** (calibrated traps, sic-damage, d 4.69; 1.80e12) | 0.999800 | 0.999628 | 0.999471 | 0.999258 | 0.997706 |
 
-Only the **new default** row is on the current c-axis electron mobility (re-measured
-2026-10-21 after the mobility default changed); the other rows were computed on
-`mobility="legacy_perp"` and move by up to about 1e-4 on the current default.
+All rows re-measured 2026-10-21 on the current defaults (c-axis electron mobility; trap
+rows with the epi length-mean occupancy lifetimes of issue #13). Before the issue-#13
+fix the new-default row read 0.999798 / 0.999619 / 0.999456 / 0.999237 / 0.997448 (node
+mean over epi + n+); the legacy rows were on `mobility="legacy_perp"` (0.999618 /
+0.998882 / 0.998294).
 
 At the same absolute fluences (0.1 ... 10 x 3.48e12 p/cm²) the new default gives
-0.999751 / 0.999414 / 0.999122 / 0.998745 / 0.995838 (old: 0.999618 / 0.998882 /
-0.998294 / NaN / NaN). The new default is LESS damaging below compensation (the legacy
+0.999758 / 0.999446 / 0.999180 / 0.998842 / 0.996778 (old default: 0.999625 / 0.998930 /
+0.998391 / NaN / NaN). The new default is LESS damaging below compensation (the legacy
 lifetime K_tau counts every level as a trap, the occupancy lifetimes only free ones) and
 keeps solving beyond it. These CCE numbers are predictions (no measured CCE vs fluence
 of this device).
@@ -615,9 +617,13 @@ The two kinds of per-neq numbers in the chain transform differently:
    does not scale.
 3. **No double counting.** The preset records its convention
    (`RadiationTrapModel.niel_convention`); `resolve_traps("auto", convention)` builds it
-   in the run's convention, and every fluence sweep (`cce_vs_fluence`,
-   `KineticTrapSolver.from_config`, `calibrate_cv`) refuses a calibrated model under
-   another convention (`check_trap_convention`, ValueError). The literature levels
+   in the run's convention (also a preset NAME passed to
+   `KineticTrapSolver.from_config`, `calibrate_cv` or `calibrate_removal`, issue #12),
+   and the fluence sweeps and helpers (`cce_vs_fluence`, `run_radiation_damage`,
+   `compensation_fluence`, `default_fluence_grid`, `trap_compensation_fluence`,
+   `KineticTrapSolver.from_config`, `calibrate_cv`, `removal_observable` both kinds)
+   refuse a calibrated model OBJECT of another convention (`check_trap_convention`,
+   ValueError; the last three guards since issue #15). The literature levels
    carry no convention (they are neutron-anchored).
 4. **What is NOT invariant** (and is reported, not hidden): the share of the removal
    carried by the literature levels (above), the energy transfer from 252.7 MeV to other
@@ -996,8 +1002,15 @@ calibrated removal").
   `initial` state at 0 V, a ramp at `ramp_V_per_s`, then a hold of `hold_s`; its trap
   charge is then frozen. The default is `"steady"`.
 - **`lifetimes="occupancy"`**: CCE lifetimes count only levels able to capture. A
-  filled level cannot capture an electron. The default is `"legacy"`, which uses
-  `compute_K_tau`.
+  filled level cannot capture an electron. The capture rate is LENGTH-averaged over
+  the epi (junction to the n-/n+ step, trapezoid on the mesh) into one tau per device
+  (the transport takes a scalar tau; a tau(x) field is not implemented). Until issue
+  #13 it was a node-count mean over the epi plus the n+ layer, which depended on the
+  mesh grading (1-CCE x0.86-0.96 on the default path). Four times finer 1-nm mesh
+  lines now move the default CCE at 1e14 p/cm² by 6e-7 (before: 1.0e-4); halving every
+  spacing moves it by 1.7e-5 (legacy lifetimes: 3.8e-5, the transport discretisation;
+  `lab/audit_v8/m2_mesh_refinement.py`). The default is `"legacy"`, which uses
+  `compute_K_tau`; the calibrated presets (hence `"auto"`) use `"occupancy"`.
 
 **Presets** (`etna.core.trap_presets.trap_preset(name)`; pass the returned model as
 `DeviceConfig(radiation_traps=...)`):
@@ -1056,13 +1069,17 @@ calibrated removal").
   - C-V removal is insensitive to sigma_n.
   - The default stays 1.4e-14 (MECHANISMS.md section 4).
 - **CCE beyond compensation** (default stack, 62 MeV), at -40 V, for 1e15 / 5e15
-  p/cm2:
+  p/cm2 (re-measured 2026-10-21 on the current defaults, sic-damage and c-axis; in
+  brackets the si-neq / legacy_perp numbers of `cce_kinetic.py`):
 
-  | Model                                     | CCE at 1e15 | CCE at 5e15 |
-  | ----------------------------------------- | ----------- | ----------- |
-  | steady traps                              | 0.355       | 0.152       |
-  | kinetic, legacy lifetimes                 | 0.831       | 0.472       |
-  | kinetic, occupancy lifetimes (calibrated) | 0.919       | 0.686       |
+  | Model                                     | CCE at 1e15     | CCE at 5e15     |
+  | ----------------------------------------- | --------------- | --------------- |
+  | steady traps                              | 0.405 (0.355)   | 0.172 (0.152)   |
+  | kinetic, legacy lifetimes                 | 0.876 (0.831)   | 0.568 (0.472)   |
+  | kinetic, occupancy lifetimes (calibrated) | 0.948 (0.919)   | 0.779 (0.686)   |
+
+  The calibrated row read 0.941 / 0.756 on the current defaults before the issue-#13
+  lifetime average. The bullets below are from the si-neq bench.
   - The steady-to-kinetic step dominates.
   - The calibrated removal itself changes CCE by less than 0.01 up to 1e15.
   - The unknown post-irradiation occupancy of EH6/7 dominates beyond about 3e14. With

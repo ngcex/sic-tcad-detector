@@ -355,8 +355,9 @@ def test_new_default_is_calibrated_kinetic_in_sic_damage():
     assert r.y[0] == leg.y[0]  # pristine point: identical
     # pins (bench lab/radiation_traps/bench/default_flip.py)
     # re-pinned for the c-axis electron mobility default (was 0.999611, 0.999209, 0.997229
-    # on legacy_perp)
-    np.testing.assert_allclose(r.y[1:], [0.999619, 0.999237, 0.997448], atol=2e-5)
+    # on legacy_perp), then for the epi length-mean occupancy lifetimes (issue #13; was
+    # 0.999619, 0.999237, 0.997448 with the node mean over epi + n+)
+    np.testing.assert_allclose(r.y[1:], [0.999628, 0.999258, 0.997706], atol=2e-5)
 
 
 def test_auto_falls_back_to_legacy_with_a_note_outside_the_engine():
