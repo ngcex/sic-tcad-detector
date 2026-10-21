@@ -1,0 +1,106 @@
+
+====================================================================================================
+1. Mean deposit vs NIST CSDA integral (delta rays off; consistency), 10 um SiC, normal
+====================================================================================================
+particle    E MeV    kappa  mean MC keV   CSDA keV   ratio    var MC var Vav/Bohr  ratio
+proton       1.00     53.1      875.729    874.568  1.0013    1117.7        251.2  4.449
+proton      10.00    0.536      117.274    117.182  1.0008     213.7        253.7  0.842
+proton      62.00   0.0147       27.812     27.707  1.0038     238.6        268.1  0.890
+proton     150.00  0.00272       14.483     14.414  1.0048     276.4        294.2  0.939
+proton     250.00  0.00106       10.563     10.509  1.0052     324.0        326.7  0.992
+alpha        5.49      111     2352.749   2352.633  1.0000    1496.3       1006.2  1.487
+c12        744.00     0.52      993.838    993.307  1.0005    8514.2       9666.0  0.881
+c12       3480.00   0.0287      345.962    345.119  1.0024   13059.6      12298.5  1.062
+(1 MeV p and 5.486 MeV alpha lose a large fraction of E in 10 um: the fixed-E Bohr/Vavilov variance is not the reference there, the slowing adds variance)
+
+====================================================================================================
+2. Distribution shape vs analytic theory (delta rays off = full loss local)
+====================================================================================================
+case                           kappa          ref   MPV MC  MPV ref  FWHM MC FWHM ref
+proton   250.0 MeV t= 10 um      0.00106  Landau(PDG)     7.13     6.39     4.72     2.62
+proton   150.0 MeV t= 10 um      0.00272  Landau(PDG)    10.27     9.32     6.05     3.85
+proton    62.0 MeV t= 10 um       0.0147  Landau(PDG)    21.52    19.85     9.75     8.22
+proton    62.0 MeV t=  2 um      0.00294  Landau(PDG)     3.62     3.31     2.94     1.64
+c12  3480.0 MeV t= 10 um       0.0287  Landau(PDG)   288.04   283.30    74.65    84.96
+proton    20.0 MeV t= 10 um        0.135      Vavilov    59.29    57.40    21.05    23.79
+proton    10.0 MeV t= 10 um        0.536      Vavilov   111.36   111.28    31.71    35.96
+c12   744.0 MeV t= 10 um         0.52      Vavilov   950.22   955.86   202.85   220.61
+alpha     5.5 MeV t=  2 um         22.2   Bohr-Gauss   412.13   410.82    34.05    33.40
+Landau rows: the PDG notes thin-Si distributions are 'significantly wider than the Landau width' (Bichsel 1988); the Urban model (Geant4) reproduces that broadening.
+
+====================================================================================================
+3. Alpha 5.486 MeV range in SiC (thick slab, normal): MC vs CSDA and Bohr straggling
+====================================================================================================
+mean stop depth 18.413 um  (CSDA 18.429 um)  ratio 0.9991
+range straggling MC 0.156 um  (Bohr integral 0.165 um)
+deposit 5473.7 keV of 5486 (ionisation; nuclear loss not deposited: 12.3 keV)
+
+====================================================================================================
+4. Adaptive steps: step_fraction convergence (alpha 5.486 MeV, 20 um SiC, stops inside)
+====================================================================================================
+step_fraction  0.40: mean stop 18.4132 um, deposit 5473.725 keV
+step_fraction  0.20: mean stop 18.4118 um, deposit 5473.657 keV
+step_fraction  0.10: mean stop 18.4101 um, deposit 5473.680 keV
+step_fraction  0.05: mean stop 18.4095 um, deposit 5473.694 keV
+step_fraction  0.02: mean stop 18.4091 um, deposit 5473.703 keV
+step_fraction  0.01: mean stop 18.4091 um, deposit 5473.701 keV
+
+====================================================================================================
+5. Delta-ray escape and equilibrium (62 MeV p, 100x100x10 um SiC, normal)
+====================================================================================================
+surround     0 um, range factor 1.0: deposit per crossing   25.335 keV = 0.9144 x CSDA mean; delta part 3.643 keV
+surround     0 um, range factor 0.7: deposit per crossing   25.649 keV = 0.9257 x CSDA mean; delta part 3.957 keV
+surround    20 um, range factor 1.0: deposit per crossing   26.970 keV = 0.9734 x CSDA mean; delta part 5.305 keV
+surround   100 um, range factor 1.0: deposit per crossing   27.991 keV = 1.0103 x CSDA mean; delta part 6.073 keV
+surround   300 um, range factor 1.0: deposit per crossing   28.029 keV = 1.0116 x CSDA mean; delta part 6.051 keV
+
+====================================================================================================
+6. T_cut plateau (62 MeV p, bare 100x100x10 um SiC, normal, l = t)
+====================================================================================================
+T_cut    1.0 keV: y_F 2.5317 +- 0.0014, y_D 2.8537 +- 0.0024 keV/um (n=400000)
+T_cut    2.0 keV: y_F 2.5344 +- 0.0014, y_D 2.8565 +- 0.0024 keV/um (n=400000)
+T_cut    5.0 keV: y_F 2.5353 +- 0.0014, y_D 2.8538 +- 0.0024 keV/um (n=400000)
+T_cut   10.0 keV: y_F 2.5369 +- 0.0014, y_D 2.8517 +- 0.0024 keV/um (n=400000)
+T_cut   20.0 keV: y_F 2.5418 +- 0.0014, y_D 2.8452 +- 0.0024 keV/um (n=400000)
+T_cut   50.0 keV: y_F 2.5983 +- 0.0015, y_D 2.9591 +- 0.0030 keV/um (n=400000)
+T_cut  139.0 keV: y_F 2.7674 +- 0.0024, y_D 3.6056 +- 0.0087 keV/um (n=400000)
+(T_cut >= T_max = 139 keV: no explicit delta rays, all loss local: no escape)
+
+====================================================================================================
+7. Lineal energy: deterministic LET x chord baseline (ETNA before) vs sampled
+====================================================================================================
+columns: base = deterministic LET x chord; local = straggling only (all loss local, no delta escape);
+ bare = straggling + delta rays, SV in vacuum; embedded = same with 300 um SiC around the SV (alpha: 5 um),
+ crossing events only (delta equilibrium)
+case                                          base    local     bare embedded
+proton    62.0 MeV normal     (l=10.00) y_F     2.771    2.769    2.530    2.751
+                                     y_D     2.771    3.618    2.845    3.228
+proton    62.0 MeV isotropic  (l=16.67) y_F     2.774    2.774    2.561    2.743
+                                     y_D     4.595    5.103    4.502    4.587
+proton   150.0 MeV normal     (l=10.00) y_F     1.441    1.442    1.269    1.373
+                                     y_D     1.441    3.399    1.618    1.860
+c12  3480.0 MeV normal     (l=10.00) y_F    34.512   34.498   29.725   31.449
+                                     y_D    34.512   38.229   30.093   31.961
+c12   744.0 MeV isotropic  (l=16.67) y_F    99.520   99.498   91.868  100.618
+                                     y_D   165.341  165.874  153.834  157.854
+alpha     5.5 MeV normal     (l=10.00) y_F   235.263  235.253  235.253  297.761
+                                     y_D   235.263  235.316  235.316  297.842
+
+====================================================================================================
+8. Throughput (numba float64, parallel; events/s, 62 MeV p, delta rays on)
+====================================================================================================
+threads: NUMBA_NUM_THREADS=default
+numba threads in use: 10
+n=    10000:      5.2 ms  ->   1.93 M events/s
+n=   100000:     26.2 ms  ->   3.82 M events/s
+n=  1000000:    257.8 ms  ->   3.88 M events/s
+n=  4000000:   1176.5 ms  ->   3.40 M events/s
+1 thread, n=1e6: 1451.5 ms -> 0.69 M events/s
+
+====================================================================================================
+9. Nuclear interactions (not modelled): probability per 10 um SiC traversal, C-12
+====================================================================================================
+100 MeV/u: sigma_R(C+Si) 1376 mb, (C+C) 950 mb (Tripathi formula, computed, not measured) -> P = 1.12e-04
+290 MeV/u: sigma_R(C+Si) 1273 mb, (C+C) 857 mb (Tripathi formula, computed, not measured) -> P = 1.03e-04
+
+total 103.2 s
