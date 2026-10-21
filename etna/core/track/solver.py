@@ -34,7 +34,7 @@ from scipy.sparse.linalg import splu
 from etna.core.device2d import Q
 
 from .grid import TrackDevice
-from .kernels import apply_update, assemble, edge_power
+from .kernels import apply_update, assemble, assemble_excess, edge_power
 
 logger = logging.getLogger(__name__)
 
@@ -74,8 +74,30 @@ def _chole(D, ni):
 class TrackSystem:
     """Discrete system (geometry, pattern, coefficients) of one TrackDevice."""
 
-    def __init__(self, dev: TrackDevice):
+    def __init__(self, dev: TrackDevice, geometry=None):
+        """``geometry`` (optional): a dict with ``vol`` (N,), ``netdop`` (N,), ``nb``
+        (N, S) neighbour indices (-1 = none), ``geo`` (N, S) face / length per slot,
+        ``is_contact`` (N,) 0/1, ``anode`` / ``cathode`` node index arrays: any
+        finite-volume mesh with Dirichlet contact nodes (e.g. the transverse
+        cross-section of ``etna.core.track.cross_section``). None = the axisymmetric
+        (r, z) grid of ``dev``."""
         self.dev = dev
+        self.excess = None  # (n_dark, p_dark) in the excess-variable mode
+        if geometry is not None:
+            g = geometry
+            self.vol = np.ascontiguousarray(g["vol"], dtype=float)
+            N = self.vol.size
+            self.M, self.K, self.N = N, 1, N
+            self.netdop = np.ascontiguousarray(g["netdop"], dtype=float)
+            nb = np.ascontiguousarray(g["nb"], dtype=np.int64)
+            geo = np.ascontiguousarray(g["geo"], dtype=float)
+            self._setup_pattern(nb, geo)
+            self.is_contact = np.ascontiguousarray(g["is_contact"], dtype=np.int64)
+            self.anode = np.asarray(g["anode"], dtype=np.int64)
+            self.cathode = np.asarray(g["cathode"], dtype=np.int64)
+            self.set_temperature(None)
+            self.set_reference(None)
+            return
         M, K = dev.M, dev.K
         N = M * K
         self.M, self.K, self.N = M, K, N
@@ -103,13 +125,26 @@ class TrackSystem:
                 if j < K - 1:
                     nb[k, 3] = k + M
                     geo[k, 3] = area[i] / hz[j]
+        self._setup_pattern(nb, geo)
+        self.is_contact = np.zeros(N, dtype=np.int64)
+        self.is_contact[:M] = 1  # anode, z = 0
+        self.is_contact[(K - 1) * M :] = 1  # cathode, z = L
+        self.anode = np.arange(M)
+        self.cathode = np.arange((K - 1) * M, N)
+        self.set_temperature(None)
+        self.set_reference(None)
+
+    def _setup_pattern(self, nb, geo):
+        """Block-CSR pattern of the neighbour lists ``nb`` (N, S)."""
+        N = nb.shape[0]
+        S = nb.shape[1]
         self.nb, self.geo = nb, geo
-        self.pe = geo * (dev.eps / Q)
+        self.pe = geo * (self.dev.eps / Q)
         # block CSR pattern: sorted neighbour columns + the diagonal
         cols = [sorted([k] + [l for l in nb[k] if l >= 0]) for k in range(N)]
         brow_ptr = np.zeros(N + 1, dtype=np.int64)
         brow_ptr[1:] = np.cumsum([len(c) for c in cols])
-        bpos = -np.ones((N, 4), dtype=np.int64)
+        bpos = -np.ones((N, S), dtype=np.int64)
         bdiag = np.empty(N, dtype=np.int64)
         for k in range(N):
             for q, c in enumerate(cols[k]):
@@ -131,13 +166,6 @@ class TrackSystem:
                 indptr[3 * k + a + 1] = pos
         self.indptr, self.indices = indptr, indices
         self.nnz = pos
-        self.is_contact = np.zeros(N, dtype=np.int64)
-        self.is_contact[:M] = 1  # anode, z = 0
-        self.is_contact[(K - 1) * M :] = 1  # cathode, z = L
-        self.anode = np.arange(M)
-        self.cathode = np.arange((K - 1) * M, N)
-        self.set_temperature(None)
-        self.set_reference(None)
 
     # ------------------------------------------------------------ coefficients
     def set_temperature(self, T_node):
@@ -197,6 +225,16 @@ class TrackSystem:
         phi = np.empty(2 * N)
         rpsi = np.empty(N)
         dev = self.dev
+        if self.excess is not None:
+            nd, pd = self.excess
+            assemble_excess(
+                x, alpha, hist, qoff, G, self.vol, nd, pd, self.nb, self.pe,
+                self.gvt, self.mun, self.mup, self.dref, self.bpos, self.bdiag,
+                self.brow_ptr, self.is_contact, dev.V_t, dev.n_i, self.taun,
+                self.taup, dev.C_n, dev.C_p, *self._physics(), res, data, phi, rpsi,
+                jac,
+            )  # fmt: skip
+            return res, data, phi, rpsi
         assemble(
             x, alpha, hist, qoff, G, self.vol, self.netdop, self.nb, self.pe,
             self.gvt, self.mun, self.mup, self.dref, self.pref, self.bpos, self.bdiag,
@@ -205,9 +243,30 @@ class TrackSystem:
         )  # fmt: skip
         return res, data, phi, rpsi
 
-    def recombination(self, x):
-        """U (N,) cm^-3 s^-1 of the state x (SRH + Auger, the kernel's model)."""
+    def _recomb_g(self, n, p):
+        """U / (n p - n_i^2) (SRH + Auger, the kernel's model)."""
         dev = self.dev
+        den = self.taup * (n + dev.n_i) + self.taun * (p + dev.n_i)
+        f = 1.0
+        if dev.auger_model == "injection" and dev.C_n + dev.C_p > 0:
+            d = np.minimum(n, p)
+            dd = np.where(d > 0, d, 1.0)
+            g = AUGER_A * dd ** (-AUGER_B) / (dev.C_n + dev.C_p)
+            f = np.where((d > 0) & (g < 1.0), g, 1.0)
+        return 1.0 / den + f * (dev.C_n * n + dev.C_p * p)
+
+    def recombination(self, x):
+        """U (N,) cm^-3 s^-1 of the state x (SRH + Auger, the kernel's model). In the
+        excess mode (``set_excess``) x holds (dpsi, dn, dp) and the EXCESS
+        U(nd + dn, pd + dp) - U(nd, pd) is returned, free of cancellation."""
+        dev = self.dev
+        if self.excess is not None:
+            nd, pd = self.excess
+            dn, dp = x[1::3], x[2::3]
+            n, p = nd + dn, pd + dp
+            num_d = nd * pd - dev.n_i**2
+            g = self._recomb_g(n, p)
+            return (nd * dp + pd * dn + dn * dp) * g + num_d * (g - self._recomb_g(nd, pd))
         n, p = x[1::3], x[2::3]
         num = n * p - dev.n_i**2
         den = self.taup * (n + dev.n_i) + self.taun * (p + dev.n_i)
@@ -218,6 +277,20 @@ class TrackSystem:
             g = AUGER_A * dd ** (-AUGER_B) / (dev.C_n + dev.C_p)
             f = np.where((d > 0) & (g < 1.0), g, 1.0)
         return num / den + f * (dev.C_n * n + dev.C_p * p) * num
+
+    def set_excess(self, x_dark):
+        """Switch to excess unknowns (dpsi, dn, dp) about the dark state ``x_dark``
+        (absolute form, with dpsi = 0: its potential must already be the reference);
+        None switches back to absolute unknowns. ``kernels.assemble_excess``."""
+        if x_dark is None:
+            self.excess = None
+            return
+        if np.any(x_dark[0::3] != 0.0):
+            raise ValueError("excess mode needs the dark state as the reference (dpsi = 0)")
+        self.excess = (
+            np.ascontiguousarray(x_dark[1::3], dtype=float),
+            np.ascontiguousarray(x_dark[2::3], dtype=float),
+        )
 
     def joule(self, x):
         """Joule power per node (W): q * sum over edges of I_e (psi_k - psi_l) / 2."""
@@ -495,7 +568,41 @@ def _extrapolate(xa, xb, ratio):
     return out
 
 
-def run_transient(
+def run_transient(system: TrackSystem, x_dark, xbc, pairs, *args, excess=None, **kw):
+    """Transient after an ion track (``_run_transient``, whose docstring has the
+    arguments), by default in EXCESS unknowns (dn, dp about the dark state:
+    ``kernels.assemble_excess``), which removes the float64 floor of the 1e19 majority
+    layers (``ledger_floor`` ~1e-6 of N_gen at LET 1 keV/um in absolute unknowns,
+    ~n_steps x 4e-16 in excess unknowns). ``excess``: None = on unless ``thermal`` or
+    ``energy`` is requested (those paths use absolute states); False = the absolute
+    form of the first release (kept selectable); True = on (raises with thermal /
+    energy). The returned TrackResult is the same quantity in both forms (the
+    ``extra["excess"]`` flag records which was used)."""
+    thermal = kw.get("thermal", args[8] if len(args) > 8 else None)
+    energy = kw.get("energy", args[9] if len(args) > 9 else False)
+    if excess is None:
+        excess = thermal is None and not energy
+    if not excess:
+        res = _run_transient(system, x_dark, xbc, pairs, *args, **kw)
+        res.extra["excess"] = False
+        return res
+    if thermal is not None or energy:
+        raise ValueError("excess=True does not support thermal / energy (absolute states)")
+    if np.any(x_dark[0::3] != 0.0):
+        raise ValueError("excess mode needs the dark state as the reference (dpsi = 0)")
+    system.set_excess(x_dark)
+    try:
+        res = _run_transient(
+            system, np.zeros_like(x_dark), np.zeros_like(xbc), pairs, *args,
+            _excess_scale=True, **kw,
+        )  # fmt: skip
+    finally:
+        system.set_excess(None)
+    res.extra["excess"] = True
+    return res
+
+
+def _run_transient(
     system: TrackSystem,
     x_dark,
     xbc,
@@ -514,6 +621,7 @@ def run_transient(
     chord=True,
     floor_frac=-1.0,
     tol_psi=1e-8,
+    _excess_scale=False,
 ):
     """Transient after an ion track that deposits ``pairs`` (N,) pairs per node volume
     (contact nodes must be zero), from the dark state ``x_dark``.
@@ -550,6 +658,9 @@ def run_transient(
     U_d = system.recombination(x_dark)
     n_d, p_d = x_dark[1::3].copy(), x_dark[2::3].copy()
     majority = float(np.dot(vol, np.maximum(n_d, p_d)))
+    if _excess_scale:
+        # excess unknowns: their sums are O(N_gen); no majority-carrier floor
+        majority = N_target
     x = x_dark.copy()
     t0_pulse = 0.0
     if pulse_sigma_s is None:
