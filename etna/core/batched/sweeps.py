@@ -190,7 +190,7 @@ class _Ramp:
 @dataclass
 class SweepResult:
     voltages: np.ndarray  # (K,) conventional sign (reverse bias negative)
-    W: np.ndarray  # (K, B) cm, depletion EDGE (n/N_D = 0.5), metadata only
+    W: "np.ndarray | None"  # (K, B) cm, depletion EDGE (n/N_D = 0.5); None if not asked
     C: "np.ndarray | None"  # (K, B) F/cm^2 (area = 1), small-signal dQ/dV; None if not asked
     psi: "np.ndarray | None"  # (K, B, N) V; None unless keep_psi
     converged: np.ndarray  # (K, B) bool, cumulative along the sweep
@@ -206,6 +206,7 @@ def reverse_sweep(
     keep_psi=False,
     capacitance=True,
     max_step_V=MAX_STEP_V,
+    width=True,
 ):
     """Solve all devices at each of ``voltages`` (<= 0, in the order given).
 
@@ -213,7 +214,8 @@ def reverse_sweep(
     the observable of a measured C-V; ``W`` is the n/N_D = 0.5 depletion edge, which is
     NOT eps/C (they differ near full depletion: 9.500 vs 9.764 um at -10 V on the
     pre-2026-10-17 default stack). ``capacitance=False`` skips C (``C`` is None), for
-    callers that only need W (reach-through refinement). Jumps longer than
+    callers that only need W (reach-through refinement); ``width=False`` skips W (``W``
+    is None), for callers that only need C (the C-V inversion). Jumps longer than
     ``max_step_V`` (default 10 V) are walked in Poisson-only sub-steps.
 
     Jumps of ~100 V (less at low T: the Newton clamp is in V_t units) between
@@ -228,9 +230,10 @@ def reverse_sweep(
         res = ramp.to(-V) if abs(V) > 1e-12 or ramp.Vc != 0.0 else None
         if res is None:
             res = pb.solve(ramp.psi, tol=tol)
-        W.append(
-            depletion_width(pb.x, res.n, pb.donors, junction_pos, epi_thickness_cm)
-        )
+        if width:
+            W.append(
+                depletion_width(pb.x, res.n, pb.donors, junction_pos, epi_thickness_cm)
+            )
         if capacitance:
             C.append(pb.small_signal_capacitance(res))
         if keep_psi:
@@ -238,7 +241,7 @@ def reverse_sweep(
         conv.append(ramp.converged.copy())
     return SweepResult(
         voltages,
-        np.array(W),
+        np.array(W) if width else None,
         np.array(C) if capacitance else None,
         np.array(psis) if keep_psi else None,
         np.array(conv),

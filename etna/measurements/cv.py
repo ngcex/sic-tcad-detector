@@ -773,7 +773,7 @@ def _stacked_W(configs, n, vmin, V, exact):
         np.concatenate([p.V_t for p in pbs]),
     )
     bias = np.linspace(0.0, vmin, n)
-    res = reverse_sweep(pb, bias, sub, epi)
+    res = reverse_sweep(pb, bias, sub, epi, width=False)  # only C is used
     if not res.converged.all():
         return None
     W = _eps() / res.C * 1e4  # (n, B)
