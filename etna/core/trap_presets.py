@@ -61,11 +61,11 @@ EH67_SIGMA_N_EMISSION = 1e-13  # cm^2 at Ec-1.60 (see module docstring)
 # CALIBRATED (lab/radiation_traps/bench/mechanisms.py, MECHANISMS.md): the slow
 # removal component (cm^-1 per Si-neq, kappa(252.7 MeV) = 0.851 of this code) fitted
 # to the three Radmanovac Table 2 slopes on top of literature_kinetic().
-# Fit "d only" (3 slopes, chi2 1.14 for 2 dof): 2.87 +- 0.23 /neq (the data +- are the
+# Fit "d only" (3 slopes, chi2 1.13 for 2 dof): 2.87 +- 0.22 /neq (the data +- are the
 # spread over depletion widths, not fit errors; kappa(252.7 MeV) = 0.851 of this code,
 # 0.9 in the paper: a ~6 % systematic on the per-neq value, not on the per-p slope).
 CALIBRATED_SLOW_REMOVAL = 2.87
-CALIBRATED_SLOW_REMOVAL_SIGMA = 0.23
+CALIBRATED_SLOW_REMOVAL_SIGMA = 0.22
 
 
 def arrhenius_sigma(A, T=300.0):

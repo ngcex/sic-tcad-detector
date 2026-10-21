@@ -77,13 +77,15 @@ Readings:
 
 ## 3. Calibration and identifiability (`calibrate_removal`, linear parameters on M1)
 
+Rows "d only", "EH4 scale only", "d + Z1/2": re-linearised (`lin_iterations=3`, default); the 3-parameter rows: one linearisation (bench run).
+
 | Fit (observations)                 | Result                                       | chi2 / dof | Notes                                                                  |
 | ---------------------------------- | -------------------------------------------- | ---------- | ---------------------------------------------------------------------- |
-| d only (3 g)                       | d = 2.87 +- 0.23 /neq                        | 1.14 / 2   | model g 4.94 / 4.81 / 4.40                                             |
-| EH4 scale only (3 g)               | s_EH4 = 2.30 +- 0.10                         | 2.06 / 2   | model 5.18 / 5.00 / 4.32                                               |
+| d only (3 g) | d = 2.87 +- 0.22 /neq | 1.13 / 2 | model g 4.95 / 4.81 / 4.41; linearity error 0.005 sigma |
+| EH4 scale only (3 g) | s_EH4 = 2.28 +- 0.10 | 2.06 / 2 | model 5.11 / 4.95 / 4.29 |
 | d + EH4 (3 g)                      | d 3.3 +- 4.2, s_EH4 0.8 +- 1.9               | 1.07 / 1   | corr -0.999; singular values 0.215, 10.8; null direction (0.91, -0.41) |
 | d + EH4 + Z1/2 (3 g + onsemi flat) | d 2.8 +- 6, s_EH4 1.0 +- 2.9, s_Z 0.9 +- 1.1 | 1.21 / 1   | corr(d, EH4) -0.998                                                    |
-| d + Z1/2 (3 g + onsemi flat)       | d 2.92 +- 0.38, s_Z 0.90 +- 0.70             | 1.20 / 2   | corr -0.81                                                             |
+| d + Z1/2 (3 g + onsemi flat) | d 2.95 +- 0.38, s_Z 0.81 +- 0.65 | 1.24 / 2 | corr -0.81 |
 
 What the data can and cannot distinguish:
 
@@ -94,13 +96,13 @@ What the data can and cannot distinguish:
    below ~500 K (identical numbers). They differ only in CCE trapping (the acceptor
    captures holes; its cross-sections are unmeasured) and at high temperature.
 3. **Fast acceptors (Z1/2, neutral-bulk only) are weakly constrained** by the onsemi
-   flat bracket: s_Z = 0.9 +- 0.7 with d. The slope alone does not see them.
+   flat bracket: s_Z = 0.8 +- 0.65 with d. The slope alone does not see them.
 4. **What would separate (1): temperature.** PREDICTED g(onsemi) at 300 / 325 / 350 K:
    calibrated (d) 4.94 / 4.56 / 3.22; EH4-scale fit 5.19 / 4.32 / 1.32. A C-V at 350 K
    (or after a 1 h reverse-bias hold at 325-350 K) splits them by 2.4x. Also DLTS of
    EH4 at 252.7 MeV (an EH4 at 5.5 /neq would be visible).
 
-Choice for the preset (`radmanovac_calibrated`): d = 2.87 +- 0.23 /neq as DIRECT
+Choice for the preset (`radmanovac_calibrated`): d = 2.87 +- 0.22 /neq as DIRECT
 removal on top of `literature_kinetic`. The chi2 difference to the EH4-only scale
 (1.14 vs 2.06) does NOT discriminate (the sigmas are width spreads, not standard
 errors). The choice rests on (i) the EH4-only fit needing EH4 at 5.5 /neq, 2.3x its

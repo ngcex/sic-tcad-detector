@@ -780,7 +780,7 @@ cv.C_ac, cv.C_qs, neff_from_cv(V_points, cv.C_ac)   # F/cm2 (area 1), cm^-3
       likewise report that Z1/2 does "not appear to significantly contribute".
   - The open question is in issue #5.
   - **Superseded** by the next subsection and `lab/radiation_traps/notes/MECHANISMS.md`. With
-    onsemi's own flat-C-V bracket, the Z1/2 scale is 0.9 +- 0.7 (consistent with nominal),
+    onsemi's own flat-C-V bracket, the Z1/2 scale is 0.8 +- 0.65 (consistent with nominal),
     and the slow component (EH4 plus the calibrated permanent removal) is about 5.3 /neq.
     The "Z1/2 carries none" reading came from an extrapolated compensation fluence.
 - **Temperature (PREDICTED, testable).** The kinetic g falls from 2.51 /p at 300 K to
@@ -871,7 +871,7 @@ steady Burin table).
 | `burin_steady` | the default trap table | literature |
 | `burin_kinetic` | same table, kinetic occupancy | literature |
 | `literature_kinetic` | Z1/Z2 two-level (Capan et al. JAP 124 (2018) 245701, Table I: energies and Arrhenius emission, [Z2]:[Z1] = 4.4, 2.5 V_C/neq assumed) + EH4 + EH6/7 (sigma_n 1e-13) + kinetic + occupancy lifetimes | PREDICTED |
-| `radmanovac_calibrated` | `literature_kinetic` + direct removal 2.87 +- 0.23 /neq | CALIBRATED to Radmanovac Table 2 |
+| `radmanovac_calibrated` | `literature_kinetic` + direct removal 2.87 +- 0.22 /neq | CALIBRATED to Radmanovac Table 2 |
 | `radmanovac_calibrated_deep_acceptor` | same rate on a midgap acceptor (Ec-1.9) | CALIBRATED; identical C-V |
 
 **Calibration on published numbers** (`trap_calibration.calibrate_removal`):
@@ -897,11 +897,11 @@ steady Burin table).
   - On the 3 Radmanovac slopes, a slow EH4-like acceptor and a permanent removal
     (direct, or a midgap acceptor) are degenerate, with correlation -0.999.
   - Direct removal and a midgap acceptor give identical C-V below about 500 K.
-  - Fast acceptors (Z1/2) are seen only through the flat-C-V fluence: scale 0.9 +- 0.7.
+  - Fast acceptors (Z1/2) are seen only through the flat-C-V fluence: scale 0.8 +- 0.65.
 - **Calibrated fits.**
-  - Direct removal: d = 2.87 +- 0.23 /neq, chi2 = 1.14 for 2 dof. Model g:
+  - Direct removal: d = 2.87 +- 0.22 /neq, chi2 = 1.13 for 2 dof. Model g:
     onsemi 4.94, W2 4.81, W4 4.40.
-  - EH4 scale instead: 2.30 +- 0.10, chi2 = 2.06. The chi2 difference does not
+  - EH4 scale instead: 2.28 +- 0.10, chi2 = 2.06. The chi2 difference does not
     discriminate (the sigmas are width spreads). The preset uses direct removal
     because the EH4-only fit needs EH4 at 2.3x its DLTS rate, and the removal
     literature points to a permanent compensating species.
