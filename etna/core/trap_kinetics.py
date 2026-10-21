@@ -41,8 +41,7 @@ Model (nothing here runs unless called; ``DeviceConfig`` and every default uncha
 What this does NOT do (stated, not hidden): the trap response AT the AC frequency (the
 lambda-region / admittance-spectroscopy part), transport-limited quasi-Fermi splitting in
 a semi-insulating epi under bias (dark flat-QFL assumption kept), Poole-Frenkel field
-enhancement of emission, the negative-U two-level Z1/2 (single level as Burin Table I),
-temperature changes within one run (one T per solver; build one solver per T).
+enhancement of emission, temperature changes within one run (one T per solver; build one solver per T).
 """
 
 from __future__ import annotations

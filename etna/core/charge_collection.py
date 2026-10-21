@@ -1209,6 +1209,11 @@ def _cce_vs_fluence_multi(
     pristine_tau_p = srh_lifetime(T_dev, "hole")
     ref = _fluence_reference(dev_kw)
 
+    # an energy outside the NIEL table is an INPUT error: raise here, before the
+    # per-point try below turns it into "solver failure" NaNs (audit v8 N3)
+    from etna.core.radiation_damage import get_hardness_factor
+
+    get_hardness_factor(energy_MeV, niel_table)
     P, F = len(damage_params_list), len(fluence_range)
     cce_values = np.zeros((P, F))
     valid = np.zeros((P, F), dtype=bool)

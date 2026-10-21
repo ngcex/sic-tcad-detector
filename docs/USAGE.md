@@ -1054,8 +1054,11 @@ calibrated removal").
     discriminate (the sigmas are width spreads). The preset uses direct removal
     because the EH4-only fit needs EH4 at 2.3x its DLTS rate, and the removal
     literature points to a permanent compensating species.
-- **Predicted flat-C-V fluences**, all inside the measured brackets:
-  - onsemi: 4.95e12 p/cm2;
+- **Predicted flat-C-V fluences**, all inside the measured brackets (si-neq preset;
+  `semi_insulating_fluence` takes the electron mobility of the default set at N_D since
+  audit v8 N1, a fixed 950 before: onsemi 4.94e12 -> 5.11e12, W4 4.77e13 -> 4.91e13,
+  the neq brackets move by < 0.1 %):
+  - onsemi: 5.11e12 p/cm2 (5.68e12 with the sic-damage preset);
   - W4: above 3.5e13;
   - Kroll et al.: 1.2e13 neq;
   - Gsponer et al.: below 5e14 neq.
@@ -2525,7 +2528,7 @@ Status **primary** means the numbers were read in the primary source. Status **s
 | `c_axis` mobility (default)                         | electrons primary (Ishikawa 2025 Kyoto thesis Eq. 2.16, drift, parallel to c); holes: `legacy_perp` (unchanged) | 300 K values exactly Eq. 2.16; T law: gamma -2.40 on mu_max (Schaffer's <0001> exponent, secondary) instead of the thesis's -3.4 (a disagreement between drift and Hall fits). Holes unchanged because the primaries disagree (lab/mobility_caxis/notes/LOG.md) |
 | `c_axis_holes_0p9` mobility (opt-in)                | as `c_axis`; holes x 0.90 (thesis drift ratio, primary; Hatakeyama 2003 1/1.15 secondary)                       | Ayalew eq. 3.81 (primary, older) says isotropic: not the default                                                                                                                                                                                                |
 | `ishikawa2025` mobility                             | primary (thesis Eqs. 2.16 and 4.6)                                                                              | Full thesis T laws, fitted 300-600 K; holes are HALL mobilities                                                                                                                                                                                                 |
-| `legacy_perp` / `ayalew2004` mobility               | primary (Ayalew Table 3.5)                                                                                      | Perpendicular to c. The electron gamma -2.40 is Schaffer's <0001> value; the hole -2.15 is borrowed from electrons. `legacy_perp` keeps mu_min T-independent                                                                                                    |
+| `legacy_perp` / `ayalew2004` mobility               | `legacy_perp` secondary (Schaffer 1994 via Ayalew Table 3.5); `ayalew2004` anisotropy primary (eqs. 3.80-3.81) | Perpendicular to c. The electron gamma -2.40 is Schaffer's <0001> value; the hole -2.15 is borrowed from electrons. `legacy_perp` keeps mu_min T-independent                                                                                                    |
 | `lades2000` high-field                              | electrons primary (Ayalew Table 3.6); parallel-to-c and holes secondary (Nilsson 2000 MC)                       | **Hole beta and T laws are an assumption** (no published fit)                                                                                                                                                                                                   |
 | `burin2024` / `ayalew2004` anisotropy               | secondary / primary                                                                                             |                                                                                                                                                                                                                                                                 |
 | `lades2000` BGN                                     | primary (Ayalew Table 3.4)                                                                                      | Lindefelt's own four-term form is restated inconsistently by two secondaries, so it is not offered                                                                                                                                                              |

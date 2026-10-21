@@ -203,9 +203,11 @@ def render() -> None:
     except ValueError as e:
         show_error(e, "Turn off incomplete ionization in the sidebar.")
         st.stop()
-    model, note = damage_model_of(run_cfg, proton_energy_MeV, **niel_kw)
+    # "auto" depends on the bias (legacy geometry): the bias widget below, as last set
+    v_pre = float(st.session_state.get("rad_v_bias", -20.0))
+    model, note = damage_model_of(run_cfg, proton_energy_MeV, V_bias=v_pre, **niel_kw)
     use_traps = model is not None
-    phi_c = compensation_fluence(run_cfg, proton_energy_MeV, **niel_kw)
+    phi_c = compensation_fluence(run_cfg, proton_energy_MeV, V_bias=v_pre, **niel_kw)
     phi_legacy = legacy_compensation_fluence(cfg, proton_energy_MeV, **niel_kw)
     st.caption(
         f"κ({proton_energy_MeV:g} MeV) = {kappa:.3g} (1 MeV neq per {pname}, "
@@ -315,6 +317,8 @@ def render() -> None:
         badge = solver_badge_text(result.metadata)
         if badge:
             st.caption(badge)
+        if result.metadata.get("damage_model_note"):
+            st.caption(f"Damage model: {result.metadata['damage_model_note']}")
         valid = np.asarray(
             result.metadata.get("valid", np.isfinite(result.y)), dtype=bool
         )

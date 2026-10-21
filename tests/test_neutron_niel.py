@@ -127,7 +127,8 @@ def test_displacement_threshold_does_not_matter_for_fast_neutrons():
 
 
 def test_sic_heavier_damage_per_gram_than_si_for_fission_neutrons():
-    # r_n > r_p at every proton energy: the default Si-neq kappa overstates SiC damage
+    # r_n > r_p at every proton energy: the si-neq kappa (the default until 2026-10-21)
+    # overstates the SiC damage
     for e in (1.0, 5.6, 62.0, 150.0, 1000.0):
         assert niel_ratio_sic_si(e) < nt.R_N_SIC_SI_FISSION
 

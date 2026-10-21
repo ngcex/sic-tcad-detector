@@ -1622,7 +1622,8 @@ def run_radiation_damage(
     proton_energy_MeV : float
         Incident proton energy (MeV) used for the NIEL damage model.
         Default 5.6. The SR-NIEL hardness table covers 1-1000 MeV (kappa(5.6 MeV)
-        = 6.67, Si-normalised 1-MeV-neq); outside it get_hardness_factor raises
+        = 5.89 in the default sic-damage convention, 6.67 in si-neq); outside it
+        get_hardness_factor raises
         ValueError (audit-v7 B-07; before 2026-10-20 a 30-150 MeV placeholder table
         silently gave kappa(30 MeV) = 0.5 here). At 5.6 MeV NIEL scaling is known to
         overpredict measured Si proton damage by tens of percent (data/niel/README.md).
@@ -1744,13 +1745,15 @@ TRAP_FLUENCE_GRID_POINTS = 10
 
 
 def damage_model_of(config: DeviceConfig, proton_energy_MeV: float = 5.6, *,
-                    V_bias: float = 0.0, particle: str = "proton",
+                    V_bias: float = -40.0, particle: str = "proton",
                     niel_convention: "str | None" = None):  # fmt: skip
     """(RadiationTrapModel or None = legacy scalar removal, note) that
     ``run_radiation_damage`` runs for ``config``: ``config.radiation_traps`` resolved in
     the NIEL convention ("auto" -> the calibrated preset inside the batched engine's
     scope, else legacy with the reason in ``note``). ``V_bias`` only matters for the
-    legacy geometry's engine depth (0 = not checked)."""
+    legacy geometry's engine depth; default -40 V, the ``run_radiation_damage`` default
+    (0 V until 2026-10-21, audit v8 N4: a -60 V legacy-geometry run then fell back to
+    the legacy model while the helpers announced the trap model)."""
     from etna.core.charge_collection import resolve_damage_model
     from etna.core.radiation_damage import hardness_table
 
@@ -1767,7 +1770,7 @@ def default_fluence_grid(
     *,
     particle: str = "proton",
     niel_convention: "str | None" = None,
-    V_bias: float = 0.0,
+    V_bias: float = -40.0,
 ) -> np.ndarray:
     """Default fluence grid of ``run_radiation_damage`` for this device (p/cm^2).
 
@@ -1871,7 +1874,7 @@ def compensation_fluence(
     *,
     particle: str = "proton",
     niel_convention: "str | None" = None,
-    V_bias: float = 0.0,
+    V_bias: float = -40.0,
 ) -> float:
     """Proton fluence (p/cm^2) at which the damage model that ``run_radiation_damage``
     runs for ``config`` (``damage_model_of``) fully compensates the epi.

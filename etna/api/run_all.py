@@ -280,7 +280,10 @@ def _compensation_note(res: SimResult) -> str:
             f"; charged traps: bulk compensated at ~{phi_c:.3g} p/cm^2, solved beyond "
             f"(legacy removal limit {phi_l:.3g})"
         )
-    return f"; full donor compensation at {phi_c:.3g} p/cm^2"
+    note = res.metadata.get("damage_model_note")
+    return f"; full donor compensation at {phi_c:.3g} p/cm^2" + (
+        f" (legacy removal: {note})" if note else ""
+    )
 
 
 def _summarize(res: SimResult) -> str:

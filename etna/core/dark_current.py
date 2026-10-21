@@ -1369,10 +1369,11 @@ def dark_current_vs_fluence(
     from etna.core.drift_diffusion import setup_sic_drift_diffusion
     from etna.core.poisson import setup_poisson, solve_equilibrium
     from etna.core.charge_collection import full_compensation_reason
-    from etna.core.radiation_damage import compute_damaged_params
+    from etna.core.radiation_damage import compute_damaged_params, get_hardness_factor
     from etna.core.sic_material import srh_lifetime
 
     fluence_range = np.asarray(fluence_range, dtype=float)
+    get_hardness_factor(energy_MeV)  # out-of-table energy raises (audit v8 N3)
 
     # --- Extract pristine parameters (once) ---
     pristine_tau_n = srh_lifetime(300.0, "electron")

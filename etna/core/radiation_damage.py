@@ -63,7 +63,7 @@ _M_H_DOS = _sic.m_h_dos  # 1.0 m0
 # the 1-MeV-neq fluence the introduction rates below are quoted in: Burin et al.
 # (arXiv:2407.16710) fit TRIGA reactor-neutron data labelled in neq (Gsponer et al.,
 # arXiv:2310.02047), and the same group converts protons with SILICON NIEL
-# (Radmanovac et al., arXiv:2510.11304: 252.7 MeV, k ~ 0.9; SR-NIEL here: 0.855).
+# (Radmanovac et al., arXiv:2510.11304: 252.7 MeV, k ~ 0.9; SR-NIEL here: 0.8514).
 # kappa(62 MeV) = 1.942, kappa(5.6 MeV) = 6.672, kappa(150 MeV) = 1.119.
 #
 # SiC NORMALISATION: the factor that maps a proton fluence onto the SiC damage of the
@@ -839,7 +839,7 @@ def compute_damaged_params(
         damage_params = RadiationDamageParams()
 
     # Convert the particle fluence to 1-MeV-neq equivalent (niel_table: see
-    # hardness_table; None = the default Si-neq proton table)
+    # hardness_table; None = the proton table of DEFAULT_NIEL_CONVENTION, sic-damage)
     kappa = get_hardness_factor(energy_MeV, niel_table)
     fluence_neq = fluence * kappa
 

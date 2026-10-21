@@ -435,12 +435,23 @@ def neutral_state(static_net, fields, n_i, iterations=200):
     return n, pp, trap_charge(fields, n, pp)
 
 
-def trap_diagnostics(N_D, fluence_neq, T=300.0, model=None):
+def electron_mobility(N_D, T=300.0, mobility=None):
+    """Low-field electron mobility (cm^2/Vs) at donor density N_D and T of the
+    mobility set ``mobility`` (None = the default set; ``DeviceConfig.mobility``)."""
+    from etna.core.sic_material import SiC4H_Parameters, mobility_caughey_thomas_T
+
+    prm = SiC4H_Parameters() if mobility is None else SiC4H_Parameters(mobility=mobility)
+    return float(mobility_caughey_thomas_T(float(N_D), float(T), "electron", prm))
+
+
+def trap_diagnostics(N_D, fluence_neq, T=300.0, model=None, mobility=None):
     """Bulk (uniform N_D) state of the trap model at ``fluence_neq``: no solver, pure
     local physics, for validation and docs.
 
     Returns a dict: n_neutral (cm^-3), Ec_minus_EF (eV) of the neutral bulk,
-    resistivity proxy (Ohm cm, electrons only, mu_n = 950: an upper-mobility estimate),
+    resistivity proxy (Ohm cm, electrons only, the low-field electron mobility at
+    (N_D, T) of the set ``mobility``, None = the default set: an upper-mobility
+    estimate; a fixed 950 until 2026-10-21, audit v8 N1),
     N_eff_depleted_ss = net charge with n = p = 0 under steady-state occupancy (the
     space charge this model puts in a depleted region), N_eff_depleted_frozen = the same
     with the occupancy frozen at the neutral-bulk value (the history-frozen
@@ -475,7 +486,9 @@ def trap_diagnostics(N_D, fluence_neq, T=300.0, model=None):
     return {
         "n_neutral": float(n[0]),
         "Ec_minus_EF": float(-V_t * np.log(n[0] / NC)),
-        "resistivity_ohm_cm": float(1.0 / (_Q * 950.0 * n[0])),
+        "resistivity_ohm_cm": float(
+            1.0 / (_Q * electron_mobility(N_D, T, mobility) * n[0])
+        ),
         "N_eff_depleted_ss": Ndep_ss,
         "N_eff_depleted_frozen": Ndep_frozen,
         "neutral_removal_rate": model.neutral_removal_rate,
