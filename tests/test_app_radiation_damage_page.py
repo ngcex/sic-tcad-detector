@@ -222,3 +222,34 @@ def test_invalid_fluence_range_is_rejected_before_the_facade(monkeypatch):
         assert any("min ≤ max" in (e.value or "") for e in at.error), (fmin, fmax)
         assert "damage_result" not in at.session_state
     assert calls == []
+
+
+def test_charged_traps_checkbox_opt_in(monkeypatch):
+    """The opt-in charged-trap checkbox (default off) passes radiation_traps=True and
+    widens the default range to 1e16 neq; off, the config is the sidebar one."""
+    from etna.core.radiation_damage import get_hardness_factor
+
+    seen = {}
+
+    def _fake(cfg, fluences, **kwargs):
+        seen["cfg"], seen["fluences"] = cfg, fluences
+        return _fake_run_radiation_damage(cfg)
+
+    monkeypatch.setattr(etna, "run_radiation_damage", _fake)
+    at = AppTest.from_function(_run_radiation_damage_page)
+    at.session_state["device_config"] = DeviceConfig()
+    at.run()
+    assert at.checkbox[0].value is False
+    at.button[0].click()
+    at.run()
+    assert seen["cfg"].radiation_traps is False
+    at.checkbox[0].check()
+    at.run()
+    at.button[0].click()
+    at.run()
+    assert at.exception == []
+    assert seen["cfg"].radiation_traps is True
+    assert seen["fluences"].max() == pytest.approx(
+        1e16 / get_hardness_factor(62), rel=1e-2
+    )
+    assert any("semi-insulating" in (i.value or "") for i in at.info)

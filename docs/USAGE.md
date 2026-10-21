@@ -74,20 +74,20 @@ What ETNA is **not**:
 
 ## 2. What to trust
 
-| Quantity                                                  | Status                                                      | Basis                                                                                                                                                                   | Where                                                                                                                       |
-| --------------------------------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Engine results (C, W, CCE, potential) vs devsim           | **verified** (code-to-code)                                 | 1D: dC/C <= ~3e-8, dW <= 1e-17 cm, dCCE <= ~1e-9 (9e-10 at the tabulated-box corners) to -100 V; 2D: dpsi ~1e-13 V                                                      | `tests/test_batched_engine.py`, `tests/test_api_engine_switch.py`, `tests/test_engine2d*.py`, `lab/engine_box/notes/LOG.md` |
-| C-V / eps*A/C of the default device                       | **calibration** (fit)                                       | default doping fitted to the digitised Photons Fig. 4b: plateau rms 0.013 µm, knee rms 0.24 µm; 1.655 / 9.519 / 9.750 µm at 0 / -10 / -30 V vs paper 1.68 / 9.52 / 9.73 | `lab/cv_gap/notes/LOG.md`, `etna/core/device.py` (`DEFAULT_STACK`)                                                          |
-| Doping profile N_D(x)                                     | **inferred**, not measured                                  | inversion of one C-V curve; bulk 3.4e13 is below the documented 0.5-1e14; no SIMS                                                                                       | section 8                                                                                                                   |
-| Full-depletion voltage                                    | **definition-dependent**                                    | analytic V_fd 2.74 V, reach-through 3.10 V, sweep gate 1.2 V_fd = 3.28 V (default stack)                                                                                | `etna.export.labels.VFD_DEFINITION`                                                                                         |
-| CCE vs bias (1D, alpha in epi)                            | **model** (low injection, steady state)                     | engine verified vs devsim; no measured CCE reproduced for the dosimeter                                                                                                 | `run_cce` docstring                                                                                                         |
-| Microdosimeter alpha CCE shape (Fig. 4b, Phys. Med. 2025) | **not reproduced**                                          | flat to 0.7 % from 0 V in the model; data drop to 0.908 at 0 V                                                                                                          | `run_cce_tilted_alpha` docstring, `lab/microdosimeter/notes/LOG.md` §9                                                      |
-| Dark current                                              | **calibration** (budget estimate)                           | one N_t fitted to < 18 pA at -60 V, 4 mm²; bias shape f_depl heuristic x Hurkx (1+Gamma), temperature shape assumed                                                                                         | `run_dark_current`, DESIGN-1                                                                                                |
-| CCE vs proton fluence                                     | **relative shape only**                                     | NIEL hardness factors: SR-NIEL data, Si-neq convention (SiC normalisation open); points at or beyond the compensation fluence are NaN                                                                            | `run_radiation_damage` docstring                                                                                            |
-| FLASH dose-rate CCE                                       | **numerical sensitivity bound**                             | no plasma or high-injection physics                                                                                                                                     | `run_flash_recombination`, `run_transient` docstrings                                                                       |
+| Quantity                                                  | Status                                                      | Basis                                                                                                                                                                      | Where                                                                                                                       |
+| --------------------------------------------------------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Engine results (C, W, CCE, potential) vs devsim           | **verified** (code-to-code)                                 | 1D: dC/C <= ~3e-8, dW <= 1e-17 cm, dCCE <= ~1e-9 (9e-10 at the tabulated-box corners) to -100 V; 2D: dpsi ~1e-13 V                                                         | `tests/test_batched_engine.py`, `tests/test_api_engine_switch.py`, `tests/test_engine2d*.py`, `lab/engine_box/notes/LOG.md` |
+| C-V / eps*A/C of the default device                       | **calibration** (fit)                                       | default doping fitted to the digitised Photons Fig. 4b: plateau rms 0.013 µm, knee rms 0.24 µm; 1.655 / 9.519 / 9.750 µm at 0 / -10 / -30 V vs paper 1.68 / 9.52 / 9.73    | `lab/cv_gap/notes/LOG.md`, `etna/core/device.py` (`DEFAULT_STACK`)                                                          |
+| Doping profile N_D(x)                                     | **inferred**, not measured                                  | inversion of one C-V curve; bulk 3.4e13 is below the documented 0.5-1e14; no SIMS                                                                                          | section 8                                                                                                                   |
+| Full-depletion voltage                                    | **definition-dependent**                                    | analytic V_fd 2.74 V, reach-through 3.10 V, sweep gate 1.2 V_fd = 3.28 V (default stack)                                                                                   | `etna.export.labels.VFD_DEFINITION`                                                                                         |
+| CCE vs bias (1D, alpha in epi)                            | **model** (low injection, steady state)                     | engine verified vs devsim; no measured CCE reproduced for the dosimeter                                                                                                    | `run_cce` docstring                                                                                                         |
+| Microdosimeter alpha CCE shape (Fig. 4b, Phys. Med. 2025) | **not reproduced**                                          | flat to 0.7 % from 0 V in the model; data drop to 0.908 at 0 V                                                                                                             | `run_cce_tilted_alpha` docstring, `lab/microdosimeter/notes/LOG.md` §9                                                      |
+| Dark current                                              | **calibration** (budget estimate)                           | one N_t fitted to < 18 pA at -60 V, 4 mm²; bias shape f_depl heuristic x Hurkx (1+Gamma), temperature shape assumed                                                        | `run_dark_current`, DESIGN-1                                                                                                |
+| CCE vs proton fluence                                     | **relative shape only**                                     | NIEL hardness factors: SR-NIEL data, Si-neq convention (SiC normalisation open); points at or beyond the compensation fluence are NaN                                      | `run_radiation_damage` docstring                                                                                            |
+| FLASH dose-rate CCE                                       | **numerical sensitivity bound**                             | no plasma or high-injection physics                                                                                                                                        | `run_flash_recombination`, `run_transient` docstrings                                                                       |
 | Tissue-equivalence kappa(E)                               | **data** (NIST) + approximation                             | NIST PSTAR/ASTAR (2026-10-20); SiC by Bragg additivity (error ~few % for p > 1 MeV, unverified estimate); LET-ratio convention, 0.43 @1 MeV -> 0.375 @150 MeV (p -> water) | `data/nist_star/README.md`, `compute_kappa_table`                                                                           |
-| 2D field maps                                             | **verified** vs devsim inside the engine2d box              | laterally uniform device; no edge termination                                                                                                                           | `tests/test_engine2d*.py`, `tests/test_field_engine_default_100V.py`                                                        |
-| Reference layout (GDS/SVG)                                | **reference only, not TCAD-validated, not for fabrication** | dimensions from `data/foundry/layout_params.toml`; ring, pad, dicing, oxide and 5x5 die are PLACEHOLDER drawing values until the mask data is entered                   | `deliverables/DIMENSIONS-provenance.md`, section 10                                                                         |
+| 2D field maps                                             | **verified** vs devsim inside the engine2d box              | laterally uniform device; no edge termination                                                                                                                              | `tests/test_engine2d*.py`, `tests/test_field_engine_default_100V.py`                                                        |
+| Reference layout (GDS/SVG)                                | **reference only, not TCAD-validated, not for fabrication** | dimensions from `data/foundry/layout_params.toml`; ring, pad, dicing, oxide and 5x5 die are PLACEHOLDER drawing values until the mask data is entered                      | `deliverables/DIMENSIONS-provenance.md`, section 10                                                                         |
 
 Summary: the numerics are well verified. The physics is calibrated on one C-V curve and
 one leakage bound. Everything else is a model prediction that has not been checked
@@ -254,10 +254,10 @@ incomplete_ionization=True)`). The ionized densities follow the local carriers i
 the Poisson equation (Burin et al., arXiv:2410.06798, Eq. 82; Pearson-Bardeen
 dE(N) = dE0 - alpha N^(1/3), Eq. 85, clamped at 0):
 
-| dopant        | levels (dE0, alpha)                                                           | g | source                                                |
-| ------------- | ----------------------------------------------------------------------------- | - | ----------------------------------------------------- |
-| N (donor)     | hexagonal 70.9 meV, 3.38e-5 meV cm; cubic 123.7 meV, 4.65e-5 meV cm (1/2 each) | 2 | Kagamihara et al., JAP 96, 5601 (2004); Burin Tab. XXV |
-| Al (acceptor) | 220 meV, 2.32e-5 meV cm                                                       | 4 | Achatz et al., APL 92, 072103 (2008); Burin Tab. XXIV  |
+| dopant        | levels (dE0, alpha)                                                            | g   | source                                                 |
+| ------------- | ------------------------------------------------------------------------------ | --- | ------------------------------------------------------ |
+| N (donor)     | hexagonal 70.9 meV, 3.38e-5 meV cm; cubic 123.7 meV, 4.65e-5 meV cm (1/2 each) | 2   | Kagamihara et al., JAP 96, 5601 (2004); Burin Tab. XXV |
+| Al (acceptor) | 220 meV, 2.32e-5 meV cm                                                        | 4   | Achatz et al., APL 92, 072103 (2008); Burin Tab. XXIV  |
 
 N_C(T), N_V(T) come from `etna.core.sic_material.effective_dos`. Depleted dopants are
 fully ionized and only neutral regions freeze out. At 300 K the neutral fractions are:
@@ -271,13 +271,13 @@ quasi-static (C is the low-frequency C). Custom parameters:
 
 Effect on the default device (300 K, legacy -> carrier-dependent):
 
-| quantity                         | legacy                | carrier-dependent     |
-| -------------------------------- | --------------------- | --------------------- |
-| N_A_ionized (p+)                 | 1.322e18              | 2.913e17              |
-| V_bi (psi(cathode) - psi(anode)) | 3.198 V               | 3.142 V               |
+| quantity                         | legacy                           | carrier-dependent                |
+| -------------------------------- | -------------------------------- | -------------------------------- |
+| N_A_ionized (p+)                 | 1.322e18                         | 2.913e17                         |
+| V_bi (psi(cathode) - psi(anode)) | 3.198 V                          | 3.142 V                          |
 | eps*A/C at 0 / -2 / -10 / -30 V  | 1.655 / 6.939 / 9.519 / 9.750 µm | 1.619 / 6.867 / 9.519 / 9.750 µm |
-| CCE at -10 V                     | 0.999473              | 0.999466              |
-| reach-through                    | 3.10 V                | 3.15 V                |
+| CCE at -10 V                     | 0.999473                         | 0.999466                         |
+| reach-through                    | 3.10 V                           | 3.15 V                           |
 
 **Why it is not the default.** The two measured-C-V presets were fitted with the legacy
 model. With the carrier-dependent model the parametric default keeps its gates (plateau
@@ -471,6 +471,92 @@ r = run_radiation_damage(cfg, fluences=np.geomspace(1e9, 0.9 * phi_c, 5), V_bias
 print(f"{phi_c:.3g}", r.metadata["valid"].all(), np.round(r.y, 4))
 ```
 
+#### Charged deep traps beyond compensation (opt-in, `radiation_traps=True`)
+
+`DeviceConfig(radiation_traps=True)` (or a `RadiationTrapModel`) replaces the
+donor-removal scalar with the radiation-induced deep levels as charged species in
+Poisson, as in the Burin et al. TCAD approach (arXiv:2407.16710). Real irradiated 4H-SiC
+turns semi-insulating and keeps detecting. The legacy model refuses those points; this
+one solves them. Default `False`: nothing changes and every baseline stays pinned.
+Code: `etna.core.radiation_traps` and `PoissonBatch(traps=...)`.
+
+- **Traps.** N_t,k = eta_k * Phi_neq on the epi nodes, from Burin Table I via
+  `RadiationDamageParams`:
+  - Z1/2: acceptor, Ec-0.67, eta 5.0.
+  - EH4: acceptor, Ec-1.03, eta 2.4.
+  - EH6/7: donor, Ec-1.60, eta 1.6, sigma_n 1.4e-14 (audit C-4, not Burin's 9e-12).
+- **Donors.** N_D is not reduced. Removal emerges from the trap charge.
+- **Occupancy.** Steady-state SRH, f = (c_n n + c_p p1) / (c_n (n + n1) + c_p (p + p1)),
+  with p1 = n_i^2 / n1, so f is Fermi-Dirac at equilibrium. Degeneracy g = 1 (assumed).
+  Z1/2 is a single level (Burin Table I).
+- **Which state sets f.** f comes from the dark state at the applied bias, solved
+  self-consistently by Newton. It is then frozen as fixed charge in the illuminated
+  Gummel solve.
+  - Reason: alpha pulses are ns long, while the trap time constants run from ms to
+    1e14 s.
+  - Check: CCE changes by < 1e-4 between G = 1e16 and 1e20.
+- **Lifetimes.** Unchanged (`compute_K_tau`).
+- **Mobility.** Taken at the pristine donors.
+- **Solver.** Batched 1D engine only. `solver="devsim"` and `incomplete_ionization`
+  are refused. An unconverged point is NaN with a reason: there is no silent legacy
+  fallback.
+- **Fluence grid.** The default grid reaches 1e16 neq. Metadata gives
+  `damage_model="charged_traps"`.
+
+Numbers (default stack, 62 MeV, kappa 1.942; `lab/radiation_traps/bench/validate.py`,
+log in `lab/radiation_traps/notes/LOG.md`):
+
+| Phi_p (p/cm^2)    | 1e11     | 1e12     | 3e12     | 1e13  | 1e14  | 3e14  | 1e15  | 5e15  |
+| ----------------- | -------- | -------- | -------- | ----- | ----- | ----- | ----- | ----- |
+| CCE legacy, -40 V | 0.999777 | 0.999247 | 0.998347 | NaN   | NaN   | NaN   | NaN   | NaN   |
+| CCE traps, -40 V  | 0.999777 | 0.999248 | 0.998345 | 0.996 | 0.972 | 0.747 | 0.355 | 0.152 |
+| CCE traps, -200 V |          |          |          |       | 0.995 |       | 0.872 | 0.340 |
+
+Bulk physics (N_D 3.38e13):
+
+- **Emergent neutral-region removal: 7.4 /neq** (both acceptors filled). For comparison,
+  the legacy scalar is 5, and Radmanovac et al. (arXiv:2510.11304) measured 5-7.5 at
+  252.7 MeV.
+- **Semi-insulating beyond compensation.** E_F reaches Ec-1.08 eV at 1e14 neq and
+  Ec-1.20 eV at 1e16. The resistivity proxy is above 1e14 Ohm cm.
+- **No type inversion.** E_F stays above midgap.
+
+**Calibrated vs predicted.** No parameter was fitted to CCE or C-V data.
+
+- The trap table is literature (Burin Table I).
+- CCE below compensation is predicted, and it equals the legacy result (difference
+  < 1e-5).
+- CCE beyond compensation is a model prediction that depends on one stated assumption.
+- Qualitative literature check, on different devices and biases:
+  - **Gsponer-like device** (50 um, 1.5e14, 1e15 neq): CCE is 0.36 / 0.70 / 0.97 at
+    -100 / -300 / -600 V. Measured: above 80 %.
+  - **De Napoli-like device** (20 um, 1e14, at 1.3e14 / 7.3e14 cm^-2): losses are
+    0.8 % / 11 % at -300 V and 2.8 % / 56 % at -100 V. Measured: 7 % and 22.5 %.
+
+Same decade, bias-dependent, not a fit.
+
+**Main assumption (read before using numbers beyond compensation).** In a depleted
+region, steady-state occupancy empties both acceptors (emission times: Z1/2 about 40 ms,
+EH4 about 30 min). EH6/7 stays about 74 % ionised. The depleted space charge is therefore
+N_D + 1.19 Phi_neq, which is positive and grows with fluence. Two consequences:
+
+- Full depletion needs more bias at high fluence. That bias need is what drives the CCE
+  drop at -40 V.
+- The model does not reproduce the falling 1/C^2 slope of measured C-V removal. In the
+  depleted region it has the opposite sign.
+
+EH6/7 (emission time about 1e14 s) never reaches steady state on lab time scales.
+
+- If the occupancy is frozen at the neutral-bulk value, the compensated epi stays
+  charge-neutral and acts as a dielectric with a uniform field. CCE would then be
+  trapping-limited, which is higher.
+- `trap_diagnostics` reports both cases. The engine uses steady state (the TCAD DC
+  choice).
+
+Small-signal C with traps is not implemented (it raises). At 0 to -1 V a semi-insulating
+epi under the DC alpha proxy is photoconductive: a few points do not converge, and CCE is
+not monotonic there.
+
 ### `run_dark_current(config, v_start=0.0, v_stop=-100.0, n_points=20, N_t=None, S_n=None, S_p=None, solver="auto")`
 
 Returns the total reverse leakage. `x` is bias (V), `y` is the total current (A, for
@@ -559,11 +645,11 @@ print(f.y.round(6), t.metadata["transient_cce_raw"].round(6))
 The transient drivers (`TransientSolver.simulate_pulse`, `simulate_pulse_train`,
 `single_particle.simulate_single_particle`) record three series per BDF1 step:
 
-| key                     | quantity                                                                                       |
-| ----------------------- | ---------------------------------------------------------------------------------------------- |
-| `currents`              | conduction current, `extract_contact_current` (continuity equations only)                      |
+| key                     | quantity                                                                                                              |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `currents`              | conduction current, `extract_contact_current` (continuity equations only)                                             |
 | `currents_displacement` | displacement current, `displacement_current(Q_k, Q_k-1, dt_k)` of the Poisson contact charge `extract_contact_charge` |
-| `currents_total`        | terminal current = conduction + displacement: the physical I(t)                                 |
+| `currents_total`        | terminal current = conduction + displacement: the physical I(t)                                                       |
 
 - **CCE and Q are unchanged.** They still integrate `currents`. The displacement term
   telescopes to `Q_contact_end - Q_contact_start`. So once the device is back in its dark
@@ -593,13 +679,13 @@ The transient drivers (`TransientSolver.simulate_pulse`, `simulate_pulse_train`,
     (~0.1 ps for the p+). Default 2D device (hw 50 µm, 50 V, LET 10, anode), measured
     2026-10-20:
 
-    | quantity          | displacement share or effect                                  |
-    | ----------------- | ------------------------------------------------------------- |
-    | 1 ps injection step | 5 % of the current                                          |
-    | later steps       | <= 1.6 % of the peak                                          |
-    | I_peak            | 5.49e-5 total vs 5.42e-5 conduction A/cm                      |
-    | t_collection      | 0.11679 ns (new definition) vs 0.11739 ns (old step-end value) |
-    | CCE               | 0.999970 either way                                           |
+    | quantity            | displacement share or effect                                   |
+    | ------------------- | -------------------------------------------------------------- |
+    | 1 ps injection step | 5 % of the current                                             |
+    | later steps         | <= 1.6 % of the peak                                           |
+    | I_peak              | 5.49e-5 total vs 5.42e-5 conduction A/cm                       |
+    | t_collection        | 0.11679 ns (new definition) vs 0.11739 ns (old step-end value) |
+    | CCE                 | 0.999970 either way                                            |
 
 - **Old definition and the stale table column.** Before 2026-10-20, `t_collection` was the
   end time of the BDF1 step that crossed 95 % of the conduction charge (`searchsorted` on
@@ -930,20 +1016,20 @@ button, caches its result against the device and warns when the sidebar has chan
 since. Each shows the solver and validity notes, and offers a CSV download whose `#`
 header carries solver, domain, config and version.
 
-| page                    | purpose                                                                         | inputs                                                                                                                                                             | outputs                                                                                                                                                                                                                                                                                                                                                                                                          |
-| ----------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Home                    | orientation, current config summary                                             | none                                                                                                                                                               |                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| Simulate → Figures      | one workflow: device -> observables -> figures, data, animation (`etna.viz`)     | device (sidebar or a preset: default, microdosimeter, tabulated, previous calibrated, legacy); observables (C-V, field, CCE, dark current, FLASH, temperature, transient (slow, devsim), tilted alpha, CCE(LET) table, two validation variants; 2D: maps incl. carriers); sweep V_stop / points, single bias; figure format, DPI, size | engine-box badge, progress bar, session cache, per-observable Plotly + solver / validity / honesty notes, publication figure preview, PNG/SVG/PDF per figure, zip of all figures + CSVs, animation (manim or matplotlib, mp4/gif) with st.video |
-| Run All                 | every section for the sidebar device (`etna.run_all`)                           | section multiselect (the 2D-engine sweep is opt-in)                                                                                                                | summary table (status, solver, key figures, reason, wall time), a curve per section, JSON/CSV                                                                                                                                                                                                                                                                                                                    |
-| C-V Analysis            | `run_cv`                                                                        | max reverse bias (default -50 V), points (40)                                                                                                                      | C-V, Mott-Schottky, eps*A/C and depletion edge vs V, full-depletion marker, CSV                                                                                                                                                                                                                                                                                                                                  |
-| Charge Collection (CCE) | `run_cce`                                                                       | V_start (-10), V_stop (-40), points (30); reverse bias only                                                                                                        | CCE vs bias, CSV                                                                                                                                                                                                                                                                                                                                                                                                 |
-| Field Map               | `run_field`, 1D or 2D                                                           | reverse bias (default -50 V, down to -200)                                                                                                                         | 1D: E(x), potential, net doping, CSV. 2D: heatmap viewer (field, potential, doping)                                                                                                                                                                                                                                                                                                                              |
-| Radiation Damage        | `run_radiation_damage`                                                          | proton energy (30/62/70/150 MeV), fluence range (default 0.7e-3 to 0.7 x the compensation fluence), points (6), bias (-20 V)                                       | CCE vs fluence with NaN gaps explained. A persistent banner says kappa is SR-NIEL (Si neq) with the SiC neutron normalisation open                                                                                                                                                                                                                                                                                                                     |
-| Dark Current            | total leakage vs T at one bias (`ParametricSweep` over T of `run_dark_current`) | T range (250-400 K), points (6), bias (-20 V), advanced N_t                                                                                                        | I_total vs T, CSV. A calibration banner is shown; only the total is shown                                                                                                                                                                                                                                                                                                                                        |
-| Microdosimetry          | `run_microdosimetry`                                                            | MC events CSV upload, SV thickness (10 µm) and width (100 µm, depth = width)                                                                                                               | y·d(y), y_F / y_D, CSV. Independent of the sidebar                                                                                                                                                                                                                                                                                                                                                               |
-| Batch Sweep             | `ParametricSweep`                                                               | one of epi thickness, p+ thickness, N_A, N_D junction, N_D bulk, transition length, T, area; comma-separated values; facade (CCE vs bias, C-V, CCE vs temperature) | overlaid curves, bulk CSV, per-value failures listed                                                                                                                                                                                                                                                                                                                                                             |
-| Export                  | engineering files (section 10)                                                  | spec sheet (reuses the Run All report when it matches); profile bias (default -30 V); animation button                                                             | layout parameter file in use (upload an alternative TOML) with its PLACEHOLDER list; spec sheet JSON/CSV/Markdown/PDF; cross-section SVG/PNG; mesh/profile CSV, VTK and VTU (ParaView/VisIt/meshio); two 480p manim MP4s (needs `viz`); reference layout SVG and GDSII (needs `gdstk`) with the disclaimer "reference layout, not TCAD-validated; not a fabrication layout while any dimension is a PLACEHOLDER" |
-| Measurements            | owner-supplied C-V, SIMS/SRP, I(T) files vs the model (section 17)               | CSV upload per tab (header-only templates downloadable); C-V smoothing lambda; SIMS junction depth, knot spacing, resampling; I(T) prefactor exponent | validation messages (file line + column); measured-vs-model figure with residuals; donor-table JSON (C-V inversion or SIMS resampling), comparison / E_a JSON, Markdown report, PNG |
+| page                    | purpose                                                                         | inputs                                                                                                                                                                                                                                                                                                                                 | outputs                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ----------------------- | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Home                    | orientation, current config summary                                             | none                                                                                                                                                                                                                                                                                                                                   |                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Simulate → Figures      | one workflow: device -> observables -> figures, data, animation (`etna.viz`)    | device (sidebar or a preset: default, microdosimeter, tabulated, previous calibrated, legacy); observables (C-V, field, CCE, dark current, FLASH, temperature, transient (slow, devsim), tilted alpha, CCE(LET) table, two validation variants; 2D: maps incl. carriers); sweep V_stop / points, single bias; figure format, DPI, size | engine-box badge, progress bar, session cache, per-observable Plotly + solver / validity / honesty notes, publication figure preview, PNG/SVG/PDF per figure, zip of all figures + CSVs, animation (manim or matplotlib, mp4/gif) with st.video                                                                                                                                                                  |
+| Run All                 | every section for the sidebar device (`etna.run_all`)                           | section multiselect (the 2D-engine sweep is opt-in)                                                                                                                                                                                                                                                                                    | summary table (status, solver, key figures, reason, wall time), a curve per section, JSON/CSV                                                                                                                                                                                                                                                                                                                    |
+| C-V Analysis            | `run_cv`                                                                        | max reverse bias (default -50 V), points (40)                                                                                                                                                                                                                                                                                          | C-V, Mott-Schottky, eps*A/C and depletion edge vs V, full-depletion marker, CSV                                                                                                                                                                                                                                                                                                                                  |
+| Charge Collection (CCE) | `run_cce`                                                                       | V_start (-10), V_stop (-40), points (30); reverse bias only                                                                                                                                                                                                                                                                            | CCE vs bias, CSV                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Field Map               | `run_field`, 1D or 2D                                                           | reverse bias (default -50 V, down to -200)                                                                                                                                                                                                                                                                                             | 1D: E(x), potential, net doping, CSV. 2D: heatmap viewer (field, potential, doping)                                                                                                                                                                                                                                                                                                                              |
+| Radiation Damage        | `run_radiation_damage`                                                          | proton energy (30/62/70/150 MeV), fluence range (default 0.7e-3 to 0.7 x the compensation fluence), points (6), bias (-20 V)                                                                                                                                                                                                           | CCE vs fluence with NaN gaps explained. A persistent banner says kappa is SR-NIEL (Si neq) with the SiC neutron normalisation open                                                                                                                                                                                                                                                                               |
+| Dark Current            | total leakage vs T at one bias (`ParametricSweep` over T of `run_dark_current`) | T range (250-400 K), points (6), bias (-20 V), advanced N_t                                                                                                                                                                                                                                                                            | I_total vs T, CSV. A calibration banner is shown; only the total is shown                                                                                                                                                                                                                                                                                                                                        |
+| Microdosimetry          | `run_microdosimetry`                                                            | MC events CSV upload, SV thickness (10 µm) and width (100 µm, depth = width)                                                                                                                                                                                                                                                           | y·d(y), y_F / y_D, CSV. Independent of the sidebar                                                                                                                                                                                                                                                                                                                                                               |
+| Batch Sweep             | `ParametricSweep`                                                               | one of epi thickness, p+ thickness, N_A, N_D junction, N_D bulk, transition length, T, area; comma-separated values; facade (CCE vs bias, C-V, CCE vs temperature)                                                                                                                                                                     | overlaid curves, bulk CSV, per-value failures listed                                                                                                                                                                                                                                                                                                                                                             |
+| Export                  | engineering files (section 10)                                                  | spec sheet (reuses the Run All report when it matches); profile bias (default -30 V); animation button                                                                                                                                                                                                                                 | layout parameter file in use (upload an alternative TOML) with its PLACEHOLDER list; spec sheet JSON/CSV/Markdown/PDF; cross-section SVG/PNG; mesh/profile CSV, VTK and VTU (ParaView/VisIt/meshio); two 480p manim MP4s (needs `viz`); reference layout SVG and GDSII (needs `gdstk`) with the disclaimer "reference layout, not TCAD-validated; not a fabrication layout while any dimension is a PLACEHOLDER" |
+| Measurements            | owner-supplied C-V, SIMS/SRP, I(T) files vs the model (section 17)              | CSV upload per tab (header-only templates downloadable); C-V smoothing lambda; SIMS junction depth, knot spacing, resampling; I(T) prefactor exponent                                                                                                                                                                                  | validation messages (file line + column); measured-vs-model figure with residuals; donor-table JSON (C-V inversion or SIMS resampling), comparison / E_a JSON, Markdown report, PNG                                                                                                                                                                                                                              |
 
 Page details not in the table:
 
@@ -1154,29 +1240,29 @@ kernel started in; notebooks 15-20 resolve it before their `os.chdir('..')`.
 Notebooks written before 2026-10-18 may state numbers for older defaults; the model they
 run is whatever `DeviceConfig()` / the core defaults are now, unless they pin a preset.
 
-| notebook                       | topic                                          | notes                                                                                                                                                   |
-| ------------------------------ | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 01_phase1_validation           | material parameters, analytical electrostatics |                                                                                                                                                         |
-| 02_electrical_characterization | C-V, Mott-Schottky, doping profile, I-V        |                                                                                                                                                         |
-| 03_charge_collection           | CCE vs bias, generation profiles, Hecht        | generator `scripts/create_notebook_03.py`                                                                                                               |
-| 04_flash_recombination         | FLASH Auger/SRH CCE vs dose rate               | sensitivity bound only                                                                                                                                  |
-| 05_dark_current_vs_fluence     | dark current vs proton fluence                 | TAT on the batched engine; fluences are fractions of `compensation_fluence(DeviceConfig(), 62)` (3.48e12 p/cm²) since 2026-10-21 |
-| 05b_flash_parametric_studies   | FLASH parametric sweeps                        | runs its 60-condition sweep when the untracked cache is missing                                                                                         |
-| 06_temperature_dependence      | material properties and CCE vs T               |                                                                                                                                                         |
-| 07_dark_current                | TAT / SRH / surface terms                      |                                                                                                                                                         |
-| 08_transient_flash             | FLASH pulse transients                         | generator `create_notebook_08.py`                                                                                                                       |
-| 09_radiation_damage            | defect introduction, lifetimes, NIEL scaling   | markdown updated 2026-10-21 to SR-NIEL kappa (1.942 at 62 MeV), SiC normalisation open; summary table at 0.1/0.5/0.9 x the compensation fluence |
-| 10_cce_vs_fluence              | CCE degradation vs fluence                     | fluences are fractions of `compensation_fluence(DeviceConfig(), 62)` (3.48e12 p/cm²) since 2026-10-21 |
-| 11_dark_current_cv_evolution   | leakage and C-V vs fluence                     | fluences are fractions of `compensation_fluence(DeviceConfig(), 62)` (3.48e12 p/cm²) since 2026-10-21; C-V at 0.1/0.3/0.6/0.9 x |
-| 12_multi_defect_comparison     | 3-defect vs single-defect models               | fluences are fractions of `compensation_fluence(DeviceConfig(), 62)` (3.48e12 p/cm²) since 2026-10-21 |
-| 13_parametric_optimization     | radiation-hardness sweep                       | 2 x 3 x 2 grid at 0.6 x the compensation fluence of the lowest-doped config (was 4 x 4 x 4 at 1e13, 15-20 min) |
+| notebook                       | topic                                          | notes                                                                                                                                                                                        |
+| ------------------------------ | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 01_phase1_validation           | material parameters, analytical electrostatics |                                                                                                                                                                                              |
+| 02_electrical_characterization | C-V, Mott-Schottky, doping profile, I-V        |                                                                                                                                                                                              |
+| 03_charge_collection           | CCE vs bias, generation profiles, Hecht        | generator `scripts/create_notebook_03.py`                                                                                                                                                    |
+| 04_flash_recombination         | FLASH Auger/SRH CCE vs dose rate               | sensitivity bound only                                                                                                                                                                       |
+| 05_dark_current_vs_fluence     | dark current vs proton fluence                 | TAT on the batched engine; fluences are fractions of `compensation_fluence(DeviceConfig(), 62)` (3.48e12 p/cm²) since 2026-10-21                                                             |
+| 05b_flash_parametric_studies   | FLASH parametric sweeps                        | runs its 60-condition sweep when the untracked cache is missing                                                                                                                              |
+| 06_temperature_dependence      | material properties and CCE vs T               |                                                                                                                                                                                              |
+| 07_dark_current                | TAT / SRH / surface terms                      |                                                                                                                                                                                              |
+| 08_transient_flash             | FLASH pulse transients                         | generator `create_notebook_08.py`                                                                                                                                                            |
+| 09_radiation_damage            | defect introduction, lifetimes, NIEL scaling   | markdown updated 2026-10-21 to SR-NIEL kappa (1.942 at 62 MeV), SiC normalisation open; summary table at 0.1/0.5/0.9 x the compensation fluence                                              |
+| 10_cce_vs_fluence              | CCE degradation vs fluence                     | fluences are fractions of `compensation_fluence(DeviceConfig(), 62)` (3.48e12 p/cm²) since 2026-10-21                                                                                        |
+| 11_dark_current_cv_evolution   | leakage and C-V vs fluence                     | fluences are fractions of `compensation_fluence(DeviceConfig(), 62)` (3.48e12 p/cm²) since 2026-10-21; C-V at 0.1/0.3/0.6/0.9 x                                                              |
+| 12_multi_defect_comparison     | 3-defect vs single-defect models               | fluences are fractions of `compensation_fluence(DeviceConfig(), 62)` (3.48e12 p/cm²) since 2026-10-21                                                                                        |
+| 13_parametric_optimization     | radiation-hardness sweep                       | 2 x 3 x 2 grid at 0.6 x the compensation fluence of the lowest-doped config (was 4 x 4 x 4 at 1e13, 15-20 min)                                                                               |
 | 14_validation                  | comparison with published irradiation data     | fluences are fractions of `compensation_fluence(DeviceConfig(), 62)` (3.48e12 p/cm²) since 2026-10-21; literature ranges kept absolute, the CCE-loss onset is not reached below compensation |
-| 15_2d_electrostatics_cce       | 2D field and CCE of the microdosimeter         | generator `create_notebook_15.py`                                                                                                                       |
-| 16_single_particle_cce         | single-particle 2D transient CCE, CCE(LET)     | generator `create_notebook_16.py`; loads `data/cce_let_table_*.json`; `ETNA_REBUILD_CCE_TABLES=1` rebuilds them (~40 min) into `$ETNA_FIGURE_DIR/data/` |
-| 17_mc_coupling                 | MC energy deposition to pulse height           | generator executes it in place                                                                                                                          |
-| 18_microdosimetric_spectra     | lineal energy spectra, y_F / y_D               | real NIST kappa, 62 MeV assumed; generator executes it                                                                                                               |
-| 19_alternative_structures      | mesa, 3D electrode, ΔE-E, guard ring           | pins the previous-default doping on the legacy geometry (PERF-06)                                                                                       |
-| 20_feasibility_report          | microdosimeter design study                    | outside-validity rows reported                                                                                                                          |
+| 15_2d_electrostatics_cce       | 2D field and CCE of the microdosimeter         | generator `create_notebook_15.py`                                                                                                                                                            |
+| 16_single_particle_cce         | single-particle 2D transient CCE, CCE(LET)     | generator `create_notebook_16.py`; loads `data/cce_let_table_*.json`; `ETNA_REBUILD_CCE_TABLES=1` rebuilds them (~40 min) into `$ETNA_FIGURE_DIR/data/`                                      |
+| 17_mc_coupling                 | MC energy deposition to pulse height           | generator executes it in place                                                                                                                                                               |
+| 18_microdosimetric_spectra     | lineal energy spectra, y_F / y_D               | real NIST kappa, 62 MeV assumed; generator executes it                                                                                                                                       |
+| 19_alternative_structures      | mesa, 3D electrode, ΔE-E, guard ring           | pins the previous-default doping on the legacy geometry (PERF-06)                                                                                                                            |
+| 20_feasibility_report          | microdosimeter design study                    | outside-validity rows reported                                                                                                                                                               |
 
 Every notebook calls `set_devsim_quiet(True)` (`etna.core.devsim_lock`, exported from
 `etna`) in its first code cell: devsim's Newton log of the direct core calls is dropped
@@ -1487,7 +1573,7 @@ for c in an.comparisons:
 ```
 
 - Fit: `ln(|I|/T^p) = ln A - E_a/(k_B T)`, weighted least squares with `sigma_ln =
-  sigma_I/|I|` (absolute covariance and chi2/dof with file sigmas; residual-scaled
+sigma_I/|I|` (absolute covariance and chi2/dof with file sigmas; residual-scaled
   covariance and >= 3 temperatures without). `p` = `T_power` is a choice (0 = plain
   Arrhenius, 1.5 = generation current, 2 or 3 as in parts of the SiC literature); E_a moves
   by about k_B T per unit of p, so data and model are fitted with the same p.

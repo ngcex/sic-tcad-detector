@@ -48,6 +48,9 @@ def use_prange(B, N, min_nodes):
 
 
 NEWTON_PAR_NODES = 2000
+# Newton step clamp (V_t) and iteration cap with charged radiation traps (opt-in)
+TRAP_CLAMP = 2.0
+TRAP_MAX_ITER = 2000
 LINEAR_PAR_NODES = 12000
 
 
@@ -316,6 +319,120 @@ def _newton_batch_ii(u, *args):
     (_newton_batch_ii_par if par else _newton_batch_ii_seq)(u, *args)
 
 
+@njit(cache=True, inline="always")
+def _trap_rho(n_hat, p_hat, tN, tn1, tp1, tr, tdon, bi, i):
+    """Scaled trap charge sum_k N_k (don_k - f_k) and its |derivative| sum_k N_k df_k/du
+    at node i, SRH occupancy f = (n + r p1)/(n + n1 + r (p + p1)) (r = c_p/c_n;
+    etna.core.radiation_traps). dn/du = n, dp/du = -p at fixed quasi-Fermi levels:
+    df/du = [n (n1 + r p) + r p (n + r p1)] / den^2 >= 0."""
+    rho = 0.0
+    drho = 0.0
+    for k in range(tN.shape[1]):
+        Nk = tN[bi, k, i]
+        if Nk == 0.0:
+            continue
+        n1 = tn1[bi, k, i]
+        p1 = tp1[bi, k, i]
+        r = tr[bi, k, i]
+        num = n_hat + r * p1
+        den = n_hat + n1 + r * (p_hat + p1)
+        f = num / den
+        rho += Nk * (tdon[bi, k, i] - f)
+        drho += Nk * (n_hat * (n1 + r * p_hat) + r * p_hat * num) / (den * den)
+    return rho, drho
+
+
+@njit(cache=True)
+def _newton_column_tr(
+    bi, u, u_n, u_p, D, tN, tn1, tp1, tr, tdon, lnni, lam2, inv_h, v, tol, max_iter,
+    clamp, iters, conv,
+):  # fmt: skip
+    """_newton_column with the charged deep traps (opt-in, etna.core.radiation_traps):
+    charge p - n + D_static + sum_k N_k (don_k - f_k(n, p)), Jacobian diagonal
+    -lap - v (p + n + sum_k N_k df_k/du)."""
+    N = u.shape[1]
+    a = np.empty(N)
+    b = np.empty(N)
+    c = np.empty(N)
+    F = np.empty(N)
+    cp = np.empty(N)
+    dp = np.empty(N)
+    l2 = lam2[bi]
+    ln = lnni[bi]
+    converged = False
+    it = 0
+    for it in range(1, max_iter + 1):
+        for i in range(1, N - 1):
+            ui = u[bi, i]
+            en = min(ui - u_n[bi, i] + ln, EXP_CLAMP)
+            ep = min(u_p[bi, i] - ui + ln, EXP_CLAMP)
+            n_hat = np.exp(en)
+            p_hat = np.exp(ep)
+            rho, drho = _trap_rho(n_hat, p_hat, tN, tn1, tp1, tr, tdon, bi, i)
+            fl = (u[bi, i + 1] - ui) * inv_h[i]
+            fr = (ui - u[bi, i - 1]) * inv_h[i - 1]
+            F[i] = l2 * (fl - fr) + v[i] * (p_hat - n_hat + D[bi, i] + rho)
+            a[i] = l2 * inv_h[i - 1]
+            c[i] = l2 * inv_h[i]
+            b[i] = -l2 * (inv_h[i - 1] + inv_h[i]) - v[i] * (p_hat + n_hat + drho)
+        F[0] = 0.0
+        F[N - 1] = 0.0
+        cp[0] = 0.0
+        dp[0] = 0.0
+        for i in range(1, N - 1):
+            m = 1.0 / (b[i] - a[i] * cp[i - 1])
+            cp[i] = c[i] * m
+            dp[i] = (-F[i] - a[i] * dp[i - 1]) * m
+        upd = 0.0
+        dnext = 0.0
+        for i in range(N - 2, 0, -1):
+            d = dp[i] - cp[i] * dnext
+            if d > clamp:
+                d = clamp
+            elif d < -clamp:
+                d = -clamp
+            dnext = dp[i] - cp[i] * dnext
+            u[bi, i] += d
+            if abs(d) > upd:
+                upd = abs(d)
+        if upd < tol:
+            converged = True
+            break
+    iters[bi] = it
+    conv[bi] = converged
+
+
+@njit(cache=True)
+def _newton_batch_tr_seq(
+    u, u_n, u_p, D, tN, tn1, tp1, tr, tdon, lnni, lam2, inv_h, v, tol, max_iter,
+    clamp, iters, conv,
+):  # fmt: skip
+    for bi in range(u.shape[0]):
+        _newton_column_tr(
+            bi, u, u_n, u_p, D, tN, tn1, tp1, tr, tdon, lnni, lam2, inv_h, v, tol,
+            max_iter, clamp, iters, conv,
+        )  # fmt: skip
+
+
+@njit(cache=True, parallel=True)
+def _newton_batch_tr_par(
+    u, u_n, u_p, D, tN, tn1, tp1, tr, tdon, lnni, lam2, inv_h, v, tol, max_iter,
+    clamp, iters, conv,
+):  # fmt: skip
+    for bi in prange(u.shape[0]):
+        _newton_column_tr(
+            bi, u, u_n, u_p, D, tN, tn1, tp1, tr, tdon, lnni, lam2, inv_h, v, tol,
+            max_iter, clamp, iters, conv,
+        )  # fmt: skip
+
+
+def _newton_batch_tr(u, *args):
+    """``_newton_column_tr`` for every device, serial or prange (``use_prange``)."""
+    B, N = u.shape
+    par = use_prange(B, N, NEWTON_PAR_NODES)
+    (_newton_batch_tr_par if par else _newton_batch_tr_seq)(u, *args)
+
+
 @njit(cache=True)
 def _dpsi_dvc_column_ii(bi, n_hat, p_hat, dd, dr, ad, ar, lam2, inv_h, v, out):
     """_dpsi_dvc_batch with the carrier-dependent ionization (opt-in, A-02): Jacobian
@@ -446,10 +563,19 @@ class PoissonBatch:
     contacts / neutral guess use the static equilibrium value, as the devsim builders.
     """
 
-    def __init__(self, x, donors, acceptors, n_i, V_t, ionization=None):
+    def __init__(self, x, donors, acceptors, n_i, V_t, ionization=None, traps=None):
         self.x = np.asarray(x, dtype=float)
         self.N = len(self.x)
         D = np.asarray(donors, dtype=float) - np.asarray(acceptors, dtype=float)
+        if ionization is not None and traps is not None:
+            raise ValueError("PoissonBatch: ionization and traps are exclusive")
+        static_D = None
+        if traps is not None:
+            # (fields_list, netdop_eq): B etna.core.radiation_traps.TrapFields (K, N) and
+            # the trap-inclusive neutral net charge (B, N) for contacts / neutral guess
+            trap_list, netdop_eq = traps
+            static_D = np.ascontiguousarray(np.broadcast_to(D, D.shape), dtype=float)
+            D = np.ascontiguousarray(np.broadcast_to(netdop_eq, D.shape), dtype=float)
         if ionization is not None:
             fields_list, netdop_eq = ionization
             D = np.ascontiguousarray(np.broadcast_to(netdop_eq, D.shape), dtype=float)
@@ -471,6 +597,24 @@ class PoissonBatch:
         self._D_hat = np.ascontiguousarray(D / self.N0[:, None])  # (B, N)
         self._inv_h = 1.0 / h  # (N-1,)
         self.ionization = None
+        self.traps = None
+        if traps is not None:
+            if len(trap_list) != self.B:
+                raise ValueError(
+                    f"traps: {len(trap_list)} field sets for {self.B} devices"
+                )
+            s = self.N0[:, None, None]
+            st = lambda key, scale: np.ascontiguousarray(
+                np.stack([getattr(f, key) for f in trap_list]) / (s if scale else 1.0)
+            )
+            self._D_static_hat = np.ascontiguousarray(static_D / self.N0[:, None])
+            self.traps = (
+                st("N_t", True), st("n1", True), st("p1", True), st("r", False),
+                st("don", False),
+            )  # fmt: skip
+            self.trap_fields = list(trap_list)
+        self.trap_clamp = TRAP_CLAMP
+        self.trap_max_iter = TRAP_MAX_ITER
         if ionization is not None:
             if len(fields_list) != self.B:
                 raise ValueError(
@@ -539,7 +683,26 @@ class PoissonBatch:
         u[:, -1] = psi_c / self.V_t
         iters = np.zeros(B, dtype=np.int64)
         conv = np.zeros(B, dtype=np.bool_)
-        if self.ionization is None:
+        if self.traps is not None:
+            # the trap charge is a steep sigmoid of u (N_t switches over a few V_t when
+            # the Fermi level crosses a level): smaller Newton steps, more of them
+            _newton_batch_tr(
+                u,
+                u_n,
+                u_p,
+                self._D_static_hat,
+                *self.traps,
+                self.log_ni_hat,
+                self.lam2,
+                self._inv_h,
+                self.v,
+                tol,
+                max(max_iter, self.trap_max_iter),
+                min(clamp, self.trap_clamp),
+                iters,
+                conv,
+            )
+        elif self.ionization is None:
             _newton_batch(
                 u,
                 u_n,
@@ -592,6 +755,11 @@ class PoissonBatch:
         devsim's small-signal AC solve to ~1e-8 (lab/microdosimeter/bench/cv_gate.py,
         tests/test_cv_small_signal.py); it is NOT eps/W_edge of the n/N_D = 0.5 edge.
         """
+        if self.traps is not None:
+            raise NotImplementedError(
+                "small-signal C with charged radiation traps is not implemented (the "
+                "trap response is frequency dependent: emission times ms .. 1e14 s)"
+            )
         n_hat = np.ascontiguousarray(res.n / self.N0[:, None])
         p_hat = np.ascontiguousarray(res.p / self.N0[:, None])
         out = np.empty(self.B)
@@ -602,6 +770,17 @@ class PoissonBatch:
                 n_hat, p_hat, *self.ionization, self.lam2, self._inv_h, self.v, out
             )
         return Q * self.N0 * out / self.V_t
+
+    def trap_charge(self, res):
+        """Net charged-trap density (B, N), cm^-3, of a PoissonResult (zeros without
+        traps): sum_k N_k (don_k - f_k(n, p)), etna.core.radiation_traps.trap_charge."""
+        if self.traps is None:
+            return np.zeros((self.B, self.N))
+        from etna.core.radiation_traps import trap_charge
+
+        return np.array(
+            [trap_charge(f, res.n[b], res.p[b]) for b, f in enumerate(self.trap_fields)]
+        )
 
     def ionized_doping(self, res):
         """(N_D+, N_A-) (B, N), cm^-3, of a PoissonResult; the static doping for the

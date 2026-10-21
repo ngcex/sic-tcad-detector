@@ -661,6 +661,7 @@ def compute_damaged_params(
     damage_params: RadiationDamageParams | None = None,
     lifetime_model: str = "linear",
     T: float = 300.0,
+    carrier_removal: bool = True,
 ) -> dict:
     """Compute all radiation-degraded device parameters for a given fluence.
 
@@ -685,6 +686,10 @@ def compute_damaged_params(
         "linear" or "logarithmic". Default "linear".
     T : float
         Temperature (K). Default 300.
+    carrier_removal : bool
+        True (default): N_D_profile is the donor-removed profile. False: N_D_profile is
+        returned unchanged (the opt-in charged-trap model, etna.core.radiation_traps,
+        where removal emerges from the trap charge and must not be applied twice).
 
     Returns
     -------
@@ -724,9 +729,11 @@ def compute_damaged_params(
         pristine_tau_p, K_tau_p, fluence_neq, model=lifetime_model
     )
 
-    # Carrier removal (position-dependent)
-    N_D_damaged = apply_carrier_removal(
-        N_D_profile, damage_params.eta_removal, fluence_neq
+    # Carrier removal (position-dependent); off for the charged-trap model
+    N_D_damaged = (
+        apply_carrier_removal(N_D_profile, damage_params.eta_removal, fluence_neq)
+        if carrier_removal
+        else N_D_profile
     )
 
     # Defect concentrations

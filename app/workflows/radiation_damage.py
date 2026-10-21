@@ -26,11 +26,14 @@ informational message.
 
 from __future__ import annotations
 
+import dataclasses
+
 import numpy as np
 import streamlit as st
 
 import etna
 from etna.api.simulation import compensation_fluence
+from etna.core.radiation_damage import get_hardness_factor
 from app.components.page_utils import (
     require_config,
     show_error,
@@ -71,29 +74,57 @@ def render() -> None:
         key="rad_proton_energy",
     )
     phi_c = compensation_fluence(cfg, proton_energy_MeV)
-    st.info(
-        f"Full donor compensation at about **{phi_c:.2e} p/cm²** for this device "
-        f"at {proton_energy_MeV} MeV (carrier removal × κ(E) × Φ reaches the "
-        "lowest epi N_D). Beyond it the epi is fully compensated and the model "
-        "is ill-posed, so those points are not solved. The default range spans "
-        "three decades up to 0.7× that fluence."
+    use_traps = st.checkbox(
+        "Charged deep traps in Poisson (opt-in, solves beyond compensation)",
+        value=False,
+        key="rad_traps",
+        help=(
+            "Replaces the donor-removal scalar by the Burin Table I deep levels "
+            "(Z1/2, EH4, EH6/7) as charged species with dark steady-state SRH "
+            "occupancy: the compensated epi turns semi-insulating and is solved. "
+            "See docs/USAGE.md for what is calibrated and what is assumed."
+        ),
     )
-    # Defaults are keyed on (energy, compensation fluence) so they refresh when
-    # either changes; user edits persist while both stay the same.
-    ctx = f"{proton_energy_MeV}_{phi_c:.4g}"
+    run_cfg = cfg
+    if use_traps:
+        try:
+            run_cfg = dataclasses.replace(cfg, radiation_traps=True)
+        except ValueError as e:
+            show_error(e, "Turn off incomplete ionization in the sidebar.")
+            st.stop()
+        top = 1e16 / get_hardness_factor(proton_energy_MeV)
+        st.info(
+            f"Charged-trap model: the legacy compensation fluence "
+            f"(**{phi_c:.2e} p/cm²**) is only a reference; beyond it the epi is "
+            "semi-insulating (Fermi level pinned by the deep levels) and still "
+            f"solved. The default range reaches 1e16 neq ({top:.2e} p/cm²)."
+        )
+        default_min, default_max = 1e-2 * phi_c, top
+    else:
+        st.info(
+            f"Full donor compensation at about **{phi_c:.2e} p/cm²** for this device "
+            f"at {proton_energy_MeV} MeV (carrier removal × κ(E) × Φ reaches the "
+            "lowest epi N_D). Beyond it the epi is fully compensated and the model "
+            "is ill-posed, so those points are not solved. The default range spans "
+            "three decades up to 0.7× that fluence."
+        )
+        default_min, default_max = 0.7e-3 * phi_c, 0.7 * phi_c
+    # Defaults are keyed on (energy, compensation fluence, model) so they refresh when
+    # either changes; user edits persist while all stay the same.
+    ctx = f"{proton_energy_MeV}_{phi_c:.4g}_{int(use_traps)}"
     col1, col2, col3 = st.columns(3)
     with col1:
         fluence_min = st.number_input(
             "Min fluence (p/cm²)",
             format="%.3e",
-            value=float(f"{0.7e-3 * phi_c:.3g}"),
+            value=float(f"{default_min:.3g}"),
             key=f"rad_fluence_min_{ctx}",
         )
     with col2:
         fluence_max = st.number_input(
             "Max fluence (p/cm²)",
             format="%.3e",
-            value=float(f"{0.7 * phi_c:.3g}"),
+            value=float(f"{default_max:.3g}"),
             key=f"rad_fluence_max_{ctx}",
         )
     with col3:
@@ -129,7 +160,7 @@ def render() -> None:
                 with st.spinner("Running fluence sweep..."):
                     fluences = np.geomspace(fluence_min, fluence_max, int(n_points))
                     st.session_state["damage_result"] = etna.run_radiation_damage(
-                        cfg,
+                        run_cfg,
                         fluences=fluences,
                         V_bias=V_bias,
                         proton_energy_MeV=proton_energy_MeV,
@@ -145,7 +176,7 @@ def render() -> None:
     result = st.session_state.get("damage_result")
     if result is not None:
         show_stale_warning(
-            result.config, cfg, st.session_state.get("damage_inputs"), inputs
+            result.config, run_cfg, st.session_state.get("damage_inputs"), inputs
         )
         badge = solver_badge_text(result.metadata)
         if badge:

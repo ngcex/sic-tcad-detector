@@ -659,6 +659,7 @@ def cce_vs_fluence(
     damage_params=None,
     device_kwargs=None,
     solver="auto",
+    radiation_traps=None,
 ):
     """Compute CCE vs proton fluence at fixed reverse bias.
 
@@ -725,6 +726,14 @@ def cce_vs_fluence(
     the epi; ~8.75e12 p/cm^2 at 62 MeV for N_D_bulk 8.5e13 with the SR-NIEL kappa
     1.942 and eta 5, ~4.86e13 with the pre-2026-10-20 placeholder 0.35) are NOT
     solved: CCE is NaN with a reason.
+
+    ``radiation_traps`` (OPT-IN, default None = the legacy removal model above,
+    unchanged): True or an ``etna.core.radiation_traps.RadiationTrapModel`` replaces the
+    donor removal by charged deep traps in Poisson (Burin Table I levels, dark
+    steady-state SRH occupancy, frozen in the illuminated solve). Every fluence is then
+    solved, also beyond the compensation fluence (semi-insulating epi). Batched engine
+    only: ``solver="devsim"`` or an out-of-scope device raises ValueError, an
+    unconverged point is NaN with a reason (never a silent legacy fallback).
     """
     return _cce_vs_fluence_multi(
         fluence_range,
@@ -740,6 +749,7 @@ def cce_vs_fluence(
         lifetime_model=lifetime_model,
         device_kwargs=device_kwargs,
         solver=solver,
+        radiation_traps=radiation_traps,
     )[0]
 
 
@@ -889,8 +899,112 @@ def _cce_fluence_engine(ref, damaged_list, V_bias, alpha_range_cm, generation_ra
     return cce, ramp.converged & tr.converged & np.isfinite(cce)
 
 
-def _cce_fluence_devsim(dev_kw, damaged, V_bias, alpha_range_cm, generation_rate):
-    """CCE of one damaged device at ``V_bias`` with devsim (staged creation)."""
+def _trap_dark_states(ref, fluences_neq, V_bias, trap_model):
+    """Dark Poisson states at ``V_bias`` with the charged radiation traps (opt-in,
+    etna.core.radiation_traps), one device per entry of ``fluences_neq``, batched.
+
+    Donors are the PRISTINE profile (no removal: it emerges from the trap charge);
+    traps sit on the epi mask of the legacy removal. Returns a dict with the
+    PoissonBatch ``pb``, the final PoissonResult ``res`` (flat quasi-Fermi levels), the
+    trap charge ``rho_trap`` (B, N) of that state, ``donors`` (B, N) and ``converged``.
+    """
+    from etna.core.batched.material import thermal_voltage
+    from etna.core.batched.poisson import PoissonBatch
+    from etna.core.batched.sweeps import _Ramp
+    from etna.core.radiation_traps import neutral_state, trap_fields
+
+    info, x = ref["info"], ref["x"]
+    fluences_neq = np.asarray(fluences_neq, dtype=float)
+    B, N = fluences_neq.size, x.size
+    donors = np.zeros((B, N))
+    donors[:, ref["epi_mask"]] = ref["pristine_N_D_profile"]
+    acceptors = np.broadcast_to(ref["acceptors"], (B, N))
+    n_i = float(info["n_i"])
+    fields = [
+        trap_fields(trap_model, F, ref["epi_mask"], info["T"], n_i)
+        for F in fluences_neq
+    ]
+    static = donors - acceptors
+    netdop_eq = np.array(
+        [static[b] + neutral_state(static[b], fields[b], n_i)[2] for b in range(B)]
+    )
+    pb = PoissonBatch(
+        x, donors, acceptors, n_i, thermal_voltage(info["T"]), traps=(fields, netdop_eq)
+    )
+    ramp = _Ramp(pb, 1e-8, max_step=_TRAP_ENGINE_STEP_V)
+    V_cathode = -float(V_bias)
+    res = ramp.to(V_cathode) if V_cathode > 0 else pb.solve(ramp.psi, tol=1e-8)
+    converged = ramp.converged & res.converged
+    return dict(
+        pb=pb,
+        res=res,
+        rho_trap=pb.trap_charge(res),
+        donors=donors,
+        acceptors=acceptors,
+        converged=converged,
+    )
+
+
+# Largest cathode step of the dark ramp with charged traps (V): the semi-insulating
+# bulk gives a softer Newton start than the legacy 25 V jumps.
+_TRAP_ENGINE_STEP_V = 5.0
+# Gummel cap with traps: a semi-insulating epi at low field converges slowly (258
+# iterations at -1 V, 4e14 p/cm^2) to the same fixed point; one iteration is ~50 us.
+_TRAP_ENGINE_GUMMEL_MAX_ITER = 3000
+
+
+def _cce_fluence_engine_traps(
+    ref, damaged_list, trap_model, V_bias, alpha_range_cm, generation_rate
+):
+    """CCE with charged radiation traps: dark trap state at V_bias (self-consistent
+    SRH occupancy), trap charge then FROZEN as fixed space charge in the illuminated
+    Gummel solve (etna.core.radiation_traps, point 3). Returns (cce, converged)."""
+    from etna.core.batched.material import Q as Q_ENGINE
+    from etna.core.batched.material import edge_mobilities, thermal_voltage
+    from etna.core.batched.poisson import PoissonBatch
+    from etna.core.batched.transport import ContinuityBatch
+
+    info, x = ref["info"], ref["x"]
+    dark = _trap_dark_states(
+        ref, [d["fluence_neq"] for d in damaged_list], V_bias, trap_model
+    )
+    donors, acceptors = dark["donors"], dark["acceptors"]
+    frozen = PoissonBatch(
+        x, donors + dark["rho_trap"], acceptors, info["n_i"], thermal_voltage(info["T"])
+    )
+    # mobility at the pristine (physical) donors: the traps are not counted as
+    # ionized-impurity scatterers (a simplification, stated in USAGE)
+    mu_n, mu_p = edge_mobilities(donors, acceptors, info["N_A"], info["T"])
+    cb = ContinuityBatch(
+        frozen,
+        mu_n,
+        mu_p,
+        np.array([d["tau_n"] for d in damaged_list], dtype=float),
+        np.array([d["tau_p"] for d in damaged_list], dtype=float),
+    )
+    G = _alpha_generation_values(info, x, alpha_range_cm, generation_rate)
+    tr = cb.solve(
+        dark["res"].psi,
+        V_cathode=-float(V_bias),
+        G=G,
+        tol=_FLUENCE_ENGINE_GUMMEL_TOL,
+        max_iter=_TRAP_ENGINE_GUMMEL_MAX_ITER,
+        poisson_tol=1e-8,
+    )
+    J_gen = Q_ENGINE * np.trapezoid(G, x)
+    cce = np.zeros(len(damaged_list)) if J_gen <= 0 else np.abs(tr.J_cathode) / J_gen
+    cce = np.clip(cce, 0.0, 1.0)
+    return cce, dark["converged"] & tr.converged & np.isfinite(cce)
+
+
+def _cce_fluence_devsim(
+    dev_kw, damaged, V_bias, alpha_range_cm, generation_rate, fixed_charge=None
+):
+    """CCE of one damaged device at ``V_bias`` with devsim (staged creation).
+
+    ``fixed_charge`` (N,) cm^-3, optional: extra static space charge added to NetDoping
+    (Donors, hence the mobility, unchanged). Used to cross-check the charged-trap engine
+    path with its FROZEN trap charge (tests/test_radiation_traps.py); None = legacy."""
     from etna.core.device import apply_damaged_params, create_sic_device
     from etna.core.drift_diffusion import seeded_bias, setup_sic_drift_diffusion
     from etna.core.poisson import setup_poisson, solve_equilibrium
@@ -900,6 +1014,19 @@ def _cce_fluence_devsim(dev_kw, damaged, V_bias, alpha_range_cm, generation_rate
         # Staged device creation; damage applied BEFORE Poisson setup
         device_info = create_sic_device(device_name=dev_name, **dev_kw)
         apply_damaged_params(device_info, damaged)
+        if fixed_charge is not None:
+            region = device_info["region_name"]
+            net = np.array(
+                devsim.get_node_model_values(
+                    device=dev_name, region=region, name="NetDoping"
+                )
+            )
+            devsim.set_node_values(
+                device=dev_name,
+                region=region,
+                name="NetDoping",
+                values=list(net + np.asarray(fixed_charge, dtype=float)),
+            )
         setup_poisson(device_info)
         solve_equilibrium(device_info)
         setup_sic_drift_diffusion(device_info)
@@ -945,6 +1072,7 @@ def _cce_vs_fluence_multi(
     lifetime_model="linear",
     device_kwargs=None,
     solver="auto",
+    radiation_traps=None,
 ):
     """cce_vs_fluence for several damage-parameter sets on one device and bias.
 
@@ -953,7 +1081,9 @@ def _cce_vs_fluence_multi(
     cce_vs_fluence result dict per damage-parameter set, in order.
     """
     from etna.core.radiation_damage import compute_damaged_params
+    from etna.core.radiation_traps import resolve_traps
 
+    trap_model = resolve_traps(radiation_traps)
     if solver not in ("auto", "engine", "devsim"):
         raise ValueError(
             f"solver must be 'auto', 'engine' or 'devsim' (got {solver!r})"
@@ -991,13 +1121,15 @@ def _cce_vs_fluence_multi(
                     damage_params=damage_params,
                     lifetime_model=lifetime_model,
                     T=T_dev,
+                    carrier_removal=trap_model is None,
                 )
             except Exception as e:
                 logger.warning(f"cce_vs_fluence: failed at fluence={fluence:.2e}: {e}")
                 cce_values[p, i] = np.nan
                 reasons[p][i] = f"solver failure: {type(e).__name__}: {e}"
                 continue
-            reason = full_compensation_reason(damaged)
+            # with charged traps the compensated (semi-insulating) epi is solved
+            reason = "" if trap_model is not None else full_compensation_reason(damaged)
             if reason:
                 logger.warning(f"cce_vs_fluence: fluence={fluence:.2e}: {reason}")
                 cce_values[p, i] = np.nan
@@ -1006,7 +1138,34 @@ def _cce_vs_fluence_multi(
             todo.append((p, i, damaged))
 
     engine_reason = _fluence_engine_reason(dev_kw, V_bias)
-    if solver == "engine" and engine_reason is not None:
+    if trap_model is not None:
+        if solver == "devsim" or engine_reason is not None:
+            raise ValueError(
+                "cce_vs_fluence: radiation_traps needs the batched engine "
+                f"({'solver=devsim' if solver == 'devsim' else engine_reason}); the "
+                "devsim path has no charged-trap model"
+            )
+        if todo:
+            cce_b, conv_b = _cce_fluence_engine_traps(
+                ref,
+                [d for _, _, d in todo],
+                trap_model,
+                V_bias,
+                alpha_range_cm,
+                generation_rate,
+            )
+            for (p, i, _), cce, ok in zip(todo, cce_b, conv_b):
+                if ok:
+                    cce_values[p, i], valid[p, i] = cce, True
+                    solvers[p][i] = "batched+traps"
+                else:
+                    cce_values[p, i] = np.nan
+                    reasons[p][i] = (
+                        "radiation_traps: batched engine did not converge "
+                        "(no devsim fallback for the charged-trap model)"
+                    )
+        todo = []
+    elif solver == "engine" and engine_reason is not None:
         raise ValueError(
             f"cce_vs_fluence: batched engine unavailable ({engine_reason})"
         )
@@ -1052,6 +1211,7 @@ def _cce_vs_fluence_multi(
             "V_bias": V_bias,
             "energy_MeV": energy_MeV,
             "lifetime_model": lifetime_model,
+            "radiation_traps": trap_model,
         }
         for p in range(P)
     ]
@@ -1478,7 +1638,9 @@ def cce_post_anneal(
 
         # Ramp bias
         cathode_V = -V_bias
-        seeded_bias(device_info, cathode_V, contact="cathode", V_step=0.5, V_step_max=2.0)
+        seeded_bias(
+            device_info, cathode_V, contact="cathode", V_step=0.5, V_step_max=2.0
+        )
 
         # Prepare generation profile
         x_nodes = np.array(

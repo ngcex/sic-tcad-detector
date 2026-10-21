@@ -28,6 +28,7 @@ from etna.core.batched import (
 from etna.core.batched.material import EPS
 from etna.core.batched.sweeps import dark_carriers
 from etna.core.charge_collection import cce_vs_bias, cce_vs_fluence
+from etna.core.radiation_traps import resolve_traps
 from etna.core.generation_profiles import ALPHA_RANGE_SIC_CM
 from etna.core.cv_analysis import cv_sweep
 from etna.core.dark_current import (
@@ -1586,6 +1587,8 @@ def run_radiation_damage(
         from 0.01x to 3x this device's compensation fluence (6 below it; the 2 beyond
         it are normally NaN with a reason - the 3x point always - to show where the
         model ends: compensation_fluence is a lower bound on the mesh threshold).
+        With ``config.radiation_traps`` on: 10 points from 0.01x the compensation
+        fluence to 1e16 neq (all solved, semi-insulating beyond compensation).
         Before 2026-10-18 the default was a fixed 1e13..1e16 grid, which lies
         beyond the compensation fluence of the default stack (1.35e13 at 5.6 MeV
         with the placeholder kappa 0.5; 1.0e12 with the SR-NIEL kappa 6.67) and of
@@ -1606,7 +1609,9 @@ def run_radiation_damage(
         sim_type="damage", x=fluences (cm^-2), y=CCE values (dimensionless),
         metadata contains "V_bias", "energy_MeV", "valid" (bool per point),
         "reason" (list of str, "" when valid) and "compensation_fluence"
-        (p/cm^2; points at or beyond it are NaN: epi fully compensated).
+        (p/cm^2; points at or beyond it are NaN: epi fully compensated; with
+        ``config.radiation_traps`` they are solved, the value is kept as the legacy
+        reference) and "damage_model" ("carrier_removal" or "charged_traps").
         "solver" names the solver(s) that produced the points ("batched" on the engine's
         box, "devsim" outside it, "batched + devsim" when mixed) and
         "solver_per_point" lists it per fluence ("" = not solved).
@@ -1631,12 +1636,15 @@ def run_radiation_damage(
     # Forward config doping/geometry (D-01) so this facade is self-consistent
     # with run_cce. Do NOT reset/build/delete any device here.
     kw = device_kwargs(config)
+    traps = resolve_traps(config.radiation_traps)
+    extra = {} if traps is None else {"radiation_traps": traps}  # legacy: same call
     result = cce_vs_fluence(
         fluence_range=fluences,
         V_bias=V_bias,
         epi_thickness_cm=kw.pop("epi_thickness_cm"),
         energy_MeV=proton_energy_MeV,
         device_kwargs=kw,
+        **extra,
     )
 
     n = len(result["fluences"])
@@ -1665,6 +1673,8 @@ def run_radiation_damage(
             ),
             "reason": list(reason) if reason is not None else [""] * n,
             "compensation_fluence": compensation_fluence(config, proton_energy_MeV),
+            # damage model: "carrier_removal" (legacy scalar) or "charged_traps"
+            "damage_model": "carrier_removal" if traps is None else "charged_traps",
         },
         mesh=None,
     )
@@ -1672,6 +1682,9 @@ def run_radiation_damage(
 
 DEFAULT_FLUENCE_GRID_SPAN = (1e-2, 3.0)  # x compensation_fluence
 DEFAULT_FLUENCE_GRID_POINTS = 8
+# radiation_traps=True grid: 0.01 x compensation_fluence .. 1e16 neq (p/cm^2 = neq/kappa)
+TRAP_FLUENCE_GRID_TOP_NEQ = 1e16
+TRAP_FLUENCE_GRID_POINTS = 10
 
 
 def default_fluence_grid(
@@ -1689,6 +1702,16 @@ def default_fluence_grid(
     """
     phi_c = compensation_fluence(config, proton_energy_MeV)
     lo, hi = DEFAULT_FLUENCE_GRID_SPAN
+    if resolve_traps(config.radiation_traps) is not None:
+        # charged-trap model: every point is solvable; reach the measured
+        # semi-insulating decade (1e16 neq, Gsponer arXiv:2310.02047)
+        from etna.core.radiation_damage import get_hardness_factor
+
+        top = max(
+            hi * phi_c,
+            TRAP_FLUENCE_GRID_TOP_NEQ / get_hardness_factor(proton_energy_MeV),
+        )
+        return np.geomspace(lo * phi_c, top, TRAP_FLUENCE_GRID_POINTS)
     return np.geomspace(lo * phi_c, hi * phi_c, DEFAULT_FLUENCE_GRID_POINTS)
 
 
