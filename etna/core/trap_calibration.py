@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import dataclasses
 from dataclasses import dataclass, field
-from typing import Sequence, Tuple
+from typing import Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -38,9 +38,7 @@ DEFAULT_FREQ_HZ = 1e5  # when the file records no frequency (stated in the resul
 def scaled_model(model, groups: Sequence[str], scales):
     """``RadiationTrapModel`` with eta multiplied by ``scales[j]`` for group j
     ("all" = every trap, else the trap of that name; a trap in several groups gets the
-    product)."""
-    from etna.core.radiation_traps import RadiationTrapModel
-
+    product). Every other field of ``model`` (donor_removal, occupancy, ...) is kept."""
     names = [t.name for t in model.traps]
     for g in groups:
         if g != "all" and g not in names:
@@ -52,7 +50,7 @@ def scaled_model(model, groups: Sequence[str], scales):
             if g == "all" or g == t.name:
                 s *= float(v)
         traps.append(dataclasses.replace(t, eta=t.eta * s))
-    return RadiationTrapModel(tuple(traps))
+    return dataclasses.replace(model, traps=tuple(traps))
 
 
 @dataclass
@@ -256,5 +254,241 @@ def calibrate_cv(
             tol=tol,
             sigma_rel_default=sigma_rel_default,
             fluences=fl.tolist(),
+        ),  # fmt: skip
+    )
+
+
+# =========================================================================== removal
+# Calibration on PUBLISHED removal numbers (no measured C-V curve ships with ETNA):
+# a removal slope g read at fixed depletion width (Radmanovac et al. method) and the
+# fluence at which the C-V turns flat (the epi turns semi-insulating).
+@dataclass(frozen=True)
+class RemovalObservation:
+    """One published irradiated-C-V number on a uniform n-epi.
+
+    ``kind``:
+    - "slope": g = -dN_eff/dPhi (cm^-1 per unit of ``fluences``), N_eff the median
+      apparent 2 / (q eps d(1/C^2)/dV) over depletion widths ``window_um`` of a kinetic
+      C-V (0 .. ``V_max`` at ``rate_V_per_s``, C(f) at ``freq_Hz``), slope by least
+      squares over ``fluences`` (0 included);
+    - "flat_fluence": the fluence at which the neutral epi's dielectric relaxation
+      time eps / sigma reaches 1 / (2 pi ``freq_Hz``) (the C-V turns flat at eps A / d);
+      ``value`` and ``sigma`` are log10(fluence) and its 1-sigma.
+    Fluences are p/cm^2 at ``energy_MeV`` (kappa from ``get_hardness_factor``), or neq
+    when ``energy_MeV`` is None. ``source``: citation and location of the number."""
+
+    name: str
+    kind: str
+    value: float
+    sigma: float
+    N_D: float
+    thickness_um: float = 50.0
+    energy_MeV: Optional[float] = None
+    fluences: Tuple[float, ...] = ()
+    window_um: Tuple[float, float] = (10.0, 40.0)
+    V_max: float = 150.0
+    V_step: float = 5.0
+    freq_Hz: float = 1e6
+    rate_V_per_s: float = 1.0
+    T: float = 300.0
+    source: str = ""
+
+    def __post_init__(self):
+        if self.kind not in ("slope", "flat_fluence"):
+            raise ValueError("RemovalObservation.kind must be 'slope' or 'flat_fluence'")
+        if not (self.sigma > 0 and np.isfinite(self.value)):
+            raise ValueError("RemovalObservation needs a finite value and sigma > 0")
+        if self.kind == "slope" and len(self.fluences) < 2:
+            raise ValueError("a 'slope' observation needs >= 2 fluences")
+
+    @property
+    def kappa(self):
+        from etna.core.radiation_damage import get_hardness_factor
+
+        return 1.0 if self.energy_MeV is None else get_hardness_factor(self.energy_MeV)
+
+
+def neff_window(V, C_per_area, window_um=(10.0, 40.0)):
+    """Median apparent N_eff (cm^-3) of each row over depletion widths eps / C inside
+    ``window_um`` (the fixed-width reading of Radmanovac et al., arXiv:2510.11304)."""
+    from etna.core.batched.material import EPS
+    from etna.core.trap_kinetics import neff_from_cv
+
+    C = np.atleast_2d(C_per_area)
+    W = EPS / C * 1e4
+    ne = neff_from_cv(V, C)
+    out = np.full(C.shape[0], np.nan)
+    for b in range(C.shape[0]):
+        m = (W[b] > window_um[0]) & (W[b] < window_um[1]) & np.isfinite(ne[b])
+        if m.any():
+            out[b] = np.median(ne[b, m])
+    return out
+
+
+def semi_insulating_fluence(model, N_D, T=300.0, freq_Hz=1e4, mu_n=950.0, kappa=1.0):
+    """Fluence (units of 1 / kappa neq) at which the NEUTRAL epi of donor density N_D
+    (local neutrality with the trap model, ``trap_diagnostics``) reaches a dielectric
+    relaxation time eps / (q mu_n n) = 1 / (2 pi freq_Hz): above it the undepleted epi
+    does not follow the AC signal and the C-V is flat at eps A / d. Bisection in
+    log fluence (n_neutral falls monotonically with fluence). ``mu_n`` (cm^2/Vs) enters
+    logarithmically (stated; holes neglected: E_F stays above midgap)."""
+    from etna.core.batched.material import EPS, Q
+    from etna.core.radiation_traps import trap_diagnostics
+
+    n_crit = 2 * np.pi * float(freq_Hz) * EPS / (Q * float(mu_n))
+    lo, hi = np.log(N_D * 1e-6), np.log(N_D * 1e3)  # neq bracket
+    for _ in range(60):
+        mid = 0.5 * (lo + hi)
+        n = trap_diagnostics(N_D, np.exp(mid), T=T, model=model)["n_neutral"]
+        if n > n_crit:
+            lo = mid
+        else:
+            hi = mid
+    return float(np.exp(0.5 * (lo + hi))) / float(kappa)
+
+
+def removal_observable(obs: RemovalObservation, model):
+    """Model value of ``obs`` (same units as ``obs.value``) for ``model``."""
+    from etna.api.device import DeviceConfig
+    from etna.core.trap_kinetics import KineticTrapSolver, simulate_cv
+
+    if obs.kind == "flat_fluence":
+        return np.log10(
+            semi_insulating_fluence(model, obs.N_D, obs.T, obs.freq_Hz, kappa=obs.kappa)
+        )
+    cfg = DeviceConfig(
+        epi_thickness_um=obs.thickness_um, doping_profile="uniform", N_D=obs.N_D,
+        T=obs.T,
+    )  # fmt: skip
+    F = np.asarray(obs.fluences, dtype=float)
+    s = KineticTrapSolver.from_config(cfg, F, energy_MeV=obs.energy_MeV, trap_model=model)
+    V = -np.arange(0.0, obs.V_max + 0.5 * obs.V_step, obs.V_step)
+    cv = simulate_cv(
+        s, V, obs.freq_Hz, rate_V_per_s=obs.rate_V_per_s, dV_max=obs.V_step
+    )
+    ne = neff_window(V, cv.C_ac, obs.window_um)
+    m = np.isfinite(ne)
+    if m.sum() < 2:
+        return np.nan
+    return float(-np.polyfit(F[m], ne[m], 1)[0])
+
+
+def parametrized_model(base, params: Sequence[str], values):
+    """``base`` with parameter j set to ``values[j]``: "donor_removal" is the absolute
+    direct removal (cm^-1 per neq); any other name ("all" or a trap name) is a
+    multiplicative scale of that trap's eta."""
+    vals = [float(v) for v in values]
+    scale_groups = [p for p in params if p != "donor_removal"]
+    scale_vals = [v for p, v in zip(params, vals) if p != "donor_removal"]
+    m = scaled_model(base, scale_groups, scale_vals) if scale_groups else base
+    if "donor_removal" in params:
+        m = dataclasses.replace(m, donor_removal=vals[list(params).index("donor_removal")])
+    return m
+
+
+def calibrate_removal(
+    observations: Sequence[RemovalObservation],
+    params: Sequence[str] = ("all",),
+    base_model=None,
+    x0=None,
+    bounds=(0.0, 50.0),
+    max_nfev=40,
+    diff_step=0.05,
+):
+    """Fit ``params`` (``parametrized_model``; LINEAR parameters: the removal is linear
+    in the introduction rates below compensation) to published removal numbers.
+
+    Returns ``TrapCalibration`` (scales = parameter values; sigma from the Gauss-Newton
+    covariance in the linear parameters; ``settings['model_values']`` and
+    ``settings['observations']``). A parameter at a bound gets a warning: its sigma is
+    then not a confidence interval. Right singular vectors of the weighted Jacobian
+    (``settings['null_directions']``, rows ordered by increasing singular value) show
+    which parameter COMBINATIONS the data fix and which they cannot see."""
+    from scipy.optimize import least_squares
+
+    from etna.core.radiation_traps import DEFAULT_TRAP_MODEL, resolve_traps
+
+    obs = list(observations)
+    if not obs:
+        raise ValueError("calibrate_removal: no observations")
+    params = tuple(params)
+    P = len(params)
+    base = resolve_traps(base_model) or DEFAULT_TRAP_MODEL
+    if x0 is None:
+        x0 = [base.donor_removal if p == "donor_removal" else 1.0 for p in params]
+    x0 = np.clip(np.asarray(x0, dtype=float), bounds[0], bounds[1])
+    parametrized_model(base, params, x0)  # validates names
+    nfev = [0]
+
+    def model_values(x):
+        nfev[0] += 1
+        m = parametrized_model(base, params, x)
+        return np.array([removal_observable(o, m) for o in obs])
+
+    meas = np.array([o.value for o in obs])
+    sig = np.array([o.sigma for o in obs])
+
+    def resid(x):
+        r = (model_values(x) - meas) / sig
+        return np.where(np.isfinite(r), r, 1e3)
+
+    sol = least_squares(
+        resid, x0, bounds=(np.full(P, bounds[0]), np.full(P, bounds[1])),
+        diff_step=diff_step, max_nfev=max_nfev, x_scale=1.0, ftol=1e-8, xtol=1e-8,
+    )  # fmt: skip
+    J = sol.jac
+    r = sol.fun
+    n = r.size
+    dof = n - P
+    chi2 = float(r @ r)
+    U, S, Vt = np.linalg.svd(J, full_matrices=False)
+    with np.errstate(divide="ignore"):
+        cov = (Vt.T / np.where(S > 1e-12 * max(S.max(), 1e-300), S**2, np.inf)) @ Vt
+    s_x = np.sqrt(np.clip(np.diag(cov), 0, None))
+    d = np.where(s_x > 0, s_x, 1.0)
+    corr = cov / np.outer(d, d)
+    red = chi2 / max(dof, 1)
+    warnings = []
+    rank_ok = S.size == P and S.min() > 1e-6 * max(S.max(), 1e-300)
+    ident = np.array([bool(rank_ok) and np.isfinite(s_x[j]) and s_x[j] > 0 for j in range(P)])
+    if dof < 0:
+        warnings.append(f"{n} observations for {P} parameters: under-determined")
+    for j, p in enumerate(params):
+        if np.isclose(sol.x[j], bounds[0], atol=1e-6) or np.isclose(sol.x[j], bounds[1]):
+            warnings.append(f"parameter {p!r} at its bound {sol.x[j]:.3g}")
+    if not rank_ok:
+        warnings.append("Jacobian rank-deficient: some parameter combination is unseen")
+    if P > 1:
+        for a, b in zip(*np.triu_indices(P, 1)):
+            if abs(corr[a, b]) > 0.95:
+                warnings.append(
+                    f"parameters {params[a]!r} and {params[b]!r} correlated "
+                    f"({corr[a, b]:+.3f})"
+                )
+    order = np.argsort(S)
+    return TrapCalibration(
+        groups=params,
+        scales=sol.x.copy(),
+        sigma=s_x,
+        sigma_scaled=s_x * np.sqrt(max(red, 1.0)),
+        correlation=corr,
+        singular_values=S,
+        chi2=chi2,
+        dof=dof,
+        n_points=n,
+        identifiable=ident,
+        warnings=warnings,
+        residuals=r,
+        nfev=nfev[0],
+        settings=dict(
+            params=list(params),
+            model_values=(r * sig + meas).tolist(),
+            observations=[
+                dict(name=o.name, kind=o.kind, value=o.value, sigma=o.sigma,
+                     source=o.source) for o in obs
+            ],
+            null_directions=Vt[order].tolist(),
+            singular_values_sorted=S[order].tolist(),
+            base_label=getattr(base, "label", ""),
         ),  # fmt: skip
     )

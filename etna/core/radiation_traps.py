@@ -68,7 +68,7 @@ KNOWN CONSEQUENCES (reported, not tuned; see docs/USAGE.md):
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Optional, Tuple
 
 import numpy as np
 
@@ -88,7 +88,17 @@ def _solver_vt(T):
 class DeepTrap:
     """One radiation-induced deep level: introduction rate ``eta`` (cm^-1 per neq),
     level ``E_below_Ec`` (eV), capture cross-sections (cm^2), ``kind`` "acceptor"
-    (charge -N_t f) or "donor" (charge +N_t (1 - f))."""
+    (charge -N_t f) or "donor" (charge +N_t (1 - f)).
+
+    Optional SECOND level (a two-electron defect, e.g. the negative-U carbon vacancy
+    Z1/2 = V_C(=/-/0)): ``E2_below_Ec``, ``sigma_n2``, ``sigma_p2`` of the transition
+    that adds the SECOND electron (- -> = for an acceptor, + -> 0 for a donor); the
+    first level adds the first electron (0 -> -, ++ -> +). Negative U means E2 is
+    DEEPER than E1. Charge states hold 0, 1, 2 electrons: "acceptor" 0, -1, -2;
+    "donor" +2, +1, 0. The occupancy is carried per LEVEL row (``level_table``) as
+    g1 = P(>= 1 electron), g2 = P(2 electrons), so the charge is N (z - g1 - g2), z = 0
+    (acceptor) or 2 (donor), the single-level formula N (don - f) summed over rows.
+    Degeneracy factors are 1 (assumed, as for single levels)."""
 
     name: str
     kind: str
@@ -96,6 +106,9 @@ class DeepTrap:
     E_below_Ec: float
     sigma_n: float
     sigma_p: float
+    E2_below_Ec: Optional[float] = None
+    sigma_n2: Optional[float] = None
+    sigma_p2: Optional[float] = None
 
     def __post_init__(self):
         if self.kind not in ("acceptor", "donor"):
@@ -110,6 +123,22 @@ class DeepTrap:
             raise ValueError(
                 f"DeepTrap.E_below_Ec must be inside the gap (got {self.E_below_Ec!r})"
             )
+        second = (self.E2_below_Ec, self.sigma_n2, self.sigma_p2)
+        if any(v is not None for v in second):
+            if any(v is None for v in second):
+                raise ValueError(
+                    "DeepTrap second level needs E2_below_Ec, sigma_n2 and sigma_p2"
+                )
+            for name in ("sigma_n2", "sigma_p2"):
+                v = getattr(self, name)
+                if not (np.isfinite(v) and v > 0):
+                    raise ValueError(f"DeepTrap.{name} must be > 0 (got {v!r})")
+            if not (0.0 < self.E2_below_Ec < 3.26):
+                raise ValueError("DeepTrap.E2_below_Ec must be inside the gap")
+
+    @property
+    def n_levels(self) -> int:
+        return 1 if self.E2_below_Ec is None else 2
 
 
 def burin_table_traps(params=None) -> Tuple[DeepTrap, ...]:
@@ -132,9 +161,27 @@ class RadiationTrapModel:
 
     ``traps``: the deep levels (default: Burin Table I via ``RadiationDamageParams``).
     The occupancy is the steady-state SRH one of the dark state (module docstring).
+
+    ``donor_removal`` (cm^-1 per neq, default 0): DIRECT donor deactivation, N_D(x) ->
+    max(N_D(x) - donor_removal * Phi_neq, 0) on the trap nodes: an occupancy-independent
+    loss of shallow donors (e.g. nitrogen bound into a complex), on top of the traps.
+    ``occupancy`` (default "steady", the documented behaviour): the trap occupancy that
+    sets the dark charge of a CCE point. "kinetic": the ``etna.core.trap_kinetics``
+    history instead: the ``initial`` state at 0 V, a ramp to the bias at
+    ``ramp_V_per_s``, a hold of ``hold_s`` s (a measurement after biasing), then the
+    trap charge frozen in the illuminated solve. Two-level traps need "kinetic" in the
+    CCE path (the steady Poisson kernel is single-level; ``trap_kinetics`` handles
+    both, its steady limit included). ``label``: provenance of a preset
+    (``etna.core.trap_presets``).
     """
 
     traps: Tuple[DeepTrap, ...] = burin_table_traps()
+    donor_removal: float = 0.0
+    occupancy: str = "steady"
+    ramp_V_per_s: float = 1.0
+    hold_s: float = 60.0
+    initial: str = "equilibrium"
+    label: str = ""
 
     def __post_init__(self):
         traps = tuple(self.traps)
@@ -143,12 +190,51 @@ class RadiationTrapModel:
         if not all(isinstance(t, DeepTrap) for t in traps):
             raise TypeError("RadiationTrapModel.traps must be DeepTrap entries")
         object.__setattr__(self, "traps", traps)
+        if not (np.isfinite(self.donor_removal) and self.donor_removal >= 0):
+            raise ValueError("RadiationTrapModel.donor_removal must be >= 0")
+        if self.occupancy not in ("steady", "kinetic"):
+            raise ValueError(
+                "RadiationTrapModel.occupancy must be 'steady' or 'kinetic'"
+            )
+        if not (self.ramp_V_per_s > 0 and self.hold_s >= 0):
+            raise ValueError("ramp_V_per_s must be > 0 and hold_s >= 0")
+        if self.initial not in ("equilibrium", "in_beam", "neutral"):
+            raise ValueError("initial must be 'equilibrium', 'in_beam' or 'neutral'")
 
     @property
     def neutral_removal_rate(self) -> float:
         """Removal rate (cm^-1 per neq) of a neutral n-type region with E_F above every
-        level: every acceptor level holds one electron, donors are neutral."""
-        return float(sum(t.eta for t in self.traps if t.kind == "acceptor"))
+        level: every acceptor level holds its electrons (two for a two-level acceptor),
+        donors are neutral; plus the direct ``donor_removal``."""
+        return float(
+            self.donor_removal
+            + sum(t.eta * t.n_levels for t in self.traps if t.kind == "acceptor")
+        )
+
+    @property
+    def multilevel(self) -> bool:
+        return any(t.n_levels > 1 for t in self.traps)
+
+
+def level_table(model):
+    """Per-LEVEL rows of ``model`` (a two-level trap gives two rows, first level
+    first): dicts with name, trap (index), eta, E (eV below Ec), sigma_n, sigma_p, don
+    (1 donor / 0 acceptor) and pair (row index of the second level for a first level,
+    -2 for a second level, -1 for a single level)."""
+    rows = []
+    for k, t in enumerate(model.traps):
+        don = 1.0 if t.kind == "donor" else 0.0
+        base = dict(trap=k, eta=t.eta, don=don)
+        if t.n_levels == 1:
+            rows.append(dict(base, name=t.name, E=t.E_below_Ec, sigma_n=t.sigma_n,
+                             sigma_p=t.sigma_p, pair=-1))  # fmt: skip
+        else:
+            i = len(rows)
+            rows.append(dict(base, name=t.name, E=t.E_below_Ec, sigma_n=t.sigma_n,
+                             sigma_p=t.sigma_p, pair=i + 1))  # fmt: skip
+            rows.append(dict(base, name=t.name + "(2)", E=t.E2_below_Ec,
+                             sigma_n=t.sigma_n2, sigma_p=t.sigma_p2, pair=-2))  # fmt: skip
+    return rows
 
 
 DEFAULT_TRAP_MODEL = RadiationTrapModel()
@@ -173,14 +259,21 @@ def resolve_traps(spec):
 
 @dataclass(frozen=True)
 class TrapFields:
-    """Per-node trap inputs, arrays (K, N): density N_t (cm^-3), n1, p1 (cm^-3),
-    r = c_p / c_n, and don = 1 for donor-like / 0 for acceptor-like."""
+    """Per-node trap inputs, arrays (L, N) over the LEVEL rows of ``level_table`` (L =
+    K for single-level traps): density N_t (cm^-3), n1, p1 (cm^-3), r = c_p / c_n, and
+    don = 1 for donor-like / 0 for acceptor-like; ``pair`` (L,) int64 as
+    ``level_table`` (None: every level single)."""
 
     N_t: np.ndarray
     n1: np.ndarray
     p1: np.ndarray
     r: np.ndarray
     don: np.ndarray
+    pair: Optional[np.ndarray] = None
+
+    @property
+    def multilevel(self) -> bool:
+        return self.pair is not None and bool(np.any(self.pair >= 0))
 
 
 def _vth(T, m_rel):
@@ -188,7 +281,8 @@ def _vth(T, m_rel):
 
 
 def trap_fields(model, fluence_neq, mask, T, n_i) -> TrapFields:
-    """TrapFields on the nodes of ``mask`` (bool (N,), traps there, zero elsewhere)."""
+    """TrapFields on the nodes of ``mask`` (bool (N,), traps there, zero elsewhere),
+    one row per level (``level_table``)."""
     from etna.core.sic_material import SiC4H_Parameters, effective_dos
 
     p = SiC4H_Parameters()
@@ -196,25 +290,43 @@ def trap_fields(model, fluence_neq, mask, T, n_i) -> TrapFields:
     V_t = _solver_vt(T)
     mask = np.asarray(mask, dtype=bool)
     N = mask.size
-    K = len(model.traps)
+    rows = level_table(model)
+    L = len(rows)
     ratio = _vth(T, p.m_h_dos) / _vth(T, p.m_e_dos)
-    out = {k: np.zeros((K, N)) for k in ("N_t", "n1", "p1", "r", "don")}
-    for k, t in enumerate(model.traps):
-        n1 = NC * np.exp(-t.E_below_Ec / V_t)
-        out["N_t"][k, mask] = t.eta * float(fluence_neq)
+    out = {k: np.zeros((L, N)) for k in ("N_t", "n1", "p1", "r", "don")}
+    for k, t in enumerate(rows):
+        n1 = NC * np.exp(-t["E"] / V_t)
+        out["N_t"][k, mask] = t["eta"] * float(fluence_neq)
         out["n1"][k] = n1
         out["p1"][k] = float(n_i) ** 2 / n1
-        out["r"][k] = t.sigma_p / t.sigma_n * ratio
-        out["don"][k] = 1.0 if t.kind == "donor" else 0.0
-    return TrapFields(**out)
+        out["r"][k] = t["sigma_p"] / t["sigma_n"] * ratio
+        out["don"][k] = t["don"]
+    pair = np.array([t["pair"] for t in rows], dtype=np.int64)
+    return TrapFields(**out, pair=pair if np.any(pair != -1) else None)
 
 
 def occupancy(fields, n, p):
-    """SRH electron occupancy f (K, N) of every trap at carrier densities n, p (N,)."""
+    """Steady-state SRH electron occupancy (L, N) of every level row at carrier
+    densities n, p (N,). Single level: f = (n + r p1) / (n + n1 + r (p + p1)).
+    Two-level trap (rows a, b): the chain 0 <-> 1 <-> 2 electrons has zero net flux on
+    each link, x = R+_a / R-_a, y = R+_b / R-_b with R+ = n + r p1, R- = n1 + r p (in
+    units of c_n), and the rows carry g1 = (x + x y) / (1 + x + x y) and
+    g2 = x y / (1 + x + x y)."""
     n = np.asarray(n, dtype=float)[None, :]
     p = np.asarray(p, dtype=float)[None, :]
     r = fields.r
-    return (n + r * fields.p1) / (n + fields.n1 + r * (p + fields.p1))
+    f = (n + r * fields.p1) / (n + fields.n1 + r * (p + fields.p1))
+    if fields.multilevel:
+        for a in np.nonzero(fields.pair >= 0)[0]:
+            b = int(fields.pair[a])
+            Rpa = n[0] + r[a] * fields.p1[a]
+            Rma = fields.n1[a] + r[a] * p[0]
+            Rpb = n[0] + r[b] * fields.p1[b]
+            Rmb = fields.n1[b] + r[b] * p[0]
+            den = Rpa * Rpb + Rpa * Rmb + Rma * Rmb  # (1 + x + xy) Rma Rmb
+            f[a] = Rpa * (Rpb + Rmb) / den
+            f[b] = Rpa * Rpb / den
+    return f
 
 
 def trap_charge(fields, n, p):
@@ -272,7 +384,8 @@ def trap_diagnostics(N_D, fluence_neq, T=300.0, model=None):
     n_i = intrinsic_concentration(float(T))[0]
     NC, _ = effective_dos(float(T))
     f = trap_fields(model, fluence_neq, np.array([True]), T, n_i)
-    n, p, rho = neutral_state(np.array([float(N_D)]), f, n_i)
+    N_D_eff = max(float(N_D) - model.donor_removal * float(fluence_neq), 0.0)
+    n, p, rho = neutral_state(np.array([N_D_eff]), f, n_i)
     V_t = _solver_vt(T)
     f_neu = occupancy(f, n, p)
     f_dep = occupancy(f, np.zeros(1), np.zeros(1))
@@ -283,10 +396,13 @@ def trap_diagnostics(N_D, fluence_neq, T=300.0, model=None):
     prm = SiC4H_Parameters()
     vn = _vth(T, prm.m_e_dos)
     tau_e = {}
-    for k, t in enumerate(model.traps):
-        e_n = t.sigma_n * vn * f.n1[k, 0]
-        e_p = f.r[k, 0] * t.sigma_n * vn * f.p1[k, 0]  # c_p p1, c_p = r c_n
-        tau_e[t.name] = 1.0 / (e_n + e_p)
+    for k, t in enumerate(level_table(model)):
+        e_n = t["sigma_n"] * vn * f.n1[k, 0]
+        e_p = f.r[k, 0] * t["sigma_n"] * vn * f.p1[k, 0]  # c_p p1, c_p = r c_n
+        tau_e[t["name"]] = 1.0 / (e_n + e_p)
+    rm = float(N_D) - N_D_eff  # direct removal: both cases
+    Ndep_ss -= rm
+    Ndep_frozen -= rm
     return {
         "n_neutral": float(n[0]),
         "Ec_minus_EF": float(-V_t * np.log(n[0] / NC)),

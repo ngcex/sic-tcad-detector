@@ -919,11 +919,19 @@ def _trap_dark_states(ref, fluences_neq, V_bias, trap_model):
     from etna.core.batched.sweeps import _Ramp
     from etna.core.radiation_traps import neutral_state, trap_fields
 
+    if trap_model.occupancy == "kinetic" or trap_model.multilevel:
+        return _trap_dark_states_kinetic(ref, fluences_neq, V_bias, trap_model)
     info, x = ref["info"], ref["x"]
     fluences_neq = np.asarray(fluences_neq, dtype=float)
     B, N = fluences_neq.size, x.size
     donors = np.zeros((B, N))
     donors[:, ref["epi_mask"]] = ref["pristine_N_D_profile"]
+    if trap_model.donor_removal > 0:  # direct donor deactivation (opt-in)
+        donors[:, ref["epi_mask"]] = np.maximum(
+            donors[:, ref["epi_mask"]]
+            - trap_model.donor_removal * fluences_neq[:, None],
+            0.0,
+        )
     acceptors = np.broadcast_to(ref["acceptors"], (B, N))
     n_i = float(info["n_i"])
     fields = [
@@ -948,6 +956,45 @@ def _trap_dark_states(ref, fluences_neq, V_bias, trap_model):
         donors=donors,
         acceptors=acceptors,
         converged=converged,
+    )
+
+
+def _trap_dark_states_kinetic(ref, fluences_neq, V_bias, trap_model):
+    """``_trap_dark_states`` with the KINETIC occupancy (``trap_model.occupancy ==
+    "kinetic"`` or two-level traps; etna.core.trap_kinetics): the ``initial`` state at
+    0 V, a ramp to ``V_bias`` at ``ramp_V_per_s``, a hold of ``hold_s`` s. With
+    ``occupancy="steady"`` and two-level traps: the kinetic solver's steady limit.
+    Same return dict (``res`` carries psi, n, p of the final state)."""
+    from types import SimpleNamespace
+
+    from etna.core.trap_kinetics import KineticTrapSolver, Segment, hold
+
+    s = KineticTrapSolver(ref, fluences_neq, trap_model)
+    V = float(V_bias)
+    if V > 0:
+        raise ValueError("kinetic trap dark state: reverse bias (V <= 0) only")
+    if trap_model.occupancy == "steady":
+        st = s.steady_state(V)
+    else:
+        st = s.initial_state(trap_model.initial)
+        prot = []
+        if V < 0:
+            prot.append(
+                Segment(abs(V) / trap_model.ramp_V_per_s, V, V_start=0.0, record=0)
+            )
+        if trap_model.hold_s > 0:
+            prot.append(hold(trap_model.hold_s, V, record=0))
+        if prot:
+            st = s.run(st, prot, tol=1e-3, dV_max=_TRAP_ENGINE_STEP_V).final
+    res = SimpleNamespace(psi=st.psi, n=st.n, p=st.p, converged=np.ones(s.B, bool))
+    return dict(
+        pb=s.pb,
+        res=res,
+        rho_trap=st.rho_trap,
+        donors=s.donors,
+        acceptors=s.acceptors,
+        converged=np.ones(s.B, bool),
+        state=st,
     )
 
 
