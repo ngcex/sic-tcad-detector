@@ -152,14 +152,14 @@ before = `legacy_perp`, after = `c_axis`.
 **(0) Mobility (cm2/Vs).** Epi bulk 3.38e13 / junction 8.19e15 / 1e19, 300 K; then the
 bulk at 250 / 350 / 450 K.
 
-| | 3.38e13 | 8.19e15 | 1e19 | 250 K | 350 K | 450 K |
-| --- | --- | --- | --- | --- | --- | --- |
-| e before | 945.4 | 834.7 | 115.3 | 1464.2 | 653.1 | 357.4 |
-| e after | 1174.4 | 947.4 | 100.6 | 1819.1 | 811.3 | 443.9 |
-| e ishikawa2025 | 1174.4 | 947.4 | 100.6 | 2159.0 | 703.4 | 309.5 |
-| h before | 123.8 | 117.5 | 75.7 | 183.1 | 88.9 | 51.9 |
-| h after | 111.4 | 105.8 | 68.1 | 164.8 | 80.0 | 46.7 |
-| h ishikawa2025 | 83.0 | 82.8 | 45.7 | 125.7 | 58.4 | 33.0 |
+|                | 3.38e13 | 8.19e15 | 1e19  | 250 K  | 350 K | 450 K |
+| -------------- | ------- | ------- | ----- | ------ | ----- | ----- |
+| e before       | 945.4   | 834.7   | 115.3 | 1464.2 | 653.1 | 357.4 |
+| e after        | 1174.4  | 947.4   | 100.6 | 1819.1 | 811.3 | 443.9 |
+| e ishikawa2025 | 1174.4  | 947.4   | 100.6 | 2159.0 | 703.4 | 309.5 |
+| h before       | 123.8   | 117.5   | 75.7  | 183.1  | 88.9  | 51.9  |
+| h after        | 111.4   | 105.8   | 68.1  | 164.8  | 80.0  | 46.7  |
+| h ishikawa2025 | 83.0    | 82.8    | 45.7  | 125.7  | 58.4  | 33.0  |
 
 **(1) C-V:** identical (max |C_after / C_before - 1| = 0). Every C-V fit, the Photons Fig.
 4b W labels (residuals -0.0253 / -0.0015 / +0.0203 um both ways) and the Bruzzi C-V check
@@ -167,10 +167,10 @@ are unchanged.
 
 **(2) alpha CCE (`run_cce`, batched; devsim agrees to 1e-6):**
 
-| V | -2 | -5 | -10 | -20 | -40 | -70 | -100 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| before | 0.993707 | 0.998831 | 0.999429 | 0.999703 | 0.999845 | 0.999910 | 0.999936 |
-| after | 0.993031 | 0.998715 | 0.999374 | 0.999676 | 0.999831 | 0.999901 | 0.999930 |
+| V            | -2       | -5       | -10      | -20      | -40      | -70      | -100     |
+| ------------ | -------- | -------- | -------- | -------- | -------- | -------- | -------- |
+| before       | 0.993707 | 0.998831 | 0.999429 | 0.999703 | 0.999845 | 0.999910 | 0.999936 |
+| after        | 0.993031 | 0.998715 | 0.999374 | 0.999676 | 0.999831 | 0.999901 | 0.999930 |
 | ishikawa2025 | 0.990714 | 0.998305 | 0.999179 | 0.999577 | 0.999781 | 0.999872 | 0.999910 |
 
 Decomposition (bench-only hybrid sets, CCE minus before at -2 / -10 / -40 / -100 V):
@@ -181,12 +181,12 @@ diffusion out of the undepleted epi tail; the electron change is irrelevant ther
 
 **(3) Full-width drift transit time (low field):**
 
-| V | -10 | -40 | -70 | -100 |
-| --- | --- | --- | --- | --- |
-| t_e before (ps) | 125.1 | 34.0 | 17.6 | 11.3 |
-| t_e after | 103.6 | 28.6 | 14.7 | 9.4 |
-| t_h before | 935.6 | 249.5 | 130.3 | 84.6 |
-| t_h after | 1039.5 | 277.2 | 144.7 | 94.0 |
+| V                | -10    | -40   | -70   | -100  |
+| ---------------- | ------ | ----- | ----- | ----- |
+| t_e before (ps)  | 125.1  | 34.0  | 17.6  | 11.3  |
+| t_e after        | 103.6  | 28.6  | 14.7  | 9.4   |
+| t_h before       | 935.6  | 249.5 | 130.3 | 84.6  |
+| t_h after        | 1039.5 | 277.2 | 144.7 | 94.0  |
 | t_h ishikawa2025 | 1376.2 | 364.4 | 191.0 | 124.6 |
 
 t_e x0.826-0.841 (the doping-weighted ratio of the depleted region), t_h x1.1111.
@@ -240,19 +240,18 @@ pipeline). The CCE(LET) tables: section 6.
 
 ## 6. CCE(LET) tables (`rebuild_let_tables.py`, notebook-16 keywords, 6 / 4 workers)
 
-| LET (keV/um) | 0.5 | 4.43 | 39.2 | 500 |
-| --- | --- | --- | --- | --- |
+| LET (keV/um)                      | 0.5       | 4.43      | 39.2      | 500       |
+| --------------------------------- | --------- | --------- | --------- | --------- |
 | tracked table before (older code) | 0.9999682 | 0.9999718 | 0.9999723 | 0.9999723 |
 | legacy_perp, rebuilt on this code | 0.9999625 | 0.9999690 | 0.9999701 | 0.9999703 |
-| c_axis (now tracked in data/) | 0.9999664 | 0.9999722 | 0.9999735 | 0.9999737 |
+| c_axis (now tracked in data/)     | 0.9999664 | 0.9999722 | 0.9999735 | 0.9999737 |
 
 - hw 50 um (100 um table), 50 V. t_collection (95 % of the terminal charge): 0.1168 ns
   (legacy_perp) -> 0.1298 ns (c_axis, +11.1 % = 1 / 0.90: the holes set it); the old
   tracked column was the stale 0.208 ns.
 - 300 um table (hw 150 um, 10 LETs): 0.9999568 / 0.9999707 / 0.9999732 / 0.9999737 at 0.5
   / 5 / 50 / 500 keV/um (tracked before 0.9999594 / 0.9999704 / 0.9999718 / 0.9999719).
-- Build times 782 s (100 um) and 1293 s (300 um) with 6 workers; legacy 100 um 1214 s with
-  4. All points converged. The legacy rebuild is kept in `notes/let_legacy_perp/`.
+- Build times 782 s (100 um) and 1293 s (300 um) with 6 workers; legacy 100 um 1214 s with 4. All points converged. The legacy rebuild is kept in `notes/let_legacy_perp/`.
 - Every CCE moves by < 4e-6: the tables are low injection, fully depleted at 50 V, and the
   2D sheet track has no plasma model, so the mobility only sets the timing.
 
@@ -303,11 +302,11 @@ field velocities) are not ETNA mobility numbers and were left.
 
 ## 10. Mesh convergence of the change (`section_convergence`, batched, h / h/2 / h/4)
 
-| | -2 V | -10 V | -40 V |
-| --- | --- | --- | --- |
+|                   | -2 V       | -10 V      | -40 V      |
+| ----------------- | ---------- | ---------- | ---------- |
 | after - before, h | -6.7608e-4 | -5.4935e-5 | -1.4082e-5 |
-| h/2 | -6.7760e-4 | -5.4906e-5 | -1.4054e-5 |
-| h/4 | -6.7838e-4 | -5.4901e-5 | -1.4044e-5 |
+| h/2               | -6.7760e-4 | -5.4906e-5 | -1.4054e-5 |
+| h/4               | -6.7838e-4 | -5.4901e-5 | -1.4044e-5 |
 
 The change is mesh-converged to 0.3 % (-2 V) and 0.06 % (-10 V); the CCE itself moves by
 2e-5 (-2 V) and 1e-7 (-10 V) from h to h/4, both sets alike.
@@ -332,3 +331,42 @@ The change is mesh-converged to 0.3 % (-2 V) and 0.06 % (-10 V); the CCE itself 
 - **lab scripts** that read `SiC4H_Parameters` mobility fields directly
   (`lab/solver2d/solver2d/engine.py`, `lab/microdosimeter/mdlab.py`, bench/hypotheses*)
   still compute the perpendicular (legacy) set; they are frozen lab records.
+
+## 12. Final state: strict reading (coordinator decision, 2026-10-21)
+
+`c_axis` = Ishikawa Eq. 2.16 electrons (T law gamma -2.40) + the legacy holes (isotropic,
+as Ayalew eq. 3.81): the primaries agree on the electrons only. The holes x 0.90 set is
+the opt-in `c_axis_holes_0p9`; `ishikawa2025` (Hall holes) stays opt-in. Merged with main
+(contact-cell graded meshes for alternative structures, trap-kinetics follow-up); the
+devsim baselines (`depth_mesh="legacy"`, as tests/test_fv2d.py pins) and the CCE(LET)
+tables were regenerated once on the merged code.
+
+| Output (default dosimeter)                  | before (`legacy_perp`)                    | after (`c_axis`)                          |
+| ------------------------------------------- | ----------------------------------------- | ----------------------------------------- |
+| mu_n / mu_p at the epi bulk, 300 K (cm2/Vs) | 945.4 / 123.8                             | 1174.4 / 123.8                            |
+| C-V, V_BD, Bruzzi, Photons W labels         |                                           | identical                                 |
+| alpha CCE -2 / -10 / -40 / -100 V           | 0.993707 / 0.999429 / 0.999845 / 0.999936 | 0.993716 / 0.999433 / 0.999847 / 0.999937 |
+| CCE change, mesh h / h/2 / h/4, -2 V        |                                           | +8.519e-6 / +8.543e-6 / +8.547e-6         |
+| t_e -10 / -40 / -100 V (ps)                 | 125.1 / 34.0 / 11.3                       | 103.6 / 28.6 / 9.4                        |
+| t_h (ps)                                    | 935.6 / 249.5 / 84.6                      | unchanged                                 |
+| t_e with lades2000, -100 V                  | 52.6 ps (perp v_sat)                      | 66.4 ps (parallel v_sat 1.64e7)           |
+| dark current -20 / -60 / -100 V             | 7.637e-12 / 1.800e-11 / 2.487e-11 A       | change < 2e-6                             |
+| CCE vs T, dd, -30 V, 250 / 300 / 450 K      | 0.999813 / 0.999797 / 0.999757            | 0.999814 / 0.999799 / 0.999759            |
+| Hecht CCE vs T, 300 K                       | 0.994405                                  | 0.995475                                  |
+| FLASH steady state, -30 V                   | 0.999809                                  | 0.999811                                  |
+| FLASH transient 20 / 100 Gy/s               | 0.999725 / 0.999869                       | 0.999725 / 0.999869                       |
+| proton damage (legacy model) 2.6e11 / 6e11  | 0.99930 / 0.99874                         | 0.99932 / 0.99880                         |
+| charged traps 1e13 / 1e14 / 1e15 / 5e15     | 0.996109 / 0.972203 / 0.354958 / 0.152176 | 0.996417 / 0.974836 / 0.357614 / 0.152972 |
+| tilted alpha, microdosimeter, 0 V (raw)     | 0.87545                                   | 0.87545                                   |
+| Petringa Fig. 4b rms                        | 0.0354                                    | 0.0354                                    |
+| track engine t95, LET 10 / 1000             | 121.4 / 232.3 ps                          | 120.7 / 237.2 ps                          |
+| CCE(LET) 100 um, 0.5 / 500 keV/um           | 0.9999625 / 0.9999703 (pre-merge)         | 0.9999662 / 0.9999742                     |
+| CCE(LET) t_collection                       | 0.1168 ns                                 | 0.1168 ns                                 |
+
+Every legacy CCE pin holds within 1e-5 (largest +8.5e-6 at -2 V). What moves: electron
+transit (x0.83), the trapping-limited CCE (charged traps up to +2.6e-3 at 1e14; Hecht
++1.1e-3), the velocity-saturated electron transit (parallel v_sat). Re-pinned again
+(legacy values in comments): tests/test_nplus.py, test_default_stack.py,
+test_charge_collection.py, test_material.py, test_microdosimeter_preset.py,
+test_viz_figures.py, test_radiation_traps.py, test_mobility_caxis.py; examples
+it_synthetic.csv regenerated.

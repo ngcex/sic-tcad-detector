@@ -41,6 +41,9 @@ LEGACY_GEOM = dict(
     buffer_thickness_cm=None,
     buffer_end_doping=None,
     N_D_junction=2.958237e15, N_D_bulk=8.252732e13, L_transition=0.987e-4,
+    # the mobility of that period (the c-axis electrons shrink the direct-current floor
+    # below the 1e-3 visibility check: 4.7e-5)
+    mobility="legacy_perp",
 )
 
 

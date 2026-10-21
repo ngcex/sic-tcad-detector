@@ -5,6 +5,9 @@ Pinned values (re-pinned 2026-10-21 on the converged/graded meshes):
 * converged mesa centre CCE (ALT_STACK, uniform-bisection limit): 0.963065122 at 10 V,
   0.999090639 at 50 V;
 * legacy devsim mesh (100 nm cathode cell): 0.96923717 / 0.99987621 (strip).
+Re-pinned for the c-axis electron mobility default (2026-10-21, issue #6;
+lab/mobility_caxis/bench/contact_mesh_refs.py): 0.963068316 / 0.999091802 converged,
+0.96924012 / 0.99987739 legacy mesh (the values above are the legacy_perp set's).
 """
 
 import numpy as np
@@ -19,8 +22,8 @@ from etna.core.contact_mesh import (
     resolve_depth_mesh,
 )
 
-REF_10V = 0.963065122
-REF_50V = 0.999090639
+REF_10V = 0.963068316
+REF_50V = 0.999091802
 
 
 def test_resolve_and_offsets():
@@ -82,8 +85,8 @@ def test_graded_mesa_is_converged_legacy_is_not(mesa_meshes):
     (50 V); the legacy mesh overestimates by 6.2e-3 / 7.9e-4 (pinned)."""
     for V, ref, tol in ((10.0, REF_10V, 6e-5), (50.0, REF_50V, 1e-5)):
         assert abs(_centre(mesa_meshes["graded"], V) - ref) < tol
-    assert _centre(mesa_meshes["legacy"], 10.0) == pytest.approx(0.96923717, abs=2e-8)
-    assert _centre(mesa_meshes["legacy"], 50.0) == pytest.approx(0.99987621, abs=2e-8)
+    assert _centre(mesa_meshes["legacy"], 10.0) == pytest.approx(0.96924012, abs=2e-8)
+    assert _centre(mesa_meshes["legacy"], 50.0) == pytest.approx(0.99987739, abs=2e-8)
 
 
 def test_reference_is_the_uniform_bisection_limit(mesa_meshes):
