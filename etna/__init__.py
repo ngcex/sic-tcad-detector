@@ -34,10 +34,18 @@ from etna.api.simulation import (
 from etna.api.track import run_tilted_alpha_track, run_track_cce_let, run_track_event
 from etna.api.models import run_avalanche, run_breakdown, run_transit_time
 from etna.api.run_all import Report, SectionResult, run_all
-from etna.design import run_design
 from etna.core.physics_models import PhysicsModels
 from etna.api.sweep import ParametricSweep
 from etna.core.devsim_lock import quiet_devsim, set_devsim_quiet
+
+
+def run_design(*args, **kwargs):
+    """Design optimisation on the batched engine: ``etna.design.run_design`` (imported
+    lazily: scipy.stats / scipy.optimize stay out of ``import etna``)."""
+    from etna.design import run_design as _run_design
+
+    return _run_design(*args, **kwargs)
+
 
 __all__ = [
     "DeviceConfig",
