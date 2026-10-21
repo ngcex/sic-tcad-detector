@@ -353,13 +353,14 @@ def render_device_sidebar() -> None:
 
     mobility = st.sidebar.selectbox(
         "Low-field mobility",
-        ("c_axis", "legacy_perp", "ishikawa2025"),
+        ("c_axis", "legacy_perp", "c_axis_holes_0p9", "ishikawa2025"),
         index=0,
         key="cfg_mobility",
         help="c_axis (default since 2026-10-21): mobility PARALLEL to the c-axis, the "
         "direction of the vertical current (electrons: Ishikawa 2025 drift mobility, "
-        "+24 % at the epi bulk; holes: x 0.90). legacy_perp: the previous default, "
-        "measured perpendicular to c (the historical presets use it). ishikawa2025: "
+        "+24 % at the epi bulk; holes unchanged). legacy_perp: the previous default, "
+        "measured perpendicular to c (the historical presets use it). "
+        "c_axis_holes_0p9: holes x 0.90 (opt-in). ishikawa2025: "
         "the thesis's full T laws, holes as Hall mobility (opt-in). docs/USAGE.md "
         "section 18.",
     )

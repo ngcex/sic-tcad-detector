@@ -15,7 +15,7 @@ import numpy as np
 # Low-field mobility set of the solvers (registry: etna.core.physics_models.
 # LOW_FIELD_MOBILITY). "c_axis" (default since 2026-10-21): parallel to the c-axis, the
 # direction of the vertical current of a (0001) diode (electrons: Ishikawa 2025 drift
-# mobility, holes: the basal-plane set x 0.90). "legacy_perp": the previous default, the
+# mobility; holes: the legacy set, the primaries disagree on them). "legacy_perp": the previous default, the
 # Schaffer/Ayalew set measured PERPENDICULAR to c (Hall, (0001) wafers). Provenance and
 # before/after numbers: lab/mobility_caxis/notes/LOG.md, docs/USAGE.md section 18.
 DEFAULT_MOBILITY = "c_axis"

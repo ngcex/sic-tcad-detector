@@ -124,7 +124,8 @@ class DeviceConfig:
     # Low-field mobility set (etna.core.physics_models.LOW_FIELD_MOBILITY), every engine:
     # "c_axis" (default since 2026-10-21) = mobility PARALLEL to the c-axis, the direction
     # of the vertical current (electrons: Ishikawa 2025 drift mobility, 1174 cm2/Vs at the
-    # epi bulk vs 950; holes: the basal-plane set x 0.90). "legacy_perp" = the previous
+    # epi bulk vs 945; holes unchanged: the primaries disagree on their magnitude and
+    # anisotropy). "c_axis_holes_0p9" (opt-in) = holes x 0.90. "legacy_perp" = the previous
     # default (Schaffer/Ayalew, measured PERPENDICULAR to c), reproduces the earlier numbers
     # bit for bit. "ishikawa2025" (opt-in) = the thesis's full c-axis T laws (holes: Hall).
     # 2D devices use the vertical (c-axis) scalar for the lateral direction too (no tensor).

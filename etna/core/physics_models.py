@@ -24,8 +24,8 @@ https://www.iue.tuwien.ac.at/phd/ayalew/), or are an ETNA assumption ("assumptio
 Direction convention: the 1D diode is a vertical device on a (0001) wafer, so its
 current and field are along the c-axis (the 4 deg off-cut is neglected). Since
 2026-10-21 the solvers' default low-field set is ``"c_axis"`` (parallel to c: electrons
-from the drift mobility of Ishikawa's 2025 Kyoto thesis, holes the basal-plane set x
-0.90); ``"legacy_perp"`` is the previous default, the Caughey-Thomas set measured
+from the drift mobility of Ishikawa's 2025 Kyoto thesis; holes unchanged, the primaries
+disagree on them; the opt-in ``"c_axis_holes_0p9"`` takes them x 0.90); ``"legacy_perp"`` is the previous default, the Caughey-Thomas set measured
 PERPENDICULAR to c (Schaffer 1994 via Ayalew Table 3.5, Hall data in the basal plane),
 which ETNA used for vertical transport until then (DeviceConfig(mobility=...) selects
 the set of the device; ``low_field_mobility="etna_default"`` here means "the device's
@@ -229,28 +229,43 @@ LOW_FIELD_MOBILITY = {
     # ETNA's default since 2026-10-21: parallel to c (vertical (0001) diode)
     "c_axis": LowFieldMobility(
         "c_axis", 1190.0, 10.0, 1.0e17, 0.54, -2.40, 0.0,
-        112.5, 14.31, 1.76e19, 0.34, -2.15, 0.0,
+        _P.mu_p_max, _P.mu_p_min, _P.N_ref_p, _P.alpha_p, _P.gamma_p, 0.0,
         Provenance(
             "electrons: " + ISHIKAWA_2025 + ", Eq. (2.16) (drift mobility parallel to c, "
             "Hall data / Hall scattering factor, (11-20) epilayers, N_D 5e14-3e18); holes: "
-            "the legacy basal-plane set (Schaffer 1994 via Ayalew Table 3.5) x 0.90, the "
-            "drift-mobility ratio mu_par / mu_perp of the same thesis (Sec. 4.3.1, "
-            "resistivity ratio, about 0.9 for N_A 1e16-7e18, 300-600 K)",
-            None, "verified-primary", ISHIKAWA_2025_URL + " (pp. 44, 51, 95-97)",
+            "the legacy set (Schaffer 1994 via Ayalew Table 3.5), taken isotropic as Ayalew "
+            "eq. 3.81",
+            None, "verified-primary", ISHIKAWA_2025_URL + " (pp. 44, 51)",
             "electrons at 300 K: mu_max 1190, mu_min 10, N_ref 1e17, alpha 0.54 exactly as "
             "Eq. 2.16; cross-checks at low doping: vertical SBD drift 1070 +- 290 at 9.7e14 "
             "(Ishikawa 2024; Eq. 2.16 gives 1101); the thesis's own perpendicular drift fit "
             "(Eq. 2.17) equals the legacy set within 3.5 % up to 5e15; mu_par / mu_perp 1.16 "
             "(Kimoto JJAP 58, 018002 (2019), Hall) to 1.2 (Ayalew eq. 3.81; Eq. 2.16 / 2.17: "
-            "1.20 at 1e15). The Hall fit (Eq. 2.11) and the pulsed-conductance values (Table "
-            "3.1, Hall density) are 8-30 % higher: the electron Hall factor. T law NOT the "
-            "thesis's drift fit (-3.4 on mu_max - mu_min, 300-600 K only; Hall fits give "
-            "-2.4 to -3.2): ETNA keeps Schaffer's <0001> gamma -2.40 on mu_max (the legacy T "
-            "law, now direction-consistent). Holes: the direction ratio agrees (Ishikawa 0.9, "
-            "Hatakeyama 2003 1/1.15 via the review) but the magnitude does not (parallel-to-c "
-            "Hall 83 and conductance about 78 in the thesis vs 112.5 here): uncertainty "
-            "-30 / +5 %. Electrons in the p+ (Al-doped, minority) are an extrapolation of an "
-            "N-doped fit",
+            "1.20 at 1e15); uncertainty about +-8 % (Hall factor). The Hall fit (Eq. 2.11) "
+            "and the pulsed-conductance values (Table 3.1, Hall density) are 8-30 % higher: "
+            "the electron Hall factor. T law NOT the thesis's drift fit (-3.4 on mu_max - "
+            "mu_min, 300-600 K only; Hall fits give -2.4 to -3.2): ETNA keeps Schaffer's "
+            "<0001> gamma -2.40 on mu_max (the legacy T law, now direction-consistent). "
+            "HOLES UNCHANGED (strict reading: the primaries disagree on the hole magnitude, "
+            "Hall 83-124 cm2/Vs at low N_A, and on the anisotropy: Ishikawa 0.9, Hatakeyama "
+            "2003 1/1.15 via the review, Ayalew isotropic): uncertainty -35 / +0 % along c. "
+            "The 0.90 ratio is the opt-in set 'c_axis_holes_0p9'. Electrons in the p+ "
+            "(Al-doped, minority) are an extrapolation of an N-doped fit",
+        ),
+        direction="c_axis",
+    ),  # fmt: skip
+    # OPT-IN alternative: the c_axis electrons and holes x 0.90 (thesis drift ratio)
+    "c_axis_holes_0p9": LowFieldMobility(
+        "c_axis_holes_0p9", 1190.0, 10.0, 1.0e17, 0.54, -2.40, 0.0,
+        112.5, 14.31, 1.76e19, 0.34, -2.15, 0.0,
+        Provenance(
+            "electrons as 'c_axis'; holes: the legacy set x 0.90, the drift-mobility ratio "
+            "mu_par / mu_perp of " + ISHIKAWA_2025 + " (Sec. 4.3.1, resistivity ratio, about "
+            "0.9 for N_A 1e16-7e18, 300-600 K)",
+            None, "verified-primary", ISHIKAWA_2025_URL + " (pp. 44, 51, 95-97)",
+            "OPT-IN, not the default: one opened primary for the hole ratio (Hatakeyama "
+            "2003 1/1.15 secondary; Ayalew eq. 3.81 isotropic). The hole magnitude stays "
+            "uncertain (Hall 83 parallel in the thesis vs 112.5 here)",
         ),
         direction="c_axis",
     ),  # fmt: skip

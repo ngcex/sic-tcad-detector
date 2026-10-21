@@ -111,7 +111,7 @@ scale, not this device.
 - `DeviceConfig(mobility=...)`: the low-field mobility set of every solver. Default
   `"c_axis"` (since 2026-10-21): the mobility parallel to the c-axis, the direction of the
   vertical current (electrons from the drift mobility of Ishikawa's 2025 Kyoto thesis,
-  +24 % at the epi bulk; holes x 0.90). `"legacy_perp"` restores the earlier
+  +24 % at the epi bulk; holes unchanged). `"legacy_perp"` restores the earlier
   perpendicular-to-c set and its numbers bit for bit
   ([USAGE §18](docs/USAGE.md#default-low-field-mobility-parallel-to-the-c-axis-since-2026-10-21)).
 
