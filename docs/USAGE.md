@@ -1635,6 +1635,97 @@ sec = rep.get("sweep")
 print(sec.status, sec.solver, sec.result.metadata["summary"])
 ```
 
+### 11.1 General 2D engine for laterally non-uniform and axisymmetric structures (`etna.core.fv2d`, opt-in)
+
+`etna.core.engine2d` handles only laterally uniform diodes. `etna.core.fv2d` solves any 2D
+tensor-grid device:
+
+- per-node doping and mobility;
+- any number of contacts on any nodes (top segments, side walls, whole electrode columns);
+- Cartesian or axisymmetric (r, z) geometry.
+
+The physics and discretisation are devsim's: box method, Scharfetter-Gummel currents,
+SRH, ohmic contacts and static doping. Incomplete ionization is not supported in fv2d.
+
+How it solves:
+
+- The code is numba float64. Newton uses SuperLU; the Gummel chord solves use a banded LU
+  or SuperLU, with the shorter grid dimension numbered fastest.
+- The dark state at reverse bias comes from an adaptive Newton ramp on the flat
+  quasi-Fermi Poisson. `dark_check()` runs a G = 0 Gummel pass to verify it is the DD
+  steady state: 2 iterations, |du| < 1e-14 V on the notebook-19 structures.
+- The illuminated solves are Gummel with chord LUs, run in parallel threads.
+
+Nothing in the default paths uses fv2d.
+
+```python
+from etna.core.alternative_structures import create_guard_ring_device
+from etna.core.fv2d import (mesh_from_builder, prepared_solver, cce_lateral_scan_fv2d,
+                            contact_sharing_fv2d, cut_node_sets, alpha_stripe_generation_fv2d)
+
+mesh, _ = mesh_from_builder(create_guard_ring_device)        # devsim's mesh, verbatim
+s = prepared_solver(mesh, {"cathode": 10.0})                  # anode and guard at 0 V
+info = mesh.info
+ns = cut_node_sets(mesh, info["sv_half_width_cm"] + 0.5 * info["gap_cm"])
+scan = cce_lateral_scan_fv2d(s, n_points=11, contact="anode", node_sets=ns,
+                             x_max_cm=info["sv_half_width_cm"] + 1.5e-4)
+frac, residual = contact_sharing_fv2d(s, alpha_stripe_generation_fv2d(mesh, 50e-4), ns)
+```
+
+The scan result has the keys of `charge_collection_2d.cce_lateral_scan`, so
+`mc_coupling.process_mc_ensemble(cce_lateral=scan)` accepts it unchanged. It also carries
+`residuals` (current conservation) and `direct_mismatch` (balanced vs direct
+extraction).
+
+`cce_lateral_scan(device_info, ..., engine="fv2d")` re-solves a devsim-biased device on
+its own mesh with fv2d, at the device's current contact biases. `mc_coupling.lateral_cce_factor`
+needs a scan that starts at x = 0. For the 3D electrode, scan from r = 0 so that the
+low-CCE n+ column region is included, rather than starting at the top-gap edge as
+notebook 19 does.
+
+**Native meshes and adaptive refinement.**
+
+- `etna.core.fv2d.structures` holds `guard_ring_structure`, `mesa_structure` and
+  `electrode3d_structure`. They take the same keywords as the devsim builders (the
+  ALT_STACK pin, graded epi). Their doping is a numpy twin of the devsim models, equal to
+  round-off on devsim's mesh.
+- The native box geometry is exact: 2π ∫r dr ring volumes. devsim's per-triangle
+  `CylindricalNodeVolume` is about 1e-4 larger in the bulk and 5/3 larger on the axis.
+- `refine.adaptive_cce_scan(structure, voltages, scan_kwargs, tol)` inserts tensor lines
+  where the field, the space charge or a contact cell call for them. It re-solves the
+  scan on every level and stops on a geometric-extrapolation error estimate.
+
+**Accuracy and speed.** Measured in `lab/geometry2d/notes/LOG.md`:
+
+- On devsim's mesh, parity with devsim is 1e-16 to 2.4e-12 in CCE and 1e-14 V in
+  potential, for the mesa at 50 V, the guard ring at 10 V (including three-contact
+  sharing) and the 3D electrode at 50 V.
+- The full workflow (import or build, ramp, dark check, scan) is faster than devsim by
+  5x (mesa), 13x (guard ring) and 27x (3D electrode) in one shared load window. Comparing
+  each tool's best observed time, the factors are about 15x, 33x and 78x.
+
+**Mesh caveat (finding).** The ALT_STACK cathode is an ohmic contact on the n- epi. The
+CCE converges at first order in the size of that contact cell. On devsim's mesh this
+overestimates the guard-ring and mesa CCE by 6.3e-3 at 10 V. At 50 V the overestimate is about
+8e-4 and not yet asymptotic. devsim reproduces this itself when given a graded cathode
+mesh (`lab/geometry2d/bench/devsim_cathode_refine.py`).
+The AMR-converged centre CCE at 10 V is 0.96294 for the mesa and 0.96281 for the guard
+ring.
+
+**Validity of the axisymmetric proxy.** The (r, z) 3D electrode with a p+ wall is a
+faithful model of annular-trench cells. It is not a model of column-lattice 3D
+detectors. For a 50 µm square cell with r = 5 µm columns:
+
+- 99 % depletion is reached at 75 V, against 30 V for the equal-area cylinder;
+- the square cell keeps low-field saddles (about 100-400 V/cm at 50-100 V) that the
+  cylinder cannot have.
+
+For such layouts, solve the Cartesian cross-section (`lab/geometry2d/bench/axisym_validity.py`).
+
+**3D.** True 3D DD with direct solvers is not tractable here. Extrapolated to a 0.9 M-node
+3D cell, it would take about 780 s and 31 GB per factorisation. A 3D engine needs
+Krylov + AMG, see the LOG.
+
 ---
 
 ## 12. Notebooks
@@ -1754,9 +1845,9 @@ uv run pytest -n0 -x tests/test_api_cce.py        # serial, e.g. with --pdb
 uv run pytest -n auto -q --durations=20           # slowest tests
 ```
 
-- 129 modules and 1665 tests (2026-10-21). `pytest.ini` deselects the `exhaustive` marker
+- 130 modules and 1685 tests (2026-10-21). `pytest.ini` deselects the `exhaustive` marker
   (6 redundant deep variants, each implied by a kept test), so the default run collects
-  1659: all pass with `--extra dev --extra viz`; with `--extra dev` only, 1651 pass and 8
+  1679: all pass with `--extra dev --extra viz`; with `--extra dev` only, 1671 pass and 8
   skip (the manim and gdstk tests). The `slow` marker labels the devsim integration tests
   but does not deselect them.
 - `pytest.ini` adds `--dist loadgroup --no-loadscope-reorder` (inert without `-n`), so

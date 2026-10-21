@@ -37,3 +37,17 @@ devsim reference dumps (`notes/*.npz`), which are regenerated on demand, not com
 Benchmark of the condensed-history energy-deposition sampler (`etna/core/mc_transport.py`,
 issue #7, 2026-10-21) against NIST, Landau/Vavilov/Bohr and Cauchy references:
 `bench/bench.py`, numbers and decisions in `notes/LOG.md`.
+
+## `lab/geometry2d`
+
+The general 2D engine `etna/core/fv2d` (issue #4, 2026-10-21) handles laterally
+non-uniform and axisymmetric devices. These benches cover:
+
+- parity with devsim on the notebook-19 structures;
+- mesh convergence and adaptive refinement;
+- the choice of linear solver;
+- the validity of the axisymmetric proxy;
+- whether 3D is tractable.
+
+`tests/test_fv2d.py` reads `notes/devsim_baselines.json` and `notes/devsim_psi.npz`;
+regenerate them with `bench/devsim_baselines.py`.

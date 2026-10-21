@@ -457,8 +457,15 @@ def cce_lateral_scan(
     node_set=None,
     x_max_cm=None,
     zero_on_contacts=True,
+    engine="devsim",
 ):
     """Compute CCE at multiple lateral positions from center to edge.
+
+    ``engine="fv2d"`` (opt-in) re-solves the scan with the general 2D numba engine
+    (etna.core.fv2d, laterally non-uniform, Cartesian or axisymmetric) on the SAME devsim
+    mesh at the device's current contact biases; same result keys plus fv2d diagnostics
+    (parity with devsim ~1e-12 on the notebook-19 structures, lab/geometry2d). The
+    devsim device is not modified.
 
     At each lateral position x_pos the generation is the alpha stripe of
     :func:`alpha_stripe_generation` (flat-box + erfc depth shape below the junction,
@@ -502,6 +509,16 @@ def cce_lateral_scan(
           collected charge over the total pairs the alpha would deposit if its
           range were not cut by the epi/cathode
     """
+    if engine == "fv2d":
+        from etna.core.fv2d.workflows import cce_lateral_scan_devsim_mesh
+
+        return cce_lateral_scan_devsim_mesh(
+            device_info, n_points=n_points, gen_rate=gen_rate,
+            stripe_sigma_cm=stripe_sigma_cm, contact=contact, node_set=node_set,
+            x_max_cm=x_max_cm,
+        )  # fmt: skip
+    if engine != "devsim":
+        raise ValueError(f"engine must be 'devsim' or 'fv2d', got {engine!r}")
     device = device_info["device_name"]
     region = device_info["region_name"]
     half_width_cm = device_info["half_width_cm"] if x_max_cm is None else x_max_cm
