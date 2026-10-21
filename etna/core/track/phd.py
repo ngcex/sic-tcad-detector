@@ -157,8 +157,14 @@ def simulate_track(
             system, x_d, **dict(thermal)
         )  # fmt: skip
     pairs = track_pairs(device, LET_keV_um, radial, region)
-    res = run_transient(system, x_d, xbc, pairs, pulse_sigma_s=pulse_sigma_s,
-                        rtol=rtol, t_max=t_max, thermal=heat, **transient_kw)  # fmt: skip
+    try:
+        res = run_transient(system, x_d, xbc, pairs, pulse_sigma_s=pulse_sigma_s,
+                            rtol=rtol, t_max=t_max, thermal=heat, **transient_kw)  # fmt: skip
+    finally:
+        # restore the isothermal coefficients of the shared dark system for the next
+        # event, also when the coupled transient raises
+        if heat is not None and heat.couple:
+            system.set_temperature(None)
     if heat is not None:
         res.extra["thermal"] = {
             "T_max_K": heat.T_max,
@@ -170,8 +176,6 @@ def simulate_track(
             "stored_J": heat.stored(),
             "ledger_residual": heat.ledger_residual(),
         }
-        if heat.couple:  # restore the isothermal coefficients for the next event
-            system.set_temperature(None)
     return res
 
 

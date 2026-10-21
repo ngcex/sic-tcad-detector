@@ -170,7 +170,8 @@ class TrackSystem:
     # ------------------------------------------------------------ coefficients
     def set_temperature(self, T_node):
         """Node mobility and SRH lifetimes at the node lattice temperature ``T_node``
-        (N,) K, or the device T (None). The SG fluxes keep the device V_t (no
+        (N,) K, or the device T (None). The lifetimes are the device's own
+        (``dev.tau_n/tau_p``) scaled by the library law ``srh_lifetime(T)/srh_lifetime(dev.T)``. The SG fluxes keep the device V_t (no
         thermodiffusion: an isothermal-transport approximation)."""
         dev = self.dev
         mun, mup = dev.node_mobility(T_node)
@@ -183,8 +184,13 @@ class TrackSystem:
         else:
             from etna.core.sic_material import srh_lifetime
 
-            self.taun = srh_lifetime(np.asarray(T_node), "electron")
-            self.taup = srh_lifetime(np.asarray(T_node), "hole")
+            # the library temperature law scales the device's own lifetimes
+            # (tau_scale, custom tau): tau(T) = dev.tau * tau_lib(T) / tau_lib(dev.T)
+            T_node = np.asarray(T_node)
+            self.taun = dev.tau_n * (srh_lifetime(T_node, "electron")
+                                     / srh_lifetime(dev.T, "electron"))
+            self.taup = dev.tau_p * (srh_lifetime(T_node, "hole")
+                                     / srh_lifetime(dev.T, "hole"))
             self.taun = np.ascontiguousarray(np.broadcast_to(self.taun, (self.N,)))
             self.taup = np.ascontiguousarray(np.broadcast_to(self.taup, (self.N,)))
 
@@ -572,8 +578,8 @@ def run_transient(system: TrackSystem, x_dark, xbc, pairs, *args, excess=None, *
     """Transient after an ion track (``_run_transient``, whose docstring has the
     arguments), by default in EXCESS unknowns (dn, dp about the dark state:
     ``kernels.assemble_excess``), which removes the float64 floor of the 1e19 majority
-    layers (``ledger_floor`` ~1e-6 of N_gen at LET 1 keV/um in absolute unknowns,
-    ~n_steps x 4e-16 in excess unknowns). ``excess``: None = on unless ``thermal`` or
+    layers (``ledger_floor`` ~1e-6 of N_gen at LET 1 keV/um in absolute unknowns;
+    in excess unknowns at most n_steps x 4.4e-16, less as the excess decays). ``excess``: None = on unless ``thermal`` or
     ``energy`` is requested (those paths use absolute states); False = the absolute
     form of the first release (kept selectable); True = on (raises with thermal /
     energy). The returned TrackResult is the same quantity in both forms (the
@@ -742,6 +748,7 @@ def _run_transient(
     converged = False
     pulse_end = t0_pulse + 6.0 * pulse_sigma_s if pulse_sigma_s is not None else 0.0
     stored_e = stored_h = N_target
+    floor_acc = 0.0
     while n_steps < max_steps:
         if h_max is not None:
             h = min(h, h_max)
@@ -821,6 +828,12 @@ def _run_transient(
             r_rate.append(out1[0])
         stored_e = float(np.dot(vol, x[1::3] - n_d))
         stored_h = float(np.dot(vol, x[2::3] - p_d))
+        # measured float64 resolution of this step's carrier sums: 2 eps of the carrier
+        # content actually held in the unknowns (absolute: the majority layers;
+        # excess: the remaining excess)
+        floor_acc += 2.2e-16 * 2.0 * float(
+            np.dot(vol, np.maximum(np.abs(x[1::3]), np.abs(x[2::3])))
+        )
         h *= min(3.0, 0.9 * max(E, 1e-12) ** (-1.0 / 3.0))
         if t >= pulse_end and max(abs(stored_e), abs(stored_h)) < stop_tol * N_target:
             converged = True
@@ -873,10 +886,12 @@ def _run_transient(
                "rej_newton": stats.get("rej_newton", 0),
                "quad_err": max(quad_err) / N_gen,
                "energy": energy_out,
-               # float64 resolution of the majority carriers (n+, p+ at 1e19): each
-               # stage can move ~eps of them; the ledger / contact sums cannot be
-               # better than this (measured ~1.5e-6 at LET 1 keV/um, 1 ns)
-               "ledger_floor": 2 * n_steps * 2.2e-16 * majority / N_gen},
+               # float64 resolution of the carrier sums, accumulated over the
+               # accepted steps from the carrier content actually held in the
+               # unknowns (absolute form: the n+ / p+ majority layers at 1e19, ~1e-6
+               # at LET 1 keV/um; excess form: the remaining excess, which decays):
+               # the ledger / contact sums cannot be better than this
+               "ledger_floor": floor_acc / N_gen},
     )  # fmt: skip
 
 

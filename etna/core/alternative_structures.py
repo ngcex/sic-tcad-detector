@@ -40,6 +40,11 @@ L 0.987 um). Reasons:
 2. Notebook 19's structure-vs-structure comparison was computed on this stack, with
    the planar baseline pinned to it (structure effects, not stack effects).
 
+The builders also use the default low-field mobility set and the legacy (full)
+acceptor ionization: they take no ``mobility`` / ``incomplete_ionization`` argument
+(unlike ``create_sic_2d_device``), so a DeviceConfig's choice of either does not reach
+them.
+
 Explicit arguments win (doping, substrate_thickness_cm). Moving the structures to the
 default stack needs n+/transition support in each builder (and the guard-ring
 convergence then re-checked): a feature, not a default change. Each device_info
@@ -689,10 +694,11 @@ def create_mesa_device(
     # Set minimal material params on trench for solver stability
     _set_sic_material_params(device_name, "trench", N_D_mob, N_A, T)
 
-    # Sub-trench region gets substrate doping if it exists
+    # Sub-trench region (below the trench, next to the n- epi and the cathode; the p+
+    # layer is at the top, y = 0). It carries no equations (inert, like the trench), so
+    # the placeholder acceptor doping below never enters the solution.
     if trench_d_cm < total_depth - 1e-10:
         _set_sic_material_params(device_name, "sub_trench", N_D_mob, N_A, T)
-        # p+ substrate doping in sub_trench
         devsim.node_model(
             device=device_name,
             region="sub_trench",

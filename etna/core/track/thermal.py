@@ -21,9 +21,13 @@ then closes exactly: sum C_v V dT = integral of H), or the cathode plane held at
 
 Time integration uses the electrical step's own TR-BDF2 stages and quadrature weights
 (sources at the stage states), so sum_k C_v V_k (T_{n+1} - T_n) = w0 H_n + w1 H_g +
-w2 H_{n+1} exactly. With ``couple=True`` the mobility and SRH lifetimes are updated
-from the node temperatures after each step (first-order splitting); the transport
-keeps the isothermal SG form (no thermodiffusion / Seebeck currents).
+w2 H_{n+1} exactly: the energy ledger is an identity of the scheme (it checks the
+bookkeeping, not the sources; J.E is checked against an analytic resistor and the
+electrical energy theorem in the tests). With ``couple=True`` the mobility and SRH
+lifetimes are updated from the node temperatures after each step (first-order
+splitting; the lifetimes are the device's own scaled by the library T law, see
+``TrackSystem.set_temperature``); the transport keeps the isothermal SG form (no
+thermodiffusion / Seebeck currents).
 """
 
 from __future__ import annotations
@@ -146,8 +150,9 @@ class LatticeHeat:
         if self.fixed.any():
             # heat into the sink: the conductive flux out of the free nodes into the
             # fixed ones, -sum_free (L T), integrated with the step's own weights at the
-            # stage temperatures, plus the sources deposited on the fixed nodes. An
-            # independent quantity: the ledger then checks the scheme's conservation.
+            # stage temperatures, plus the sources deposited on the fixed nodes. Built
+            # from the same L T terms as the solve, so the ledger closes by construction
+            # (a bookkeeping check, not a check of the sources).
             free = ~self.fixed
             out = [-float((self.L @ T)[free].sum()) for T in (T0, Tg, T1)]
             src_fixed = h * (w0 * H0 + w1 * Hg + w2 * H1)[self.fixed].sum()

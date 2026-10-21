@@ -61,6 +61,13 @@ LET_LINEAR = (
 # E_perp ~ 1e3 V/cm; at LET 0.1-1 the self-field of the column already matters at 1e4)
 
 
+# path elements below this transverse field lie outside the validity of the 2.5D model
+# (USAGE 19.3: the slice box / undepleted-path approximations dominate there)
+E_VALID_V_CM = 1e4
+# share of the epi pairs below E_VALID_V_CM above which a bias point is flagged invalid
+VALID_MAX_FRAC = 0.05
+
+
 def _xE(E):
     return np.arcsinh(np.asarray(E, dtype=float) / 1e3)
 
@@ -291,6 +298,10 @@ class TiltedResult:
     column_ledger: np.ndarray = None
     # per bias: (E_perp V/cm, weight x f_ex) of every path element in the epi
     elements: list = field(default_factory=list, repr=False)
+    # per bias: share of the epi pairs on path elements with E_perp < E_VALID_V_CM,
+    # and the validity mask (share <= VALID_MAX_FRAC)
+    frac_below_1e4: np.ndarray = None
+    valid: np.ndarray = None
 
     def loss_by_field(self, edges=(0.0, 2e3, 1e4, np.inf)):
         """(n_bias, n_bands) plasma loss split by the local E_perp of the path
@@ -316,6 +327,32 @@ NOTES = [
 ]
 
 
+def check_table(table: PlasmaTable, expected: dict, rtol=1e-6):
+    """Raise ValueError if a precomputed table's recorded ``settings`` disagree with
+    the run's physics ``expected`` (keys absent from the table are not checked: tables
+    built by hand carry no settings)."""
+    bad = []
+    st = table.settings or {}
+    for k, want in expected.items():
+        if k not in st or want is None:
+            continue
+        have = st[k]
+        if k == "mobility":  # None = the library default set
+            have = PARAMS.mobility if have is None else have
+            want = PARAMS.mobility if want is None else want
+        if isinstance(want, str) or isinstance(have, str):
+            ok = str(have) == str(want)
+        else:
+            ok = math.isclose(float(have), float(want), rel_tol=rtol, abs_tol=1e-30)
+        if not ok:
+            bad.append(f"{k}: table {have!r} vs run {want!r}")
+    if bad:
+        raise ValueError(
+            "precomputed PlasmaTable does not match the run's physics ("
+            + "; ".join(bad) + "); rebuild it or pass matching arguments"
+        )
+
+
 def tilted_alpha_cce(
     config,
     V_values=(0.0, 5.0, 10.0, 20.0, 30.0, 40.0, 50.0),
@@ -335,9 +372,17 @@ def tilted_alpha_cce(
 ) -> TiltedResult:
     """CCE vs reverse bias of a tilted alpha (2.5D composition, module docstring).
 
-    ``table``: a precomputed PlasmaTable (its physics must match ``tau_scale``; it is
-    built here otherwise, with ``table_kw``). Pairs in the epi only (the
-    ``run_cce_tilted_alpha`` default convention)."""
+    ``table``: a precomputed PlasmaTable (its recorded settings are checked against
+    theta_deg, s_nm, dead_layer_um, alpha_range_um, E0_MeV, shape, junction_um, the
+    column's tau_n / tau_p (``tau_scale``), T, the mobility set and ``table_kw``:
+    ValueError on a mismatch;
+    it is built here otherwise, with ``table_kw``). Pairs in the epi only (the
+    ``run_cce_tilted_alpha`` default convention).
+
+    Validity: ``frac_below_1e4`` (per bias) is the share of the epi pairs on path
+    elements with E_perp < 1e4 V/cm, outside the 2.5D model's validity; ``valid`` is
+    share <= VALID_MAX_FRAC (a convention of this module, not a physical threshold),
+    and a RuntimeWarning names the invalid biases."""
     from etna.api.device import device_kwargs
     from etna.core.generation_profiles import tilted_alpha_generation
 
@@ -350,11 +395,20 @@ def tilted_alpha_cce(
         tk.setdefault("tau_p", dev.tau_p)
         tk.setdefault("N_D", float(kw.get("N_D") or 1e14))
         tk.setdefault("T", float(kw["T"]))
+        tk.setdefault("mobility", dev.mobility)  # issue #16: the column's mobility set
         table = plasma_table(
             theta_deg=theta_deg, alpha_range_um=alpha_range_um, E0_MeV=E0_MeV,
             junction_um=junction_um, dead_layer_um=dead_layer_um, shape=shape,
             s_nm=s_nm, workers=workers, **tk,
         )  # fmt: skip
+    else:
+        check_table(table, dict(
+            dict(table_kw or {}),
+            theta_deg=theta_deg, s_nm=s_nm, dead_layer_um=dead_layer_um,
+            alpha_range_um=alpha_range_um, E0_MeV=E0_MeV, shape=shape,
+            junction_um=junction_um, tau_n=dev.tau_n, tau_p=dev.tau_p,
+            T=float(kw["T"]), mobility=dev.mobility,
+        ))  # fmt: skip
 
     def G_depth(z):
         return tilted_alpha_generation(
@@ -370,7 +424,7 @@ def tilted_alpha_cce(
     w = np.where(epi, f, 0.0)
     w = w / w.sum()
     Vs = np.abs(np.asarray(V_values, dtype=float))
-    cc, loss, led, elems = [], [], [], []
+    cc, loss, led, elems, below = [], [], [], [], []
     for V in Vs:
         cce_c, z, E, res = column_linear_cce(dev, V, G_depth, **{})
         Ez = np.interp(depth, z, E)
@@ -378,10 +432,25 @@ def tilted_alpha_cce(
         fl = table(s[epi], Ep)
         loss.append(float(np.dot(w[epi], fl)))
         elems.append((Ep, w[epi] * fl))
+        below.append(float(w[epi][Ep < E_VALID_V_CM].sum()))
         cc.append(cce_c)
         led.append(res.ledger_residual)
     cc = np.array(cc)
     loss = np.array(loss)
+    below = np.array(below)
+    valid = below <= VALID_MAX_FRAC
+    if not valid.all():
+        import warnings
+
+        warnings.warn(
+            "tilted 2.5D model outside its validity at |V| = "
+            + ", ".join(f"{v:g}" for v in Vs[~valid])
+            + " V: share of epi pairs with E_perp < 1e4 V/cm = "
+            + ", ".join(f"{b:.2f}" for b in below[~valid])
+            + " (TiltedResult.frac_below_1e4 / valid)",
+            RuntimeWarning,
+            stacklevel=2,
+        )
     return TiltedResult(
         V=Vs,
         cce=cc - loss,
@@ -400,6 +469,8 @@ def tilted_alpha_cce(
         notes=list(NOTES),
         column_ledger=np.array(led),
         elements=elems,
+        frac_below_1e4=below,
+        valid=valid,
     )
 
 
@@ -519,6 +590,7 @@ __all__ = [
     "TauCalibration",
     "TiltedResult",
     "calibrate_tau_scale",
+    "check_table",
     "column_device",
     "column_linear_cce",
     "path_profile",

@@ -172,7 +172,14 @@ def run_tilted_alpha_track(
     needs tau_scale ~1/20-1/30 (a CALIBRATION, lab/track_plasma/notes/LOG.md, not a
     preset: it misses 0..-10 V and is ~100x below good-epi ambipolar lifetimes).
 
-    ``table``: a precomputed ``PlasmaTable`` (its physics must match the arguments).
+    Validity: metadata ``frac_below_1e4`` (per bias) is the share of the epi pairs on
+    path elements with E_perp < 1e4 V/cm, outside the 2.5D model's validity, and
+    ``valid`` the per-bias mask; a RuntimeWarning names the invalid biases. The default
+    ``V_values`` follow the Fig. 4b data grid: on the microdosimeter preset the 0, 5
+    and 10 V points are outside the validity (kept for comparison with the data).
+
+    ``table``: a precomputed ``PlasmaTable``; its recorded settings must match the
+    arguments (ValueError otherwise).
     Cost: one plasma table (~80 transverse slices, ~1-3 s each; ``workers`` > 1 runs
     them in processes) plus a column transient per bias."""
     from etna.api.device import microdosimeter_config
@@ -193,6 +200,8 @@ def run_tilted_alpha_track(
         table=r.table.to_dict(),
         notes=r.notes,
         column_ledger=r.column_ledger,
+        frac_below_1e4=r.frac_below_1e4,
+        valid=r.valid,
         tau_scale=tau_scale,
         s_nm=s_nm,
         solver="track 2.5D (column + transverse plasma slices, numba DD)",

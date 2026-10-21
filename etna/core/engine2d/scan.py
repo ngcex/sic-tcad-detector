@@ -119,6 +119,10 @@ ENGINE2D_TABLE_BOX = {"donor_table_N_D": (5e12, 5e16)}
 _BOX_RTOL = 1e-9
 
 
+# CCE above 1 + this is flagged with a RuntimeWarning (still clipped to 1)
+CCE_CLIP_TOL = 1e-6
+
+
 def _in_box(value, lo, hi):
     """lo <= value <= hi up to _BOX_RTOL (False for None / non-finite values)."""
     if value is None or not np.isfinite(value):
@@ -409,7 +413,7 @@ def lateral_cce_scan_2d(
         dev.factor_continuity()
         x_positions = np.linspace(0, info["half_width_cm"], n_lateral_points)
         vol = grid.volume
-        cce = np.empty(n_lateral_points)
+        raw = np.zeros(n_lateral_points)
         Gs = [_generation(dev, xp, gen_rate, stripe_sigma_cm) for xp in x_positions]
         if full_area:
             Gs.append(_uniform_epi_generation(dev, gen_rate))
@@ -421,12 +425,14 @@ def lateral_cce_scan_2d(
             I_gen = float(
                 np.sum(vol * G)
             )  # box rule over injected nodes, as compute_cce_2d
-            cce[m] = float(np.clip(abs(I) / I_gen, 0.0, 1.0)) if I_gen > 0 else 0.0
-        cce_full = None
+            raw[m] = abs(I) / I_gen if I_gen > 0 else 0.0
+        cce = np.clip(raw, 0.0, 1.0)
+        cce_full = raw_full = None
         if full_area:
             G, I = Gs[-1], Is[-1]
             I_gen = float(np.sum(vol * G))
-            cce_full = float(np.clip(abs(I) / I_gen, 0.0, 1.0)) if I_gen > 0 else 0.0
+            raw_full = abs(I) / I_gen if I_gen > 0 else 0.0
+            cce_full = float(np.clip(raw_full, 0.0, 1.0))
     except EngineNotConverged as e:
         raise Engine2DFallback(str(e)) from e
     # depth over which pairs are generated, as cce_lateral_scan: the epi, plus the n+
@@ -435,6 +441,19 @@ def lateral_cce_scan_2d(
     if has_nplus and info.get("nplus_generation"):
         gen_depth += info["nplus_thickness_cm"]
     f_in = in_mesh_generation_fraction(gen_depth, alpha_range_cm=_ALPHA_RANGE_CM)
+    # values above 1 are clipped (compute_cce_2d convention) but flagged: a CCE > 1 is
+    # the signature of a current-extraction or conservation error
+    clipped = raw > 1.0
+    worst = max([float(raw.max(initial=0.0))] + ([raw_full] if full_area else []))
+    if worst > 1.0 + CCE_CLIP_TOL:
+        import warnings
+
+        warnings.warn(
+            f"engine2d CCE above 1 (max {worst:.6g}), clipped to 1: a current-"
+            "extraction or conservation error ('cce_raw', 'cce_clipped')",
+            RuntimeWarning,
+            stacklevel=2,
+        )
     out = {
         "x_positions_cm": x_positions,
         "x_positions_um": x_positions * 1e4,
@@ -445,9 +464,12 @@ def lateral_cce_scan_2d(
         "device_info": info,
         "cathode_field": field,
         "gummel_iterations": list(dev.gummel_iterations),
+        "cce_raw": raw,
+        "cce_clipped": clipped,
     }
     if full_area:
         out["cce_full_area"] = cce_full
+        out["cce_full_area_raw"] = raw_full
     return out
 
 
