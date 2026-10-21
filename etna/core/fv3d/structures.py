@@ -8,9 +8,11 @@ lattice cell with two mirror planes (square, rectangular) the QUARTER cell with
 reflecting sides IS the periodic lattice. Diagonal (eighth-cell) symmetry is not
 representable on a tensor grid.
 
-Circular columns are staircased: a node is in a column iff its (x, y) lies inside the
-circle, so the column surface converges at first order in the local line spacing (the
-builders refine the lines over the whole column radius). Lines are built with
+The builders give every electrode as a level set (<= 0 inside): a node is an electrode
+node iff it lies inside, and the solver's cut cells put the Dirichlet value on the true
+(curved) surface, second order in the line spacing (a plain node mask = staircase,
+first order or worse). The lines are refined over the whole column radius. Lines are
+built with
 ``etna.core.fv2d.structures.graded_lines`` (local spacing grows geometrically by
 ``ratio`` away from each knot): Poisson only needs ~ the Debye length (0.45 um at
 8e13 cm^-3) at the column surfaces, NOT the 0.1 nm contact cells of

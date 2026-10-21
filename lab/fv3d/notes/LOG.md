@@ -143,11 +143,50 @@ spot: 1-5 M nodes, 10-60 s per bias.
    component set to 0). What matters for charge collection is the SIZE of the low-field
    region around the null point (and that carriers generated exactly on the symmetry
    lines drift slowly): the bulk fraction below 1 kV/cm at 150 V is ~0.1 %.
-2. See section 7 for the depletion maps (filled from `design_maps.py`).
+2. **The axisymmetric proxy underestimates the depletion voltage of column lattices by
+   2.5-5.4x** (section 7), more for thin columns and large pitch: the field must reach
+   the null point at the edge midpoint, which the equal-area cylinder does not have. For
+   the square-TRENCH microdosimeter cell the annular proxy is within ~10 % at 50-80 um
+   pitch (ratio 0.91) and 36 % off at 25 um (corner effect): the (r, z) model is
+   adequate there, as issue #4 concluded.
+3. In the true-3D cell with partial columns and a back plane, the low-field spots are
+   the top-surface null points at the edge midpoints and a local minimum under the
+   anode column tip (z = 38 um, 1.2 kV/cm at 100 V) where the field turns from the
+   column towards the back plane; 0.07 % of the bulk is below 1 kV/cm at 100 V.
 
-## 7. Design maps (`lab/fv3d/bench/design_maps.py`)
+## 7. Design maps (`lab/fv3d/bench/design_maps.py`, N_D 8.25e13)
 
-(filled below)
+1. Through-column square lattice, r_n = r_p = r: 99 % depletion bias (V), fv3d (cut
+   cells, default lines) vs the equal-area axisymmetric proxy (fv2d (r, z), n+ core,
+   p+ shell of the corner columns' area):
+
+| pitch um | r um | nodes | V99 3D | V99 proxy | ratio |
+|---|---|---|---|---|---|
+| 30 | 2.5 | 11200 | 30.40 | 7.54 | 4.03 |
+| 30 | 5.0 | 19663 | 18.88 | 7.63 | 2.47 |
+| 50 | 2.5 | 15463 | 117.47 | 25.10 | 4.68 |
+| 50 | 5.0 | 28672 | 74.54 | 22.67 | 3.29 |
+| 80 | 2.5 | 21175 | 379.65 | 69.93 | 5.43 |
+| 80 | 5.0 | 36288 | 268.52 | 67.11 | 4.00 |
+
+   (Grid error of the 3D values ~0.3 %, section 4. The issue #4 "30 V" for the 50/5
+   cylinder was the first sweep point past 99 %; interpolated it is 22.7 V.)
+
+2. Square-trench microdosimeter cell (central n+ column r 5 um, p+ wall 5 um, through,
+   z-invariant) vs the annular-trench proxy of the same sensitive area:
+
+| pitch um | nodes | V99 3D | V99 annular proxy | ratio | min |E| at 1.5 V99 |
+|---|---|---|---|---|---|
+| 25 | 11767 | 10.19 | 7.47 | 1.36 | 7.8 kV/cm at (8.9, 8.9) um |
+| 50 | 21175 | 16.85 | 18.57 | 0.91 | 3.7 kV/cm at (21.5, 21.5) um |
+| 80 | 34300 | 53.54 | 58.93 | 0.91 | 4.4 kV/cm at (36.5, 36.5) um |
+
+   The weakest field sits on the diagonal towards the wall corner; no null point.
+
+3. True-3D column cell (30 um columns + p+ back plane, 50 um, pitch 50, r 5), 100 V,
+   237 568 nodes, depleted 0.99935. Bulk fraction with |E| below 0.5 / 1 / 2 kV/cm:
+   0.066 / 0.068 / 0.092 %. |E| minima: (25, 0, 0) and (0, 25, 0) um: 0 (null points);
+   (25, 25, 38.4) um: 1.23 kV/cm. Figure `lab/fv3d/figures/low_field_map.png`.
 
 ## 8. GPU (`uv run --with mlx python lab/fv3d/bench/gpu_smoother.py`)
 

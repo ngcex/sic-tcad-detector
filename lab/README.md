@@ -61,3 +61,12 @@ at first order in the contact cell: the builders now default to a graded depth m
 stack is checked and not affected. Benches: `default_1d.py`, `default_2d.py`,
 `alt_cathode_study.py` (reference by uniform bisection + Richardson), `nb19_metrics.py`,
 `telescope_devsim.py`, `gr_devsim_50v.py`; numbers in `notes/LOG.md`.
+
+## `lab/fv3d`
+
+3D Poisson on tensor grids, `etna/core/fv3d` (issue #4 follow-up, 2026-10-21): column
+lattices and square-cell microdosimeters. Benches: `validate.py` (fv2d parity, analytic,
+order of accuracy), `convergence.py` (Richardson), `scaling.py` (vs SuperLU,
+tractability), `design_maps.py` (depletion voltage vs pitch / radius against the
+axisymmetric proxy, low-field map), `gpu_smoother.py` (MLX, run with `--with mlx`).
+Numbers in `notes/LOG.md`.

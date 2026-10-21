@@ -1998,13 +1998,91 @@ detectors. For a 50 µm square cell with r = 5 µm columns:
 
 - 99 % depletion is reached at 75 V, against 30 V for the equal-area cylinder;
 - the square cell keeps low-field saddles (about 100-400 V/cm at 50-100 V) that the
-  cylinder cannot have.
+  cylinder cannot have. (Section 11.2: the saddle between two anode columns is a
+  symmetric null point, |E| = 0; the 100-400 V/cm were a one-sided-difference artefact.)
 
 For such layouts, solve the Cartesian cross-section (`lab/geometry2d/bench/axisym_validity.py`).
 
 **3D.** True 3D DD with direct solvers is not tractable here. Extrapolated to a 0.9 M-node
 3D cell, it would take about 780 s and 31 GB per factorisation. A 3D engine needs
 Krylov + AMG, see the LOG.
+Poisson-only 3D is now available: section 11.2.
+
+### 11.2 3D Poisson on tensor grids (`etna.core.fv3d`, `etna.run_field_3d`, opt-in)
+
+Electrostatics of 3D-column lattices and square-cell microdosimeters, where the
+axisymmetric proxy is invalid. Opt-in: no other facade calls it; numba only.
+
+**Model.** Nonlinear Poisson with Boltzmann carriers and flat quasi-Fermi levels (the
+reverse-bias dark state, as fv2d's dark ramp). n+ / p+ columns, trench walls and
+implanted planes are ohmic Dirichlet bodies. The box sides are mirror planes, so the
+quarter cell of a square lattice is the periodic lattice.
+
+- Electrodes are level sets with cut cells: the Dirichlet value sits on the true curved
+  surface, second-order accurate.
+- `carriers=False` gives the fully-depleted field in one linear solve.
+- Ramo weighting potentials and `fv3d.ramo_signal` (drift line plus induced charge and
+  current) are by-products. They assume a dielectric bulk, so they are valid at full
+  depletion; the readout is the whole lattice's contact of that name.
+
+**Solver.** Newton with an energy line search (globally convergent) and inexact
+CG preconditioned by a matrix-free geometric multigrid V-cycle (red-black Gauss-Seidel,
+numba prange). Memory is linear (91 B/node per linear solve, 271 B/node for the
+nonlinear solver); time is ~linear.
+
+```python
+import etna
+r = etna.run_field_3d(None, "column", V_bias=(10, 50, 75, 100), pitch=50, r_n=5, r_p=5,
+                      thickness=50, depth_n=30, depth_p=30, back="p+")  # lengths in um
+r.y                          # depleted bulk fraction per bias
+r.metadata["V_depletion"]    # bias of 99 % depletion (interpolated; or find_depletion_voltage=True)
+r.metadata["saddles"]        # |E| local minima {x, y, z cm, E V/cm} at the last bias
+r.metadata["weighting"]["cathode"]   # Ramo weighting potential on the (nz, ny, nx) grid
+```
+
+Structures: `"column"` (n+ column at the cell centre, p+ at the corners; through,
+single- or double-sided, optional planar `back`), `"trench"` (central n+ column, p+
+trench wall), `"coax"` and `"slab"` (test cells), or any `fv3d.Structure3D`.
+
+**Validation** (`lab/fv3d/bench/validate.py`):
+
+- z-extruded 2D cell vs fv2d: 1e-14 V.
+- Over-depleted slab vs the exact parabola: 1e-12 V.
+- Cut-cell coax vs analytic: second order; 2.5 mV of 100 V at 0.125 um.
+- Manufactured Laplace: order 2.0.
+- Quarter cell vs explicit mirrored lattice: < 1e-7 V.
+
+Grid convergence with Richardson estimates is in `lab/fv3d/bench/convergence.py`. With
+carriers, potentials differ from fv2d's (r, z) by about 0.1 V near ohmic surfaces (an
+unresolved nm-scale spill-over layer in both). This does not matter at the
+depletion-voltage level. devsim 3D was not run.
+
+**Numbers (pitch 50 um, r = 5 um, N_D 8.25e13).**
+
+- Through columns: 99 % depletion at 74.5 +- 0.25 V.
+- 30 um single-sided columns with a p+ back plane, 50 um thick: 62.0 +- 0.15 V.
+- The edge midpoint between two anode columns is a null point (|E| = 0). About 0.1 % of
+  the bulk stays below 1 kV/cm at 150 V.
+- The equal-area axisymmetric proxy underestimates the column-lattice depletion voltage
+  2.5-5.4x (pitch 30-80 um, r 2.5-5 um; e.g. 74.5 vs 22.7 V at 50 / 5 um).
+- For the square-trench microdosimeter cell the annular proxy is within 10 % at 50-80 um
+  pitch (36 % at 25 um).
+- Full maps: `lab/fv3d/notes/LOG.md` section 7, `lab/fv3d/bench/design_maps.py`.
+
+**Cost.** The issue #4 named point (0.9 M nodes): one linear solve takes 1.1 s and
+80 MB, against 780 s and 31 GB per SuperLU factorisation. A full bias point of the
+870k-node true-3D cell takes 10-15 s. The largest tractable cell is ~3e7 nodes in 8 GB,
+at about 5 min per bias.
+
+**GPU.** The GPU was measured (MLX f32 smoother, `lab/fv3d/bench/gpu_smoother.py`) and
+gives no gain. The result is CPU-only.
+
+**Limits.**
+
+- No drift-diffusion or transient in 3D.
+- No eighth-cell or periodic-wrap boundaries.
+- Fixed oxide or surface charge is not modelled.
+- Point smoothing slows on strongly anisotropic grading (keep line growth <= 1.15).
 
 ---
 
