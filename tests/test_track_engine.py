@@ -28,7 +28,7 @@ from etna.core.track.radial import (
     whk,
     whk_ranges,
 )
-from etna.core.track.solver import dark_state, run_transient, steady_cce
+from etna.core.track.solver import W0, W2, dark_state, run_transient, steady_cce
 from etna.core.track.thermal import C_V, LatticeHeat, line_source_peak
 
 V_BIAS = 30.0
@@ -246,7 +246,7 @@ def test_heat_line_source_analytic():
     t, h = 0.0, 1e-13
     checks = {}
     while t < 2e-10:
-        heat.advance(s, x, x, x, h, (0.29289, 0.29289, 0.41421))
+        heat.advance(s, x, x, x, h, (W0, W0, W2))
         t += h
         h *= 1.2
         for tc in (2e-11, 2e-10):
@@ -268,8 +268,13 @@ def test_electrothermal_coupled_run(tiny):
     assert th["heat_prompt_J"] == pytest.approx(
         hot.N_gen * (7.8 - 3.26) * Q, rel=0.01
     )  # (E_pair - E_g) per pair
-    assert abs(hot.cce - iso.cce) < 1e-4  # single ion: lattice heating is negligible
+    assert abs(hot.cce - iso.cce) < 1e-4  # 20 nm core: lattice heating is small
     assert C_V == pytest.approx(0.69 * 3.21)
+    # cathode heat sink: the sink heat is the integrated conductive flux (independent
+    # of the stored heat), so the ledger checks the scheme's conservation
+    sink = simulate_track(thermal={"sink": "cathode"}, **kw).extra["thermal"]
+    assert sink["heat_sink_J"] > 0
+    assert sink["ledger_residual"] < 1e-6
 
 
 def test_invalid_arguments(tiny):

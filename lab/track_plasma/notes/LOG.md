@@ -43,6 +43,8 @@ This means a steady-illumination CCE (`run_cce`) is not the single-particle CCE 
 
 ## 2. CCE vs LET, Gaussian w = 50 nm (the commercial-TCAD style track; `letscan`)
 
+FAST mesh: PHD numbers carry ~5-8 % mesh error (section 7).
+
 Recombined fraction:
 
 | LET keV/um | 0.1     | 1       | 10      | 100     | 300    | 1000    | 3000    |
@@ -57,6 +59,8 @@ Wall time per event (FAST): 4-15 s under load, 2-5 s unloaded (`timing`).
 
 ## 3. The core decides (`core`, 50 V)
 
+FAST mesh: PHD numbers carry ~5-8 % mesh error (section 7).
+
 | radial model              | r50     | LET 300: recombined | LET 1000: recombined | peak density (1000) |
 | ------------------------- | ------- | ------------------- | -------------------- | ------------------- |
 | Gaussian 50 nm            | 42 nm   | 4.0e-5              | 1.3e-4               | 1.6e19              |
@@ -69,7 +73,20 @@ Wall time per event (FAST): 4-15 s under load, 2-5 s unloaded (`timing`).
 
 Between a sub-nm WHK core and a 50 nm core, the recombination loss spans three decades. The bare WHK core puts mean densities of order 1e22-1e23 cm^-3 in the first cell. At those densities drift-diffusion (and a constant Auger C) is not valid. The thermalization radius s is unknown for 4H-SiC; it is a parameter of the result, NOT a fit.
 
+The sub-nm cores are FIRST-CELL LIMITED. At LET 1000 the recombined fraction depends on the axis cell r_min (FAST, bench section `rmin`):
+
+| core | r_min 1 nm | r_min 0.5 nm | r_min 0.25 nm |
+|---|---|---|---|
+| bare WHK | 0.184 | 0.207 | 0.219 |
+| WHK + s = 1 nm | 0.0470 | 0.0504 | 0.0514 |
+
+- **Bare WHK** does not converge. Its first-cell density reaches 6e23 cm^-3, above the atomic density of SiC, so its numbers are not physics.
+- **s = 1 nm** converges to about 0.052.
+- **s >= 10 nm** is converged in r_min (section 7 is for the mesh).
+
 ## 4. Opt-in physics (`physics`, WHK thermalized s = 10 nm)
+
+FAST mesh: PHD numbers carry ~5-8 % mesh error (section 7).
 
 Recombined fraction:
 
@@ -87,6 +104,8 @@ Recombined fraction:
 
 ## 5. Ions at normal incidence (`ions`)
 
+FAST mesh: PHD numbers carry ~5-8 % mesh error (section 7).
+
 Setup: NIST Bragg profile, WHK at the local speed, thermalized by s; `region="all"` (pairs in the p+ and the n+ too).
 
 | ion                        | V   | s     | CCE    | recombined | wrong contact |
@@ -97,9 +116,13 @@ Setup: NIST Bragg profile, WHK at the local speed, thermalized by s; `region="al
 | alpha 8 MeV                | 50  | 10 nm | 0.9451 | 2.2e-3     | 5.3e-2        |
 | alpha 5.486 MeV            | 10  | 10 nm | 0.9379 | 3.1e-3     | 5.9e-2        |
 
+CCE is relative to the pairs generated INSIDE the 11.3 um domain: the 3 MeV proton and both alphas run past the n+ end (alpha 5.486 MeV range 18.5 um).
+
 The "wrong contact" column is the dead p+ (0.3 um): electrons generated there exit at the anode. For tracks that cross the epi, it also includes the n+, whose holes exit at the cathode. At these LETs recombination is 0.1-0.3 % and nearly bias independent from 10 to 50 V.
 
 ## 6. Fig. 4b proxy (`fig4b`, microdosimeter preset, N_D 1e14)
+
+FAST mesh: PHD numbers carry ~5-8 % mesh error (section 7).
 
 **This is a proxy, not the measurement geometry.** The real track is tilted 65 deg and has no axial symmetry. The proxy is a vertical column with:
 
@@ -157,12 +180,24 @@ The PHD is converging. The remaining mesh error is about 5-8 % of the PHD itself
 
 | case                    | dT_max                    | dCCE (coupled - isothermal) | thermal ledger                  | Poynting residual |
 | ----------------------- | ------------------------- | --------------------------- | ------------------------------- | ----------------- |
-| LET 1000, WHK s = 10 nm | 118 K (core, ps)          | -2.5e-4                     | 3e-8 (adiabatic) / 2e-13 (sink) | 2.3e-5            |
+| LET 1000, WHK s = 10 nm | 118 K (core, ps)          | -2.5e-4                     | 3e-8 (adiabatic) / 3e-8 (sink) | 2.3e-5            |
 | LET 1000, bare WHK      | 3.0e4 K (unphysical core) | -0.29                       | 7e-8                            | 4.0e-5            |
 | LET 300, Gaussian 50 nm | 1.8 K                     | -1.9e-8                     | 8e-8                            | 3.1e-5            |
 
 - **Heat budget** (LET 1000): Joule 1.09e-11 J >> prompt (E_pair - E_g) 9.3e-13 J >> recombination 1e-15 J. Joule per collected charge = V + ~3 V, the built-in-like drop (tested).
-- **When heating matters:** for a single ion it is negligible unless the core is sub-10 nm. There the drift-diffusion model is outside its validity anyway. The 3e4 K bare-WHK result is a symptom of that, not a prediction.
+- **When heating matters:**
+  - 50 nm core: negligible (1.8 K, dCCE -2e-8).
+  - 10 nm core at LET 1000: a 118 K ps-scale core rise and dCCE = -2.5e-4, about 19 % of the 1.31e-3 PHD. The rise is stable in time step: dCCE -2.517e-4 at rtol 1e-4 and -2.511e-4 at 1e-5.
+  - Below that, drift-diffusion is outside its validity. The 3e4 K bare-WHK result is a symptom of that, not a prediction.
+- **Sink ledger.** Since the fix that integrates the conductive flux into the fixed nodes with the step weights, the sink-mode ledger is an independent check: 3e-8. Before the fix it was sources minus stored, i.e. an identity, and the 2e-13 in `thermal.out` comes from that version.
+- **Poynting residual vs rtol** (LET 300, Gaussian 20 nm, MESH_TINY):
+
+  | rtol | 1e-3 | 1e-4 | 1e-5 | 1e-6 |
+  |---|---|---|---|---|
+  | residual | 1.4e-4 | 3.5e-5 | 8.0e-6 | 1.8e-6 |
+
+  The residual falls with the time tolerance, so it is time-discretisation error, not a missing term.
+- **0 V and the domain radius.** The CCE rise with LET at 0 V holds when R grows: at R = 20 / 50 / 100 um, CCE(0.1) = 0.87218 / 0.87218 / 0.87217 and CCE(1000) = 0.92372 / 0.92253 / 0.92253. With R = 20 um the high-LET value is 1e-3 high.
 
 ## 9. Speed
 
@@ -176,4 +211,4 @@ The PHD is converging. The remaining mesh error is about 5-8 % of the PHD itself
   - Track engine (FAST, Gaussian cylinder of the same 1 um sigma): 1.1 / 1.2 / 1.9 s per LET. CCE 0.9999686 / 0.9999684 / 0.9999490.
   - At low LET the two agree to 1.6e-6. That is the expected 1D-limit agreement, from different meshes and time steppers.
   - At LET 1000 the cylinder (a denser track than the sheet) already loses 2e-5 more.
-  - About 40x faster per LET point, but these are not the same physics: the sheet stays linear by construction.
+  - Excluding the devsim build: about 20-35x faster per LET point on a loaded machine. They are not the same physics: the sheet stays linear by construction.

@@ -1363,9 +1363,9 @@ uv run pytest -n0 -x tests/test_api_cce.py        # serial, e.g. with --pdb
 uv run pytest -n auto -q --durations=20           # slowest tests
 ```
 
-- 119 modules and 1514 tests (2026-10-21). `pytest.ini` deselects the `exhaustive` marker
+- 120 modules and 1530 tests (2026-10-21). `pytest.ini` deselects the `exhaustive` marker
   (6 redundant deep variants, each implied by a kept test), so the default run collects
-  1508: all pass with `--extra dev --extra viz`; with `--extra dev` only, 1500 pass and 8
+  1524: all pass with `--extra dev --extra viz`; with `--extra dev` only, 1516 pass and 8
   skip (the manim and gdstk tests). The `slow` marker labels the devsim integration tests
   but does not deselect them.
 - `pytest.ini` adds `--dist loadgroup --no-loadscope-reorder` (inert without `-n`), so
@@ -1658,7 +1658,7 @@ r = simulate_track(DeviceConfig(), LET_keV_um=let, V_bias=50.0, region="all",
 
 **Checks** (`tests/test_track_engine.py`):
 - Each run reports `ledger_residual` (pairs) and `extra["quad_err"]`.
-- With `energy=True`, the discrete Poynting theorem ∫J·E = Σ_c ψ_c ∫I_c − ΔW_field is checked; it closes to about 3e-5.
+- With `energy=True`, the discrete Poynting theorem ∫J·E = Σ_c ψ_c ∫I_c − ΔW_field is checked; it closes to 3.5e-5 at rtol 1e-4 and falls with the tolerance (1.8e-6 at 1e-6), so the residual is time-discretisation error.
 - The heat solver matches the analytic line source to within 3 %.
 
 **Results to know** (50 V unless stated, details in the LOG):
@@ -1666,8 +1666,10 @@ r = simulate_track(DeviceConfig(), LET_keV_um=let, V_bias=50.0, region="all",
 - **The core radius decides the plasma loss.** At LET 1000 keV/µm the recombined fraction is:
   - 1.3e-4 with a 50 nm core;
   - 1.3e-3 for WHK spread by 10 nm;
-  - 4.7e-2 for 1 nm;
-  - 0.18 for the bare sub-nm WHK core, where drift-diffusion is outside its validity.
+  - about 5e-2 for 1 nm;
+  - 0.18-0.22 for the bare sub-nm WHK core. That value is not mesh-converged: the first-cell density exceeds the atomic density, and drift-diffusion is outside its validity there.
+
+  These are `MESH_FAST` numbers: the PHD carries 5-8 % mesh error, and the sub-nm cores depend on the axis cell.
 
   The thermalisation radius for 4H-SiC is not known. Every PHD number from this engine is conditional on `radial`.
 - **Normal-incidence ions at 10–50 V.** Protons and 5.5 / 8 MeV alphas recombine 0.1–0.3 % of their pairs. The p+ dead layer (wrong-contact loss) is larger, at 2–6 %.
@@ -1678,8 +1680,11 @@ r = simulate_track(DeviceConfig(), LET_keV_um=let, V_bias=50.0, region="all",
 **Electrothermal (opt-in, `thermal={"couple": True, "sink": "none"|"cathode"}`)**
 
 - **Physics.** Anisotropic κ (4.71 W/cm/K radial, 3.24 W/cm/K along c; arXiv:1712.00830) and c_v = 0.69 J/g/K × 3.21 g/cm³. Heat sources are Joule J·E (SG edge power), E_g per recombination, and prompt (E_pair − E_g) heat. Mobility and SRH τ follow T; transport stays isothermal SG (no thermodiffusion).
-- **Energy ledger.** The thermal ledger closes to ≤ 1e-7.
-- **Result.** For a single ion the heating is negligible unless the core is sub-10 nm: ΔT_max 118 K for ps in a 10 nm core at LET 1000, with ΔCCE −2.5e-4.
+- **Energy ledger.** The thermal ledger closes to ≤ 1e-7, adiabatic or with the cathode heat sink. The sink heat is the integrated conductive flux, so the ledger is an independent check.
+- **Result.** The effect of heating depends on the core size:
+  - 50 nm core: negligible (1.8 K).
+  - 10 nm core at LET 1000: ΔT_max 118 K for picoseconds and ΔCCE −2.5e-4, about 19 % of the PHD (stable in time step).
+  - Smaller cores: the result is not meaningful.
 
 **Cost and limits**
 

@@ -144,11 +144,15 @@ class LatticeHeat:
         self.heat_joule += h * (w0 * j0 + w1 * jg + w2 * j1)
         self.heat_recomb += h * (w0 * r0 + w1 * rg + w2 * r1)
         if self.fixed.any():
-            # heat into the sink = sources - stored change (exact by the ledger)
+            # heat into the sink: the conductive flux out of the free nodes into the
+            # fixed ones, -sum_free (L T), integrated with the step's own weights at the
+            # stage temperatures, plus the sources deposited on the fixed nodes. An
+            # independent quantity: the ledger then checks the scheme's conservation.
             free = ~self.fixed
-            stored = float(np.dot(self.CV[free], T1[free] - T0[free]))
-            src = h * (w0 * H0 + w1 * Hg + w2 * H1)
-            self.heat_sink += float(src[free].sum()) - stored + float(src[~free].sum())
+            out = [-float((self.L @ T)[free].sum()) for T in (T0, Tg, T1)]
+            src_fixed = h * (w0 * H0 + w1 * Hg + w2 * H1)[self.fixed].sum()
+            self.heat_sink += h * (w0 * out[0] + w1 * out[1] + w2 * out[2])
+            self.heat_sink += float(src_fixed)
         self.T = T1
         self.T_max = max(self.T_max, float(T1.max()))
         if self.couple:

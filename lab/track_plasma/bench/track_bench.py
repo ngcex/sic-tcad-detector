@@ -14,7 +14,10 @@ Sections (each prints a table; numbers recorded in lab/track_plasma/notes/LOG.md
   mesh      mesh convergence at LET 1000, WHK s = 10 nm
   rtol      time-step tolerance convergence
   thermal   opt-in lattice heat: dT, CCE change, energy ledgers
-  timing    wall / CPU per event, LU counts (and --devsim: one devsim LET point)
+  timing    wall / CPU per event, LU counts (and --devsim: a 3-LET devsim table)
+  rmin      axis-cell dependence of the sub-nm cores
+  radius    0 V CCE(LET) vs the domain radius R
+  poynting  energy-theorem residual vs time tolerance
 """
 
 from __future__ import annotations
@@ -308,7 +311,43 @@ def sec_timing(mesh, devsim=False):
             print(f"track engine LET {let:g}: CCE {r.cce:.7f} (wall {r.wall_s:.1f} s)")
 
 
-SECTIONS = dict(parity=sec_parity, letscan=sec_let, core=sec_core, physics=sec_physics,
+def sec_rmin(mesh):
+    """Axis-cell dependence of the sub-nm cores (LET 1000, 50 V)."""
+    for rmin in (1e-7, 0.5e-7, 0.25e-7):
+        dev = build_track_device(DeviceConfig(), mesh=dict(mesh, r_min_cm=rmin))
+        for name, rad in (("whk", whk(beta_of(1.0))),
+                          ("whk+1nm", thermalized(whk(beta_of(1.0)), 1e-7))):  # fmt: skip
+            r = simulate_track(device=dev, LET_keV_um=1000.0, V_bias=50.0, radial=rad)
+            print(f"r_min {rmin:g} {name}: recombined {r.recombined_fraction:.4g} "
+                  f"first-cell density {r.peak_excess:.3g}")  # fmt: skip
+
+
+def sec_radius(mesh):
+    """0 V CCE(LET) vs the domain radius R."""
+    for R in (20e-4, 50e-4, 100e-4):
+        dev = build_track_device(DeviceConfig(), mesh=dict(mesh, R_cm=R))
+        dark = dark_state(dev, 0.0)
+        c = [simulate_track(device=dev, dark=dark, LET_keV_um=let,
+                            radial=gaussian(50e-7)).cce for let in (0.1, 1000.0)]  # fmt: skip
+        print(f"R {R * 1e4:g} um: CCE(0.1) {c[0]:.6f} CCE(1000) {c[1]:.6f}")
+
+
+def sec_poynting(mesh):
+    """Energy-theorem residual vs time tolerance (MESH_TINY, LET 300, 50 V)."""
+    from etna.core.track.phd import MESH_TINY
+
+    dev = build_track_device(DeviceConfig(), mesh=MESH_TINY)
+    dark = dark_state(dev, 50.0)
+    for rtol in (1e-3, 1e-4, 1e-5, 1e-6):
+        r = simulate_track(device=dev, dark=dark, LET_keV_um=300.0, radial=gaussian(20e-7),
+                           energy=True, rtol=rtol)  # fmt: skip
+        print(
+            f"rtol {rtol:g}: steps {r.n_steps} residual {r.extra['energy']['residual']:.3g}"
+        )
+
+
+SECTIONS = dict(rmin=sec_rmin, radius=sec_radius, poynting=sec_poynting)
+SECTIONS |= dict(parity=sec_parity, letscan=sec_let, core=sec_core, physics=sec_physics,
                 ions=sec_ions, fig4b=sec_fig4b, mesh=sec_mesh, rtol=sec_rtol,
                 thermal=sec_thermal, timing=sec_timing)  # fmt: skip
 
