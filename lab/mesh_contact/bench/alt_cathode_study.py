@@ -63,12 +63,13 @@ SPECS = {
     "legacy (100 nm / 10 nm)": "legacy",
     "cathode 1 nm, junction 10 nm": {"first_cell_cm": 1e-7, "junction_ps_cm": 1e-6},
     "cathode 1 nm, junction 1 nm": {"first_cell_cm": 1e-7},
-    "graded default (0.1 nm / 1 nm)": "graded",
+    "graded default": "graded",
+    "ratio 1.5, near depth 2 um": {"ratio": 1.5, "near_depth_cm": 2e-4},
     "cathode 0.01 nm, junction 1 nm": {"first_cell_cm": 1e-9},
     "default, near 100 nm": {"near_ps_cm": 1e-5},
     "default, near 25 nm": {"near_ps_cm": 2.5e-6},
-    "default, ratio 1.25": {"ratio": 1.25},
-    "default, near depth 1 um": {"near_depth_cm": 1e-4},
+    "default, ratio 1.5": {"ratio": 1.5},
+    "default, near depth 2 um": {"near_depth_cm": 2e-4},
 }
 
 if __name__ == "__main__":

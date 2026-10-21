@@ -51,3 +51,13 @@ non-uniform and axisymmetric devices. These benches cover:
 
 `tests/test_fv2d.py` reads `notes/devsim_baselines.json` and `notes/devsim_psi.npz`;
 regenerate them with `bench/devsim_baselines.py`.
+
+## `lab/mesh_contact`
+
+Contact-cell mesh convergence (issue #4 follow-up, 2026-10-21). An ohmic cathode on the
+n- epi (the ALT_STACK structures, the legacy-stack planar diode) makes the CCE converge
+at first order in the contact cell: the builders now default to a graded depth mesh
+(`etna/core/contact_mesh.py`, `depth_mesh="legacy"` keeps the old one). The default n+
+stack is checked and not affected. Benches: `default_1d.py`, `default_2d.py`,
+`alt_cathode_study.py` (reference by uniform bisection + Richardson), `nb19_metrics.py`,
+`telescope_devsim.py`, `gr_devsim_50v.py`; numbers in `notes/LOG.md`.

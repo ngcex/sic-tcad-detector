@@ -1012,8 +1012,9 @@ from the scan's alpha-stripe generation), the centroid stands for the whole trac
 default 2D device is laterally uniform, so its scan gives f = 1 (no edge physics); a
 structure with an edge does: the guard-ring device (`alternative_structures.
 create_guard_ring_device`, SV half-width 50 µm, 3 µm gap, 10 V, anode read-out) gives
-f = 0.9959 at 41 µm, 0.977 at 46 µm and 0.49 at 51.5 µm (middle of the gap;
-`lab/edge_cce/notes/LOG.md`).
+f = 0.9948 at 41 µm, 0.9726 at 46 µm and 0.488 at 51.5 µm (middle of the gap; graded depth
+mesh, NIST Bragg alpha; `lab/edge_cce/notes/LOG.md`). The f ratios move by <= 4e-4 with
+the depth mesh; the absolute CCE moved by -5.7e-3 (2026-10-21, `lab/mesh_contact`).
 `run_microdosimetry` does not apply it (it has no CCE step).
 
 #### Energy-deposition sampler, event-by-event pulse heights, Allpix Squared exchange (core API, issue #7)
@@ -1706,13 +1707,40 @@ notebook 19 does.
   5x (mesa), 13x (guard ring) and 27x (3D electrode) in one shared load window. Comparing
   each tool's best observed time, the factors are about 15x, 33x and 78x.
 
-**Mesh caveat (finding).** The ALT_STACK cathode is an ohmic contact on the n- epi. The
-CCE converges at first order in the size of that contact cell. On devsim's mesh this
-overestimates the guard-ring and mesa CCE by 6.3e-3 at 10 V. At 50 V the overestimate is about
-8e-4 and not yet asymptotic. devsim reproduces this itself when given a graded cathode
-mesh (`lab/geometry2d/bench/devsim_cathode_refine.py`).
-The AMR-converged centre CCE at 10 V is 0.96294 for the mesa and 0.96281 for the guard
-ring.
+**Depth mesh at a contact on the epi (`depth_mesh`, since 2026-10-21).** The ALT_STACK
+cathode is an ohmic contact directly on the n- epi, a perfect sink for holes: holes
+generated within its boundary layer (the undepleted epi at partial depletion, a layer of
+~kT/(qE) once depleted) are lost, and the CCE converges at FIRST order in the size of the
+contact cell. The builders `create_mesa_device`, `create_guard_ring_device`,
+`create_delta_e_e_device` and their fv2d twins therefore take
+`depth_mesh="graded"` (default; `etna.core.contact_mesh`): a 0.1 nm cathode cell growing
+by 1.25x to 50 nm, 50 nm over the last 1 um of the epi, and 1 nm junction lines.
+`depth_mesh="legacy"` gives the meshes before 2026-10-21 (100 nm cathode cell, 10 nm
+junction) for reproducing earlier numbers; a dict overrides single grading keys.
+`create_sic_2d_device` takes the same keyword with default `"legacy"` (every pinned number
+and the engine2d grid); use `"graded"` for the legacy-stack planar diode (`nplus_thickness_cm=None`).
+
+| mesa centre CCE (ALT_STACK) | 10 V | 50 V |
+| --- | --- | --- |
+| converged (uniform-bisection limit, two starting meshes agree to 2.5e-8) | 0.9630651 | 0.9990906 |
+| graded mesh (default) | +5.4e-5 | -2.9e-6 |
+| legacy mesh | +6.17e-3 | +7.86e-4 |
+| legacy-stack planar `create_sic_2d_device`, legacy mesh (27.5 nm cathode cell) | +1.4e-3 | +6.8e-4 |
+
+At 50 V the converged 1 - CCE (9.1e-4) is mostly this cathode sink; the default n+ stack,
+which has no such contact, gives 1.25e-4. Cost: the guard ring goes from 11.5k to 20.4k
+nodes (devsim 10 V ramp and scan about 110 s, fv2d 2.4 s). The default n+ stack is not
+affected: bisecting the contact cells of the 1D engine moves the CCE by < 2.3e-10, a 0.1 nm
+2D cathode cell by 4e-10 (the cathode sits on the 1e19 n+, no generation reaches it), so
+the 1D/2D default meshes and the CCE(LET) tables are unchanged. Details, the 1D general
+mesh error (C 2.7e-3 at -1 V, CCE 1.7e-4 at -1 V, < 1e-6 beyond -5 V) and every number
+that moved: `lab/mesh_contact/notes/LOG.md`.
+
+The AMR values quoted here before (0.96294 mesa, 0.96281 guard ring at 10 V, estimate
+5e-6) were 1.2e-4 / 2.6e-4 off: `refine.adaptive_cce_scan`'s geometric-extrapolation
+estimate is a heuristic and underestimated the error 15-20x on this pre-asymptotic
+sequence. Use uniform bisection with Richardson (`lab/mesh_contact/bench/alt_cathode_study.py`)
+for a reference value.
 
 **Validity of the axisymmetric proxy.** The (r, z) 3D electrode with a p+ wall is a
 faithful model of annular-trench cells. It is not a model of column-lattice 3D
@@ -1819,6 +1847,9 @@ calibrated constants in `etna/` cite these logs (`lab/README.md`).
 | `lab/microdosimeter`    | the microdosimeter preset; why its alpha CCE shape is not reproduced                                 |
 | `lab/engine_box`        | widening the engine T and epi boxes; devsim ramp steps                                               |
 | `lab/solver2d`          | the 2D numba engine spike (promoted to `etna/core/engine2d/`)                                        |
+| `lab/geometry2d`        | the general 2D engine `etna/core/fv2d`: parity, AMR, axisymmetric proxy, 3D tractability            |
+| `lab/mesh_contact`      | contact-cell mesh convergence: graded depth mesh of the contact-on-epi builders, what moved          |
+| `lab/edge_cce`          | lateral (edge) CCE map of the guard ring for the MC weighting                                        |
 | GPU spike (archived)    | tag `archive/gpu-solver-lab`: numba beat the GPU for 1D batches                                      |
 
 Where decisions and evidence live:

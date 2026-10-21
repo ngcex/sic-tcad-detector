@@ -25,6 +25,14 @@ scan is re-solved on every level, d_L = max |CCE_L - CCE_L-1|, and the error est
 level L is d_L * r / (1 - r) with the observed contraction r = d_L / d_L-1 (geometric
 extrapolation; r clipped to [0.1, 0.9], d_L alone before two differences exist).
 Refinement stops when the estimate is below ``tol``.
+
+CAVEAT (2026-10-21, lab/mesh_contact/notes/LOG.md). The estimate is not a bound: on the
+mesa centre at 10 V it stopped at an estimate of 7.8e-6 while the true error was 1.2e-4
+(from the legacy native mesh) and 3.5e-5 (from the graded one); the contact rule
+overshoots a pre-asymptotic, non-monotone sequence. For reference values use uniform
+bisection with Richardson extrapolation once the increments are asymptotic. The builders'
+default depth mesh (``etna.core.contact_mesh``, ``depth_mesh="graded"``) already resolves
+the contact cell.
 """
 
 from __future__ import annotations

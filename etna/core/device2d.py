@@ -277,12 +277,13 @@ def create_sic_2d_device(
     depth_mesh : {"legacy", "graded"} or dict
         "graded" grades the depth lines toward the cathode down to a 0.1 nm contact
         cell (``etna.core.contact_mesh``; the junction is already 1 nm here). "legacy"
-        (default: every pinned number, and the engine2d grid) keeps the 100 nm cathode
-        cell. Without an n+ layer the cathode is an ohmic contact on the n- epi and the
-        100 nm cell OVERESTIMATES the CCE (first order in the cell size; legacy-stack
-        planar at 10 / 50 V: +1.4e-3 / +6.8e-4, lab/mesh_contact/notes/LOG.md). With
-        the n+ layer (default stack) the cathode sits on the 1e19 n+ and the grading
-        changes nothing that matters (it exists there for the convergence check).
+        (default: every pinned number, and the engine2d grid) keeps the cathode line at
+        ps 1e-5 (devsim grades it from the neighbouring lines: 27.5 nm without n+, 13.4
+        nm on the n+ stack). Without an n+ layer the cathode is an ohmic contact on the
+        n- epi and that cell OVERESTIMATES the CCE (first order in the cell size;
+        legacy-stack planar at 10 / 50 V: +1.4e-3 / +6.8e-4 against the graded mesh,
+        lab/mesh_contact/notes/LOG.md). On the n+ stack the cathode sits on the 1e19 n+
+        and the 0.1 nm cell moves the CCE by 4e-10 (lab/mesh_contact/bench/default_2d.py).
 
     Returns
     -------
