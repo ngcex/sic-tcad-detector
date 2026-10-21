@@ -36,8 +36,15 @@ from etna.api.models import run_avalanche, run_breakdown, run_transit_time
 from etna.api.run_all import Report, SectionResult, run_all
 from etna.core.physics_models import PhysicsModels
 from etna.api.sweep import ParametricSweep
-from etna.uq.run import run_uq
 from etna.core.devsim_lock import quiet_devsim, set_devsim_quiet
+
+
+def run_uq(*args, **kwargs):
+    """``etna.uq.run.run_uq`` (imported on first call: scipy.stats stays out of
+    ``import etna``, tests/test_import_lazy.py). See docs/USAGE.md §20."""
+    from etna.uq.run import run_uq as _run_uq
+
+    return _run_uq(*args, **kwargs)
 
 __all__ = [
     "DeviceConfig",
