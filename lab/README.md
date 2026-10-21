@@ -68,3 +68,10 @@ Bench of `etna.uq` / `etna.run_uq` (issue #11, 2026-10-21): Ishigami convergence
 Sobol' estimators against the closed form, throughput (samples/s) of every observable on
 the batched engines, and the bands / indices of the default dosimeter: `bench.py`,
 numbers in `notes/LOG.md`.
+
+## `lab/theory_manual`
+
+Worked examples of `docs/THEORY.md` (2026-10-21): `worked_examples.py` has one function per
+chapter that evaluates the documented code path next to the hand formula (device and
+electrostatics in `device_example.py`); a few seconds each after numba compilation. The run quoted in
+the manual is in `notes/LOG.md`.

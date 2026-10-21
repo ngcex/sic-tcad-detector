@@ -6,6 +6,8 @@ not read this code. Every Python block below was run against this repository (ve
 5.0.0; re-run 2026-10-21); the numbers quoted come from those runs on an Apple M4 (10
 cores) and will differ slightly on other machines; timings are dated where given. File
 paths are relative to the repository root.
+The equations, constants, assumptions and status of every model are in the theory
+manual, [docs/THEORY.md](THEORY.md).
 
 Contents
 
@@ -2130,9 +2132,9 @@ uv run pytest -n0 -x tests/test_api_cce.py        # serial, e.g. with --pdb
 uv run pytest -n auto -q --durations=20           # slowest tests
 ```
 
-- 138 modules and 1812 tests (2026-10-21). `pytest.ini` deselects the `exhaustive` marker
+- 139 modules and 1818 tests (2026-10-21). `pytest.ini` deselects the `exhaustive` marker
   (6 redundant deep variants, each implied by a kept test), so the default run collects
-  1806: all pass with `--extra dev --extra viz`; with `--extra dev` only, 1798 pass and 8
+  1812: all pass with `--extra dev --extra viz`; with `--extra dev` only, 1804 pass and 8
   skip (the manim and gdstk tests). The `slow` marker labels the devsim integration tests
   but does not deselect them.
 - `pytest.ini` adds `--dist loadgroup --no-loadscope-reorder` (inert without `-n`), so
