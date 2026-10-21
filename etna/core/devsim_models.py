@@ -52,16 +52,9 @@ def _num(v):
 
 
 def _ct_node_expression(lf, N_expr, T, carrier, ratio):
-    """devsim expression of LowFieldMobility.mobility at total doping N_expr."""
-    s = "n" if carrier == "electron" else "p"
-    g = lambda k: getattr(lf, f"{k}_{s}")
-    t = float(T) / 300.0
-    mu_max = g("mu_max") * t ** g("gamma")
-    mu_min = g("mu_min") * t ** g("beta") if g("beta") != 0.0 else g("mu_min")
-    return (
-        f"{_num(ratio)} * ({_num(mu_min)} + ({_num(mu_max)} - {_num(mu_min)}) / "
-        f"(1 + pow(({N_expr}) / {_num(g('N_ref'))}, {_num(g('alpha'))})))"
-    )
+    """devsim expression of LowFieldMobility.mobility at total doping N_expr (either
+    form, LowFieldMobility.devsim_expression), times the anisotropy ``ratio``."""
+    return f"{_num(ratio)} * {lf.devsim_expression(N_expr, T, carrier)}"
 
 
 def _set_low_field(device_info, models, T):
@@ -70,7 +63,7 @@ def _set_low_field(device_info, models, T):
     device, region = device_info["device_name"], device_info["region_name"]
     scale = acceptor_total_scale(device_info["N_A"], device_info["N_A_ionized"])
     N_expr = f"Donors + {float(scale)!r} * Acceptors"
-    lf = models.get("low_field_mobility")
+    lf = models.low_field_set(device_info["params"].mobility)
     an = models.get("anisotropy")
     for name, carrier in (("mu_n", "electron"), ("mu_p", "hole")):
         ratio = (
@@ -203,7 +196,9 @@ def apply_physics_models(device_info, models) -> PhysicsModels:
         or models.get("anisotropy") is not None
     ):
         _set_low_field(device_info, models, T)
-    _set_currents(device_info, models.high_field_params(T))
+    _set_currents(
+        device_info, models.high_field_params(T, device_info["params"].mobility)
+    )
     coef = models.impact_coefficients(T)
     if coef is not None:
         _set_impact(device_info, coef)

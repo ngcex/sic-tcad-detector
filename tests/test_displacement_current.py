@@ -90,6 +90,10 @@ def _device(nplus):
         doping_profile="uniform",
         N_D=1e12,  # space-charge drop q N d^2 / 2 eps ~ 0.1 V: uniform field
         device_name=f"disp_{uuid.uuid4().hex[:8]}",
+        # the perpendicular-to-c set: its mu_n / mu_p ratio separates the hole and the
+        # electron plateaus enough for the windows below (with the c-axis default the
+        # electron-only window holds 3 time steps); the q N v / d check is set-agnostic
+        mobility="legacy_perp",
         **kw,
     )
     ramp_bias(info, V_BIAS, contact="anode")

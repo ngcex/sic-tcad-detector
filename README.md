@@ -108,6 +108,13 @@ scale, not this device.
   Predictions there rest on a stated occupancy assumption
   ([USAGE §6](docs/USAGE.md#charged-deep-traps-beyond-compensation-opt-in-radiation_trapstrue)).
 
+- `DeviceConfig(mobility=...)`: the low-field mobility set of every solver. Default
+  `"c_axis"` (since 2026-10-21): the mobility parallel to the c-axis, the direction of the
+  vertical current (electrons from the drift mobility of Ishikawa's 2025 Kyoto thesis,
+  +24 % at the epi bulk; holes x 0.90). `"legacy_perp"` restores the earlier
+  perpendicular-to-c set and its numbers bit for bit
+  ([USAGE §18](docs/USAGE.md#default-low-field-mobility-parallel-to-the-c-axis-since-2026-10-21)).
+
 - `etna.PhysicsModels` with `run_breakdown` / `run_avalanche` / `run_transit_time`: a
   model library with provenance, 1D only (issue #6). It covers velocity saturation, c-axis
   anisotropy, and impact ionization (Hatakeyama 2004 and four other sets) with avalanche
@@ -243,9 +250,9 @@ uv run pytest -n auto -q -m exhaustive     # the 6 deselected deep variants
 uv run pytest -n0 -x tests/test_api_cce.py # serial, e.g. with --pdb
 ```
 
-1701 tests in 131 modules. `pytest.ini` deselects the 6 `exhaustive` ones, so the default
-run is 1695 tests: all pass with `--extra dev --extra viz`, and with `--extra dev` only
-1687 pass and 8 skip (manim/gdstk). On a 10-core Apple M4 shared with other jobs, `-n auto`
+1722 tests in 132 modules. `pytest.ini` deselects the 6 `exhaustive` ones, so the default
+run is 1716 tests: all pass with `--extra dev --extra viz`, and with `--extra dev` only
+1708 pass and 8 skip (manim/gdstk). On a 10-core Apple M4 shared with other jobs, `-n auto`
 took 169–205 s on 2026-10-21 (600 s on a heavily loaded machine): plan on about 3 minutes. `pytest.ini` supplies the tuned
 xdist scheduler; use `-n0` for pdb.
 

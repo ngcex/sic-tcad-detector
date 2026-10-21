@@ -69,7 +69,8 @@ class Device2D:
 
     def __init__(self, grid: Grid2D, info: dict):
         T = info["T"]
-        prm = SiC4H_Parameters()
+        # the builder's parameters (carry the low-field mobility set, "params.mobility")
+        prm = info.get("params") or SiC4H_Parameters()
         self.grid = grid
         self.info = info
         self.junction = info["substrate_thickness_cm"]

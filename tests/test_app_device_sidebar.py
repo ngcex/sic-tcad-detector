@@ -39,6 +39,8 @@ ALL_FIELDS_VALUES = {
     # opt-in charged radiation traps: set by the Radiation Damage page's own checkbox,
     # not the sidebar, so the round-trip is the default
     "radiation_traps": False,
+    # low-field mobility set (sidebar selectbox; non-default value here)
+    "mobility": "legacy_perp",
 }
 
 

@@ -395,6 +395,8 @@ def _engine_batch(kws, x=None):
         donor_table=table,
         # opt-in carrier-dependent ionization: one value per group (_engine_groups)
         incomplete_ionization=kws[0].get("incomplete_ionization"),
+        # low-field mobility set: one per group (_engine_groups)
+        mobility=kws[0].get("mobility"),
     )
     return pb, x
 
@@ -415,6 +417,7 @@ def _engine_groups(configs, bias_array, facade):
             kw.get("buffer_thickness_cm") is not None,  # buffer values may differ
             kw.get("donor_table"),  # a tabulated profile is shared by its group
             kw.get("incomplete_ionization"),  # one ionization model per group
+            kw.get("mobility"),  # one low-field mobility set per group
         )
         groups.setdefault(key, []).append(i)
     return groups
@@ -1757,7 +1760,9 @@ def _min_epi_donors(config: DeviceConfig) -> float:
     return min(config.N_D_junction, config.N_D_bulk)
 
 
-def _kappa(energy_MeV: float, particle: str = "proton", niel_convention: str = "si-neq"):
+def _kappa(
+    energy_MeV: float, particle: str = "proton", niel_convention: str = "si-neq"
+):
     """Hardness factor (neq per particle) of the chosen particle / NIEL convention."""
     from etna.core.radiation_damage import get_hardness_factor, hardness_table
 
@@ -1950,15 +1955,17 @@ def _temperature_engine(config: DeviceConfig, temperatures, voltage, method):
     ``cce_vs_bias`` generation and mobility inputs (as ``run_cce``).
     """
     from etna.core.charge_collection import hecht_cce
+    from etna.core.sic_material import SiC4H_Parameters
 
     kws = [device_kwargs(_with_T(config, T)) for T in temperatures]
     pb, x = _engine_batch(kws)
     sub, epi = kws[0]["substrate_thickness_cm"], kws[0]["epi_thickness_cm"]
     if method == "hecht":
         res = reverse_sweep(pb, [voltage], sub, epi, capacitance=False)
+        prm = SiC4H_Parameters(mobility=config.mobility)
         vals = np.array(
             [
-                float(hecht_cce(voltage, d=W, T=T))
+                float(hecht_cce(voltage, d=W, T=T, params=prm))
                 for W, T in zip(res.W[0], temperatures)
             ]
         )

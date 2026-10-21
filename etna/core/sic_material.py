@@ -12,6 +12,15 @@ References:
 from dataclasses import dataclass
 import numpy as np
 
+# Low-field mobility set of the solvers (registry: etna.core.physics_models.
+# LOW_FIELD_MOBILITY). "c_axis" (default since 2026-10-21): parallel to the c-axis, the
+# direction of the vertical current of a (0001) diode (electrons: Ishikawa 2025 drift
+# mobility, holes: the basal-plane set x 0.90). "legacy_perp": the previous default, the
+# Schaffer/Ayalew set measured PERPENDICULAR to c (Hall, (0001) wafers). Provenance and
+# before/after numbers: lab/mobility_caxis/notes/LOG.md, docs/USAGE.md section 18.
+DEFAULT_MOBILITY = "c_axis"
+LEGACY_MOBILITY = "legacy_perp"
+
 
 @dataclass
 class SiC4H_Parameters:
@@ -46,8 +55,14 @@ class SiC4H_Parameters:
     # ~5e-9 cm^-3 (18 orders below Si's 1e10)
     n_i_300: float = 5.0e-9  # cm^-3, Ioffe/TU Wien
 
-    # --- Electron mobility: Caughey-Thomas model ---
-    # Source: TU Wien Ayalew thesis, Table 3.5
+    # --- Low-field mobility set used by mobility_caughey_thomas_T (and every solver) ---
+    # A name of etna.core.physics_models.LOW_FIELD_MOBILITY; "legacy_perp" evaluates the
+    # mu_*/N_ref_*/alpha_*/gamma_* fields below (the perpendicular-to-c set), any other
+    # name the registered set (default "c_axis": parallel to c, vertical transport).
+    mobility: str = DEFAULT_MOBILITY
+
+    # --- Electron mobility: Caughey-Thomas model (the "legacy_perp" set) ---
+    # Source: TU Wien Ayalew thesis, Table 3.5 (mu PERPENDICULAR to c, node65)
     mu_n_max: float = 950.0  # cm^2/Vs at 300K, low-doping limit
     mu_n_min: float = 40.0  # cm^2/Vs, high-doping limit
     N_ref_n: float = 1.94e17  # cm^-3, reference doping concentration
@@ -192,9 +207,10 @@ def compute_ni(T=300):
 def mobility_caughey_thomas(N_total, carrier="electron"):
     """Doping-dependent mobility using Caughey-Thomas model.
 
-    Kept as the independent 300 K closed-form reference (TU Wien table) that pins
-    ``mobility_caughey_thomas_T(N, 300)`` in tests/test_material.py; the solvers call
-    the T-dependent form.
+    Kept as the independent 300 K closed-form reference (TU Wien table, the
+    PERPENDICULAR-to-c set) that pins ``mobility_caughey_thomas_T(N, 300)`` of the
+    ``"legacy_perp"`` set in tests/test_material.py; the solvers call the T-dependent
+    form, whose default set is the c-axis one (DEFAULT_MOBILITY).
 
     mu(N) = mu_min + (mu_max - mu_min) / (1 + (N/N_ref)^alpha)
 
@@ -293,14 +309,34 @@ def intrinsic_concentration(T, params=None):
     return n_i_calibrated, NC_T, NV_T, Eg_T
 
 
-def mobility_caughey_thomas_T(N_total, T, carrier="electron", params=None):
-    """Doping- and temperature-dependent mobility using Caughey-Thomas model.
+def mobility_set(name):
+    """The registered low-field mobility set ``name`` (a LowFieldMobility of
+    etna.core.physics_models.LOW_FIELD_MOBILITY); ValueError naming the choices."""
+    from etna.core.physics_models import LOW_FIELD_MOBILITY
 
-    Extends the 300K Caughey-Thomas model with temperature scaling on mu_max:
+    try:
+        if name == "etna_default":  # a PhysicsModels alias, not a material set
+            raise KeyError(name)
+        return LOW_FIELD_MOBILITY[name]
+    except (KeyError, TypeError):
+        raise ValueError(
+            f"mobility={name!r} is not a registered low-field mobility set (exact names: "
+            f"{sorted(k for k in LOW_FIELD_MOBILITY if k != 'etna_default')})"
+        ) from None
+
+
+def mobility_caughey_thomas_T(N_total, T, carrier="electron", params=None):
+    """Doping- and temperature-dependent low-field mobility of ``params.mobility``.
+
+    The default set ``"c_axis"`` (since 2026-10-21) is the mobility PARALLEL to the
+    c-axis, the direction of the vertical current (etna.core.physics_models
+    LOW_FIELD_MOBILITY["c_axis"]). ``params.mobility == "legacy_perp"`` evaluates the
+    previous default from the fields of ``params``: the Caughey-Thomas set measured
+    perpendicular to c with temperature scaling on mu_max:
         mu_max(T) = mu_max(300) * (T/300)^gamma
 
     mu_min stays constant (weakly T-dependent in practice).
-    At T=300, returns identical values to mobility_caughey_thomas().
+    For "legacy_perp" at T=300, returns identical values to mobility_caughey_thomas().
 
     Parameters
     ----------
@@ -324,6 +360,9 @@ def mobility_caughey_thomas_T(N_total, T, carrier="electron", params=None):
     """
     if params is None:
         params = SiC4H_Parameters()
+    if params.mobility != LEGACY_MOBILITY:
+        mu = mobility_set(params.mobility).mobility(N_total, T, carrier)
+        return float(mu) if np.ndim(mu) == 0 else mu
 
     if carrier == "electron":
         mu_max_300 = params.mu_n_max

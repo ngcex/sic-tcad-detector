@@ -35,7 +35,7 @@ from etna.core.physics_models import (
     PhysicsModels,
     hatakeyama_anisotropic_alpha,
 )
-from etna.core.sic_material import mobility_caughey_thomas_T
+from etna.core.sic_material import SiC4H_Parameters, mobility_caughey_thomas_T
 
 SUB, NPL = 0.3e-4, 1e-4
 
@@ -105,15 +105,17 @@ def test_etna_default_low_field_is_the_solver_mobility(carrier):
         ref = mobility_caughey_thomas_T(N, T, carrier)
         got = LOW_FIELD_MOBILITY["etna_default"].mobility(N, T, carrier)
         np.testing.assert_array_equal(got, ref)
-    # ayalew2004 adds (T/300)^-0.5 on mu_min: equal at 300 K, different elsewhere
+    # ayalew2004 adds (T/300)^-0.5 on mu_min to the legacy (perpendicular) set: equal
+    # at 300 K, different elsewhere
     a = LOW_FIELD_MOBILITY["ayalew2004"]
+    leg = SiC4H_Parameters(mobility="legacy_perp")
     np.testing.assert_allclose(
         a.mobility(N, 300.0, carrier),
-        mobility_caughey_thomas_T(N, 300.0, carrier),
+        mobility_caughey_thomas_T(N, 300.0, carrier, leg),
         rtol=1e-15,
     )
     assert a.mobility(1e20, 450.0, carrier) < mobility_caughey_thomas_T(
-        1e20, 450.0, carrier
+        1e20, 450.0, carrier, leg
     )
 
 

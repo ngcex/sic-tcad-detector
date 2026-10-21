@@ -19,6 +19,7 @@ from etna.core.batched.material import (
     Q,
     edge_mobilities,
     graded_doping,
+    material_params,
     thermal_voltage,
 )
 from etna.core.batched.poisson import PoissonBatch
@@ -82,8 +83,13 @@ def make_batch(
     buffer,
     donor_table=None,
     incomplete_ionization=None,
+    mobility=None,
 ):
     """PoissonBatch for graded p+/n- diodes on mesh ``x`` (uniform: N_D_junction == N_D_bulk).
+
+    ``mobility`` (the create_sic_device keyword; one value for the batch, None = the
+    default "c_axis"): the low-field mobility set, stored as ``pb.mobility`` and used by
+    ``srh_continuity`` / ``material.edge_mobilities``.
 
     Parameters are scalars or (B,) arrays; lengths in cm, densities in cm^-3, T in K.
     ``nplus`` = (x_epi_end, N_D_nplus) for an n+ layer under the epi (the mesh must
@@ -103,6 +109,7 @@ def make_batch(
     static NetDoping as the devsim builder (etna.core.device.device_ionization_fields).
     """
     model = resolve_ionization(incomplete_ionization)
+    params = material_params(mobility)  # validates the name before any work
     T = np.atleast_1d(np.asarray(T, dtype=float))
     if model is None:
         N_A_ion = _per_device(_n_a_ionized, N_A, T)
@@ -142,6 +149,7 @@ def make_batch(
         pb.acceptor_scales = np.array(
             [acceptor_total_scale(a, i) for a, i in zip(N_A_b, N_A_ion_b)]
         )
+    pb.mobility = params.mobility
     return pb
 
 
@@ -280,7 +288,12 @@ def srh_continuity(pb, T, N_A):
     T = np.broadcast_to(np.asarray(T, dtype=float), (pb.B,))
     N_A = np.broadcast_to(np.asarray(N_A, dtype=float), (pb.B,))
     mu_n, mu_p = edge_mobilities(
-        pb.donors, pb.acceptors, N_A, T, getattr(pb, "acceptor_scales", None)
+        pb.donors,
+        pb.acceptors,
+        N_A,
+        T,
+        getattr(pb, "acceptor_scales", None),
+        mobility=getattr(pb, "mobility", None),
     )
     return ContinuityBatch(
         pb,

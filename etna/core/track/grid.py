@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from etna.core.batched.material import EPS, thermal_voltage
+from etna.core.batched.material import EPS, material_params, thermal_voltage
 from etna.core.batched.sweeps import make_batch
 from etna.core.device import donor_table_spec, local_mobility
 from etna.core.sic_material import SiC4H_Parameters, srh_lifetime
@@ -106,6 +106,7 @@ class TrackDevice:
     auger_model: str = "constant"  # "constant" | "injection" (solver.AUGER_A/B)
     carrier_scattering: bool = False  # Conwell-Weisskopf (solver.CCS_D/F)
     meta: dict = field(default_factory=dict)
+    mobility: str = PARAMS.mobility  # low-field mobility set (DeviceConfig.mobility)
 
     # ------------------------------------------------------------- geometry
     @property
@@ -160,11 +161,12 @@ class TrackDevice:
         don = np.broadcast_to(self.donors[:, None], (self.K, self.M))
         acc = np.broadcast_to(self.acceptors[:, None], (self.K, self.M))
         out = []
+        prm = material_params(self.mobility)
         for carrier in ("electron", "hole"):
             out.append(
                 np.ascontiguousarray(
                     local_mobility(
-                        don, acc, self.acceptor_scale, T, carrier, PARAMS
+                        don, acc, self.acceptor_scale, T, carrier, prm
                     ).ravel()
                 )
             )
@@ -235,6 +237,7 @@ def device_from_config(
         nplus=nplus,
         buffer=buffer,
         donor_table=table,
+        mobility=kw.get("mobility"),
     )
     T = float(kw["T"])
     from etna.core.batched.material import _acceptor_scale
@@ -258,4 +261,5 @@ def device_from_config(
         auger_model=auger_model,
         carrier_scattering=bool(carrier_scattering),
         meta={"config": config},
+        mobility=pb.mobility,
     )

@@ -622,6 +622,7 @@ def _cce_vs_dose_rate_engine(dose_rates, V_bias, E_MeV, dev_kw, C_n=None, C_p=No
     common = dict(
         tau_n=srh_lifetime(info["T"], "electron", params),
         tau_p=srh_lifetime(info["T"], "hole", params),
+        mobility=params.mobility,
     )
     args = (
         x,

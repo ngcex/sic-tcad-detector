@@ -368,7 +368,9 @@ class TestHechtCCE300KRegression:
         doping (mobility_doping: default stack N_D_bulk) and the 300 K lifetimes.
 
         Before 2026-10-18 the defaults were the undoped limits mu_max (950 / 125
-        cm2/Vs): 0.9946968964068645; now 0.9946708773626582 (-2.6e-5).
+        cm2/Vs): 0.9946968964068645; then 0.9946708773626582 (-2.6e-5); since 2026-10-21
+        the c-axis mobility default 0.9956830295853791 (the legacy_perp set still gives
+        0.9946708773626582).
         """
         from etna.core.device import mobility_doping
         from etna.core.sic_material import SiC4H_Parameters, mobility_caughey_thomas_T
@@ -385,7 +387,11 @@ class TestHechtCCE300KRegression:
         )
         cce_T300 = hecht_cce(30, 9.5e-4, T=300)
         assert cce_T300 == pytest.approx(float(cce_explicit), rel=1e-12)
-        assert float(cce_T300) == pytest.approx(0.9946708773626582, rel=1e-12)
+        assert float(cce_T300) == pytest.approx(0.9956830295853791, rel=1e-12)
+        legacy = SiC4H_Parameters(mobility="legacy_perp")
+        assert float(hecht_cce(30, 9.5e-4, T=300, params=legacy)) == pytest.approx(
+            0.9946708773626582, rel=1e-12
+        )
         # an explicit doping is honoured (uniform 1e15 epi: lower mobility, lower CCE)
         assert float(hecht_cce(1, 10e-4, N_D_mobility=1e15)) < float(hecht_cce(1, 10e-4))
 

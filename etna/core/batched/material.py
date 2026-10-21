@@ -23,7 +23,7 @@ from etna.core.device import (
     tabulated_donor_profile,
 )
 from etna.core.incomplete_ionization import ionized_acceptor_concentration
-from etna.core.sic_material import SiC4H_Parameters
+from etna.core.sic_material import SiC4H_Parameters, mobility_set
 
 PARAMS = SiC4H_Parameters()
 EPS = PARAMS.eps_r * EPS_0  # F/cm
@@ -39,7 +39,16 @@ def _acceptor_scale(N_A, T):
     return acceptor_total_scale(N_A, ionized_acceptor_concentration(N_A, T))
 
 
-def edge_mobilities(donors, acceptors, N_A, T, acceptor_scales=None):
+@lru_cache(maxsize=16)
+def material_params(mobility=None):
+    """SiC4H_Parameters with the low-field mobility set ``mobility`` (None = default)."""
+    if mobility is None or mobility == PARAMS.mobility:
+        return PARAMS
+    mobility_set(mobility)  # ValueError naming the registered sets
+    return SiC4H_Parameters(mobility=mobility)
+
+
+def edge_mobilities(donors, acceptors, N_A, T, acceptor_scales=None, mobility=None):
     """Edge mobilities (mu_n, mu_p), each (N-1, B), of the devsim builders' local model.
 
     ``donors`` / ``acceptors`` (B, N) are the doping the solver sees (acceptors
@@ -49,7 +58,10 @@ def edge_mobilities(donors, acceptors, N_A, T, acceptor_scales=None):
     numpy twin of etna.core.device.add_local_mobility_models.
     ``acceptor_scales`` (B,): the N_A / N_A_ionized factors when the batch does not use
     the legacy ionization (``PoissonBatch.acceptor_scales``, opt-in A-02 model).
+    ``mobility``: the low-field mobility set (None = the default "c_axis";
+    ``PoissonBatch.mobility`` of a ``make_batch`` batch).
     """
+    params = material_params(mobility)
     donors = np.atleast_2d(np.asarray(donors, dtype=float))
     acceptors = np.broadcast_to(np.asarray(acceptors, dtype=float), donors.shape)
     B = donors.shape[0]
@@ -65,7 +77,7 @@ def edge_mobilities(donors, acceptors, N_A, T, acceptor_scales=None):
         for b in range(B):
             scale = scales[b]
             node = local_mobility(
-                donors[b], acceptors[b], scale, float(T[b]), carrier, PARAMS
+                donors[b], acceptors[b], scale, float(T[b]), carrier, params
             )
             mu[b] = edge_mobility(node)
         out.append(np.ascontiguousarray(mu.T))

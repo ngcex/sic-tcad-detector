@@ -874,7 +874,9 @@ def _cce_fluence_engine(ref, damaged_list, V_bias, alpha_range_cm, generation_ra
     pb = PoissonBatch(x, donors, acceptors, info["n_i"], thermal_voltage(info["T"]))
     # local (per-node, edge-averaged) mobility at the DAMAGED doping, as devsim's
     # mu_n / mu_p edge models after apply_damaged_params (was the scalar info["mu_n"])
-    mu_n, mu_p = edge_mobilities(donors, acceptors, info["N_A"], info["T"])
+    mu_n, mu_p = edge_mobilities(
+        donors, acceptors, info["N_A"], info["T"], mobility=info["params"].mobility
+    )
     cb = ContinuityBatch(
         pb,
         mu_n,
@@ -980,7 +982,9 @@ def _cce_fluence_engine_traps(
     )
     # mobility at the pristine (physical) donors: the traps are not counted as
     # ionized-impurity scatterers (a simplification, stated in USAGE)
-    mu_n, mu_p = edge_mobilities(donors, acceptors, info["N_A"], info["T"])
+    mu_n, mu_p = edge_mobilities(
+        donors, acceptors, info["N_A"], info["T"], mobility=info["params"].mobility
+    )
     cb = ContinuityBatch(
         frozen,
         mu_n,
@@ -1988,7 +1992,14 @@ def compare_cce_hecht_vs_dd(V_range, epi_thickness_cm=10e-4, **kwargs):
     nd_mob = mobility_doping(
         _dk.get("N_D"), _dk.get("doping_profile", "graded"), _dk.get("N_D_bulk")
     )
-    cce_hecht = hecht_cce(V_range, d=epi_thickness_cm, N_D_mobility=nd_mob)
+    cce_hecht = hecht_cce(
+        V_range,
+        d=epi_thickness_cm,
+        N_D_mobility=nd_mob,
+        params=SiC4H_Parameters(
+            mobility=_dk.get("mobility", SiC4H_Parameters.mobility)
+        ),
+    )
 
     # Partial depletion Hecht using a simple W(V) model
     # W ~ sqrt(2 * eps * V / (q * N_D)) with calibrated N_D

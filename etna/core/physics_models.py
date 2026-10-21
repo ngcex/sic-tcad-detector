@@ -22,11 +22,16 @@ arXiv:2410.06798, and the TU Wien thesis of T. Ayalew, 2004,
 https://www.iue.tuwien.ac.at/phd/ayalew/), or are an ETNA assumption ("assumption").
 
 Direction convention: the 1D diode is a vertical device on a (0001) wafer, so its
-current and field are along the c-axis (the 4 deg off-cut is neglected). The published
-Caughey-Thomas set (Schaffer 1994 via Ayalew Table 3.5) is the mobility PERPENDICULAR to
-c (Hall data in the basal plane); with ``anisotropy=None`` ETNA uses it for vertical
-transport, as it always has. Impact-ionization sets carry their own direction; the 1D
-solvers use the parallel-to-c coefficients and refuse a set that has none.
+current and field are along the c-axis (the 4 deg off-cut is neglected). Since
+2026-10-21 the solvers' default low-field set is ``"c_axis"`` (parallel to c: electrons
+from the drift mobility of Ishikawa's 2025 Kyoto thesis, holes the basal-plane set x
+0.90); ``"legacy_perp"`` is the previous default, the Caughey-Thomas set measured
+PERPENDICULAR to c (Schaffer 1994 via Ayalew Table 3.5, Hall data in the basal plane),
+which ETNA used for vertical transport until then (DeviceConfig(mobility=...) selects
+the set of the device; ``low_field_mobility="etna_default"`` here means "the device's
+own"). An ``anisotropy`` model rotates a perpendicular set only. Impact-ionization sets
+carry their own direction; the 1D solvers use the parallel-to-c coefficients and refuse
+a set that has none.
 """
 
 from __future__ import annotations
@@ -37,7 +42,7 @@ from typing import Literal, Optional, Tuple, Union
 
 import numpy as np
 
-from etna.core.sic_material import SiC4H_Parameters
+from etna.core.sic_material import DEFAULT_MOBILITY, SiC4H_Parameters
 
 Status = Literal["verified-primary", "verified-secondary", "assumption", "legacy"]
 STATUSES = ("verified-primary", "verified-secondary", "assumption", "legacy")
@@ -76,15 +81,22 @@ class Provenance:
 
 @dataclass(frozen=True)
 class LowFieldMobility:
-    """Caughey-Thomas mu = mu_min (T/300)^beta + (mu_max (T/300)^gamma - mu_min
-    (T/300)^beta) / (1 + (N / N_ref)^alpha), N = total doping; perpendicular to c."""
+    """Doping/temperature low-field mobility, N = total doping, t = T / 300 K.
+
+    ``form="ct"`` (Caughey-Thomas, Ayalew eqs. 3.77-3.79):
+        mu = mu_min t^beta + (mu_max t^gamma - mu_min t^beta) / (1 + (N / N_ref)^alpha)
+    ``form="arora"`` (Ishikawa 2025 thesis Eqs. 2.10 / 4.5, an Arora-type form):
+        mu = (mu_max - mu_min) t^gamma / (1 + (N / N_ref)^alpha t^delta) + mu_min t^beta
+    The two forms coincide at 300 K. ``direction``: "c_axis" (parallel to c, the
+    vertical (0001) diode) or "perp" (basal plane, Hall data on (0001) wafers).
+    """
 
     name: str
     mu_max_n: float
     mu_min_n: float
     N_ref_n: float
     alpha_n: float
-    gamma_n: float  # exponent of mu_max
+    gamma_n: float  # exponent of mu_max ("ct") / of (mu_max - mu_min) ("arora")
     beta_n: float  # exponent of mu_min (0 = T-independent)
     mu_max_p: float
     mu_min_p: float
@@ -93,46 +105,159 @@ class LowFieldMobility:
     gamma_p: float
     beta_p: float
     provenance: Provenance
+    direction: str = "perp"
+    form: str = "ct"
+    delta_n: float = 0.0  # "arora" only: exponent on (N / N_ref)^alpha
+    delta_p: float = 0.0
+    T_range_K: Optional[Tuple[float, float]] = None  # fitted T range of the T law
 
-    def mobility(self, N, T, carrier):
-        """mu (cm^2/Vs) at total doping N (cm^-3) and T (K); numpy, broadcasts."""
+    def __post_init__(self):
+        if self.direction not in ("c_axis", "perp"):
+            raise ValueError("LowFieldMobility.direction must be 'c_axis' or 'perp'")
+        if self.form not in ("ct", "arora"):
+            raise ValueError("LowFieldMobility.form must be 'ct' or 'arora'")
+        if self.form == "ct" and (self.delta_n != 0.0 or self.delta_p != 0.0):
+            raise ValueError("LowFieldMobility: delta is an 'arora'-form parameter")
+
+    def _carrier(self, carrier):
         s = "n" if carrier == "electron" else "p" if carrier == "hole" else None
         if s is None:
             raise ValueError(f"carrier must be 'electron' or 'hole' (got {carrier!r})")
-        g = lambda k: getattr(self, f"{k}_{s}")
-        t = np.asarray(T, dtype=float) / 300.0
-        mu_max = g("mu_max") * t ** g("gamma")
+        return lambda k: getattr(self, f"{k}_{s}")
+
+    def coefficients(self, T, carrier):
+        """T-resolved constants (A, B, C, N_ref, alpha) of the evaluation
+        mu = C + A / (1 + (N / N_ref)^alpha) ("ct", B = None) or
+        mu = A / (1 + (N / N_ref)^alpha * B) + C ("arora"); python floats, shared by
+        the numpy evaluation and the devsim expression (same order of operations)."""
+        g = self._carrier(carrier)
+        t = float(T) / 300.0
         mu_min = g("mu_min") * t ** g("beta") if g("beta") != 0.0 else g("mu_min")
+        if self.form == "ct":
+            mu_max = g("mu_max") * t ** g("gamma")
+            return mu_max - mu_min, None, mu_min, g("N_ref"), g("alpha")
+        A = (g("mu_max") - g("mu_min")) * t ** g("gamma")
+        return A, t ** g("delta"), mu_min, g("N_ref"), g("alpha")
+
+    def mobility(self, N, T, carrier):
+        """mu (cm^2/Vs) at total doping N (cm^-3) and T (K); numpy, broadcasts."""
+        g = self._carrier(carrier)
         N = np.asarray(N, dtype=float)
-        return mu_min + (mu_max - mu_min) / (1.0 + (N / g("N_ref")) ** g("alpha"))
+        if self.form == "ct":
+            t = np.asarray(T, dtype=float) / 300.0
+            mu_max = g("mu_max") * t ** g("gamma")
+            mu_min = g("mu_min") * t ** g("beta") if g("beta") != 0.0 else g("mu_min")
+            return mu_min + (mu_max - mu_min) / (1.0 + (N / g("N_ref")) ** g("alpha"))
+        if np.ndim(T) != 0:
+            return np.vectorize(lambda TT, NN: self.mobility(NN, TT, carrier))(T, N)
+        A, B, C, N_ref, alpha = self.coefficients(T, carrier)
+        return A / (1.0 + (N / N_ref) ** alpha * B) + C
+
+    def devsim_expression(self, N_expr, T, carrier):
+        """devsim string of ``mobility`` at the density expression ``N_expr`` (the T-
+        dependent constants inlined at full precision, same order of operations)."""
+        A, B, C, N_ref, alpha = self.coefficients(T, carrier)
+        if self.form == "ct":
+            # written mu_min + (mu_max(T) - mu_min) / (...) as the numpy evaluation
+            g = self._carrier(carrier)
+            mu_max = g("mu_max") * (float(T) / 300.0) ** g("gamma")
+            return (
+                f"({float(C)!r} + ({float(mu_max)!r} - {float(C)!r}) / "
+                f"(1.0 + pow(({N_expr}) / {float(N_ref)!r}, {float(alpha)!r})))"
+            )
+        return (
+            f"({float(A)!r} / (1.0 + pow(({N_expr}) / {float(N_ref)!r}, "
+            f"{float(alpha)!r}) * {float(B)!r}) + {float(C)!r})"
+        )
 
 
-_P = SiC4H_Parameters()
+_P = SiC4H_Parameters(mobility="legacy_perp")
+ISHIKAWA_2025 = (
+    "R. Ishikawa, 'Low-Field and High-Field Anisotropic Carrier Transport in SiC', PhD "
+    "thesis, Kyoto University (2025), doi:10.14989/doctor.k26017"
+)
+ISHIKAWA_2025_URL = "http://hdl.handle.net/2433/296110"
+ISHIKAWA_SBD_2024 = (
+    "R. Ishikawa, M. Kaneko, T. Kimoto, Solid State Phenom. 360, 205 (2024), "
+    "doi:10.4028/p-MAe9pZ (CC BY; http://hdl.handle.net/2433/290505)"
+)
+_LEGACY_PERP_PROVENANCE = Provenance(
+    "W. J. Schaffer et al., MRS Proc. 339, 595 (1994) via Ayalew Table 3.5",
+    None, "verified-secondary", AYALEW_URL + " (node65, Table 3.5)",
+    "PERPENDICULAR to c (Ayalew's Table 3.5 header is mu_perp,300; eq. 3.81 gives "
+    "mu_n,par = 1.2 mu_n): ETNA's default until 2026-10-21, used for vertical transport. "
+    "Differs from Ayalew in T: mu_min is held T-independent (Ayalew: (T/300)^-0.5). The "
+    "electron gamma -2.40 is Schaffer's <0001> (parallel) value, -2.15 in the basal plane "
+    "(review Table XXVIII footnote c); the hole -2.15 is borrowed from electrons "
+    "(Schaffer stated it for electrons only, review text)",
+)  # fmt: skip
 LOW_FIELD_MOBILITY = {
-    # the solvers' model since 2026-10-18 (sic_material.mobility_caughey_thomas_T)
-    "etna_default": LowFieldMobility(
-        "etna_default", _P.mu_n_max, _P.mu_n_min, _P.N_ref_n, _P.alpha_n, _P.gamma_n,
+    # ETNA's solver mobility until 2026-10-21 (perpendicular-to-c set, vertical use)
+    "legacy_perp": LowFieldMobility(
+        "legacy_perp", _P.mu_n_max, _P.mu_n_min, _P.N_ref_n, _P.alpha_n, _P.gamma_n,
         0.0, _P.mu_p_max, _P.mu_p_min, _P.N_ref_p, _P.alpha_p, _P.gamma_p, 0.0,
+        _LEGACY_PERP_PROVENANCE, direction="perp",
+    ),  # fmt: skip
+    # ETNA's default since 2026-10-21: parallel to c (vertical (0001) diode)
+    "c_axis": LowFieldMobility(
+        "c_axis", 1190.0, 10.0, 1.0e17, 0.54, -2.40, 0.0,
+        112.5, 14.31, 1.76e19, 0.34, -2.15, 0.0,
         Provenance(
-            "M. Schaffer et al., MRS Proc. 339, 595 (1994) via Ayalew Table 3.5",
-            None, "verified-secondary", AYALEW_URL + " (node61, Table 3.5)",
-            "values perpendicular to c. Differs from Ayalew in T: mu_min is held "
-            "T-independent (Ayalew: (T/300)^-0.5). The electron gamma -2.40 is Schaffer's "
-            "<0001> value (-2.15 in the basal plane), the hole -2.15 is borrowed from "
-            "electrons (review arXiv:2410.06798 Table XXVIII and text)",
+            "electrons: " + ISHIKAWA_2025 + ", Eq. (2.16) (drift mobility parallel to c, "
+            "Hall data / Hall scattering factor, (11-20) epilayers, N_D 5e14-3e18); holes: "
+            "the legacy basal-plane set (Schaffer 1994 via Ayalew Table 3.5) x 0.90, the "
+            "drift-mobility ratio mu_par / mu_perp of the same thesis (Sec. 4.3.1, "
+            "resistivity ratio, about 0.9 for N_A 1e16-7e18, 300-600 K)",
+            None, "verified-primary", ISHIKAWA_2025_URL + " (pp. 44, 51, 95-97)",
+            "electrons at 300 K: mu_max 1190, mu_min 10, N_ref 1e17, alpha 0.54 exactly as "
+            "Eq. 2.16; cross-checks at low doping: vertical SBD drift 1070 +- 290 at 9.7e14 "
+            "(Ishikawa 2024; Eq. 2.16 gives 1101); the thesis's own perpendicular drift fit "
+            "(Eq. 2.17) equals the legacy set within 3.5 % up to 5e15; mu_par / mu_perp 1.16 "
+            "(Kimoto JJAP 58, 018002 (2019), Hall) to 1.2 (Ayalew eq. 3.81; Eq. 2.16 / 2.17: "
+            "1.20 at 1e15). The Hall fit (Eq. 2.11) and the pulsed-conductance values (Table "
+            "3.1, Hall density) are 8-30 % higher: the electron Hall factor. T law NOT the "
+            "thesis's drift fit (-3.4 on mu_max - mu_min, 300-600 K only; Hall fits give "
+            "-2.4 to -3.2): ETNA keeps Schaffer's <0001> gamma -2.40 on mu_max (the legacy T "
+            "law, now direction-consistent). Holes: the direction ratio agrees (Ishikawa 0.9, "
+            "Hatakeyama 2003 1/1.15 via the review) but the magnitude does not (parallel-to-c "
+            "Hall 83 and conductance about 78 in the thesis vs 112.5 here): uncertainty "
+            "-30 / +5 %. Electrons in the p+ (Al-doped, minority) are an extrapolation of an "
+            "N-doped fit",
         ),
+        direction="c_axis",
+    ),  # fmt: skip
+    "ishikawa2025": LowFieldMobility(
+        "ishikawa2025", 1190.0, 10.0, 1.0e17, 0.54, -3.4, 0.8,
+        83.0, 20.0, 6.4e18, 0.83, -2.3, -2.2,
+        Provenance(
+            ISHIKAWA_2025 + ", Eq. (2.16) (electron DRIFT mobility parallel to c) and Eq. "
+            "(4.6) (hole HALL mobility parallel to c)",
+            None, "verified-primary", ISHIKAWA_2025_URL + " (pp. 44, 51, 88)",
+            "full thesis T laws, fitted 300-600 K (below 300 K an extrapolation; the "
+            "electron (T/300)^-3.4 grows fast below 300 K). Holes are HALL mobilities (the "
+            "hole Hall factor was not converted in the thesis; conductance values in Fig. "
+            "5.8 are about 5-10 % lower)",
+        ),
+        direction="c_axis", form="arora", delta_n=-2.2, delta_p=-0.9,
+        T_range_K=(300.0, 600.0),
     ),  # fmt: skip
     "ayalew2004": LowFieldMobility(
         "ayalew2004", 950.0, 40.0, 1.94e17, 0.61, -2.40, -0.5,
         125.0, 15.9, 1.76e19, 0.34, -2.15, -0.5,
         Provenance(
             AYALEW_2004 + ", Table 3.5, eqs. 3.77-3.79", None, "verified-primary",
-            AYALEW_URL + " (node61)",
+            AYALEW_URL + " (node65)",
             "full Ayalew T law (beta -0.5 on mu_min); a mixture of Schaffer 1994 "
             "(N_ref, alpha) and Roschke & Schwierz 2001 (T exponents), perpendicular to c",
         ),
+        direction="perp",
     ),  # fmt: skip
 }
+# "etna_default" = the device's own selection (DeviceConfig.mobility, default "c_axis"):
+# the facades and the devsim twin leave the engine's mobility untouched for it
+LOW_FIELD_MOBILITY["etna_default"] = replace(
+    LOW_FIELD_MOBILITY[DEFAULT_MOBILITY], name="etna_default"
+)
 
 
 @dataclass(frozen=True)
@@ -185,7 +310,26 @@ HIGH_FIELD_MOBILITY = {
             "Table 3.6 (perpendicular to c); v_sat parallel 1.64e7 (e) and hole v_sat "
             "1.1e7 / 6.5e6 are Nilsson 2000 MC (review Tables XXXIII/XXXIV). ASSUMPTION: "
             "the hole beta and T exponents are set equal to the electron ones (no hole "
-            "fit is published, review Sec. VIII)",
+            "fit is published, review Sec. VIII). Check against the measured parallel-to-c "
+            "hole v(E) (Ishikawa 2025 thesis Fig. 5.7a, N_A 1e16, read off the plot): "
+            "about 4-5e6 cm/s at 100 kV/cm and 5e6 at 200 kV/cm vs 4.1e6 / 5.2e6 from the "
+            "parallel hole parameters with mu0 = 85",
+        ),
+    ),  # fmt: skip
+    "ishikawa2025": HighFieldMobility(
+        "ishikawa2025",
+        1.7e7, 1.7e7, 0.76, 0.0, 0.0,
+        1.1e7, 6.5e6, 1.2, -0.44, 1.0,
+        Provenance(
+            "electrons: " + ISHIKAWA_2025 + ", Ch. 3, Table 3.1 (pulsed conductance on "
+            "(11-20) bridges, 1-200 kV/cm); holes: the lades2000 hole values",
+            None, "verified-primary", ISHIKAWA_2025_URL + " (pp. 73-75)",
+            "electron v_sat 1.7e7 cm/s in BOTH directions (mean of N_D <= 1e16, where "
+            "self-heating is negligible; computed with the Hall electron density, so "
+            "possibly over-estimated by the Hall factor > 1, thesis Sec. 3.4.3); beta 0.76 = "
+            "mean of the parallel fits 0.62 / 0.78 / 0.87 at N_D 2e15-1e16 (perpendicular "
+            "0.58-1.02); no T law measured (300 K values at every T). Holes: no saturation "
+            "observed up to 200 kV/cm (thesis Ch. 5), so the lades2000 hole set is kept",
         ),
     ),  # fmt: skip
 }
@@ -484,9 +628,8 @@ _REGISTRIES = {
 class PhysicsModels:
     """Model selection (registry names or parameter-set instances); frozen, hashable.
 
-    ``PhysicsModels()`` = ETNA's existing physics (low-field Caughey-Thomas
-    perpendicular to c used for vertical transport, no velocity saturation, no
-    avalanche, no bandgap narrowing). ``allow_T_extrapolation`` lets an impact-
+    ``PhysicsModels()`` = ETNA's existing physics (the device's own low-field set,
+    "c_axis" by default, no velocity saturation, no avalanche, no bandgap narrowing). ``allow_T_extrapolation`` lets an impact-
     ionization set run outside its measured temperature range (flagged in metadata).
     """
 
@@ -524,6 +667,14 @@ class PhysicsModels:
                 )
         if not isinstance(self.allow_T_extrapolation, bool):
             problems.append("allow_T_extrapolation must be a bool")
+        lf, an = out.get("low_field_mobility"), out.get("anisotropy")
+        if lf is not None and an is not None and lf.direction != "perp":
+            problems.append(
+                f"anisotropy={an.name!r} rotates a PERPENDICULAR-to-c low-field set to "
+                f"the c-axis, but low_field_mobility={lf.name!r} is already parallel to c "
+                "(the default since 2026-10-21): pass low_field_mobility='legacy_perp' "
+                "(or 'ayalew2004') with an anisotropy, or no anisotropy"
+            )
         ii = out.get("impact_ionization")
         if ii is not None and (ii.n_par is None or ii.p_par is None):
             problems.append(
@@ -563,10 +714,27 @@ class PhysicsModels:
 
     # --- solver inputs (1D vertical = c-axis) ---------------------------------------
 
-    def low_field_edge_mobility(self, donors, acceptors_total, T, carrier):
+    def low_field_set(self, device_mobility=None):
+        """The low-field set in effect: the selected one, or for "etna_default" the
+        device's own (``device_mobility``, DeviceConfig.mobility; None = default)."""
+        lf = self.get("low_field_mobility")
+        if lf.name == "etna_default":
+            return LOW_FIELD_MOBILITY[device_mobility or DEFAULT_MOBILITY]
+        return lf
+
+    def vertical_is_parallel(self, device_mobility=None) -> bool:
+        """True when the vertical transport is parallel to c: a c-axis low-field set, or
+        a perpendicular one rotated by an ``anisotropy`` model. Selects the parallel
+        high-field v_sat."""
+        if self.get("anisotropy") is not None:
+            return True
+        return self.low_field_set(device_mobility).direction == "c_axis"
+
+    def low_field_edge_mobility(self, donors, acceptors_total, T, carrier,
+                                device_mobility=None):  # fmt: skip
         """Low-field node mobility of the selected set at total doping, times the
         anisotropy ratio (vertical = parallel to c) when one is selected."""
-        mu = self.get("low_field_mobility").mobility(
+        mu = self.low_field_set(device_mobility).mobility(
             np.asarray(donors) + np.asarray(acceptors_total), T, carrier
         )
         an = self.get("anisotropy")
@@ -574,12 +742,14 @@ class PhysicsModels:
             mu = mu * (an.ratio_n if carrier == "electron" else an.ratio_p)
         return mu
 
-    def high_field_params(self, T):
-        """(vsat_n, beta_n, vsat_p, beta_p) for vertical transport, or None."""
+    def high_field_params(self, T, device_mobility=None):
+        """(vsat_n, beta_n, vsat_p, beta_p) for vertical transport, or None: the
+        parallel-to-c v_sat when the vertical transport is parallel to c
+        (``vertical_is_parallel``), the perpendicular one with a "legacy_perp" device."""
         hf = self.get("high_field_mobility")
         if hf is None:
             return None
-        par = self.get("anisotropy") is not None
+        par = self.vertical_is_parallel(device_mobility)
         vn, bn = hf.vsat_beta(T, "electron", parallel=par)
         vp, bp = hf.vsat_beta(T, "hole", parallel=par)
         return vn, bn, vp, bp
@@ -590,7 +760,7 @@ class PhysicsModels:
             return None
         return ii.coefficients(T, "c_axis", self.allow_T_extrapolation)
 
-    def describe(self) -> dict:
+    def describe(self, device_mobility=None) -> dict:
         """JSON-able provenance record of the selection (for result metadata)."""
         d = {}
         for key in _REGISTRIES:
@@ -598,12 +768,18 @@ class PhysicsModels:
             d[key] = None if m is None else {
                 "name": m.name, **m.provenance.as_dict()
             }  # fmt: skip
+        lf = self.low_field_set(device_mobility)
+        if self.get("low_field_mobility").name == "etna_default":
+            d["low_field_mobility"]["device_set"] = lf.name
         d["allow_T_extrapolation"] = self.allow_T_extrapolation
-        d["transport_direction"] = (
-            "parallel to c (anisotropy applied)"
-            if self.get("anisotropy") is not None
-            else "vertical, with the perpendicular-to-c parameter sets (ETNA default)"
-        )
+        if self.get("anisotropy") is not None:
+            d["transport_direction"] = "parallel to c (perpendicular set x anisotropy)"
+        elif lf.direction == "c_axis":
+            d["transport_direction"] = f"parallel to c ({lf.name!r} set)"
+        else:
+            d["transport_direction"] = (
+                f"vertical, with the perpendicular-to-c set {lf.name!r} (legacy)"
+            )
         return d
 
 

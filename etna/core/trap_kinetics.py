@@ -327,7 +327,9 @@ class KineticTrapSolver:
         # error weighted by its share of the local space charge
         tot = np.abs(donors - acceptors) + self.N_t.sum(axis=1)
         self._w_charge = self.N_t / np.maximum(tot, 1.0)[:, None, :]
-        mu_n, mu_p = edge_mobilities(donors, acceptors, info["N_A"], self.T)
+        mu_n, mu_p = edge_mobilities(
+            donors, acceptors, info["N_A"], self.T, mobility=info["params"].mobility
+        )
         self.mu_n, self.mu_p = mu_n.T.copy(), mu_p.T.copy()  # (B, N-1)
         self._Q = Q
         self._psi_cold = None

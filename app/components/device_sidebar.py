@@ -67,6 +67,9 @@ def assemble_config(values: dict) -> DeviceConfig:
         donor_table=values.get("donor_table", DeviceConfig.donor_table),
         # opt-in carrier-dependent incomplete ionization (False = the legacy scalar)
         incomplete_ionization=values.get("incomplete_ionization", False),
+        # low-field mobility set (default "c_axis"; the historical presets carry
+        # "legacy_perp")
+        mobility=values.get("mobility", DeviceConfig.mobility),
     )
 
 
@@ -348,7 +351,21 @@ def render_device_sidebar() -> None:
             "field, dark current, FLASH and fluence pages run on devsim."
         )
 
+    mobility = st.sidebar.selectbox(
+        "Low-field mobility",
+        ("c_axis", "legacy_perp", "ishikawa2025"),
+        index=0,
+        key="cfg_mobility",
+        help="c_axis (default since 2026-10-21): mobility PARALLEL to the c-axis, the "
+        "direction of the vertical current (electrons: Ishikawa 2025 drift mobility, "
+        "+24 % at the epi bulk; holes: x 0.90). legacy_perp: the previous default, "
+        "measured perpendicular to c (the historical presets use it). ishikawa2025: "
+        "the thesis's full T laws, holes as Hall mobility (opt-in). docs/USAGE.md "
+        "section 18.",
+    )
+
     values = {
+        "mobility": mobility,
         "epi_thickness_um": epi_thickness_um,
         "substrate_thickness_um": substrate_thickness_um,
         "half_width_um": half_width_um,

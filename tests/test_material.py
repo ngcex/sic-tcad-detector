@@ -185,19 +185,23 @@ class TestIntrinsicConcentration:
         assert len(result) == 4
 
 
+LEGACY = SiC4H_Parameters(mobility="legacy_perp")
+
+
 class TestMobilityTemperature:
     """Test temperature-dependent Caughey-Thomas mobility."""
 
     def test_mobility_300k_matches_original_electron(self):
-        """T-dependent mobility at 300K must match original for electrons."""
+        """T-dependent mobility at 300K must match original for electrons (the
+        "legacy_perp" set; the default "c_axis" set: tests/test_mobility_caxis.py)."""
         mu_orig = mobility_caughey_thomas(1e14, "electron")
-        mu_T = mobility_caughey_thomas_T(1e14, 300, "electron")
+        mu_T = mobility_caughey_thomas_T(1e14, 300, "electron", LEGACY)
         assert mu_T == pytest.approx(mu_orig, rel=1e-10)
 
     def test_mobility_300k_matches_original_hole(self):
         """T-dependent mobility at 300K must match original for holes."""
         mu_orig = mobility_caughey_thomas(1e14, "hole")
-        mu_T = mobility_caughey_thomas_T(1e14, 300, "hole")
+        mu_T = mobility_caughey_thomas_T(1e14, 300, "hole", LEGACY)
         assert mu_T == pytest.approx(mu_orig, rel=1e-10)
 
     def test_electron_mobility_decreases_with_T(self):
@@ -213,9 +217,13 @@ class TestMobilityTemperature:
         assert mu_280 > mu_300
 
     def test_350k_electron_value(self):
-        """mu(1e14, 350, electron) ~ 660 cm^2/Vs (within 10%)."""
-        mu = mobility_caughey_thomas_T(1e14, 350, "electron")
+        """mu(1e14, 350, electron) ~ 660 cm^2/Vs (within 10%) for the legacy_perp set;
+        the default c_axis set (x 1.235 at 1e14): 803.0."""
+        mu = mobility_caughey_thomas_T(1e14, 350, "electron", LEGACY)
         assert mu == pytest.approx(660, rel=0.10)
+        assert mobility_caughey_thomas_T(1e14, 350, "electron") == pytest.approx(
+            803.0, abs=0.05
+        )
 
     def test_hole_mobility_T_scaling(self):
         """Hole mobility at 350K should be less than at 300K."""
@@ -308,8 +316,15 @@ class TestRegressionT300K:
         dev = create_sic_device(device_name=f"reg300_mu_{uuid.uuid4().hex[:6]}", T=300)
         # v1.0 uses mobility_caughey_thomas(N_D) with N_D=1.07e15; hole mobility at the epi doping since 2026-10-17 (was N_A, audit-v7 A-03):
         # mu_p 75.68 -> 121.12 cm2/Vs
+        # mu_p 75.68 -> 121.12 cm2/Vs. Since 2026-10-21 the default set is "c_axis"
+        # (mu_n 913.39 -> 1096.28, mu_p 121.12 -> 109.01); "legacy_perp" keeps v1.0.
         mu_n_v1 = mobility_caughey_thomas(1.07e15, "electron")
         mu_p_v1 = mobility_caughey_thomas(1.07e15, "hole")
+        assert dev["mu_n"] == pytest.approx(1096.2846199758114, rel=1e-12)
+        assert dev["mu_p"] == pytest.approx(0.9 * mu_p_v1, rel=1e-12)
+        dev = create_sic_device(
+            device_name=f"reg300_mu_{uuid.uuid4().hex[:6]}", T=300, mobility="legacy_perp"
+        )
         assert dev["mu_n"] == pytest.approx(mu_n_v1, rel=1e-10)
         assert dev["mu_p"] == pytest.approx(mu_p_v1, rel=1e-10)
 

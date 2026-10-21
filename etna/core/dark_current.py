@@ -1016,6 +1016,14 @@ def dark_reference(dev_kw):
     return {"info": info, "x": x, "donors": donors, "acceptors": acceptors}
 
 
+def _shared_mobility(infos):
+    """The low-field mobility set of devsim device infos (one per batch)."""
+    names = {i["params"].mobility for i in infos}
+    if len(names) != 1:
+        raise ValueError(f"one mobility set per engine batch (got {sorted(names)})")
+    return names.pop()
+
+
 def dark_current_engine(
     refs,
     V_range,
@@ -1093,6 +1101,7 @@ def dark_current_engine(
         epi_end=epi_ends.pop(),
         S_n=[i["params"].S_n if S_n is None else S_n for i in infos],
         S_p=[i["params"].S_p if S_p is None else S_p for i in infos],
+        mobility=_shared_mobility(infos),
     )
     out = []
     for b in range(B):

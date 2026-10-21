@@ -168,17 +168,27 @@ def section5():
             f"{v:.0f} V {d:+.1e}" for v, d in zip(c.x, c.y - c.metadata["cce_baseline"])
         )
     )
-    an = PhysicsModels(high_field_mobility="lades2000", anisotropy="burin2024")
-    c2 = run_avalanche(cfg, an, -10.0, -100.0, 4)
+    # an anisotropy rotates a PERPENDICULAR set only (the default is c-axis since
+    # 2026-10-21): the legacy_perp device with burin2024, against its own baseline
+    cfg_leg = DeviceConfig(mobility="legacy_perp")
+    an = PhysicsModels(
+        high_field_mobility="lades2000", anisotropy="burin2024",
+        low_field_mobility="legacy_perp",
+    )  # fmt: skip
+    c2 = run_avalanche(cfg_leg, an, -10.0, -100.0, 4)
     print(
-        "  ... with burin2024 c-axis anisotropy:            "
+        "  ... legacy_perp device + burin2024 anisotropy:   "
         + "  ".join(
             f"{v:.0f} V {d:+.1e}"
             for v, d in zip(c2.x, c2.y - c2.metadata["cce_baseline"])
         )
     )
-    for m, lab in ((hf, "lades2000"), (an, "lades2000 + burin2024")):
-        t = run_transit_time(cfg, m, -10.0, -100.0, 4)
+    for c_, m, lab in (
+        (cfg, hf, "lades2000 (c-axis default)"),
+        (cfg_leg, hf, "lades2000 on legacy_perp"),
+        (cfg_leg, an, "legacy_perp + burin2024 + lades2000"),
+    ):
+        t = run_transit_time(c_, m, -10.0, -100.0, 4)
         md = t.metadata
         print(
             f"  transit time {lab}: "

@@ -34,9 +34,11 @@ import logging
 import devsim
 
 from etna.core.sic_material import (
+    DEFAULT_MOBILITY,
     SiC4H_Parameters,
     intrinsic_concentration,
     mobility_caughey_thomas_T,
+    mobility_set,
     srh_lifetime,
 )
 from etna.core.incomplete_ionization import (  # noqa: F401 (re-export)
@@ -221,8 +223,14 @@ def create_sic_2d_device(
     buffer_end_doping=_BUFFER_END_DOPING_DEFAULT,
     donor_table=None,
     incomplete_ionization=None,
+    mobility=DEFAULT_MOBILITY,
 ):
     """Create a 2D p+/n- 4H-SiC diode device in devsim.
+
+    ``mobility``: the low-field mobility set (as ``create_sic_device``). The scalar
+    mobility is used for BOTH directions: with the default c-axis set the vertical
+    (c-axis) transport is right and the lateral (basal-plane) electrons are about 20 %
+    too mobile (no mobility tensor yet).
 
     Structure uses symmetry: x = 0 (center/symmetry plane) to half_width_cm.
     Depth: y = 0 (anode, top) to total_depth (cathode, bottom).
@@ -281,7 +289,8 @@ def create_sic_2d_device(
     if N_D is None:
         N_D = DEFAULT_N_D
 
-    params = SiC4H_Parameters()
+    mobility_set(mobility)  # ValueError naming the registered sets
+    params = SiC4H_Parameters(mobility=mobility)
     half_width_cm = half_width_um * 1e-4  # um -> cm
     junction_pos = substrate_thickness_cm
     epi_end = substrate_thickness_cm + epi_thickness_cm

@@ -60,7 +60,9 @@ class DarkResult:
     J_TAT: np.ndarray  # (K, B)
     J_SRV: np.ndarray  # (K, B)
     converged: np.ndarray  # (K, B) bool, cumulative along the sweep
-    hurkx_invalid: np.ndarray  # (K, B) bool: |E| > E_hurkx_max somewhere (outside the engine)
+    hurkx_invalid: (
+        np.ndarray
+    )  # (K, B) bool: |E| > E_hurkx_max somewhere (outside the engine)
 
 
 def _col(a, B):
@@ -125,9 +127,11 @@ def dark_sweep(
     gummel_tol=DARK_GUMMEL_TOL,
     max_iter=DARK_GUMMEL_MAX_ITER,
     max_step_V=MAX_STEP_V,
+    mobility=None,
 ):
     """Dark-current components of B devices on mesh ``x`` at each anode bias of
-    ``voltages`` (<= 0, in the order given).
+    ``voltages`` (<= 0, in the order given). ``mobility``: the low-field mobility set
+    (None = default; the devsim device's ``params.mobility``).
 
     ``donors`` / ``acceptors`` (B, N): the doping the devsim device carries (acceptors
     ionized, as devsim's Acceptors model); ``T``, ``N_A`` (total, for the local mobility),
@@ -148,7 +152,7 @@ def dark_sweep(
     if not np.all(np.isfinite(voltages)) or np.any(voltages > 0):
         raise ValueError("voltages must be finite reverse biases (<= 0)")
     pb = PoissonBatch(x, donors, acceptors, n_i, thermal_voltage(T))
-    mu_n, mu_p = edge_mobilities(donors, acceptors, N_A, T)
+    mu_n, mu_p = edge_mobilities(donors, acceptors, N_A, T, mobility=mobility)
     n1, p1 = _col(n1, B), _col(p1, B)
     cb = ContinuityBatch(pb, mu_n, mu_p, _col(tau_n, B), _col(tau_p, B), n1=n1, p1=p1)
     mask = np.ones(N) if epi_end is None else (epi_end - x >= 0).astype(float)
@@ -224,6 +228,7 @@ def generation_cce(
     gummel_tol=FLASH_GUMMEL_TOL,
     max_iter=DARK_GUMMEL_MAX_ITER,
     max_step_V=MAX_STEP_V,
+    mobility=None,
 ):
     """CCE = |J_cathode| / (q trapz(G, x)) of B devices at one anode bias ``V_bias``,
     each with its own generation ``G`` (B, N), midgap SRH and (optionally) Auger
@@ -236,7 +241,7 @@ def generation_cce(
     acceptors = np.broadcast_to(np.asarray(acceptors, dtype=float), (B, N))
     T, N_A, n_i = _col(T, B), _col(N_A, B), _col(n_i, B)
     pb = PoissonBatch(x, donors, acceptors, n_i, thermal_voltage(T))
-    mu_n, mu_p = edge_mobilities(donors, acceptors, N_A, T)
+    mu_n, mu_p = edge_mobilities(donors, acceptors, N_A, T, mobility=mobility)
     cb = ContinuityBatch(
         pb, mu_n, mu_p, _col(tau_n, B), _col(tau_p, B), C_n=C_n, C_p=C_p
     )

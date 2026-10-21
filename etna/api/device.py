@@ -21,6 +21,7 @@ from typing import Literal, Optional, Tuple, Union, get_args
 from etna.core.devsim_lock import serialized
 from etna.core.incomplete_ionization import IonizationModel, resolve_ionization
 from etna.core.radiation_traps import RadiationTrapModel, resolve_traps
+from etna.core.sic_material import DEFAULT_MOBILITY, mobility_set
 from etna.core.device2d import create_sic_2d_device
 from etna.core.drift_diffusion import create_dd_device, setup_sic_drift_diffusion
 from etna.core.poisson import setup_poisson, solve_equilibrium
@@ -120,6 +121,14 @@ class DeviceConfig:
     # applied (a pristine device has no traps), batched 1D engine only, exclusive with
     # incomplete_ionization. Not a device-builder keyword. See docs/USAGE.md.
     radiation_traps: Union[bool, RadiationTrapModel] = False
+    # Low-field mobility set (etna.core.physics_models.LOW_FIELD_MOBILITY), every engine:
+    # "c_axis" (default since 2026-10-21) = mobility PARALLEL to the c-axis, the direction
+    # of the vertical current (electrons: Ishikawa 2025 drift mobility, 1174 cm2/Vs at the
+    # epi bulk vs 950; holes: the basal-plane set x 0.90). "legacy_perp" = the previous
+    # default (Schaffer/Ayalew, measured PERPENDICULAR to c), reproduces the earlier numbers
+    # bit for bit. "ishikawa2025" (opt-in) = the thesis's full c-axis T laws (holes: Hall).
+    # 2D devices use the vertical (c-axis) scalar for the lateral direction too (no tensor).
+    mobility: str = DEFAULT_MOBILITY
 
     def __post_init__(self) -> None:
         """Normalise the derived fields, then reject meaningless values (``validate``).
@@ -273,6 +282,10 @@ class DeviceConfig:
             )
         if not (100.0 <= self.T <= 600.0):
             problems.append(f"T must be between 100 and 600 K (got {self.T!r})")
+        try:
+            mobility_set(self.mobility)
+        except ValueError as e:
+            problems.append(str(e))
         if problems:
             raise ValueError("Invalid DeviceConfig: " + "; ".join(problems))
 
@@ -323,6 +336,11 @@ def device_kwargs(config: DeviceConfig) -> dict:
     model = resolve_ionization(getattr(config, "incomplete_ionization", False))
     if model is not None:
         kw.update(incomplete_ionization=model)
+    # the mobility set is emitted only when not the default (same pattern: default calls
+    # keep their exact keyword set; every builder takes ``mobility=``)
+    mobility = getattr(config, "mobility", DEFAULT_MOBILITY)
+    if mobility != DEFAULT_MOBILITY:
+        kw.update(mobility=mobility)
     return kw
 
 
@@ -341,6 +359,8 @@ LEGACY_PRESET = {
     "E_t": LEGACY_STACK["E_t"],
     "buffer_thickness_um": None,  # no graded n-/n+ transition
     "buffer_end_doping": None,
+    # the perpendicular-to-c mobility of that period (the default until 2026-10-21)
+    "mobility": "legacy_perp",
 }
 
 
@@ -392,6 +412,8 @@ NPLUS_CALIBRATED_PRESET = {
     "buffer_end_doping": None,
     "N_t": NPLUS_CALIBRATION["N_t"],
     "E_t": NPLUS_CALIBRATION["E_t"],
+    # the perpendicular-to-c mobility of that period (the default until 2026-10-21)
+    "mobility": "legacy_perp",
 }
 
 

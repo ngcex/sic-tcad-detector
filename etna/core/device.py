@@ -18,9 +18,12 @@ import devsim
 import numpy as np
 
 from etna.core.sic_material import (
+    DEFAULT_MOBILITY,
+    LEGACY_MOBILITY,
     SiC4H_Parameters,
     intrinsic_concentration,
     mobility_caughey_thomas_T,
+    mobility_set,
     srh_lifetime,
 )
 from etna.core.incomplete_ionization import (
@@ -170,6 +173,10 @@ def mobility_ct_expression(N_expr, T, carrier, params=None):
     """
     if params is None:
         params = SiC4H_Parameters()
+    if params.mobility != LEGACY_MOBILITY:  # the registered set (default "c_axis")
+        if carrier not in ("electron", "hole"):
+            raise ValueError(f"carrier must be 'electron' or 'hole', got '{carrier}'")
+        return mobility_set(params.mobility).devsim_expression(N_expr, T, carrier)
     if carrier == "electron":
         mu_max_300, mu_min = params.mu_n_max, params.mu_n_min
         N_ref, alpha, gamma = params.N_ref_n, params.alpha_n, params.gamma_n
@@ -504,8 +511,13 @@ def create_sic_device(
     buffer_end_doping=DEFAULT_STACK["buffer_end_doping"],
     donor_table=None,
     incomplete_ionization=None,
+    mobility=DEFAULT_MOBILITY,
 ):
     """Create a 1D p+/n- 4H-SiC diode device in devsim.
+
+    ``mobility``: the low-field mobility set (etna.core.physics_models.
+    LOW_FIELD_MOBILITY): "c_axis" (default, parallel to c = the vertical current) or
+    "legacy_perp" (the perpendicular-to-c set, the default before 2026-10-21).
 
     Structure: p+ anode layer (left, anode) | n- epitaxial layer [| graded n-/n+
     transition] | [n+ layer] (right, cathode)
@@ -595,7 +607,8 @@ def create_sic_device(
     if N_D is None:
         N_D = DEFAULT_N_D
 
-    params = SiC4H_Parameters()
+    mobility_set(mobility)  # ValueError naming the registered sets
+    params = SiC4H_Parameters(mobility=mobility)
     junction_pos = substrate_thickness_cm
     epi_end = substrate_thickness_cm + epi_thickness_cm
     _check_nplus(nplus_thickness_cm, N_D_nplus)

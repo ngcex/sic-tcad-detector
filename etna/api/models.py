@@ -122,7 +122,8 @@ def _edge_low_field(pb, config, models):
     out = []
     for carrier in ("electron", "hole"):
         node = models.low_field_edge_mobility(
-            pb.donors[0], scale * pb.acceptors[0], config.T, carrier
+            pb.donors[0], scale * pb.acceptors[0], config.T, carrier,
+            getattr(config, "mobility", None),
         )
         out.append(np.ascontiguousarray(edge_mobility(node)[:, None]))
     return cb, out[0], out[1]
@@ -134,7 +135,7 @@ def _provenance(config, models, **extra):
     reason = validated_domain_reason(config)
     return {
         "solver": "batched-models",
-        "physics_models": models.describe(),
+        "physics_models": models.describe(getattr(config, "mobility", None)),
         "T_extrapolated": models.T_extrapolated(config.T),
         "validated_domain": reason is None,
         "domain_note": reason,
@@ -341,7 +342,7 @@ def run_avalanche(
     base = ModelContinuityBatch(pb, cb.mu_n, cb.mu_p, cb.tau_n, cb.tau_p, n1=n1, p1=p1)
     mod = ModelContinuityBatch(
         pb, mu_n, mu_p, cb.tau_n, cb.tau_p, n1=n1, p1=p1,
-        hf=models.high_field_params(config.T), ii=coef,
+        hf=models.high_field_params(config.T, getattr(config, "mobility", None)), ii=coef,
     )  # fmt: skip
     ramp = _Ramp(pb, 1e-10, 10.0 * min(config.T, 300.0) / 300.0)
     J, J0, M_int, conv, reasons, Emax = [], [], [], [], [], []
@@ -443,7 +444,7 @@ def run_transit_time(
     models = _check(config, models, "run_transit_time")
     pb, x, kw = _batch(config)
     cb, mu_n0, mu_p0 = _edge_low_field(pb, config, models)
-    hf = models.high_field_params(config.T)
+    hf = models.high_field_params(config.T, getattr(config, "mobility", None))
     sub = kw["substrate_thickness_cm"]
     epi_end = sub + kw["epi_thickness_cm"]
     xe = 0.5 * (x[1:] + x[:-1])
@@ -491,4 +492,3 @@ __all__ = [
     "run_breakdown", "run_avalanche", "run_transit_time", "refine_mesh",
     "DEFAULT_BREAKDOWN_MODELS", "BREAKDOWN_NOTE",
 ]  # fmt: skip
-

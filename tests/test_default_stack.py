@@ -176,7 +176,9 @@ def test_default_numbers_are_the_measured_cv_record():
     assert cv.metadata["reach_through_V"] == pytest.approx(3.1)
     cce = sim.run_cce(c, -10.0, -50.0, 3)
     # NIST ASTAR Bragg-curve alpha profile (18.43 um) since 2026-10-20; 15 um flat box: 0.9994734 / 0.9998111 / 0.9998832
-    np.testing.assert_allclose(cce.y, [0.9994291, 0.9997970, 0.9998749], atol=1e-7)
+    # c-axis mobility default since 2026-10-21 (legacy_perp: 0.9994291 / 0.9997970 /
+    # 0.9998749; the dark current does not move)
+    np.testing.assert_allclose(cce.y, [0.9993742, 0.9997783, 0.9998636], atol=1e-7)
     d = sim.run_dark_current(c, 0.0, -60.0, 7)  # default area: 4 mm2
     np.testing.assert_allclose(
         d.y[[1, 3, 6]] * 1e12, [3.9919, 11.8799, 18.000], atol=1e-3
@@ -364,7 +366,10 @@ def test_transient_uses_the_anode_with_nplus():
     assert r.metadata["current_contact"] == "anode"
     # 2026-10-18 (local mobility): 0.999725 / 0.999869 at 20 / 100 Gy/s; balanced
     # steady-state CCE at 20 Gy/s 0.999809; direct anode round-off ~1e-4
-    np.testing.assert_allclose(r.y, [0.9997250, 0.9998694], atol=1e-6)
+    # c-axis mobility default since 2026-10-21: 1.0 (raw 1.0000022, clipped) / 0.9997590;
+    # legacy_perp 0.9997250 / 0.9998694. The moves (+2.8e-4 / -1.1e-4) are of the order of
+    # the direct-anode estimator's round-off (the steady-state CCE moves by -1.8e-5)
+    np.testing.assert_allclose(r.y, [1.0, 0.9997590], atol=1e-6)
     r = sim.run_transient(legacy_config(), np.array([20.0]))
     assert r.metadata["current_contact"] == "cathode"
     # pre-flip value 0.9975336675676356; hole mobility at the epi doping since 2026-10-17 (was N_A, audit-v7 A-03)

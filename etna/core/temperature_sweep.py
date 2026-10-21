@@ -80,9 +80,13 @@ def sweep_iv_vs_temperature(
     from etna.core.dark_current import create_dark_current_device, dark_current_sweep
 
     temperatures = np.asarray(temperatures, dtype=float)
-    params = SiC4H_Parameters()
+    params = SiC4H_Parameters(
+        mobility=device_kwargs.get("mobility", SiC4H_Parameters.mobility)
+    )
     if solver not in ("auto", "engine", "devsim"):
-        raise ValueError(f"solver must be 'auto', 'engine' or 'devsim' (got {solver!r})")
+        raise ValueError(
+            f"solver must be 'auto', 'engine' or 'devsim' (got {solver!r})"
+        )
 
     engine_J = {}
     if use_tat and solver != "devsim":
@@ -124,7 +128,9 @@ def sweep_iv_vs_temperature(
                 # (DARK_RAMP_STEP_V): the per-step refresh cannot use the adaptive ramp.
                 sweep = dark_current_sweep(device_info, [V_reverse], area=1.0)
                 if len(sweep["J_total"]) == 0:
-                    raise RuntimeError(f"dark_current_sweep did not converge at {V_reverse} V")
+                    raise RuntimeError(
+                        f"dark_current_sweep did not converge at {V_reverse} V"
+                    )
                 I_total = sweep["J_total"][-1]
             else:
                 # Ramp to reverse bias: cathode voltage = -V_reverse
@@ -190,7 +196,9 @@ def _iv_engine(temperatures, V_reverse, solver, device_kwargs):
         reason = dark_engine_reason(kw, [V_reverse])
         if reason is not None:
             if solver == "engine":
-                raise ValueError(f"sweep_iv_vs_temperature: engine unavailable ({reason})")
+                raise ValueError(
+                    f"sweep_iv_vs_temperature: engine unavailable ({reason})"
+                )
             logger.info("sweep_iv: T=%g K on devsim (%s)", T, reason)
             continue
         kws.append(kw)
@@ -342,8 +350,9 @@ def sweep_cce_vs_temperature(
                 cv_result = _cv_sweep(device_info, voltages)
                 truncated = bool(cv_result.get("truncated", False))
 
+                prm = device_info.get("params")  # carries the low-field mobility set
                 for V, W in zip(cv_result["voltages"], cv_result["depletion_widths"]):
-                    cce_val = float(hecht_cce(V, d=W, T=T))
+                    cce_val = float(hecht_cce(V, d=W, T=T, params=prm))
                     records.append(
                         {"T": T, "V": float(V), "CCE": cce_val, "truncated": truncated}
                     )
