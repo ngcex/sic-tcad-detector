@@ -348,7 +348,9 @@ def _allpix(p):
             st.caption(
                 "E in V/cm (points to the p+ side in the depleted epi), doping in 1/cm³ "
                 "(n positive), planar-pad weighting potential z/t. Allpix has no SiC "
-                "mobility model (use constant / custom)."
+                "mobility model (use constant / custom). Known open issue #19: the maps "
+                "span the whole stack but the snippet sets no field_depth / doping_depth, "
+                "so Allpix rescales them to its sensor thickness."
             )
 
 
@@ -424,6 +426,12 @@ def render() -> None:
             st.caption(
                 "PREDICTED by ETNA's sampler (± = 1 standard error, statistical only; the "
                 "model's own systematic error is not included)."
+            )
+            st.warning(
+                "Known open issues of the core sampler (GitHub): #17, the per-event random "
+                "streams overlap, so the standard errors shown may be 1.6-2.3x too small; "
+                "#18, the tilted-beam mean chord is t/cos(θ), so y_F of a tilted beam may be "
+                "biased low. Treat the ± as a lower bound until they are fixed."
             )
             sp = spectrum_with_errors(out["edep_keV"], out["l_bar_um"])
             st.plotly_chart(_spectrum_plot(sp, "Microdosimetric spectrum"), key="mc_sp_plot")
