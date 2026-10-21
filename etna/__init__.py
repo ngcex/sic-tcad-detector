@@ -36,6 +36,7 @@ from etna.api.models import run_avalanche, run_breakdown, run_transit_time
 from etna.api.run_all import Report, SectionResult, run_all
 from etna.core.physics_models import PhysicsModels
 from etna.api.sweep import ParametricSweep
+from etna.uq.run import run_uq
 from etna.core.devsim_lock import quiet_devsim, set_devsim_quiet
 
 __all__ = [
@@ -68,6 +69,7 @@ __all__ = [
     "run_track_cce_let",
     "run_tilted_alpha_track",
     "ParametricSweep",
+    "run_uq",
     "PhysicsModels",
     "run_breakdown",
     "run_avalanche",
