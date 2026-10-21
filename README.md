@@ -94,8 +94,14 @@ scale, not this device.
   Predictions there rest on a stated occupancy assumption
   ([USAGE §6](docs/USAGE.md#charged-deep-traps-beyond-compensation-opt-in-radiation_trapstrue)).
 
+- `etna.PhysicsModels` with `run_breakdown` / `run_avalanche` / `run_transit_time`: a
+  model library with provenance, 1D only (issue #6). It covers velocity saturation, c-axis
+  anisotropy, and impact ionization (Hatakeyama 2004 and four other sets) with avalanche
+  breakdown and gain. The default facades do not use it
+  ([USAGE §18](docs/USAGE.md#18-physical-model-library-opt-in-high-field-mobility-anisotropy-avalanche-and-breakdown)).
+
 **Not modelled:** high injection / plasma, edge termination and guard rings on the
-default path, oxide charge, impact ionisation and breakdown, 3D. Full list and the
+default path (the opt-in breakdown is the parallel-plane value), oxide charge, 3D. Full list and the
 full-depletion definitions in [USAGE §8](docs/USAGE.md#8-validity-and-limits).
 
 ---
