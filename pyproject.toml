@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "etna"
 # single source of truth: etna/_version.py (__version__), read by hatch below
 dynamic = ["version"]
-description = "ETNA: Epitaxial Tcad Numerical Analysis — SiC TCAD simulator library for 4H-SiC detectors (INFN-LNS Petringa group)"
+description = "ETNA: Epitaxial Tcad Numerical Analysis — SiC TCAD simulator library for 4H-SiC detectors"
 readme = "README.md"
 license = "MIT"
 authors = [{ name = "Cesare Scalia" }]
