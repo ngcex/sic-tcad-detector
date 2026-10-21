@@ -135,3 +135,15 @@ def test_export_allpix_fields_2d_matches_1d(tmp_path):
     k = int(np.argmin(np.abs(zdep - 2.0)))
     assert v[10, 0, k, 2] == pytest.approx(np.interp(zdep[k], r1.x, r1.y), rel=0.02)
     assert np.max(np.abs(v[..., 0])) < 1e-3 * np.max(v[..., 2])
+
+
+def test_tracks_to_dataframe_uses_chord_midpoint():
+    ev = mt.sample_track_events("proton", 62.0, irradiation="isotropic", n_events=2000,
+                                seed=7)
+    df = mx.tracks_to_dataframe(ev)
+    # entry points sit on faces; midpoints are inside the SV
+    assert np.all(np.abs(df["x_cm"]) <= 50e-4 + 1e-12)
+    assert np.all((df["z_cm"] >= 0) & (df["z_cm"] <= 10e-4 + 1e-12))
+    on_side = np.abs(np.abs(ev.entry_um[:, 0]) - 50.0) < 1e-6
+    assert on_side.any()
+    assert np.all(np.abs(df["x_cm"][on_side]) < 50e-4 - 1e-9)

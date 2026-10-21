@@ -708,6 +708,29 @@ def _rotate_dir(dx, dy, dz, ct, ph):
     )
 
 
+@njit(cache=True)
+def _add_track_hits(hits, n_hits, i, nh, max_hits, p, d, s0, length, energy, hit_step):
+    """Record a primary deposit spread evenly over ceil(length / hit_step) points of the
+    path [s0, s0 + length] (recording only: the sampled step is unchanged)."""
+    nseg = 1
+    if length > 0.0 and hit_step > 0.0:
+        nseg = max(1, int(math.ceil(length / hit_step - 1e-9)))
+    e = energy / nseg
+    for k in range(nseg):
+        sk = s0 + (k + 0.5) * length / nseg
+        if nh < max_hits:
+            hits[i, nh, 0] = p[0] + sk * d[0]
+            hits[i, nh, 1] = p[1] + sk * d[1]
+            hits[i, nh, 2] = p[2] + sk * d[2]
+            hits[i, nh, 3] = e
+            hits[i, nh, 4] = 1.0
+            nh += 1
+        else:
+            hits[i, max_hits - 1, 3] += e
+            n_hits[i, 1] += 1
+    return nh
+
+
 @njit(cache=True, parallel=True)
 def _transport_kernel(
     n,
@@ -747,6 +770,7 @@ def _transport_kernel(
     rfac,
     step_frac,
     max_hits,
+    hit_step,
     hits,
     n_hits,
     edep,
@@ -800,6 +824,10 @@ def _transport_kernel(
             if E <= E_min:
                 if inside:
                     dep_p += E
+                    if max_hits > 0:
+                        nh = _add_track_hits(
+                            hits, n_hits, i, nh, max_hits, p, d, s, 0.0, E, hit_step
+                        )
                 stop_s[i] = s
                 E = 0.0
                 alive = False
@@ -811,6 +839,10 @@ def _transport_kernel(
                 # stops within this step: deposit the rest (electronic), end of range
                 if inside:
                     dep_p += E
+                    if max_hits > 0:
+                        nh = _add_track_hits(
+                            hits, n_hits, i, nh, max_hits, p, d, s, R, E, hit_step
+                        )
                 stop_s[i] = s + R
                 E = 0.0
                 alive = False
@@ -865,21 +897,12 @@ def _transport_kernel(
                 ion_thr,
             )
             dE = loss + (mean_tot - mean_el)
-            sm = s + 0.5 * ds
             if inside:
                 dep_p += loss
                 if max_hits > 0:
-                    k = nh if nh < max_hits else max_hits - 1
-                    if nh < max_hits:
-                        hits[i, k, 0] = p[0] + sm * d[0]
-                        hits[i, k, 1] = p[1] + sm * d[1]
-                        hits[i, k, 2] = p[2] + sm * d[2]
-                        hits[i, k, 3] = loss
-                        hits[i, k, 4] = 1.0
-                        nh += 1
-                    else:
-                        hits[i, k, 3] += loss
-                        n_hits[i, 1] += 1
+                    nh = _add_track_hits(
+                        hits, n_hits, i, nh, max_hits, p, d, s, ds, loss, hit_step
+                    )
             for _j in range(nd_step):
                 # T from 1/T^2 between tcut and tmax, accept (1 - beta2 T / tmax)
                 T = tcut
@@ -1030,6 +1053,7 @@ def sample_track_events(
     step_fraction=0.05,
     max_hits=0,
     event_offset=0,
+    hit_step_um=1.0,
 ):
     """Sample ``n_events`` primary tracks through a box SV and score the deposits.
 
@@ -1066,6 +1090,10 @@ def sample_track_events(
     max_hits : int
         > 0 records up to this many energy deposits per event (positions + energy) for
         the hit-list exchange (:mod:`etna.core.mc_exchange`).
+    hit_step_um : float
+        Recorded primary deposits are spread over points <= this far apart along the
+        path (default 1 um, Allpix DepositionGeant4's ``max_step_length``); recording
+        only, the sampled steps (and every distribution) are unchanged.
     """
     if fluctuations is None:
         fluctuations = default_fluctuation_model(particle)
@@ -1076,6 +1104,8 @@ def sample_track_events(
         raise ValueError("sv_um must be three positive finite sizes (um)")
     if not (0.0 < step_fraction <= 0.5):
         raise ValueError("step_fraction must be in (0, 0.5]")
+    if not (hit_step_um > 0):
+        raise ValueError("hit_step_um must be > 0")
     if surround_um < 0 or delta_range_factor <= 0:
         raise ValueError("surround_um must be >= 0 and delta_range_factor > 0")
     n_events = int(n_events)
@@ -1162,6 +1192,7 @@ def sample_track_events(
         float(delta_range_factor),
         float(step_fraction),
         nh,
+        float(hit_step_um) * 1e-4,
         hits,
         n_hits,
         out["edep"],

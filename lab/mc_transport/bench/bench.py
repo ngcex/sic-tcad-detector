@@ -212,7 +212,12 @@ def main():
         "7. Lineal energy: deterministic LET x chord baseline (ETNA before) vs sampled"
     )
     print(
-        f"{'case':38s} {'yF base':>8s} {'yF MC':>8s} {'yD base':>8s} {'yD MC':>8s} {'yD/yD_base':>10s}"
+        "columns: base = deterministic LET x chord; local = straggling only (all loss "
+        "local, no delta escape);\n bare = straggling + delta rays, SV in vacuum; "
+        "embedded = same with 300 um SiC around the SV (alpha: 5 um),\n crossing events only (delta equilibrium)"
+    )
+    print(
+        f"{'case':36s} {'':4s} {'base':>8s} {'local':>8s} {'bare':>8s} {'embedded':>8s}"
     )
     for part, E, irr in [
         ("proton", 62.0, "normal"),
@@ -223,22 +228,23 @@ def main():
         ("alpha", 5.486, "normal"),
     ]:
         lb = mr.default_l_bar_um((100, 100, 10), irr)
-        b = mt.sample_track_events(
-            part,
-            E,
-            n_events=N // 2,
-            irradiation=irr,
-            fluctuations="none",
-            delta_rays=False,
-            seed=16,
-        )
-        m = mt.sample_track_events(part, E, n_events=N // 2, irradiation=irr, seed=16)
-        mb = mr.lineal_moments(b.edep_keV, lb)
-        mm = mr.lineal_moments(m.edep_keV, lb)
-        print(
-            f"{part} {E:7.1f} MeV {irr:10s} (l={lb:5.2f}) {mb['y_F']:8.3f} {mm['y_F']:8.3f} "
-            f"{mb['y_D']:8.3f} {mm['y_D']:8.3f} {mm['y_D'] / mb['y_D']:10.3f}"
-        )
+        kw = dict(n_events=N // 2, irradiation=irr, seed=16)
+        sur = 5.0 if part == "alpha" else 300.0  # the alpha would stop in 300 um
+        runs = [
+            mt.sample_track_events(part, E, fluctuations="none", delta_rays=False, **kw),
+            mt.sample_track_events(part, E, delta_rays=False, **kw),
+            mt.sample_track_events(part, E, **kw),
+            mt.sample_track_events(part, E, surround_um=sur, **kw),
+        ]
+        # embedded: SV-crossing events only (delta-only near-miss events, real but
+        # removed by any threshold, would dominate the count in a broad beam)
+        emb = runs[3]
+        runs[3] = emb.edep_keV[emb.chord_um > 0]
+        mom = [mr.lineal_moments(r if isinstance(r, np.ndarray) else r.edep_keV, lb)
+               for r in runs]
+        tag = f"{part} {E:7.1f} MeV {irr:10s} (l={lb:5.2f})"
+        print(f"{tag:36s} y_F  " + " ".join(f"{m['y_F']:8.3f}" for m in mom))
+        print(f"{'':36s} y_D  " + " ".join(f"{m['y_D']:8.3f}" for m in mom))
 
     section(
         "8. Throughput (numba float64, parallel; events/s, 62 MeV p, delta rays on)"

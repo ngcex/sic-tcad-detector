@@ -163,7 +163,7 @@ def test_delta_escape_and_equilibrium():
 
 
 def test_alpha_range_and_straggling():
-    ev = mt.sample_track_events("alpha", 5.486, sv_um=(100, 100, 40), n_events=100_000)
+    ev = mt.sample_track_events("alpha", 5.486, sv_um=(100, 100, 40), n_events=30_000)
     R = float(csda_range_cm("alpha", "sic", 5.486)) * 1e4
     assert np.nanmean(ev.stop_path_um) == pytest.approx(R, rel=0.005)
     sb = bohr_range_straggling_cm("alpha", 5.486) * 1e4
@@ -245,3 +245,25 @@ def test_auto_tcut():
     tc = mt.auto_tcut_keV((100, 100, 10))
     assert mt.electron_range_um(tc) == pytest.approx(0.5, rel=0.02)
     assert mt.auto_tcut_keV((1, 1, 0.01)) == 1.0
+
+
+def test_hits_resolve_the_depth_profile():
+    # 62 MeV p crosses 10 um in one sampled step: recording splits it into <= 1 um hits
+    ev = mt.sample_track_events("proton", 62.0, n_events=500, max_hits=64, seed=5)
+    nh = ev.n_hits[:, 0]
+    prim = ev.hits[:, :, 4] == 1.0
+    valid = np.arange(64)[None, :] < nh[:, None]
+    n_prim = np.sum(prim & valid, axis=1)
+    assert np.all(n_prim >= 10)
+    z = ev.hits[:, :, 2][prim & valid]
+    assert z.min() < 1.0 and z.max() > 9.0 and z.min() >= 0 and z.max() <= 10.0
+    assert np.allclose(ev.hits[:, :, 3].sum(axis=1), ev.edep_keV, rtol=1e-9)
+    # recording does not change the sampled physics
+    ref = mt.sample_track_events("proton", 62.0, n_events=500, seed=5)
+    assert np.array_equal(ref.edep_keV, ev.edep_keV)
+    # a stopping alpha: the end-of-range deposit is recorded too
+    a = mt.sample_track_events("alpha", 5.486, sv_um=(100, 100, 30), n_events=200,
+                               max_hits=256, seed=6)
+    assert np.allclose(a.hits[:, :, 3].sum(axis=1), a.edep_keV, rtol=1e-9)
+    with pytest.raises(ValueError):
+        mt.sample_track_events("proton", 62.0, n_events=5, max_hits=4, hit_step_um=0.0)

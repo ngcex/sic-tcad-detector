@@ -230,11 +230,14 @@ def read_deposition_csv(
 
 def tracks_to_dataframe(events):
     """Event-level DataFrame of sampled tracks for ``process_mc_ensemble``: one row per
-    event with edep_keV, the SV-entry position (cm), ``ekin_MeV`` = kinetic energy at SV
-    entry (for the kappa(E) lookup) and ``track_id`` = 1."""
+    event with edep_keV, the chord MIDPOINT in the SV (cm; the lateral position used by
+    ``cce_lateral`` weighting, not the entry point, which lies on a side face for
+    isotropic tracks), ``ekin_MeV`` = kinetic energy at SV entry (for the kappa(E)
+    lookup) and ``track_id`` = 1. Tracks that miss the SV get position 0."""
     import pandas as pd
 
-    ent = np.nan_to_num(events.entry_um, nan=0.0) * 1e-4
+    mid = events.entry_um + 0.5 * events.chord_um[:, None] * events.direction
+    ent = np.nan_to_num(mid, nan=0.0) * 1e-4
     return pd.DataFrame(
         {
             "event_id": np.arange(events.n_events),

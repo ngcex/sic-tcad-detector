@@ -785,7 +785,8 @@ A numba float64 parallel condensed-history sampler for `"proton"`, `"alpha"` and
 
 It returns `TrackEvents`: `edep_keV` (= primary + delta part), `chord_um`,
 `E_sv_entry_MeV`, entry point and direction, `stop_path_um` and optional `hits`
-(`max_hits>0`). The deterministic baseline is
+(`max_hits>0`; recorded primary deposits are spread over points `hit_step_um` = 1 um
+apart, recording only). The deterministic baseline is
 `fluctuations="none", delta_rays=False`, which gives exactly the CSDA mean along the chord
 (`mean_csda_deposit_keV`).
 
@@ -808,8 +809,8 @@ It returns `TrackEvents`: `edep_keV` (= primary + delta part), `chord_um`,
   unit_energy="MeV")` reads the Allpix `DepositionReader` CSV (`Event: N` headers from
   0, `pdg, t, E, x, y, z, detector, track, parent`).
   - The read DataFrame goes straight into `process_mc_ensemble`.
-  - `tracks_to_dataframe(events)` gives one row per event with `ekin_MeV` (SV-entry
-    energy) for the kappa(E) lookup.
+  - `tracks_to_dataframe(events)` gives one row per event: position at the chord
+    midpoint, plus `ekin_MeV` (SV-entry energy) for the kappa(E) lookup.
 - `write_init` / `read_init` handle the Allpix INIT field format, laid out as
   `FieldParser::parse_init_file` reads it: 1-based i j k, z fastest, header sizes
   (thickness, x, y) in um, values on cells, z from the back to the implant side.
@@ -837,7 +838,7 @@ m = mr.lineal_moments(ev.edep_keV, 10.0)
 print(round(m["y_F"], 2), round(m["y_D"], 2))  # 2.53 2.85 (bare SV; deterministic LET x t: 2.77 2.77)
 ```
 
-Benchmarks: `uv run python lab/mc_transport/bench/bench.py` (about 25 s; numbers in
+Benchmarks: `uv run python lab/mc_transport/bench/bench.py` (25-100 s, depending on machine load; numbers in
 `lab/mc_transport/notes/LOG.md`).
 
 - **Consistency (not validation; same tables).** The mean deposit equals the NIST CSDA
@@ -853,8 +854,15 @@ Benchmarks: `uv run python lab/mc_transport/bench/bench.py` (about 25 s; numbers
   the Bohr integral 0.165 um.
 - **Delta rays.** A bare 10 um SV keeps 0.914 of the mean (62 MeV p). A 100-300 um SiC
   surround restores 1.01.
-- **Speed.** 10 M events/s on 10 threads, 2 M events/s on 1. A GPU port was not
-  attempted: one spectrum takes under 1 s on the CPU.
+- **Effects separated (62 MeV p, normal beam).**
+  - Straggling alone keeps y_F (2.77) and raises y_D from 2.77 to 3.62.
+  - Delta-ray escape from a bare SV lowers y_F to 2.53 and y_D to 2.85.
+  - A 300 um SiC surround brings them back to 2.75 / 3.23.
+  - The bare-SV default is therefore not a detector prediction for an SV inside a chip:
+    set `surround_um` to the real overlayer/substrate.
+- **Speed.** 10 M events/s on 10 threads and 2 M events/s on 1 (Apple M4, light load),
+  falling to 2-4 M events/s under load average 45-110. A GPU port was not attempted: one
+  spectrum takes under 1 s on the CPU.
 
 Not modelled:
 

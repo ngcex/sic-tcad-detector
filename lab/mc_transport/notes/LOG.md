@@ -90,33 +90,57 @@ The 1 % above 1 with a surround comes from slowing in the upstream SiC.
 2.598 / 2.959. At T_cut = T_max (139 keV, all loss local, no escape) it is
 2.767 / 3.606.
 
-**7. Lineal energy, deterministic LET x chord (ETNA before) vs sampled (bare SV).**
+**7. Lineal energy: what changes vs the deterministic LET x chord (ETNA before).**
+Four columns separate the effects:
 
-| case                     | y_F before -> after | y_D before -> after |
-| ------------------------ | ------------------- | ------------------- |
-| p 62 MeV, normal         | 2.771 -> 2.530      | 2.771 -> 2.845      |
-| p 62 MeV, isotropic      | 2.774 -> 2.561      | 4.595 -> 4.502      |
-| p 150 MeV, normal        | 1.441 -> 1.269      | 1.441 -> 1.618      |
-| C-12 290 MeV/u           | 34.51 -> 29.73      | 34.51 -> 30.09      |
-| C-12 62 MeV/u, isotropic | 99.5 -> 91.9        | 165.3 -> 153.8      |
-| alpha 5.486 MeV          | unchanged (235.3)   | unchanged (235.3)   |
+- **base**: deterministic, no fluctuations, no delta rays;
+- **local**: straggling only, all loss local (T_cut = T_max);
+- **bare**: straggling + delta rays, SV in vacuum;
+- **embedded**: bare + 300 um SiC around the SV (5 um for the alpha), SV-crossing
+  events only.
 
-Before, y_D = y_F for a normal beam, because there was no straggling at all.
+| case | y_F base / local / bare / embedded | y_D base / local / bare / embedded |
+|---|---|---|
+| p 62 MeV, normal | 2.771 / 2.769 / 2.530 / 2.751 | 2.771 / 3.618 / 2.845 / 3.228 |
+| p 62 MeV, isotropic (l 16.67) | 2.774 / 2.774 / 2.561 / 2.743 | 4.595 / 5.103 / 4.502 / 4.587 |
+| p 150 MeV, normal | 1.441 / 1.442 / 1.269 / 1.373 | 1.441 / 3.399 / 1.618 / 1.860 |
+| C-12 290 MeV/u, normal | 34.51 / 34.50 / 29.73 / 31.45 | 34.51 / 38.23 / 30.09 / 31.96 |
+| C-12 62 MeV/u, isotropic | 99.5 / 99.5 / 91.9 / 100.6 | 165.3 / 165.9 / 153.8 / 157.9 |
+| alpha 5.486 MeV, normal | 235.3 / 235.3 / 235.3 / 297.8 | 235.3 / 235.3 / 235.3 / 297.8 |
 
-**8. Throughput (62 MeV p, delta rays on).**
+How to read it:
 
-| events | events/s            |
-| ------ | ------------------- |
-| 1e4    | 6.2 M               |
-| 1e5    | 8.5 M               |
-| 1e6    | 9.8 M               |
-| 4e6    | 10.0 M (10 threads) |
+- **Straggling** leaves y_F unchanged (mean preserved) and raises y_D. For a normal beam
+  y_D was equal to y_F before; it is now 1.3x higher at 62 MeV and 2.4x at 150 MeV with
+  all loss local.
+- **Delta-ray escape** from a bare SV lowers both: y_F by 9 % for p 62 MeV and 14 % for
+  C-12 290 MeV/u, and it cuts the high tail of y_D.
+- **A SiC surround** restores most of the escaped energy: y_F within 1 % of base for
+  protons and 9 % below it for C-12 at 290 MeV/u (its delta rays reach 0.6 MeV, beyond
+  300 um of equilibrium for a 10 um SV seen by a 100 um face).
+- **The alpha "embedded" row** reflects the degraded beam (5 um of SiC upstream raises
+  its LET), not delta rays.
+- **The bare-SV default is not a detector prediction** for an SV inside a SiC chip: use
+  `surround_um` with the real overlayer/substrate.
+- **Delta-only events.** With a broad beam and a surround, delta-only near-miss events
+  (chord 0, deposit > 0) are real events. They dominate the count without a threshold:
+  for C-12 290 MeV/u, normal beam, y_F drops to 13.9 if they are included.
 
-On 1 thread it is 2.05 M events/s.
+**8. Throughput (62 MeV p, delta rays on, 10 numba threads, Apple M4).** The machine
+was shared with other agents' jobs, so the numbers depend on load.
 
-GPU was not attempted. A converged spectrum (rel. SE 0.3 % on y_D) needs about 4e5 events
-in 40 ms. The GPU float32 tail sampling (1/T^2, logs of tiny losses) would need an error
-bound, and the earlier MLX spike was a negative result.
+| run | load average | 1e4 events | 1e5 events | 1e6 events | 4e6 events | 1 thread, 1e6 events |
+|---|---|---|---|---|---|---|
+| first | about 10-25 | 6.2 M/s | 8.5 M/s | 9.8 M/s | 10.0 M/s | 2.05 M/s |
+| final `bench.out` | 45-110 | 1.9 M/s | | 3.9 M/s | | 0.69 M/s |
+
+Either way it is above the 1e6 events/s acceptance target.
+
+GPU was not attempted:
+
+- A converged spectrum (rel. SE 0.3 % on y_D) needs about 4e5 events, i.e. 40-100 ms.
+- GPU float32 tail sampling (1/T^2, logs of tiny losses) would need an error bound.
+- The earlier MLX spike was a negative result.
 
 **9. Nuclear interactions (not modelled).** The probability per 10 um SiC traversal for
 C-12 is 1.1e-4 at 100 MeV/u and 1.0e-4 at 290 MeV/u. This uses sigma_R from the Tripathi
