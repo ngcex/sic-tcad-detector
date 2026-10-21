@@ -294,3 +294,28 @@ positive = n-type". The opened Allpix module source does not state the sign conv
     neutron_niel (coverage gap only).
 - **App caching:** no `st.cache_*` in use. Session caches keep the source object next to
   id keys, and caches are capped except on the figures page (memory only).
+
+---
+
+## Resolution (2026-10-21, branch worktree-agent-ad02bbb6dea5fe590)
+
+Each fix has a regression test that fails on edf4483 and passes after the fix.
+
+| # | commit | test |
+| --- | --- | --- |
+| 1 (#17) | c397508 | `tests/test_mc_rng_streams.py`: lag-1 0.72 -> 0.006; seed scatter / SE 1.99 / 1.53 -> 0.99 / 0.94 |
+| 2 (#18) | 6cf3d35 | `tests/test_mc_response.py::test_default_l_bar_is_sampled_mean_chord` |
+| 3 (#19) | 3a4dd96 | `tests/test_mc_exchange_allpix_depth.py`: the Allpix placement rule keeps 53.2 V |
+| 4 (#20) | 72d0ace | `tests/test_measurements_rebuild_code.py` |
+| 5-17 | 39dbe7f, d38387f | `tests/test_audit_v8_minors.py` |
+
+Notes on the minor findings:
+
+- **12.** On main, a neutron -> proton switch was already flagged, but only through the
+  fluence and energy keys, which change with the particle. The particle key itself is
+  now always compared.
+- **13, 14, 15 and 10.** The page-level changes (1D doping traces, figures stale key,
+  microdosimetry content hash, captions, Run All text) have no new dedicated AppTest.
+  The existing page tests pass.
+- **Unverified item (DopingProfileReader sign, positive = n-type).** Still unverified.
+  The `mc_exchange` docstring now says so.
