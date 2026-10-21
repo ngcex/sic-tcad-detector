@@ -52,6 +52,7 @@ SPLIT_PER_PARAM = (
 # unit (file, file::Class or full nodeid of a split test) -> approx. seconds
 HEAVY = {
     "tests/test_single_particle.py::TestBuildCCELetTableSmallMesh": 160,
+    "tests/test_track_engine.py": 40,
     "tests/test_device2d_convergence.py::TestReverseBiasConvergence::test_converges_at_minus_50V_300um": 150,
     "tests/test_engine2d.py::test_sweep_row_failing_config_hw25": 150,
     "tests/test_devsim_quiet.py::test_set_devsim_quiet_silences_direct_core_calls": 130,

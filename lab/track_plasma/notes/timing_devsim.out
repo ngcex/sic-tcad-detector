@@ -1,0 +1,13 @@
+0     fast      6930    1 0.999969 1.33709 1.84076    126   27    1801
+1     fast      6930 1000 0.999868 3.73682 4.96088    164  120    3691
+2  default     13671    1 0.999973 2.94156 3.77331    134   26    1794
+3  default     13671 1000 0.999861 10.3059 12.5953    192  151    4284
+devsim build_cce_let_table (2D Cartesian sheet, hw 50, 3 LETs, full): 140.3 s
+   LET_keV_um  Q_generated_fC  Q_collected_fC      CCE  CCE_raw  converged  t_collection_ns  simulated
+0           1        0.103848        0.103845 0.999967 0.999967       True         0.116787       True
+1     31.6228         3.28396         3.28386  0.99997  0.99997       True         0.116788       True
+2        1000         103.848         103.845  0.99997  0.99997       True         0.116829       True
+track engine LET 1: CCE 0.9999686 (wall 1.1 s)
+track engine LET 31.6228: CCE 0.9999684 (wall 1.2 s)
+track engine LET 1000: CCE 0.9999490 (wall 1.9 s)
+[timing] 163.3 s
