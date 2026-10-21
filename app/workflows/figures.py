@@ -119,7 +119,11 @@ OBSERVABLES = {
         "Validation: tilted-alpha shape vs Micro Fig. 4b (microdosimeter preset)",
         "any",
         False,
-        "Shape only, against digitised read-off estimates; NOT reproduced.",
+        "Shape only, against digitised read-off estimates; NOT reproduced. The "
+        "tilted-track plasma model (etna.run_tilted_alpha_track, minutes per curve) "
+        "does not reproduce it either with the library lifetimes; its -20..-50 V tail "
+        "calibrates tau_n+tau_p ~ 23 ns (~100x below good epi), and the core radius is "
+        "not constrained (docs/USAGE.md 19.3).",
     ),
     "val_creep": (
         "Validation: W creep vs Photons Fig. 4b labels (1D graded epi / n-/n+)",

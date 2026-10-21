@@ -1,0 +1,33 @@
+R = 5 um                       E=1.45e+04  loss=6.2449e-04  ledger=2e-08 conv=True steps=209 2.4s
+R = 10 um                      E=1.45e+04  loss=8.0865e-04  ledger=7e-09 conv=True steps=224 2.9s
+R = 20 um                      E=1.45e+04  loss=9.7164e-04  ledger=3e-08 conv=True steps=238 3.5s
+gradient N_space 0.82e14, R 10 E=1.45e+04  loss=9.1235e-04  ledger=3e-08 conv=True steps=226 3.0s
+gradient N_space 0.82e14, R 20 E=1.45e+04  loss=1.2766e-03  ledger=3e-08 conv=True steps=255 3.9s
+mesh r_min 0.25 nm, x1.25      E=1.45e+04  loss=8.3579e-04  ledger=3e-08 conv=True steps=238 5.9s
+WHK s = 1 nm                   E=1.45e+04  loss=5.6094e-03  ledger=4e-08 conv=True steps=274 3.4s
+WHK s = 50 nm                  E=1.45e+04  loss=6.7559e-04  ledger=2e-08 conv=True steps=189 2.4s
+Gaussian 300 nm                E=1.45e+04  loss=6.3231e-04  ledger=1e-08 conv=True steps=132 1.8s
+LET 1 (linear)                 E=1.45e+04  loss=5.9699e-06  ledger=4e-08 conv=True steps=269 3.2s
+Auger off                      E=1.45e+04  loss=6.7133e-04  ledger=3e-08 conv=True steps=224 2.8s
+Auger injection                E=1.45e+04  loss=6.8292e-04  ledger=3e-08 conv=True steps=224 3.0s
+carrier-carrier scattering     E=1.45e+04  loss=2.6711e-03  ledger=2e-08 conv=True steps=190 2.8s
+frozen-field v_sat             E=1.45e+04  loss=1.0543e-03  ledger=3e-08 conv=True steps=224 2.9s
+tau x1/10                      E=1.45e+04  loss=6.7985e-03  ledger=3e-08 conv=True steps=225 2.8s
+tau x1/30                      E=1.45e+04  loss=1.9790e-02  ledger=3e-08 conv=True steps=225 2.9s
+R = 5 um                       E= 4.2e+04  loss=2.2741e-04  ledger=2e-08 conv=True steps=197 2.1s
+R = 10 um                      E= 4.2e+04  loss=2.4454e-04  ledger=2e-08 conv=True steps=212 2.7s
+R = 20 um                      E= 4.2e+04  loss=2.5529e-04  ledger=2e-08 conv=True steps=225 3.1s
+gradient N_space 0.82e14, R 10 E= 4.2e+04  loss=2.4762e-04  ledger=2e-08 conv=True steps=210 2.6s
+gradient N_space 0.82e14, R 20 E= 4.2e+04  loss=2.6178e-04  ledger=2e-08 conv=True steps=223 3.2s
+mesh r_min 0.25 nm, x1.25      E= 4.2e+04  loss=2.5100e-04  ledger=2e-08 conv=True steps=225 5.4s
+WHK s = 1 nm                   E= 4.2e+04  loss=5.0492e-03  ledger=3e-08 conv=True steps=262 3.3s
+WHK s = 50 nm                  E= 4.2e+04  loss=1.1200e-04  ledger=1e-08 conv=True steps=181 2.4s
+Gaussian 300 nm                E= 4.2e+04  loss=8.6901e-05  ledger=7e-09 conv=True steps=138 1.7s
+LET 1 (linear)                 E= 4.2e+04  loss=7.0146e-07  ledger=4e-08 conv=True steps=274 3.2s
+Auger off                      E= 4.2e+04  loss=1.0780e-04  ledger=2e-08 conv=True steps=212 2.7s
+Auger injection                E= 4.2e+04  loss=1.1905e-04  ledger=2e-08 conv=True steps=212 2.7s
+carrier-carrier scattering     E= 4.2e+04  loss=2.0966e-03  ledger=2e-08 conv=True steps=177 2.6s
+frozen-field v_sat             E= 4.2e+04  loss=4.7108e-04  ledger=2e-08 conv=True steps=209 2.7s
+tau x1/10                      E= 4.2e+04  loss=1.2130e-03  ledger=2e-08 conv=True steps=212 2.6s
+tau x1/30                      E= 4.2e+04  loss=3.3559e-03  ledger=2e-08 conv=True steps=211 2.7s
+[slices] 96.5 s

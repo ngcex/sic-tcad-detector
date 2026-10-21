@@ -85,7 +85,7 @@ What ETNA is **not**:
 | Doping profile N_D(x)                                     | **inferred**, not measured                                  | inversion of one C-V curve; bulk 3.4e13 is below the documented 0.5-1e14; no SIMS                                                                                          | section 8                                                                                                                   |
 | Full-depletion voltage                                    | **definition-dependent**                                    | analytic V_fd 2.74 V, reach-through 3.10 V, sweep gate 1.2 V_fd = 3.28 V (default stack)                                                                                   | `etna.export.labels.VFD_DEFINITION`                                                                                         |
 | CCE vs bias (1D, alpha in epi)                            | **model** (low injection, steady state)                     | engine verified vs devsim; no measured CCE reproduced for the dosimeter                                                                                                    | `run_cce` docstring                                                                                                         |
-| Microdosimeter alpha CCE shape (Fig. 4b, Phys. Med. 2025) | **not reproduced**                                          | flat to 0.7 % from 0 V in the model; data drop to 0.908 at 0 V                                                                                                             | `run_cce_tilted_alpha` docstring, `lab/microdosimeter/notes/LOG.md` §9                                                      |
+| Microdosimeter alpha CCE shape (Fig. 4b, Phys. Med. 2025) | **not reproduced** (calibration only) | 1D: flat to 0.7 % from 0 V; tilted track + plasma (2.5D) with library lifetimes: rms 0.033. The −20..−50 V tail needs τ_n+τ_p ≈ 23 ns (band 17-42), ~100x below good epi; 0..−10 V not fitted | `run_cce_tilted_alpha` docstring, `lab/microdosimeter/notes/LOG.md` §9, `lab/track_plasma/notes/LOG.md` §§10-12 |
 | Dark current                                              | **calibration** (budget estimate)                           | one N_t fitted to < 18 pA at -60 V, 4 mm²; bias shape f_depl heuristic x Hurkx (1+Gamma), temperature shape assumed                                                        | `run_dark_current`, DESIGN-1                                                                                                |
 | CCE vs proton fluence                                     | **relative shape only**                                     | NIEL hardness factors: SR-NIEL data, Si-neq convention (SiC normalisation open); points at or beyond the compensation fluence are NaN                                      | `run_radiation_damage` docstring                                                                                            |
 | FLASH dose-rate CCE                                       | **numerical sensitivity bound**                             | no plasma or high-injection physics                                                                                                                                        | `run_flash_recombination`, `run_transient` docstrings                                                                       |
@@ -549,11 +549,11 @@ shapes.
 `trap_compensation_fluence` and `default_fluence_grid` take `particle=` and
 `niel_convention=` (keywords), and the core functions take `niel_table=`:
 
-| convention | kappa | 62 MeV proton |
-| ---------- | ----- | ------------- |
-| `si-neq` (default, unchanged) | NIEL_x,Si(E) / NIEL_n,Si(1 MeV, ASTM) | 1.942 |
-| `sic-damage` | NIEL_x,SiC(E) / (r_n NIEL_n,Si(1 MeV)): same SiC damage as the Si-labelled reactor neq of the rates | 1.552 |
-| `sic-1mev` | NIEL_x,SiC(E) / NIEL_n,SiC(1 MeV): SiC-native neq | 1.470 |
+| convention                    | kappa                                                                                               | 62 MeV proton |
+| ----------------------------- | --------------------------------------------------------------------------------------------------- | ------------- |
+| `si-neq` (default, unchanged) | NIEL_x,Si(E) / NIEL_n,Si(1 MeV, ASTM)                                                               | 1.942         |
+| `sic-damage`                  | NIEL_x,SiC(E) / (r_n NIEL_n,Si(1 MeV)): same SiC damage as the Si-labelled reactor neq of the rates | 1.552         |
+| `sic-1mev`                    | NIEL_x,SiC(E) / NIEL_n,SiC(1 MeV): SiC-native neq                                                   | 1.470         |
 
 `particle="neutron"` reads the fluences as neutrons and the energy as the neutron energy
 (bin-averaged NJOY table, 1/20 decade bins, ~1e-5 to 18.9 MeV, no extrapolation; 1 MeV:
@@ -1069,7 +1069,7 @@ apart, recording only). The deterministic baseline is
 **`etna.core.mc_exchange`** (file formats only; no Allpix, Geant4 or ROOT install)
 
 - `write_deposition_csv(path, events)` writes and `read_deposition_csv(path, unit_length="mm",
-  unit_energy="MeV")` reads the Allpix `DepositionReader` CSV (`Event: N` headers from
+unit_energy="MeV")` reads the Allpix `DepositionReader` CSV (`Event: N` headers from
   0, `pdg, t, E, x, y, z, detector, track, parent`).
   - The read DataFrame goes straight into `process_mc_ensemble`.
   - `tracks_to_dataframe(events)` gives one row per event: position at the chord
@@ -1087,6 +1087,7 @@ apart, recording only). The deterministic baseline is
 
   1D results give a laterally uniform map. 2D half-cell results are mirrored to a full
   plane (`PIXEL_FULL`).
+
 - These files are checked against the quoted parser layout and against each other, not in
   an Allpix run.
   - Allpix truncates E/W per deposit to an integer in `DepositionReader`, so avoid many
@@ -1430,7 +1431,7 @@ header carries solver, domain, config and version.
 | C-V Analysis            | `run_cv`                                                                        | max reverse bias (default -50 V), points (40)                                                                                                                                                                                                                                                                                          | C-V, Mott-Schottky, eps*A/C and depletion edge vs V, full-depletion marker, CSV                                                                                                                                                                                                                                                                                                                                  |
 | Charge Collection (CCE) | `run_cce`                                                                       | V_start (-10), V_stop (-40), points (30); reverse bias only                                                                                                                                                                                                                                                                            | CCE vs bias, CSV                                                                                                                                                                                                                                                                                                                                                                                                 |
 | Field Map               | `run_field`, 1D or 2D                                                           | reverse bias (default -50 V, down to -200)                                                                                                                                                                                                                                                                                             | 1D: E(x), potential, net doping, CSV. 2D: heatmap viewer (field, potential, doping)                                                                                                                                                                                                                                                                                                                              |
-| Radiation Damage        | `run_radiation_damage`                                                          | proton energy (30/62/70/150 MeV), fluence range (default 0.7e-3 to 0.7 x the compensation fluence; with the opt-in charged-traps checkbox (`radiation_traps=True`) 0.01 x it to 1e16 neq), points (6), bias (-20 V)                                                                                                                                                                                                           | CCE vs fluence with NaN gaps explained. A persistent banner says kappa is SR-NIEL (Si neq by default) and states r_n; particle (proton/neutron) and NIEL convention selectors (defaults proton / si-neq)                                                                                                                                                                                                                                                                               |
+| Radiation Damage        | `run_radiation_damage`                                                          | proton energy (30/62/70/150 MeV), fluence range (default 0.7e-3 to 0.7 x the compensation fluence; with the opt-in charged-traps checkbox (`radiation_traps=True`) 0.01 x it to 1e16 neq), points (6), bias (-20 V)                                                                                                                    | CCE vs fluence with NaN gaps explained. A persistent banner says kappa is SR-NIEL (Si neq by default) and states r_n; particle (proton/neutron) and NIEL convention selectors (defaults proton / si-neq)                                                                                                                                                                                                         |
 | Dark Current            | total leakage vs T at one bias (`ParametricSweep` over T of `run_dark_current`) | T range (250-400 K), points (6), bias (-20 V), advanced N_t                                                                                                                                                                                                                                                                            | I_total vs T, CSV. A calibration banner is shown; only the total is shown                                                                                                                                                                                                                                                                                                                                        |
 | Microdosimetry          | `run_microdosimetry`                                                            | MC events CSV upload, SV thickness (10 µm) and width (100 µm, depth = width)                                                                                                                                                                                                                                                           | y·d(y), y_F / y_D, CSV. Independent of the sidebar                                                                                                                                                                                                                                                                                                                                                               |
 | Batch Sweep             | `ParametricSweep`                                                               | one of epi thickness, p+ thickness, N_A, N_D junction, N_D bulk, transition length, T, area; comma-separated values; facade (CCE vs bias, C-V, CCE vs temperature)                                                                                                                                                                     | overlaid curves, bulk CSV, per-value failures listed                                                                                                                                                                                                                                                                                                                                                             |
@@ -2158,13 +2159,13 @@ print((t.metadata["t_e"] / t.metadata["t_e_low_field"]).round(2))   # [1.25 2.12
 
 `PhysicsModels` is frozen and hashable. Its fields take a registry name or a parameter-set instance:
 
-| Field | Registry names | Default |
-| --- | --- | --- |
-| `low_field_mobility` | `etna_default` (the solvers' Caughey-Thomas), `ayalew2004` (adds Ayalew's (T/300)^-0.5 on mu_min) | `etna_default` |
-| `high_field_mobility` | `lades2000`: mu = mu0 / (1 + (mu0 E / v_sat)^beta)^(1/beta), v_sat ~ T^-0.44, beta ~ T^1 | None |
-| `anisotropy` | `ayalew2004` (mu_n,par = 1.2 mu_n), `burin2024` (electrons x 1/0.83, holes x 1/1.15) | None |
-| `impact_ionization` | `hatakeyama2004` (default of `run_breakdown`), `niwa2015`, `zhao2019`, `loh2008`, `stefanakis2021`, `ayalew2004_legacy`; all are alpha = a (1 + c dT) exp(-[b (1 + d dT) / E]^m) | None |
-| `bandgap_narrowing` | `lades2000` (Slotboom: Delta E_g = C (F + sqrt(F^2 + 0.5)), F = ln(N / 1e17)) | None, registered only (below) |
+| Field                 | Registry names                                                                                                                                                                   | Default                       |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| `low_field_mobility`  | `etna_default` (the solvers' Caughey-Thomas), `ayalew2004` (adds Ayalew's (T/300)^-0.5 on mu_min)                                                                                | `etna_default`                |
+| `high_field_mobility` | `lades2000`: mu = mu0 / (1 + (mu0 E / v_sat)^beta)^(1/beta), v_sat ~ T^-0.44, beta ~ T^1                                                                                         | None                          |
+| `anisotropy`          | `ayalew2004` (mu_n,par = 1.2 mu_n), `burin2024` (electrons x 1/0.83, holes x 1/1.15)                                                                                             | None                          |
+| `impact_ionization`   | `hatakeyama2004` (default of `run_breakdown`), `niwa2015`, `zhao2019`, `loh2008`, `stefanakis2021`, `ayalew2004_legacy`; all are alpha = a (1 + c dT) exp(-[b (1 + d dT) / E]^m) | None                          |
+| `bandgap_narrowing`   | `lades2000` (Slotboom: Delta E_g = C (F + sqrt(F^2 + 0.5)), F = ln(N / 1e17))                                                                                                    | None, registered only (below) |
 
 **Validation is strict.** These are all errors:
 
@@ -2184,15 +2185,15 @@ Status **primary** means the numbers were read in the primary source. Status **s
 - J. Burin et al., "TCAD parameters for 4H-SiC: a review", arXiv:2410.06798, Tables XIII, XXVII, XXXIII and XXXIV;
 - the TU Wien thesis of T. Ayalew (2004).
 
-| Set | Status | Notes |
-| --- | --- | --- |
-| `hatakeyama2004` | primary: APL 85, 1380 (2004), doi:10.1063/1.1784520, Table I | <0001> and <11-20>; 300 K; fitted 2-5 MV/cm. The SISPAD-2005 anisotropic interpolation is `hatakeyama_anisotropic_alpha` (tested, not coupled into 2D) |
-| `niwa2015`, `zhao2019`, `loh2008`, `stefanakis2021` | secondary (review Table XIII) | Primaries not opened. The review flags Zhao 2019's hole c, d. The `niwa2015` 300-448 K and `stefanakis2021` 300-573 K ranges are ETNA assumptions. The `loh2008` direction is not stated in the review |
-| `ayalew2004_legacy` | primary, **legacy** | The review finds b_n carried over from 6H. It is off by +48 to +94 % against Hatakeyama's measured V_BD below. Do not use it for predictions |
-| `etna_default` / `ayalew2004` mobility | primary (Ayalew Table 3.5) | Perpendicular to c. The electron gamma -2.40 is Schaffer's <0001> value; the hole -2.15 is borrowed from electrons. `etna_default` keeps mu_min T-independent |
-| `lades2000` high-field | electrons primary (Ayalew Table 3.6); parallel-to-c and holes secondary (Nilsson 2000 MC) | **Hole beta and T laws are an assumption** (no published fit) |
-| `burin2024` / `ayalew2004` anisotropy | secondary / primary | |
-| `lades2000` BGN | primary (Ayalew Table 3.4) | Lindefelt's own four-term form is restated inconsistently by two secondaries, so it is not offered |
+| Set                                                 | Status                                                                                    | Notes                                                                                                                                                                                                  |
+| --------------------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `hatakeyama2004`                                    | primary: APL 85, 1380 (2004), doi:10.1063/1.1784520, Table I                              | <0001> and <11-20>; 300 K; fitted 2-5 MV/cm. The SISPAD-2005 anisotropic interpolation is `hatakeyama_anisotropic_alpha` (tested, not coupled into 2D)                                                 |
+| `niwa2015`, `zhao2019`, `loh2008`, `stefanakis2021` | secondary (review Table XIII)                                                             | Primaries not opened. The review flags Zhao 2019's hole c, d. The `niwa2015` 300-448 K and `stefanakis2021` 300-573 K ranges are ETNA assumptions. The `loh2008` direction is not stated in the review |
+| `ayalew2004_legacy`                                 | primary, **legacy**                                                                       | The review finds b_n carried over from 6H. It is off by +48 to +94 % against Hatakeyama's measured V_BD below. Do not use it for predictions                                                           |
+| `etna_default` / `ayalew2004` mobility              | primary (Ayalew Table 3.5)                                                                | Perpendicular to c. The electron gamma -2.40 is Schaffer's <0001> value; the hole -2.15 is borrowed from electrons. `etna_default` keeps mu_min T-independent                                          |
+| `lades2000` high-field                              | electrons primary (Ayalew Table 3.6); parallel-to-c and holes secondary (Nilsson 2000 MC) | **Hole beta and T laws are an assumption** (no published fit)                                                                                                                                          |
+| `burin2024` / `ayalew2004` anisotropy               | secondary / primary                                                                       |                                                                                                                                                                                                        |
+| `lades2000` BGN                                     | primary (Ayalew Table 3.4)                                                                | Lindefelt's own four-term form is restated inconsistently by two secondaries, so it is not offered                                                                                                     |
 
 ### Numerics
 
@@ -2205,11 +2206,11 @@ Status **primary** means the numbers were read in the primary source. Status **s
 
 A lagged (Gummel) avalanche term converges with ratio 1 - 1/M. On the default dosimeter (`lab/physics_models/bench/models_bench.py`, 2026-10-21, M4):
 
-| M | lagged sweeps / time | coupled outer x Newton / time |
-| --- | --- | --- |
-| 2.2 | 15 / 14 ms | 3 x 2 / 3.5 ms |
-| 34.5 | 136 / 186 ms | 3 x 2 / 12 ms |
-| 122 | 421 / 514 ms | 4 x 2 / 6 ms |
+| M    | lagged sweeps / time | coupled outer x Newton / time |
+| ---- | -------------------- | ----------------------------- |
+| 2.2  | 15 / 14 ms           | 3 x 2 / 3.5 ms                |
+| 34.5 | 136 / 186 ms         | 3 x 2 / 12 ms                 |
+| 122  | 421 / 514 ms         | 4 x 2 / 6 ms                  |
 
 Past V_BD the system is singular, and the solve reports `converged=False`. `run_avalanche` marks those points NaN ("at or beyond V_BD").
 
@@ -2227,14 +2228,14 @@ Past V_BD the system is singular, and the solve reports `converged=False`. `run_
 
 **Breakdown vs measurement.** Hatakeyama 2004 measured V_BD = 1940 (1e16/N_D)^0.8 V on (0001) p+n mesas (10 um epi, N_D 3e16-2e17). The table compares a modelled p+ / 10 um n / n+ diode. These coefficients were fitted on these same diodes, so for `hatakeyama2004` this is **consistency, not validation**. The other sets are independent comparisons and show the model spread:
 
-| N_D (cm^-3) | 3e16 | 5e16 | 1e17 | 2e17 |
-| --- | --- | --- | --- | --- |
-| measured fit (V) | 805.6 | 535.3 | 307.5 | 176.6 |
-| hatakeyama2004 | -0.6 % | -0.3 % | +1.8 % | +7.0 % |
-| niwa2015 | -6.4 % | -2.7 % | +5.2 % | +18.1 % |
-| zhao2019 | -10.8 % | -8.1 % | -2.1 % | +8.0 % |
-| loh2008 | -17.8 % | -14.6 % | -8.2 % | +2.0 % |
-| stefanakis2021 | -2.1 % | +4.3 % | +16.2 % | +33.5 % |
+| N_D (cm^-3)       | 3e16    | 5e16    | 1e17    | 2e17    |
+| ----------------- | ------- | ------- | ------- | ------- |
+| measured fit (V)  | 805.6   | 535.3   | 307.5   | 176.6   |
+| hatakeyama2004    | -0.6 %  | -0.3 %  | +1.8 %  | +7.0 %  |
+| niwa2015          | -6.4 %  | -2.7 %  | +5.2 %  | +18.1 % |
+| zhao2019          | -10.8 % | -8.1 %  | -2.1 %  | +8.0 %  |
+| loh2008           | -17.8 % | -14.6 % | -8.2 %  | +2.0 %  |
+| stefanakis2021    | -2.1 %  | +4.3 %  | +16.2 % | +33.5 % |
 | ayalew2004_legacy | +47.8 % | +55.7 % | +70.6 % | +93.9 % |
 
 The peak field at breakdown, against Hatakeyama's critical field F_C = 2.70 (1e16/N_D)^-0.1 MV/cm (SISPAD 2005), is between -1.6 and -3.2 % for `hatakeyama2004`.
@@ -2250,14 +2251,14 @@ The peak field at breakdown, against Hatakeyama's critical field F_C = 2.70 (1e1
 
 ### Effects on the outputs (default dosimeter, model vs default physics)
 
-| Output | Effect | Why |
-| --- | --- | --- |
-| C-V | none | Pure electrostatics; none of these models enters Poisson |
-| CCE (alpha, steady state) with `lades2000` | -5.0e-5 at -10 V to -6.5e-5 at -100 V | Slower carriers recombine slightly more; lifetime >> transit |
-| ... plus `burin2024` anisotropy | -1.7e-4 / -1.2e-4 | Holes are slower along c |
+| Output                                                   | Effect                                                       | Why                                                                                                                      |
+| -------------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| C-V                                                      | none                                                         | Pure electrostatics; none of these models enters Poisson                                                                 |
+| CCE (alpha, steady state) with `lades2000`               | -5.0e-5 at -10 V to -6.5e-5 at -100 V                        | Slower carriers recombine slightly more; lifetime >> transit                                                             |
+| ... plus `burin2024` anisotropy                          | -1.7e-4 / -1.2e-4                                            | Holes are slower along c                                                                                                 |
 | Electron transit time (full depleted width), `lades2000` | x1.25 at -10 V, x4.65 at -100 V (52.6 ps instead of 11.3 ps) | Velocity saturation is strong at 1e5 V/cm. Holes x1.05 to x1.85. This is what a pulse-shape / timing analysis should use |
-| CCE with avalanche, `hatakeyama2004` | 1.00001 at -1050 V, 1.0145 at -1525 V, 2.12 at -2000 V | APD-like gain only within ~25 % of V_BD; none at the operating -10 to -100 V (M - 1 < 1e-5) |
-| Dark current with avalanche | x1.0137 at -1525 V, x2.03 at -2000 V | Multiplication of the TAT effective generation; see the note below |
+| CCE with avalanche, `hatakeyama2004`                     | 1.00001 at -1050 V, 1.0145 at -1525 V, 2.12 at -2000 V       | APD-like gain only within ~25 % of V_BD; none at the operating -10 to -100 V (M - 1 < 1e-5)                              |
+| Dark current with avalanche                              | x1.0137 at -1525 V, x2.03 at -2000 V                         | Multiplication of the TAT effective generation; see the note below                                                       |
 
 **The dark current with avalanche** uses the TAT effective generation and the Z1/2 SRH level **without** the Hurkx (1 + Gamma) factor, whose closed form is invalid above about 1.1e6 V/cm. Its absolute value is therefore below `run_dark_current`'s at the same bias. Read it as a multiplication factor (`metadata["gain"]`).
 
@@ -2292,7 +2293,7 @@ All three are 1D only. They refuse 2D configs, `radiation_traps`, and `bandgap_n
 
 The track engine solves one ion track in the default stack (or any `DeviceConfig`), axisymmetric in (r, z) at normal incidence. It models the dense track core, plasma (columnar) recombination by SRH + Auger, the pulse-height defect (PHD) and, opt-in, the lattice temperature.
 
-It is a separate engine. Nothing in the `run_*` facades calls it, and `build_cce_let_table` (2D Cartesian sheet track, linear) is unchanged. Issue #9; numbers and commands are in `lab/track_plasma/notes/LOG.md`.
+It is a separate, opt-in engine with its own facades (`run_track_event`, `run_track_cce_let`, `run_tilted_alpha_track`, section 19.2). No other `run_*` facade calls it, and `build_cce_let_table` (2D Cartesian sheet track, linear) is unchanged. Issue #9; numbers and commands are in `lab/track_plasma/notes/LOG.md`.
 
 ```python
 from etna import DeviceConfig
@@ -2327,6 +2328,7 @@ r = simulate_track(DeviceConfig(), LET_keV_um=let, V_bias=50.0, region="all",
 - **CCE.** `TrackResult.cce` is the induced charge from the pair balance: 1 − (recombined + wrong-contact minority + stored)/N_gen. The direct majority-carrier contact sums (`cce_cathode`) carry about 1e-5 of float64 round-off in the 1e19 layers.
 
 **Checks** (`tests/test_track_engine.py`):
+
 - Each run reports `ledger_residual` (pairs) and `extra["quad_err"]`.
 - With `energy=True`, the discrete Poynting theorem ∫J·E = Σ_c ψ_c ∫I_c − ΔW_field is checked; it closes to 3.5e-5 at rtol 1e-4 and falls with the tolerance (1.8e-6 at 1e-6), so the residual is time-discretisation error.
 - The heat solver matches the analytic line source to within 3 %.
@@ -2342,10 +2344,11 @@ r = simulate_track(DeviceConfig(), LET_keV_um=let, V_bias=50.0, region="all",
   These are `MESH_FAST` numbers: the PHD carries 5-8 % mesh error, and the sub-nm cores depend on the axis cell.
 
   The thermalisation radius for 4H-SiC is not known. Every PHD number from this engine is conditional on `radial`.
+
 - **Normal-incidence ions at 10–50 V.** Protons and 5.5 / 8 MeV alphas recombine 0.1–0.3 % of their pairs. The p+ dead layer (wrong-contact loss) is larger, at 2–6 %.
-- **0 V.** The CCE *rises* with LET (0.872 → 0.933 from 0.1 to 3000 keV/µm), so the linear-table assumption fails without depletion.
+- **0 V.** The CCE _rises_ with LET (0.872 → 0.933 from 0.1 to 3000 keV/µm), so the linear-table assumption fails without depletion.
 - **Steady-state CCE is not the single-particle CCE** even at low injection. SRH in the depletion region needs both carriers at once (n_i ≈ 0).
-- **The 241Am tilted-alpha data (Fig. 4b) are not reproduced** by a normal-incidence proxy of the tilted track. The plasma loss is nearly bias-independent above 5 V. This confirms `lab/microdosimeter/notes/LOG.md` §9.
+- **The 241Am tilted-alpha data (Fig. 4b) are not reproduced** with the library lifetimes. This holds for the normal-incidence proxy and for the proper tilted (2.5D) model of section 19.2, and it confirms `lab/microdosimeter/notes/LOG.md` §9. See 19.3 for what the data do constrain.
 
 **Electrothermal (opt-in, `thermal={"couple": True, "sink": "none"|"cathode"}`)**
 
@@ -2359,4 +2362,84 @@ r = simulate_track(DeviceConfig(), LET_keV_um=let, V_bias=50.0, region="all",
 **Cost and limits**
 
 - **Cost.** 2–5 s per event on `MESH_FAST` (6930 unknowns) and 4–15 s on `MESH_DEFAULT`, dominated by sparse LU. Use DEFAULT or finer for PHD numbers: the mesh error is about 5–8 % of the PHD.
-- **Not modelled:** tilted tracks (3D), velocity saturation, band-gap narrowing, hot carriers, and nuclear-stopping or window defects.
+- **Not modelled:**
+  - a full 3D tilted track (section 19.2 composes 2D transverse slices instead);
+  - self-consistent velocity saturation (only a frozen-field bracket exists, `mu_field`);
+  - band-gap narrowing;
+  - hot carriers;
+  - nuclear-stopping or window defects.
+
+### 19.1 Excess unknowns (the float64 floor, default since the issue #9 follow-up)
+
+`run_transient` now solves for the CHANGE from the dark state, (dψ, dn, dp), by default (`kernels.assemble_excess`). Every term is the exact difference from the dark state, evaluated without cancellation:
+
+- SG flux: a[dn_k B(D) − dn_l B(−D)] + a[n_dk ΔB(D0, δ) − n_dl ΔB(−D0, −δ)], with ΔB(x, d) = B(x + d) − B(x) from `bern_diff` (series / expm1 forms; 1e-14 relative against a 50-digit reference, tested);
+- recombination: (n_d dp + p_d dn + dn dp) g(n, p) + (n_d p_d − n_i²)(g − g_d);
+- Poisson: V (dp − dn) + the Laplacian of dψ.
+
+In absolute unknowns the excess in a 1e19 cm⁻³ layer is resolved only to ~eps × 1e19 per node and stage: the `ledger_floor` was ~1e-6 of N_gen at LET 1 keV/µm. In excess unknowns it is ~n_steps × 4e-16 (MESH_FAST, default stack, 0 V, LET 1: ledger 5.1e-6 → 2.5e-8, floor 9.6e-7 → 9e-14). The CCE agrees with the absolute form to 6e-9 (LET 1000) and 8e-7 (LET 1, where the absolute form was floor-limited).
+
+`excess=False` restores the absolute form (first release). The thermal coupling and `energy=True` use absolute states, so `excess=None` (default) switches to the absolute form for them; `excess=True` with either raises.
+
+### 19.2 Tilted tracks: transverse slices and the 2.5D composition
+
+A tilted track is not axisymmetric. Two new modules handle it:
+
+- **`etna.core.track.cross_section`**: the plane perpendicular to a long, locally uniform track, with the transverse field E⊥ = E sin θ imposed far away. It is a 2D Cartesian half plane (mirror plane through the track and the field), with unit length along the track and absorbing Dirichlet edges at |u| = R, v = R. The physics and numerics are the engine's (`TrackSystem(dev, geometry=...)` now accepts any finite-volume mesh). Backgrounds:
+  - `"depleted"`: n = p = n_i, linear ψ, exact discrete steady state (tested); `N_space` adds an in-plane space charge for the field gradient;
+  - `"neutral"`: n = N_D, E⊥ = 0.
+
+  `slice_loss(E_perp, LET, radial, ...)` returns the recombined fraction of the slice. `mu_field=True` is a frozen-far-field velocity-saturation bracket (Lades 2000 / Nilsson parallel-to-c v_sat).
+
+- **`etna.core.track.tilted`**: `tilted_alpha_cce(config, V_values, tau_scale=..., s_nm=...)`. CCE(V) = CCE_column(V) − Σ_k w_k f_ex(s_k, E⊥(z_k; V)), where:
+  - CCE_column is the single-particle linear response of the tilted generation on the 1D column (track engine, M = 1);
+  - f_ex = f(LET(s)) − f(LET → 0) is the plasma excess of the slice, tabulated in a `PlasmaTable` (6 path nodes × 11 fields, ~77 slices) and interpolated.
+
+  Approximations, reported in `notes`:
+  - the parallel component E cos θ is dropped (it only adds erosion, so the slice overestimates the loss);
+  - the box R matters at low field, where the plasma grows to several µm before erosion;
+  - undepleted path segments use the E → 0 depleted-slice excess.
+
+Facades (`etna.api.track`, exported from `etna`):
+
+| function                                                                                                        | returns                                                                 |
+| --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `run_track_event(config, LET_keV_um, V_bias, radial="whk", s_nm=10, mesh="fast")`                               | x = t (s), y = cathode current (e/s); metadata cce, recombined, ledgers |
+| `run_track_cce_let(config, LET_values, V_bias, radial="gaussian", s_nm=50)`                                     | x = LET, y = CCE; PHD, recombined                                       |
+| `run_tilted_alpha_track(config=microdosimeter, V_values, tau_scale=1, s_nm=10, R_um=10, workers=1, table=None)` | x = −V, y = CCE; cce_column, plasma_loss, shape, table, notes           |
+
+### 19.3 Fig. 4b with the tilted model: a calibration, not a reproduction
+
+Details are in `lab/track_plasma/notes/LOG.md` §§10-12. The bench is `lab/track_plasma/bench/tilted_bench.py`. Device: the microdosimeter preset with N_D 1e14.
+
+**With the library lifetimes (τ_n 1 ns, τ_p 600 ns) the tilted track does not reproduce Fig. 4b.**
+- The plasma loss changes by at most 1e-3 between the fields of −20 and −50 V; the data rise by 1e-2 there.
+- The shape misses by rms 0.033, the same as the normal-incidence proxy (0.034). The tilt was not the missing ingredient.
+
+**What moves the bias-dependent loss.**
+- The bias-dependent loss is SRH recombination during the plasma time, which scales as about 1/E⊥ and 1/(τ_n + τ_p).
+- The following move the loss nearly flat in bias, so the free overall scale absorbs them:
+  - the core radius (thermalization length) s;
+  - the Auger model;
+  - carrier-carrier scattering.
+- Velocity saturation flattens the field dependence.
+
+**Calibration** (free scale, the −20 to −50 V tail):
+
+| quantity | value |
+|---|---|
+| τ_scale | 0.039, 68 % interval 0.035-0.047 at σ 1e-3 |
+| τ_n + τ_p ≈ τ_p | ≈ 23 ns |
+| systematic band (box R, field gradient, v_sat, N_D) | 17-42 ns |
+| χ² | 6.4 for 2 dof at σ 1e-3; 25 at the digitisation σ of 5e-4 |
+
+This lifetime is about 100x below good-epi ambipolar lifetimes (~2 µs, arXiv:1011.1039, abstract).
+
+**What the fit cannot do.**
+- No single τ fits all seven points (χ² 371 for 5 dof).
+- The 0 to −10 V points depend on path elements below 1e4 V/cm, outside the validity of the 2.5D model.
+
+**What the data constrain.**
+- The singular values of the scale-projected Jacobian show ONE constrained direction: the plasma SRH lifetime.
+- **The core radius is not constrained:** Δχ² < 0.2 between s = 1 and 50 nm.
+- Hence no preset: `tau_scale` is a user knob of `run_tilted_alpha_track`.

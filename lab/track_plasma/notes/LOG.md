@@ -212,3 +212,186 @@ The PHD is converging. The remaining mesh error is about 5-8 % of the PHD itself
   - At low LET the two agree to 1.6e-6. That is the expected 1D-limit agreement, from different meshes and time steppers.
   - At LET 1000 the cylinder (a denser track than the sheet) already loses 2e-5 more.
   - Excluding the devsim build: about 20-35x faster per LET point on a loaded machine. They are not the same physics: the sheet stays linear by construction.
+
+# Follow-up (2026-10-21): tilted tracks, Fig. 4b calibration, float64 floor
+
+Bench: `uv run python lab/track_plasma/bench/tilted_bench.py SECTION [--workers 8]` with SECTION one of `slices`, `scan`, `relin`, `calibrate`.
+
+Outputs:
+
+- `notes/tilted_slices.out`;
+- `tilted_scan.out` / `tilted_scan.json`;
+- `tilted_relin.out`;
+- `tilted_calibrate.out` / `tilted_calibration.json`;
+- the plasma tables, in `notes/tables/*.json` (`PlasmaTable.to_dict`).
+
+Code:
+
+- `etna/core/track/cross_section.py`: the transverse slice.
+- `etna/core/track/tilted.py`: the 2.5D composition and `calibrate_tau_scale`.
+- `kernels.assemble_excess` and `bern_diff`: the excess unknowns.
+- `etna/api/track.py`: the facades.
+
+Wall times are on the M4, under a load average of 10-30 from other jobs.
+
+## 10. Was the proxy wrong? Transverse slices (`slices`)
+
+A track tilted 65° sees the field mostly ACROSS it: E⊥ = 0.906 E, E∥ = 0.423 E. The axisymmetric engine used for the §6 proxy can only hold a track parallel to the field.
+
+The slice solves the other limit: the plane perpendicular to a long track, with E⊥ imposed and the engine's physics. It is `cross_section.slice_loss`, a 2D Cartesian half plane with absorbing edges at R.
+
+Checks (`tests/test_track_tilted.py`):
+
+- The linear ψ with n = p = n_i is an exact discrete steady state.
+- Sampled radial lumping conserves pairs to 1e-9 and matches the exact erf-product Gaussian.
+- At E = 0 with SRH off, the slice reproduces the axisymmetric radial problem on a disc mesh to within 3 %.
+- The slice is linear in LET below 0.01 keV/µm: within 0.5 % at E⊥ from 250 to 6.4e4 V/cm.
+  - At LET 1 the column's self-field already raises f by 40-50 % at 1e4 V/cm.
+  - The first scan's f_lin used LET 1; `relin` recomputed it at 0.01.
+- Ledgers close to 1e-8.
+
+Loss of one slice: LET 300 keV/µm, WHK 0.4 MeV/u thermalized by s = 10 nm. The two fields are E⊥ at the track end at −20 / −50 V (N_D 1e14).
+
+| variant | E⊥ 1.45e4 V/cm | E⊥ 4.2e4 V/cm | difference |
+|---|---|---|---|
+| R 5 / 10 / 20 µm | 6.2e-4 / 8.1e-4 / 9.7e-4 | 2.27e-4 / 2.45e-4 / 2.55e-4 | 4-7e-4 |
+| in-plane field gradient (N_D sin²θ), R 10 / 20 | 9.1e-4 / 1.28e-3 | 2.48e-4 / 2.62e-4 | 7e-4 / 1.0e-3 |
+| mesh r_min 0.25 nm, x1.25 | 8.36e-4 | 2.51e-4 | 5.9e-4 |
+| WHK s 1 nm / 50 nm | 5.6e-3 / 6.8e-4 | 5.0e-3 / 1.1e-4 | 6e-4 / 5.6e-4 |
+| Gaussian 300 nm | 6.3e-4 | 8.7e-5 | 5.4e-4 |
+| Auger off / injection-dependent | 6.7e-4 / 6.8e-4 | 1.08e-4 / 1.19e-4 | 5.6e-4 |
+| carrier-carrier scattering | 2.67e-3 | 2.10e-3 | 5.7e-4 |
+| frozen-field v_sat (Lades / Nilsson, ∥c) | 1.05e-3 | 4.7e-4 | 5.8e-4 |
+| **τ_n, τ_p x 1/10** | 6.8e-3 | 1.21e-3 | 5.6e-3 |
+| **τ_n, τ_p x 1/30** | 1.98e-2 | 3.36e-3 | 1.6e-2 |
+
+**Verdict.** The proxy's conclusion holds. With the library lifetimes (τ_n 1 ns, τ_p 600 ns), the transverse geometry changes the plasma loss by at most 1e-3 between the fields of −20 and −50 V. The data rise by 1e-2 there.
+
+What moves the loss:
+
+- **Lifetime.** The bias-dependent part is the SRH loss during the plasma time. It scales as about 1/E⊥ and as 1/(τ_n + τ_p), the high-injection SRH lifetime.
+- **Core size and Auger.** These move the loss nearly flat in bias (s = 1 nm adds 5e-3 at both fields). The free overall scale absorbs that offset.
+- **Velocity saturation.** It raises the high-field loss and so FLATTENS the field dependence, which is the wrong direction.
+- **Box size (main systematic).** At 1.45e4 V/cm the plasma grows to r ~ N_L q / (2π ε E⊥) ~ 8 µm before erosion. The R and field-gradient dependence (±25-60 %) is the main systematic of the local model.
+
+## 11. 2.5D composition vs Fig. 4b (`scan`)
+
+The composition is `tilted.tilted_alpha_cce`:
+
+CCE(V) = CCE_column(V) − Σ_k w_k f_ex(s_k, E⊥(z_k; V))
+
+- **CCE_column** is the single-particle linear response of the tilted NIST-Bragg generation on the 1D column (track engine, M = 1, a transient at a peak excess of 1e10).
+- **f_ex** = f(local LET, local WHK speed, s) − f(LET 0.01).
+  - It is tabulated on 6 path nodes x 11 fields (77 slices, 70-270 s with 8 workers) and interpolated.
+  - E⊥ = |E| sin θ, from the column's dark state.
+- **Device:** the microdosimeter preset (N_D 1e14, p+ 0.3 µm), with epi-only pairs.
+
+Shape = CCE / CCE(−50 V). χ² is computed with a free overall scale (the §9 convention):
+
+| τ scale (τ_p) | 0 V | −5 | −10 | −20 | −30 | −40 | χ² 7 pts (σ 1e-3) | χ² −20..−50 |
+|---|---|---|---|---|---|---|---|---|
+| 1 (600 ns) | 0.980 | 0.9974 | 0.9989 | 0.9996 | 0.9999 | 1.0000 | 3844 | 51.9 |
+| 1/3 | 0.937 | 0.9921 | 0.9968 | 0.9989 | 0.9996 | 0.9999 | 814 | 44.7 |
+| 1/10 | 0.819 | 0.9747 | 0.9893 | 0.9964 | 0.9986 | 0.9995 | 7960 | 24.5 |
+| 1/20 | 0.710 | 0.9516 | 0.9791 | 0.9928 | 0.9972 | 0.9991 | 36269 | 8.7 |
+| 1/30 | 0.664 | 0.9304 | 0.9692 | 0.9893 | 0.9959 | 0.9986 | 54307 | 7.7 |
+| 1/50 | 0.580 | 0.8926 | 0.9505 | 0.9824 | 0.9932 | 0.9977 | 99886 | 48.2 |
+| data | 0.9083 | 0.9662 | 0.9806 | 0.9904 | 0.9932 | 0.9976 | | |
+
+At τ x1 the 2.5D shape has rms 0.033 from the data, the same as the normal-incidence proxy (0.034). The 50 V plasma loss is 3.1e-4, against 2e-4 for the proxy at s = 10 nm.
+
+## 12. Calibration (`calibrate`): what the data constrain
+
+`calibrate_tau_scale`: flat prior in log τ_scale, PCHIP interpolation of the shapes between the scanned τ, free scale. **This is a CALIBRATION, not a prediction.**
+
+**(a) Base model** (s 10 nm, R 10 µm, N_D 1e14, constant Auger):
+
+| points | σ | τ_scale mode (68 % / 95 %) | τ_p | χ² / dof |
+|---|---|---|---|---|
+| −20..−50 V | 1e-3 | **0.039** (0.035-0.047 / 0.031-0.057) | 23 ns | 6.4 / 2 |
+| −20..−50 V | 5e-4 (digitisation) | 0.039 (0.037-0.042) | 23 ns | 25.4 / 2 |
+| −20..−50 V | 2e-3 | 0.039 (0.032-0.066 / 0.026-0.15) | 23 ns | 1.6 / 2 |
+| all 7 | 1e-3 | 0.24 | 144 ns | 371 / 5 |
+
+- **Tail:** reproduced only at σ ≥ 1e-3 (the §9 convention), with χ² 6.4 for 2 dof. At the stated read-off σ of 5e-4 it is not reproduced (χ² 25).
+- **All seven points:** no single τ fits them (χ² 371 for 5 dof). At the tail mode the model gives 0.681 / 0.938 / 0.972 at 0 / −5 / −10 V, against data 0.908 / 0.966 / 0.981. That is far too much loss at low bias.
+
+**(b) Systematic band of the tail-best τ_scale.** Each variant's shift from the base is interpolated in log τ between its 1/10 and 1/30 runs:
+
+| variant | tail-best τ_scale |
+|---|---|
+| s 1 / 50 nm | 0.0385 / 0.0389 |
+| R 5 / 20 µm | 0.029 / 0.051 |
+| field gradient (R 20) | 0.070 |
+| v_sat bracket | 0.046 |
+| injection-dependent Auger | 0.039 |
+| carrier-carrier scattering | 0.039 |
+| T 295 K | 0.039 |
+| N_D 0.5 / 1.5 / 2e14 | 0.040 / 0.039 / 0.041 |
+
+Band: **τ_scale 0.03-0.07, i.e. τ_p ≈ 17-42 ns.** This is also the band of τ_n + τ_p, the high-injection SRH lifetime. The box and gradient systematics dominate, and they are larger than the statistical 68 % interval.
+
+**(c) Where the low-bias excess comes from.** Plasma loss split by the local E⊥:
+
+| τ | V | < 2e3 V/cm | 2e3-1e4 | > 1e4 | column / column(50) |
+|---|---|---|---|---|---|
+| 1/30 | 0 | 0.173 | 0.045 | 1e-4 | 0.881 |
+| 1/30 | −5 | 0 | 0.062 | 0.008 | 0.997 |
+| 1/30 | −10 | 0 | 0.014 | 0.018 | 0.998 |
+| 1/30 | −20..−50 | 0 | 0 | 0.0135 → 0.0036 | |
+| 1/20 | 0 | 0.169 | 0.032 | 8e-5 | **0.9085** |
+
+- **0 to −10 V lie OUTSIDE the validity of the 2.5D model, and it cannot decide them.** These points are dominated by path elements below 1e4 V/cm:
+  - there the plasma grows to ~10 µm, past the box and past the scale over which the real field varies;
+  - the slice background is intrinsic-depleted, while the real material near the depletion edge is neutral n-type;
+  - the R 5 vs 20 µm shapes at 0 V differ (0.76 vs 0.64 at τ/30).
+
+  The low-field treatment was not adjusted to fit them.
+- **The column alone at τ/20 gives 0.9085 at 0 V** (data 0.9083). This is a coincidence worth noting, not a fit.
+
+**(d) Identifiability.** Singular values of the scale-projected shape Jacobian in (log10 τ, log10 s, N_D/1e14), σ 1e-3:
+
+| τ | points | singular values | column norms (log τ / log s / N_D) |
+|---|---|---|---|
+| 1/30 | tail | 20.1, 0.35, 0.002 | 20.1 / 0.05 / 0.38 |
+| 1/30 | all | 352, 31, 0.7 | 315 / 2.7 / 159 |
+| 1/10 | tail | 5.7, 0.12, 7e-4 | 5.7 / 0.02 / 0.13 |
+
+- The tail constrains ONE combination: the plasma SRH lifetime.
+- **The core radius s is NOT constrained.** The tail χ² is 7.6 / 7.7 / 7.7 for s = 1 / 10 / 50 nm at τ/30, and 24.7 / 24.5 / 24.5 at τ/10. The posterior of s equals its prior. **The Fig. 4b data say nothing about the 4H-SiC track core radius (thermalization length).**
+- N_D enters only through the low-bias points, which the model cannot represent.
+
+**Plausibility.**
+
+- **Literature.** τ_p ≈ 23 ns (band 17-42 ns) is about 100x below the high-injection (ambipolar) lifetimes of good 4H-SiC epi. Chowdhury et al., arXiv:1011.1039, give "in the range of 2 µs" (only the abstract was opened). It is also below the 500 ns hole lifetime of Verzellesi 2002 (an abstract, cited in lab/microdosimeter LOG §9).
+- **The device's own dark current does not test it.** Its `N_t` (1.36e12) is an effective generation RATE in cm⁻³ s⁻¹ (`etna/core/dark_current.py`), not a trap density. Read as midgap SRH generation it gives n_i / G ≈ 4e-21 s, which is not a lifetime: SiC leakage is not thermal SRH generation. The dark current therefore cannot confirm or exclude a short τ.
+- **No independent second test.** A 23 ns lifetime would also act in the column (diffusion collection), where on its own it reproduces the 0 V point at τ/20. The two readings are not independent tests.
+
+**Decision.**
+
+- **No preset.** The plasma-SRH reading of the tail needs a TUNED lifetime, 30-100x below good-epi values. It misses 0 to −10 V, and it holds only at σ ≥ 1e-3. That is not the defensible, non-tuned parameter set the task requires.
+- **What is exposed.** `run_tilted_alpha_track(tau_scale=...)` exposes the knob. The calibration is recorded here and on the issue.
+- **What the tail data constrain**, if the mechanism is plasma SRH: τ_n + τ_p ≈ 23 ns. The statistical 68 % interval is 21-28 ns at σ 1e-3; the systematic band is 17-42 ns.
+- **What they do not constrain:** the core radius, the Auger model and carrier-carrier scattering, all of which are flat in bias.
+- **Other mechanisms not excluded.** Other mechanisms that give a 1/E-like tail are not excluded by this work. Examples are trapping within the 3 µs shaping (§9: needs implausible trap densities) or a calibration artefact.
+
+## 13. Float64 floor: excess unknowns (now the default)
+
+`run_transient(excess=None)` solves for (dψ, dn, dp) about the dark state. `kernels.assemble_excess` evaluates the SG flux difference with `bern_diff`, which is accurate to 1.1e-14 relative against a 50-digit Decimal reference (x in ±80, d from 1e-14 to 2). It also evaluates the recombination excess without cancellation.
+
+The absolute form stays selectable (`excess=False`). It is used automatically for thermal coupling and `energy=True`.
+
+MESH_FAST results:
+
+| case | CCE absolute | CCE excess | ledger abs → excess | floor abs → excess |
+|---|---|---|---|---|
+| default stack, 0 V, LET 1 | 0.873557230 | 0.873558014 | 5.1e-6 → 2.5e-8 | 9.6e-7 → 9.2e-14 |
+| default stack, 0 V, LET 1000 | 0.923716151 | 0.923716157 | 1.0e-8 → 9.8e-9 | 8.9e-10 → 8.7e-14 |
+| default stack, 50 V, LET 1 | 0.999969306 | 0.999969308 | 1.4e-7 → 7.0e-9 | 5.7e-7 → 5.5e-14 |
+| default stack, 50 V, LET 1000 | 0.9998684349 | 0.9998684349 | 1.5e-10 → 1.6e-10 | 7.4e-10 → 7.2e-14 |
+| micro, 0 V, LET 1 | 0.986214753 | 0.986214960 | 1.5e-6 → 1.9e-8 | 8.2e-7 → 8.0e-14 |
+| micro, 50 V, LET 1000 | 0.9998695579 | 0.9998695579 | 1.6e-10 → 7.9e-11 | 7.0e-10 → 6.8e-14 |
+
+- **Agreement.** At LET ≥ 100 the two forms agree to ≤ 6e-9. At LET 1 the absolute CCE was floor-limited, off by up to 8e-7.
+- **Ledger.** The excess ledger is now set by the Newton tolerance (1e-9 per step), not by round-off.
+- **Cost** (MESH_FAST, unloaded): +20-28 % per event. LET 1 goes from 2.2 to 2.9 s and LET 1000 from 2.8 to 3.4 s. The extra cost is the `bern_diff` terms; the step and LU counts are unchanged.
