@@ -63,6 +63,51 @@ def load_donor_table_json(src, epi_thickness_um: "float | None" = None):
     return table
 
 
+def device_rebuild_code(config, json_name: str = "donor_table_cv.json") -> str:
+    """Python that rebuilds ``config`` with the donor table read from ``json_name``.
+
+    ``config`` is the device a table was fitted on (``CVInversion.config``: the sidebar
+    device plus the table, with the parametric n-/n+ transition switched off). Every
+    field that differs from ``DeviceConfig()`` is written out, so the snippet rebuilds
+    that device and not the defaults (issue #20). A field whose ``repr`` does not
+    evaluate back to the same value (e.g. a custom model object) is left as a comment.
+    """
+    import ast
+    from dataclasses import fields
+
+    from etna.api.device import DeviceConfig
+
+    default = DeviceConfig()
+    args, skipped = [], []
+    for f in fields(config):
+        if f.name == "donor_table":
+            continue
+        v = getattr(config, f.name)
+        if v == getattr(default, f.name):
+            continue
+        r = repr(v)
+        try:
+            ok = ast.literal_eval(r) == v
+        except Exception:
+            ok = False
+        (args if ok else skipped).append(f"    {f.name}={r},")
+    lines = [
+        "import etna, etna.measurements as M",
+        f"table = M.load_donor_table_json({json_name!r})",
+        "# the device the table was fitted on (sidebar settings at fit time)",
+        "cfg = etna.DeviceConfig(",
+        *args,
+        "    donor_table=table,",
+        ")",
+    ]
+    if skipped:
+        lines += [
+            "# not representable as a literal: set these as in the sidebar device",
+            *("#" + s for s in skipped),
+        ]
+    return "\n".join(lines)
+
+
 def write_json(result, path, **kw) -> Path:
     """``result.to_json()`` to ``path``."""
     p = Path(path)

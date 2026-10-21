@@ -65,23 +65,42 @@ class RawTable:
     comments: list = field(default_factory=list)
 
 
+def _decode(data: bytes, source: str) -> str:
+    """UTF-8 (BOM allowed); anything else is a ``MeasurementFileError`` naming the line
+    and byte, not a bare ``UnicodeDecodeError`` (e.g. a Latin-1 'µm' / '°C' comment)."""
+    try:
+        return data.decode("utf-8-sig")
+    except UnicodeDecodeError as e:
+        line = data[: e.start].count(b"\n") + 1
+        raise MeasurementFileError(
+            source,
+            [
+                f"line {line}: byte 0x{data[e.start]:02x} is not UTF-8 (the file is "
+                "probably Latin-1 / Windows-1252, e.g. a 'µ' or '°' in a comment); "
+                "save it as UTF-8"
+            ],
+        ) from None
+
+
 def read_text(src) -> "tuple[str, str]":
     """``src`` (path, bytes, str content or file-like) -> (text, source name)."""
     if isinstance(src, (bytes, bytearray)):
-        return bytes(src).decode("utf-8-sig"), "<uploaded bytes>"
+        return _decode(bytes(src), "<uploaded bytes>"), "<uploaded bytes>"
     if hasattr(src, "read"):
         data = src.read()
-        name = getattr(src, "name", "<stream>")
+        name = str(getattr(src, "name", "<stream>"))
         if isinstance(data, bytes):
-            data = data.decode("utf-8-sig")
-        return data, str(name)
+            data = _decode(data, name)
+        return data, name
     if isinstance(src, Path) or (
         isinstance(src, str) and "\n" not in src and len(src) < 4096
     ):
         p = Path(src)
         if not p.exists():
             raise FileNotFoundError(f"measurement file not found: {p}")
-        return p.read_text(encoding="utf-8-sig"), p.name
+        text = _decode(p.read_bytes(), p.name)
+        # universal newlines, as Path.read_text gave (keeps the recorded sha256)
+        return text.replace("\r\n", "\n").replace("\r", "\n"), p.name
     return str(src), "<text>"
 
 
@@ -102,6 +121,7 @@ def parse_table(
     exclusive: "list[tuple[str, ...]]" = (),
     meta_keys: "dict[str, type]" = None,
     kind: str = "measurement",
+    complete_if_present: "tuple[str, ...]" = (),
 ) -> RawTable:
     """Parse and validate one CSV against an accepted-column table.
 
@@ -109,7 +129,8 @@ def parse_table(
     ``exclusive``: groups of quantities of which at most one may be present.
     ``meta_keys``: metadata key -> type (float or str); an empty value means "not given".
     Required-quantity cells must be finite numbers on every row; optional cells may be
-    empty (NaN) but, when filled, must be finite numbers.
+    empty (NaN) but, when filled, must be finite numbers. ``complete_if_present``:
+    optional quantities (uncertainties) that must be filled on every row or on none.
     """
     meta_keys = meta_keys or {}
     issues: list[str] = []
@@ -226,6 +247,18 @@ def parse_table(
                 cols[q].append(float("nan"))
                 continue
             cols[q].append(v * col.factor)
+    for q in complete_if_present:
+        if q not in by_quantity or q in required_q:
+            continue
+        empty = [ln for ln, v in zip(lines, cols[q]) if math.isnan(v)]
+        if empty and len(empty) < len(lines):
+            shown = ", ".join(str(x) for x in empty[:10])
+            more = f" and {len(empty) - 10} more" if len(empty) > 10 else ""
+            issues.append(
+                f"column '{by_quantity[q][1].name}': empty cell on line(s) {shown}{more} "
+                "while other rows give one; fill every row or leave the column empty "
+                "(a partial uncertainty column would silently drop all weights)"
+            )
     if issues:
         raise MeasurementFileError(source, issues)
     return RawTable(

@@ -159,3 +159,32 @@ formula as coded in Geant4: computed, not measured (C+Si 1.38 / 1.27 b, C+C 0.95
 - **Delta-ray paths.** Straight line with the CSDA range. Tabata-Ito-Okabe extrapolated
   ranges are about 0.7 x CSDA in Si (secondary source). With factor 0.7 the bare-SV
   escape drops from 8.6 % to 7.4 %.
+
+## Re-run after the random-stream fix (issue #17, 2026-10-21)
+
+Before the fix, event k+1 used event k's random numbers shifted by one draw (linear
+start state). Consecutive deposits were correlated (lag-1 0.72, 100 MeV p, 10 um), and
+seed-to-seed scatter / reported SE was 1.99 (y_F) and 1.53 (y_D) over 30 seeds of 5e4
+events (62 MeV p, 100x100x10 um). Each event now starts at a SplitMix64 hash of
+(seed, event): lag-1 is 0.006 (20k events, |r| < 4/sqrt(n) tested), and the ratio is 0.99
+/ 0.94 (30 seeds), tested at 100 seeds in `tests/test_mc_rng_streams.py`.
+
+`bench.out` is the post-fix run (NUMBA_NUM_THREADS=8, load average about 40-50). The
+tables above are the pre-fix run. What moved:
+
+- **Mean deposit / CSDA (delta rays off).** 0.9997-1.0011 now. Before it was 1.000-1.005:
+  the 62-250 MeV proton rows were 1.0038-1.0052, i.e. the correlated streams inflated
+  single-run means beyond their nominal error.
+- **Variance ratios.** p 10 MeV 0.83, 62 MeV 0.87, 150 MeV 0.94, 250 MeV 1.00, C-12
+  62 MeV/u 0.87, 290 MeV/u 1.04.
+- **Shapes.** MPVs moved by up to 2.5 % (p 20 MeV 60.75 vs 59.29 keV, Vavilov 57.41);
+  FWHMs within 1 %. The Vavilov-regime MPV is now within 0.1-5.8 % of the numerical
+  Vavilov density.
+- **Alpha.** Stop depth 18.411 um (ratio 0.9990).
+- **Delta rays.** Bare 0.915, factor 0.7 0.926, 20 um 0.975, 100 um 1.010, 300 um 1.011.
+- **Lineal energy (62 MeV p, normal).** y_F 2.771 / 2.769 / 2.533 / 2.756, y_D 2.771 /
+  3.612 / 2.850 / 3.224. Isotropic y_D bare 4.463, embedded 4.681 (was 4.502 / 4.587).
+- **Throughput.** Interleaved A/B (old vs new seeding, same process, load about 40):
+  8 threads 1.84-2.20 vs 1.85-1.92 M events/s; 1 thread 0.34-0.37 vs 0.28-0.34 M events/s.
+  The difference is within the run-to-run noise of this shared machine (three extra
+  64-bit mixes per event against thousands of operations per track).

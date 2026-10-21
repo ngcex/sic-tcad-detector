@@ -222,12 +222,9 @@ def _cv_tab(cfg) -> None:
         d3.download_button(
             "Figure PNG", png, "cv_inversion.png", "image/png", key="meas_cv_inv_png"
         )
+        # rebuild the device the table was fitted on, not DeviceConfig() (issue #20)
         st.code(
-            "import etna, etna.measurements as M\n"
-            "table = M.load_donor_table_json('donor_table_cv.json')\n"
-            "# same geometry as the sidebar device (the default transition is dropped)\n"
-            "cfg = etna.DeviceConfig(donor_table=table)",
-            language="python",
+            M.device_rebuild_code(inv.config, "donor_table_cv.json"), language="python"
         )
 
 

@@ -616,9 +616,11 @@ def render() -> None:
     if done:
         cache = st.session_state.get(CACHE_KEY, {})
         entries = [(obs, ck, cache[ck]) for obs, ck, _ in done if ck in cache]
-        if any(ck[0] and ck[0] != etna.viz.config_hash(cfg) for _, ck, _ in entries):
+        # the whole cache key (device AND page inputs: V_stop, bias, LET table, ...)
+        if any(ck != cache_key(cfg, obs, p) for obs, ck, _ in entries):
             st.warning(
-                "Some results below are for a previous device configuration; press Run to update."
+                "Some results below are for a previous device configuration or page "
+                "inputs; press Run to update."
             )
         good = [e for e in entries if not isinstance(e[2], BaseException)]
         if good:

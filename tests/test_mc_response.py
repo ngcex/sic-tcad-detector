@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 from etna.core import mc_response as mr
+from etna.core import mc_transport as mt
 from etna.core.single_particle import load_cce_let_table
 
 
@@ -33,7 +34,38 @@ def test_default_l_bar():
     assert mr.default_l_bar_um((100, 100, 10), "isotropic") == pytest.approx(
         16.6667, rel=1e-4
     )
-    assert mr.default_l_bar_um((100, 100, 10), 60.0) == pytest.approx(20.0)
+    # V / A_proj, not the slab t / cos(theta) = 20 (issue #18)
+    assert mr.default_l_bar_um((100, 100, 10), 60.0) == pytest.approx(17.0466, rel=1e-4)
+    assert mr.default_l_bar_um((100, 100, 10), 0.0) == pytest.approx(10.0)
+
+
+@pytest.mark.parametrize(
+    "sv, irr",
+    [
+        ((100, 100, 10), 60.0),
+        ((10, 10, 10), 45.0),
+        ((100, 100, 10), 30.0),
+        ((20, 50, 10), 75.0),
+        ((100, 100, 10), "isotropic"),
+        ((100, 100, 10), "normal"),
+    ],
+)
+def test_default_l_bar_is_sampled_mean_chord(sv, irr):
+    """default_l_bar_um == the sampler's mean chord over events that hit the SV."""
+    ev = mt.sample_track_events(
+        "proton",
+        100.0,
+        sv_um=sv,
+        irradiation=irr,
+        n_events=200_000,
+        delta_rays=False,
+        fluctuations="none",
+        seed=4,
+    )
+    c = ev.chord_um[ev.chord_um > 0]
+    se = c.std() / np.sqrt(c.size)
+    ref = mr.default_l_bar_um(sv, irr)
+    assert abs(c.mean() - ref) < max(4 * se, 1e-9 * ref), (c.mean(), ref, se)
 
 
 def test_adaptive_converges_and_is_batch_independent():

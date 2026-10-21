@@ -93,6 +93,34 @@ def _f(v):
     return None if v is None else float(v)
 
 
+SPEC_BIASES_V = (0.0, -10.0, -30.0)
+
+
+def _cv_on_spec_biases(config, cv):
+    """A C-V result that contains the spec biases as grid points.
+
+    The run_all C-V (0..-50 V, 40 points, 1.28 V step) does not contain -10 V, and
+    interpolating W there missed the exactly solved value by 0.3 % (audit v8 finding
+    16). The engine solves exactly at each requested bias, so a 0/-10/-20/-30 V sweep
+    gives the values themselves; the run_all result is kept when the biases are on its
+    grid already, or if the extra sweep fails.
+    """
+    x = np.asarray(cv.x, dtype=float)
+    if all(np.any(np.abs(x - v) < 1e-9) for v in SPEC_BIASES_V):
+        return cv
+    if np.min(x) > min(SPEC_BIASES_V) + 1e-9:
+        return cv  # sweep does not reach -30 V: keep what was run
+    try:
+        from etna.api.simulation import run_cv
+
+        r = run_cv(config, 0.0, -30.0, 4)
+    except Exception:
+        return cv
+    if len(r.x) != 4 or not np.all(np.isfinite(np.asarray(r.y, dtype=float))):
+        return cv
+    return r
+
+
 def _provenance_rows(report) -> "list[dict]":
     rows = []
     for name in SPEC_SECTIONS:
@@ -296,17 +324,18 @@ def build_spec(config, report=None, layout_params=None) -> dict:
     if cv is not None:
         from etna.core.batched.material import EPS
 
-        W = EPS * config.area_cm2 / np.asarray(cv.y, dtype=float) * 1e4
-        We = np.asarray(cv.metadata.get("depletion_widths", []), dtype=float) * 1e4
+        cvw = _cv_on_spec_biases(config, cv)
+        W = EPS * config.area_cm2 / np.asarray(cvw.y, dtype=float) * 1e4
+        We = np.asarray(cvw.metadata.get("depletion_widths", []), dtype=float) * 1e4
         at = lambda arr: {
-            f"{v:g} V": _f(_interp_at(cv.x, arr, v)) for v in (0.0, -10.0, -30.0)
+            f"{v:g} V": _f(_interp_at(cvw.x, arr, v)) for v in SPEC_BIASES_V
         }
         cvd.update(
             bias_range_V=[float(np.max(cv.x)), float(np.min(cv.x))],
             W_um=at(W),
             W_definition="eps*A/C, C = small-signal dQ/dV (as the measured W)",
-            W_edge_um=at(We) if We.size == np.size(cv.x) else {},
-            C_at_minus30V_F=_f(_interp_at(cv.x, cv.y, -30.0)),
+            W_edge_um=at(We) if We.size == np.size(cvw.x) else {},
+            C_at_minus30V_F=_f(_interp_at(cvw.x, cvw.y, -30.0)),
         )
     w30 = cvd.get("W_um", {}).get("-30 V")
     d30 = None if w30 is None else 100.0 * (w30 - MEASURED_W_30V_UM) / MEASURED_W_30V_UM

@@ -2629,6 +2629,9 @@ def run_microdosimetry(
             "l_bar_um": l_bar,
             "chord_model": chord_model,
             "sv_dimensions_um": (sv_width_um, sv_depth_um, sv_thickness_um),
+            "n_events": spec["n_events"],
+            "n_zero_events": spec["n_zero"],  # excluded from f(y)
+            "n_out_of_range": spec["n_out_of_range"],
         },
         mesh=None,
     )

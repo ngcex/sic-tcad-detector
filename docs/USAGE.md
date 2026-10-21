@@ -1254,7 +1254,10 @@ energy spectrum: `x` is y (keV/µm), `y` is y·d(y). Metadata holds `y_F`, `y_D`
 thickness). `config` is carried for provenance only. `mc_csv_path` may be
 a path or a file-like object (e.g. `io.BytesIO`). It raises `ValueError` for non-positive or
 non-finite sensitive-volume dimensions, an unknown `chord_model`, a CSV with no events,
-non-finite or negative `edep`, or no event depositing energy.
+non-finite or negative `edep`, or no event depositing energy. f(y), y_F and y_D are over
+the events that deposit energy with y inside the bins (ICRU 36); `n_zero_events` and
+`n_out_of_range` in the metadata count the excluded ones (before 2026-10-21 zero events
+were in the f(y) normalisation, which scaled y_F by the non-zero fraction).
 
 Mean chord length (audit D-15 follow-up, 2026-10-20): `chord_model="cauchy"` (default) is
 Cauchy's l̄ = 4V/S of the finite box w × d × t (`sv_depth_um=None` means a square footprint,
@@ -1319,8 +1322,10 @@ A numba float64 parallel condensed-history sampler for `"proton"`, `"alpha"` and
   delta rays made there can enter, and the beam is degraded by it.
 - **Stepping.** Adaptive (`step_fraction`, the energy-loss fraction per step), so an
   alpha stopping in the SV ends at the CSDA range.
-- **Random numbers.** A SplitMix64 stream per (seed, event). Results are independent of
-  the thread count, and `event_offset` continues a stream.
+- **Random numbers.** A SplitMix64 stream per (seed, event), started at a hash of the
+  pair, so events are independent (issue #17: before, event k+1 reused event k's draws
+  shifted by one and the standard errors were 1.6-2x too small). Results are
+  independent of the thread count, and `event_offset` continues a stream.
 
 It returns `TrackEvents`: `edep_keV` (= primary + delta part), `chord_um`,
 `E_sv_entry_MeV`, entry point and direction, `stop_path_um` and optional `hits`
@@ -1335,6 +1340,11 @@ apart, recording only). The deterministic baseline is
   errors.
 - `adaptive_lineal_energy(particle, E, rel_tol=0.01, ...)` samples batches until both
   relative standard errors are below `rel_tol`.
+- `default_l_bar_um(sv_um, irradiation)` (the default l_bar of `adaptive_lineal_energy`)
+  is the sampler's mean chord: t for a normal beam, V / A_proj with
+  A_proj = wx wy cos(theta) + wy t sin(theta) for a beam tilted in x-z, 4V/S for
+  isotropic. It is not the slab t / cos(theta) (60 deg, 100x100x10 um: 17.05 um, not
+  20; issue #18).
 - `pulse_heights(edep, chord, cce_interp, fano=None, enc_electrons=0, threshold_keV=0)`
   runs, per event: N = epsilon/W, then optional Gaussian Fano smearing, then
   CCE(LET = epsilon/chord) from `load_cce_let_table`, then ENC noise, then the
@@ -1364,6 +1374,14 @@ unit_energy="MeV")` reads the Allpix `DepositionReader` CSV (`Event: N` headers 
   1D results give a laterally uniform map. 2D half-cell results are mirrored to a full
   plane (`PIXEL_FULL`).
 
+  The snippet sets `field_depth` / `doping_depth` / `potential_depth` to the exported
+  thickness (the whole stack, 11.3 um for the default device; `depth_range_um` picks a
+  sub-range). Allpix otherwise maps each file onto the whole sensor thickness and
+  silently stretches it (issue #19: 47 V instead of 53.2 V across a 10 um sensor at
+  -50 V). The Allpix sensor must be at least that thick (Allpix rejects deeper maps);
+  pass `sensor_thickness_um=` to get a warning on any mismatch. The maps sit at the top
+  (implant side) of the sensor, while `write_deposition_csv` hits are SV-centred.
+
 - These files are checked against the quoted parser layout and against each other, not in
   an Allpix run.
   - Allpix truncates E/W per deposit to an integer in `DepositionReader`, so avoid many
@@ -1383,8 +1401,8 @@ Benchmarks: `uv run python lab/mc_transport/bench/bench.py` (25-100 s, depending
 
 - **Consistency (not validation; same tables).** The mean deposit equals the NIST CSDA
   integral within 0.1 % (8e6 events).
-- **Variance.** 0.84-1.06 x the Vavilov/Bohr variance xi T_max (1 - beta²/2).
-- **Vavilov regime (kappa 0.1-0.5).** The most probable value is within 1-3 % of the
+- **Variance.** 0.83-1.04 x the Vavilov/Bohr variance xi T_max (1 - beta²/2).
+- **Vavilov regime (kappa 0.1-0.5).** The most probable value is within 0.2-6 % of the
   numerical Vavilov density. The FWHM is 10-12 % narrower.
 - **Landau regime (kappa < 0.03).** The MPV is 2-12 % above PDG Eq. 34.12 and the FWHM is
   1.2-1.8 x 4 xi. The PDG and Bichsel 1988 report that thin-Si distributions are wider
@@ -1395,9 +1413,9 @@ Benchmarks: `uv run python lab/mc_transport/bench/bench.py` (25-100 s, depending
 - **Delta rays.** A bare 10 um SV keeps 0.914 of the mean (62 MeV p). A 100-300 um SiC
   surround restores 1.01.
 - **Effects separated (62 MeV p, normal beam).**
-  - Straggling alone keeps y_F (2.77) and raises y_D from 2.77 to 3.62.
+  - Straggling alone keeps y_F (2.77) and raises y_D from 2.77 to 3.61.
   - Delta-ray escape from a bare SV lowers y_F to 2.53 and y_D to 2.85.
-  - A 300 um SiC surround brings them back to 2.75 / 3.23.
+  - A 300 um SiC surround brings them back to 2.76 / 3.22.
   - The bare-SV default is therefore not a detector prediction for an SV inside a chip:
     set `surround_um` to the real overlayer/substrate.
 - **Speed.** 10 M events/s on 10 threads and 2 M events/s on 1 (Apple M4, light load),
@@ -2247,9 +2265,9 @@ uv run pytest -n0 -x tests/test_api_cce.py        # serial, e.g. with --pdb
 uv run pytest -n auto -q --durations=20           # slowest tests
 ```
 
-- 150 modules and 1938 tests (2026-10-21). `pytest.ini` deselects the `exhaustive` marker
+- 154 modules and 1972 tests (2026-10-21). `pytest.ini` deselects the `exhaustive` marker
   (6 redundant deep variants, each implied by a kept test), so the default run collects
-  1932: all pass with `--extra dev --extra viz`; with `--extra dev` only, 1924 pass and 8
+  1966: all pass with `--extra dev --extra viz`; with `--extra dev` only, 1958 pass and 8
   skip (the manim and gdstk tests). The `slow` marker labels the devsim integration tests
   but does not deselect them.
 - `pytest.ini` adds `--dist loadgroup --no-loadscope-reorder` (inert without `-n`), so
@@ -2390,9 +2408,14 @@ cmp.rms_W_um, cmp.rms_C_rel, cmp.notes
 dep = M.depletion_profile(d)                # differential N(W), depletion approximation
 inv = M.invert_cv(d, etna.DeviceConfig())   # -> inv.donor_table, inv.config
 open("donor_table.json", "w").write(inv.to_json())
-cfg = etna.DeviceConfig(donor_table=M.load_donor_table_json("donor_table.json"))
+cfg = inv.config                            # the fitted device itself
+print(M.device_rebuild_code(inv.config, "donor_table.json"))  # code rebuilding it later
 ```
 
+- `DeviceConfig(donor_table=table)` alone is NOT the fitted device: it keeps the
+  defaults (epi, substrate, n+, mobility, traps) and the parametric transition. Use
+  `inv.config`, or `device_rebuild_code(inv.config, json_name)`, which writes every
+  non-default field out (issue #20; the Measurements page shows that code).
 - Capacitance is stored per area (F/cm²); `W = EPS / (C/A)` with the model's permittivity,
   so data and model are converted identically. The model area does not enter the
   comparison (per-area C); a data area different from `config.area_cm2` is noted.

@@ -66,7 +66,7 @@ def render() -> None:
     st.title("Radiation Damage")
     st.caption(
         "CCE of the alpha test signal (as on the Charge Collection page) at one reverse "
-        "bias vs the proton fluence the device has received."
+        "bias vs the particle (proton or neutron) fluence the device has received."
     )
     about(
         "- **Damage scale:** 1 MeV-neutron-equivalent fluence Φ_neq = κ(E)·Φ_p, with "
@@ -120,7 +120,7 @@ def render() -> None:
             horizontal=True,
             key="rad_particle",
             help="Neutrons: NJOY HEATR / ENDF-B-VIII.0 NIEL (data/niel/), "
-            "lethargy-averaged, 1e-5 to 18.9 MeV.",
+            "lethargy-averaged; energies 1e-3 to 18.8 MeV on this page.",
         )
     with ccol:
         niel_convention = st.selectbox(
@@ -282,7 +282,8 @@ def render() -> None:
         "max fluence": float(fluence_max),
         "number of points": int(n_points),
         "proton energy": proton_energy_MeV,
-        **niel_kw,
+        # always recorded: a proton -> neutron switch must flag the result stale
+        **niel,
         "V_bias": float(V_bias),
     }
     if st.button("Run simulation"):

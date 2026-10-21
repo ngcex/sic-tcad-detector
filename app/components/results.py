@@ -530,7 +530,9 @@ def to_csv_bytes(result: SimResult) -> bytes:
         )
         extra_header_lines = []
     elif result.sim_type == "damage":
-        cols = {"fluence_p_per_cm2": result.x, "CCE": result.y}
+        # n/cm^2 for a neutron sweep (the column name carried p for both)
+        fu = "n" if result.metadata.get("particle") == "neutron" else "p"
+        cols = {f"fluence_{fu}_per_cm2": result.x, "CCE": result.y}
         if "valid" in result.metadata:
             cols["valid"] = np.asarray(result.metadata["valid"], dtype=bool)
             cols["reason"] = result.metadata.get("reason") or [""] * len(result.x)
@@ -555,7 +557,7 @@ def to_csv_bytes(result: SimResult) -> bytes:
             ),
             *(
                 [
-                    f"# compensation_fluence_p_per_cm2: "
+                    f"# compensation_fluence_{fu}_per_cm2: "
                     f"{md['compensation_fluence']:.4g} "
                     + (
                         "(neutral epi compensated; beyond it semi-insulating, still "
@@ -652,9 +654,15 @@ def to_csv_bytes(result: SimResult) -> bytes:
     else:
         raise ValueError(f"to_csv_bytes: unknown sim_type {result.sim_type!r}")
 
-    device_fields = ", ".join(
-        f"{key}={value}" for key, value in asdict(result.config).items()
-    )
+    cfg_fields = asdict(result.config)
+    nt_used = result.metadata.get("N_t")
+    if nt_used is not None and nt_used != cfg_fields.get("N_t"):
+        # a run-level N_t override (Dark Current page, Advanced): record what was used
+        extra_header_lines.append(
+            f"# N_t_override: {nt_used:g} (device N_t {cfg_fields.get('N_t')} not used)"
+        )
+        cfg_fields["N_t"] = nt_used
+    device_fields = ", ".join(f"{key}={value}" for key, value in cfg_fields.items())
     generated_at = datetime.now(timezone.utc).isoformat()
 
     header_lines = [
