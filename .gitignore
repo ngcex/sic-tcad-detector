@@ -40,3 +40,7 @@ htmlcov/
 
 # numba JIT cache dir used by CI (NUMBA_CACHE_DIR)
 .numba-cache/
+
+# generated figures (regenerate with the notebooks / etna.viz)
+figures/*
+!figures/cv_validation_bruzzi2023.png
