@@ -1,5 +1,6 @@
 """Batched 1D diode engine (numba, float64): thousands of reverse-bias C-V / field /
-CCE points per second, validated against the devsim path.
+CCE points per second, cross-checked against the devsim path (solver parity, not a
+validation against measurement).
 
 Scope: 1D graded or uniform p+/n- diode, reverse bias, Poisson-with-quasi-Fermi
 electrostatics (W, C, psi) and Gummel transport for CCE. Devices in one batch

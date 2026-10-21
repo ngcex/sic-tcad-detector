@@ -242,7 +242,10 @@ def _footer(fig, prov, notes):
     for n in notes:
         lines += textwrap.wrap(n, chars)
     lines += textwrap.wrap(footer_text(prov), chars)
-    lines += textwrap.wrap(VALIDATION_LABEL, chars)
+    # one clause per wrap, so "not validated against measurement" never splits
+    clauses = VALIDATION_LABEL.split("; ")
+    for i, c in enumerate(clauses):
+        lines += textwrap.wrap(c + (";" if i < len(clauses) - 1 else ""), chars)
     fig.text(
         0.008,
         0.006,

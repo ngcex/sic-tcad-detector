@@ -204,3 +204,56 @@ def test_facade_runtime_error_shows_error_not_crash(monkeypatch):
     assert at.exception == [], f"page crashed instead of st.error: {at.exception}"
     assert len(at.error) >= 1
     assert "sweep_results" not in at.session_state
+
+
+def _tabulated_page_run(monkeypatch, raw):
+    from etna.api.device import measured_cv_tabulated_config
+
+    monkeypatch.setattr(etna, "run_cce", _fake_run_cce)
+    at = AppTest.from_function(_run_batch_sweep_page)
+    at.session_state["device_config"] = measured_cv_tabulated_config()
+    at.run()
+    at.selectbox(key="sweep_param").set_value("epi_thickness_um")
+    at.run()
+    at.text_input(key="sweep_values").set_value(raw)
+    at.button[0].click()
+    at.run()
+    assert at.exception == [], at.exception
+    return at
+
+
+def test_invalid_value_reason_shown_inline_per_point(monkeypatch):
+    """An epi thicker than the tabulated profile: the reason is on the page, not
+    only inside the 'Error details' expander (which keeps the full message)."""
+    at = _tabulated_page_run(monkeypatch, "6, 15")
+    assert len(at.session_state["sweep_results"]) == 1
+    texts = [w.value or "" for w in at.warning]
+    hit = [t for t in texts if "1 of 2 values completed successfully" in t]
+    assert hit, texts
+    assert "= 15: the tabulated epi profile covers only 10 µm" in hit[0]
+    assert "epi thickness ≤ 10 µm" in hit[0]
+    assert "Invalid DeviceConfig" not in hit[0]  # raw text stays in the expander
+    assert any(e.label == "Error details" for e in at.expander)
+    assert any("must cover the epi" in (c.value or "") for c in at.code)
+
+
+def test_all_values_invalid_reason_shown_inline(monkeypatch):
+    at = _tabulated_page_run(monkeypatch, "15, 20")
+    assert "sweep_results" not in at.session_state
+    texts = [e.value or "" for e in at.error]
+    hit = [t for t in texts if "All swept values failed" in t]
+    assert hit, texts
+    assert "= 15: the tabulated epi profile covers only 10 µm" in hit[0]
+    assert "= 20: the tabulated epi profile covers only 10 µm" in hit[0]
+    assert any("must cover the epi" in (c.value or "") for c in at.code)
+
+
+def test_failure_reason_wording():
+    from app.workflows.batch_sweep import NO_DATA_REASON, failure_reason
+
+    assert failure_reason(None) == NO_DATA_REASON
+    assert "did not converge" in failure_reason("RuntimeError: Newton diverged")
+    assert failure_reason(
+        "ValueError: Invalid DeviceConfig: T must be between 100 and 600 K (got 900.0)"
+    ) == "invalid for this device: T must be between 100 and 600 K (got 900.0)"
+    assert len(failure_reason("ValueError: " + "x" * 1000)) == 200

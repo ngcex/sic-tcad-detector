@@ -327,8 +327,11 @@ The Streamlit sidebar has no toggle yet.
 
 All facades are importable from `etna` (`etna/__init__.py`) and live in
 `etna/api/simulation.py`; their docstrings are the reference. Each takes a
-`DeviceConfig` first. Timings are single calls on the default device, after the numba
-cache is warm.
+`DeviceConfig` first. Timings (measured 2026-10-21, Apple M4, load average 1-4) are
+the second call of the same facade on the default device in one process, numba disk
+cache loaded. The first call in a fresh process adds the cache load (run_cv 0.13 s
+instead of 7 ms); with an empty numba cache it compiles instead (about 0.4-0.6 s per
+kernel family: run_cv 0.56 s, run_cce 0.41 s, 2D field 0.67 s).
 
 ### `run_cv(config, v_start=0.0, v_stop=-50.0, n_points=40)`
 
@@ -342,7 +345,7 @@ measured C-V. Metadata:
 - `reach_through_V`, `reach_through_known`, `reach_through_method`
 - provenance (section 7)
 
-1D only. Takes about 0.1 s on the batched engine.
+1D only. Takes about 10 ms (40 points) on the batched engine.
 
 ```python
 import numpy as np
@@ -364,7 +367,8 @@ relative to the in-epi generation). `x` is bias (V), `y` is CCE in [0, 1]. Metad
 - `reach_through_V`, `reach_through_known`
 - provenance
 
-1D only (a 2D config raises `NotImplementedError`). Takes about 0.1 s on the engine.
+1D only (a 2D config raises `NotImplementedError`). Takes about 30-40 ms (30 points) on
+the engine.
 
 ```python
 from etna import DeviceConfig, run_cce
@@ -404,13 +408,14 @@ Returns the field and potential at one reverse bias.
 - **1D**: `x` is depth (µm), `y` is |E| (V/cm). Metadata holds `potential` (V) and
   `net_doping` (cm^-3). 1D runs on the **batched engine** inside its box (the run_cv
   box, |bias| up to `cross_checked_to_V` = 40 V without n+ / 100 V with it, static
-  ionization; about 5 ms, `metadata["solver"] == "batched"`): same mesh and keys as devsim,
+  ionization; about 1.5 ms, `metadata["solver"] == "batched"`): same mesh and keys as devsim,
   potential within 1.5e-14 V, |E| within 4.5e-12 of max E, Electrons / Holes within 2e-9
   relative (`tests/test_field_engine_1d.py`). Otherwise, or with `solver="devsim"`, devsim
-  (about 0.3 s). `solver="engine"` raises where no engine serves the call.
+  (about 50 ms). `solver="engine"` raises where no engine serves the call.
 - **2D** (`half_width_um` set): `x` and `y` are **empty**. Use `mesh.x_coords`
   (lateral, cm), `mesh.y_coords` (depth, cm) and `mesh.node_values["ElectricField"]`.
-  The 2D engine serves configs inside its box (about 0.5 s); otherwise devsim runs.
+  The 2D engine serves configs inside its box (about 0.3 s for a new geometry, mostly
+  the mesh; about 10 ms for another bias on the same geometry); otherwise devsim runs.
 - A legacy-model 2D bias past the contact wall raises `OutsideModelValidity`
   (section 8).
 
@@ -580,9 +585,9 @@ Returns the total reverse leakage. `x` is bias (V), `y` is the total current (A,
   only)
 
 Runs on the batched 1D engine inside its box (section 7; the same TAT/SRH/SRV model
-and frozen-field fixed point as devsim, parity <= ~1e-11 relative, about 20 ms for 20
-points), otherwise on devsim (about 2-3 s). `solver="devsim"` forces the devsim reference,
-`solver="engine"` raises outside the box. Quote the result as a budget estimate
+and frozen-field fixed point as devsim, parity <= ~1e-11 relative, about 8 ms for 20
+points), otherwise on devsim (about 0.26 s for the same 20 points). `solver="devsim"`
+forces the devsim reference, `solver="engine"` raises outside the box. Quote the result as a budget estimate
 (section 2).
 
 ```python
@@ -625,9 +630,9 @@ print(r.metadata["solver"], np.round(r.y, 4))
 
 FLASH dose-rate sweeps. `x` is dose rate (Gy/s), `y` is CCE. `run_transient` also
 returns `transient_cce_raw` (unclipped). `run_flash_recombination` runs on the batched
-engine inside its scope (section 7; about 40 ms, parity <= ~7.5e-12 with Auger on),
-otherwise on devsim (about 1-3 s); `run_transient` runs on devsim (about 2 s). Any
-variation with dose rate is a **numerical sensitivity bound**. No plasma or high-injection physics is modelled. Both
+engine inside its scope (section 7; about 5 ms, parity <= ~7.5e-12 with Auger on),
+otherwise on devsim (about 0.5 s with `solver="devsim"`); `run_transient` runs on devsim
+(about 1 s). Any variation with dose rate is a **numerical sensitivity bound**. No plasma or high-injection physics is modelled. Both
 solvers of the steady-state sweep solve **SRH + Auger** (C_n 5e-31, C_p 2e-31 cm^6/s,
 Galeckas et al. 1997, 300 K constants; override with
 `etna.core.flash_recombination.cce_vs_dose_rate(..., C_n=, C_p=)`). Auger lowers CCE by
@@ -705,7 +710,8 @@ The transient drivers (`TransientSolver.simulate_pulse`, `simulate_pulse_train`,
     rebuild gave 0.117 ns.
   - No code reads that column: `load_cce_let_table` interpolates CCE only, and CCE is
     unaffected.
-  - The tables were not regenerated (~40 min, `ETNA_REBUILD_CCE_TABLES=1` in notebook 16).
+  - The tables were not regenerated (~40 min on 2026-10-18, not re-measured;
+    `ETNA_REBUILD_CCE_TABLES=1` in notebook 16).
 
 ### `run_microdosimetry(config, mc_csv_path, sv_thickness_um=10.0, sv_width_um=100.0, sv_depth_um=None, chord_model="cauchy")`
 
@@ -781,7 +787,7 @@ for r in sweep.run():
 Runs, in one process: `cv`, `cce`, `field`, `damage`, `dark`, `temperature`, `flash`,
 and, on request, `sweep` (a small 2D-engine microdosimetric grid; section 11). It asserts
 between sections that no devsim device leaked. On the default device every section runs on
-the engines and the whole run takes about 0.2 s with a warm numba cache (legacy preset
+the engines and the whole run takes about 0.06 s with a warm numba cache (legacy preset
 about 0.9 s: its 0..-100 V dark sweep runs on devsim; measured 2026-10-21). A section's `status` is `ok`, `warning` (it ran
 but returned no valid point; `reason` says why), `error` or `skipped`; `rep.ok` is
 True when no section is `error` or `warning` (skipped sections do not count). A curve with invalid points starts its key
@@ -1043,7 +1049,7 @@ header carries solver, domain, config and version.
 | C-V Analysis            | `run_cv`                                                                        | max reverse bias (default -50 V), points (40)                                                                                                                                                                                                                                                                                          | C-V, Mott-Schottky, eps*A/C and depletion edge vs V, full-depletion marker, CSV                                                                                                                                                                                                                                                                                                                                  |
 | Charge Collection (CCE) | `run_cce`                                                                       | V_start (-10), V_stop (-40), points (30); reverse bias only                                                                                                                                                                                                                                                                            | CCE vs bias, CSV                                                                                                                                                                                                                                                                                                                                                                                                 |
 | Field Map               | `run_field`, 1D or 2D                                                           | reverse bias (default -50 V, down to -200)                                                                                                                                                                                                                                                                                             | 1D: E(x), potential, net doping, CSV. 2D: heatmap viewer (field, potential, doping)                                                                                                                                                                                                                                                                                                                              |
-| Radiation Damage        | `run_radiation_damage`                                                          | proton energy (30/62/70/150 MeV), fluence range (default 0.7e-3 to 0.7 x the compensation fluence; with the opt-in charged-traps checkbox (`radiation_traps=True`) 0.01 x it to 1e16 neq), points (6), bias (-20 V)                                                                                                                                                                                                           | CCE vs fluence with NaN gaps explained. A persistent banner says kappa is SR-NIEL (Si neq) with the SiC neutron normalisation open                                                                                                                                                                                                                                                                               |
+| Radiation Damage        | `run_radiation_damage`                                                          | proton energy (30/62/70/150 MeV), fluence range (default 0.7e-3 to 0.7 x the compensation fluence; with the opt-in charged-traps checkbox (`radiation_traps=True`) 0.01 x it to 1e16 neq), points (6), bias (-20 V)                                                                                                                    | CCE vs fluence with NaN gaps explained. A persistent banner says kappa is SR-NIEL (Si neq) with the SiC neutron normalisation open                                                                                                                                                                                                                                                                               |
 | Dark Current            | total leakage vs T at one bias (`ParametricSweep` over T of `run_dark_current`) | T range (250-400 K), points (6), bias (-20 V), advanced N_t                                                                                                                                                                                                                                                                            | I_total vs T, CSV. A calibration banner is shown; only the total is shown                                                                                                                                                                                                                                                                                                                                        |
 | Microdosimetry          | `run_microdosimetry`                                                            | MC events CSV upload, SV thickness (10 µm) and width (100 µm, depth = width)                                                                                                                                                                                                                                                           | y·d(y), y_F / y_D, CSV. Independent of the sidebar                                                                                                                                                                                                                                                                                                                                                               |
 | Batch Sweep             | `ParametricSweep`                                                               | one of epi thickness, p+ thickness, N_A, N_D junction, N_D bulk, transition length, T, area; comma-separated values; facade (CCE vs bias, C-V, CCE vs temperature)                                                                                                                                                                     | overlaid curves, bulk CSV, per-value failures listed                                                                                                                                                                                                                                                                                                                                                             |
@@ -1080,8 +1086,10 @@ remain notebook-only.
 ## 10. Exports (Python)
 
 `etna.export` holds pure builders: they take a config plus finished results and never
-simulate. Each one carries `etna.export.VALIDATION_LABEL`: "simulation output, validated
-against devsim reference; not validated against measurement except where stated".
+simulate. Each one carries `etna.export.VALIDATION_LABEL`: "simulation output; fast
+engines cross-checked against the devsim reference solver; not validated against
+measurement except where stated". The devsim comparison is a solver-to-solver
+cross-check of the same model, not a validation of the model.
 
 ```python
 from etna import DeviceConfig, run_all, run_field
@@ -1289,16 +1297,20 @@ Every notebook calls `set_devsim_quiet(True)` (`etna.core.devsim_lock`, exported
 (it used to stream ~1e5 lines per notebook into the outputs); `ETNA_DEVSIM_VERBOSE=1`
 brings it back. Use it in your own scripts too.
 
-Run times measured on 2026-10-18 (Apple M4, executed into a scratch copy, the machine shared
-with other jobs): 01 3 s, 02 17 s, 03 15 s, 04 5 s, 05 6.5 s, 05b 5.3 s (full 60-condition sweep, on
-the engine; it still prints its old "~80 s" estimate), 06 29 s, 07 5.6 s, 08 21 s, 09 4 s, 10 11 s, 11 34 s, 12 27 s, 13 17 s, 14 18 s, 15 60 s, 16 71 s (tables
-loaded; one 2D ion-track transient remains), 17 4 s, 18 3 s, 19 193 s, 20 123 s. Notebooks 05, 05b, 06, 07, 20
+Run times measured on 2026-10-21 (Apple M4, `jupyter nbconvert --execute` from `notebooks/`
+into a scratch directory with `ETNA_FIGURE_DIR` in scratch; wall clock including the kernel
+start, numba cache warm, load average 2-3): 01 3.7 s, 02 12 s, 03 4.8 s, 04 3.7 s, 05 3.4 s,
+05b 4.2 s (full 60-condition sweep on the engine, empty cache; it still prints its old "~80 s"
+estimate), 06 32 s, 07 3.5 s, 08 9.1 s, 09 3.2 s, 10 4.5 s, 11 4.6 s, 12 3.6 s, 13 3.2 s,
+14 3.3 s, 15 34 s, 16 53 s (tables loaded; one 2D ion-track transient remains), 17 2.9 s,
+18 2.9 s. Notebooks 19 and 20 were not re-measured (over 2 min each: 193 s and 123 s on
+2026-10-18). Notebooks 05, 05b, 06, 07, 20
 were re-timed on 2026-10-19 after the dark-current / FLASH engine port, back to back with the
 previous code (scratch copies, same session): 05 35.9 -> 6.5 s, 05b 91.2 -> 5.3 s, 06 50.6 ->
 28.5 s (its C-V / CCE-vs-T sweeps are still devsim), 07 27.2 -> 5.6 s (its
 dark_current_sweep on a user-built devsim device stays devsim), 20 271.6 -> 123.1 s (the
 2D dark current; the rest is the 2D CCE scans). Rebuilding the
-notebook-16 tables (`ETNA_REBUILD_CCE_TABLES=1`) takes about 40 min (100 um ~15 min, 300 um ~26 min; one device per table, linear-response synthesis of the non-simulated LETs) and writes them to
+notebook-16 tables (`ETNA_REBUILD_CCE_TABLES=1`) takes about 40 min (2026-10-18, not re-measured; 100 um ~15 min, 300 um ~26 min; one device per table, linear-response synthesis of the non-simulated LETs) and writes them to
 `$ETNA_FIGURE_DIR/data/`, never over `data/`. Notebook 17 rewrites `data/synthetic_mc_events.csv` (bit-identical, seeded) relative to the repo root (they `chdir('..')`):
 run them from a scratch copy unless you mean to regenerate those tracked files. The test suite and CI do not
 execute notebooks (only the no-outputs and generator checks run);
@@ -1361,9 +1373,9 @@ uv run pytest -n0 -x tests/test_api_cce.py        # serial, e.g. with --pdb
 uv run pytest -n auto -q --durations=20           # slowest tests
 ```
 
-- 119 modules and 1514 tests (2026-10-21). `pytest.ini` deselects the `exhaustive` marker
+- 119 modules and 1517 tests (2026-10-21). `pytest.ini` deselects the `exhaustive` marker
   (6 redundant deep variants, each implied by a kept test), so the default run collects
-  1508: all pass with `--extra dev --extra viz`; with `--extra dev` only, 1500 pass and 8
+  1511: all pass with `--extra dev --extra viz`; with `--extra dev` only, 1503 pass and 8
   skip (the manim and gdstk tests). The `slow` marker labels the devsim integration tests
   but does not deselect them.
 - `pytest.ini` adds `--dist loadgroup --no-loadscope-reorder` (inert without `-n`), so
@@ -1444,7 +1456,7 @@ uv run pytest -n auto -q --durations=20           # slowest tests
 | `metadata["truncated"] == True`, shorter `x`                       | a devsim convergence wall at deep reverse bias. For the legacy model it is the cathode-on-epi artefact (about -64 V): use the default stack, or stay above it.                                                                                                                          |
 | `OutsideModelValidity`                                             | the requested point is outside the model's validity (legacy 2D past the contact wall; `run_cce_tilted_alpha` outside the engine box). The message says what to change.                                                                                                                  |
 | NaN points in a damage sweep                                       | the fluence is at or past `compensation_fluence`; see `metadata["reason"]`.                                                                                                                                                                                                             |
-| First call is slow (about 1 s), later calls about 0.1 s            | numba compilation. The batched-engine kernels use `cache=True`, so later processes load the compiled code from `__pycache__`. Changing numba or the source recompiles.                                                                                                                  |
+| First call is slow (about 0.5 s), later calls about 10 ms          | numba compilation (measured 2026-10-21, run_cv; section 6). The batched-engine kernels use `cache=True`, so later processes load the compiled code from `__pycache__`. Changing numba or the source recompiles.                                                                         |
 | A C-V or CCE call takes seconds instead of milliseconds            | the config is outside the engine box (`validated_domain_reason(cfg)`), or the engine fell back (`metadata["fallback_reason"]`).                                                                                                                                                         |
 | `ModuleNotFoundError` (plotly, streamlit) under `uv run pytest`    | `.venv` was synced without `--extra dev`, so a system pytest ran. Run `uv sync --extra dev`.                                                                                                                                                                                            |
 | Export page: "Animations are unavailable" / no GDSII button        | install `--extra viz` (macOS: `brew install pkgconf cairo pango` first). Note that a later plain `uv sync --extra dev` removes it again.                                                                                                                                                |

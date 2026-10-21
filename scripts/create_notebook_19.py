@@ -9,7 +9,8 @@ was a short and a telescope that was a four-layer stack.
 
 Regenerate with ``uv run python scripts/create_notebook_19.py`` and execute with
 ``uv run jupyter nbconvert --to notebook --execute notebooks/19_alternative_structures.ipynb
---output /tmp/nb19_out.ipynb`` (then ``git checkout -- figures``). Target < 5 min.
+--output /tmp/nb19_out.ipynb`` (figures go to ``$ETNA_FIGURE_DIR`` or ``notebooks/figures``,
+gitignored). Target < 5 min.
 """
 
 import nbformat

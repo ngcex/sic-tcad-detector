@@ -218,9 +218,9 @@ uv run pytest -n auto -q -m exhaustive     # the 6 deselected deep variants
 uv run pytest -n0 -x tests/test_api_cce.py # serial, e.g. with --pdb
 ```
 
-1514 tests in 119 modules. `pytest.ini` deselects the 6 `exhaustive` ones, so the default
-run is 1508 tests: all pass with `--extra dev --extra viz`, and with `--extra dev` only
-1500 pass and 8 skip (manim/gdstk). On a 10-core Apple M4 shared with other jobs, `-n auto`
+1517 tests in 119 modules. `pytest.ini` deselects the 6 `exhaustive` ones, so the default
+run is 1511 tests: all pass with `--extra dev --extra viz`, and with `--extra dev` only
+1503 pass and 8 skip (manim/gdstk). On a 10-core Apple M4 shared with other jobs, `-n auto`
 took 169–205 s on 2026-10-21: plan on about 3 minutes. `pytest.ini` supplies the tuned
 xdist scheduler; use `-n0` for pdb.
 
