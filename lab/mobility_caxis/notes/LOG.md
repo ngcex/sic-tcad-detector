@@ -370,3 +370,9 @@ transit (x0.83), the trapping-limited CCE (charged traps up to +2.6e-3 at 1e14; 
 test_charge_collection.py, test_material.py, test_microdosimeter_preset.py,
 test_viz_figures.py, test_radiation_traps.py, test_mobility_caxis.py; examples
 it_synthetic.csv regenerated.
+
+After the merge also: tests/test_contact_mesh.py (mesa references re-derived with
+`lab/mobility_caxis/bench/contact_mesh_refs.py`: 0.963068316 / 0.999091802 converged,
+0.96924012 / 0.99987739 legacy mesh; legacy_perp reproduces the previous pins to 5e-9 /
+4e-8) and tests/test_balanced_current.py (legacy geometry now with `legacy_perp`).
+Full suite on the merged branch: 1731 passed, 8 skipped.
