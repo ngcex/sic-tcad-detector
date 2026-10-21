@@ -86,6 +86,7 @@ Rows "d only", "EH4 scale only", "d + Z1/2": re-linearised (`lin_iterations=3`, 
 | d + EH4 (3 g)                      | d 3.3 +- 4.2, s_EH4 0.8 +- 1.9               | 1.07 / 1   | corr -0.999; singular values 0.215, 10.8; null direction (0.91, -0.41) |
 | d + EH4 + Z1/2 (3 g + onsemi flat) | d 2.8 +- 6, s_EH4 1.0 +- 2.9, s_Z 0.9 +- 1.1 | 1.21 / 1   | corr(d, EH4) -0.998                                                    |
 | d + Z1/2 (3 g + onsemi flat) | d 2.95 +- 0.38, s_Z 0.81 +- 0.65 | 1.24 / 2 | corr -0.81 |
+| same, flat fluence with the c-axis mu (audit v8 N1, 2026-10-21) | d 2.95 +- 0.39, s_Z 0.81 +- 0.64 | 1.30 / 2 | corr -0.82 |
 
 What the data can and cannot distinguish:
 

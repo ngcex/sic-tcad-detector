@@ -11,6 +11,9 @@ Results 2026-10-21 (dCCE refined - base at 1e13 / 1e14 / 1e15):
   0.25 0 1e-6, node mean (before #13): -2.9e-5 / -1.0e-4 / -2.7e-5
   0.25 0 1e-6, epi length mean      : -3.5e-7 / -5.7e-7 / +9.9e-7
   0.25 0 1e-6, legacy lifetimes     : +1.0e-7 / +7.5e-7 / +4.1e-6
+  0.5,         node mean (before #13): +5.2e-6 / +2.2e-5 / +1.6e-4 (uniform scaling keeps
+               the node distribution, so the node mean barely moves: the test refines
+               the 1-nm lines only)
   0.5,         epi length mean      : +4.2e-6 / +1.7e-5 / +1.2e-4
   0.5,         legacy lifetimes     : +7.7e-6 / +3.8e-5 / +2.4e-4
 """

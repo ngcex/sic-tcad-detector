@@ -1047,7 +1047,9 @@ calibrated removal").
   - On the 3 Radmanovac slopes, a slow EH4-like acceptor and a permanent removal
     (direct, or a midgap acceptor) are degenerate, with correlation -0.999.
   - Direct removal and a midgap acceptor give identical C-V below about 500 K.
-  - Fast acceptors (Z1/2) are seen only through the flat-C-V fluence: scale 0.8 +- 0.65.
+  - Fast acceptors (Z1/2) are seen only through the flat-C-V fluence: scale 0.8 +- 0.65
+    (re-run 2026-10-21 with the c-axis electron mobility in the flat fluence, audit v8
+    N1: s_Z 0.81 +- 0.64, d 2.95 +- 0.39, chi2 1.30 / 2, was 1.24).
 - **Calibrated fits.**
   - Direct removal: d = 2.87 +- 0.22 /neq, chi2 = 1.13 for 2 dof. Model g:
     onsemi 4.94, W2 4.81, W4 4.40.
