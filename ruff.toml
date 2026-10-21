@@ -14,6 +14,7 @@ include = [
     "app/**/*.py",
     "tests/**/*.py",
     "scripts/**/*.py",
+    "benchmarks/**/*.py",
 ]
 extend-exclude = ["notebooks", "lab", ".claude", ".scratch"]
 

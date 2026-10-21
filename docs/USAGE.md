@@ -774,11 +774,14 @@ Bulk physics (N_D 3.38e13):
 - CCE beyond compensation is a model prediction that depends on one stated assumption.
 - Qualitative literature check, on different devices and biases:
   - **Gsponer-like device** (50 um, 1.5e14, 1e15 neq): CCE is 0.36 / 0.70 / 0.97 at
-    -100 / -300 / -600 V. Measured: above 80 %.
+    -100 / -300 / -600 V. Measured: better than 50 % up to 1e15 n_eq/cm^2 (abstract of
+    arXiv:2310.02047; bias not stated there).
   - **De Napoli-like device** (20 um, 1e14, at 1.3e14 / 7.3e14 cm^-2): losses are
     0.8 % / 11 % at -300 V and 2.8 % / 56 % at -100 V. Measured: 7 % and 22.5 %.
 
-Same decade, bias-dependent, not a fit.
+Same decade, bias-dependent, not a fit (this steady opt-in model, si-neq fluences; the
+default model since 2026-10-21 loses about 10x less than De Napoli's measurement:
+[VV_REPORT.md](VV_REPORT.md) section 5).
 
 **Main assumption (read before using numbers beyond compensation).** In a depleted
 region, steady-state occupancy empties both acceptors (emission times: Z1/2 about 40 ms,
@@ -2132,9 +2135,9 @@ uv run pytest -n0 -x tests/test_api_cce.py        # serial, e.g. with --pdb
 uv run pytest -n auto -q --durations=20           # slowest tests
 ```
 
-- 139 modules and 1818 tests (2026-10-21). `pytest.ini` deselects the `exhaustive` marker
+- 140 modules and 1861 tests (2026-10-21). `pytest.ini` deselects the `exhaustive` marker
   (6 redundant deep variants, each implied by a kept test), so the default run collects
-  1812: all pass with `--extra dev --extra viz`; with `--extra dev` only, 1804 pass and 8
+  1855: all pass with `--extra dev --extra viz`; with `--extra dev` only, 1847 pass and 8
   skip (the manim and gdstk tests). The `slow` marker labels the devsim integration tests
   but does not deselect them.
 - `pytest.ini` adds `--dist loadgroup --no-loadscope-reorder` (inert without `-n`), so
@@ -2166,6 +2169,15 @@ uv run pytest -n auto -q --durations=20           # slowest tests
   only ~1-2 s per worker (`test_batched_engine.py`: 7.9 s cold vs 5.8 s warm), so
   there is no warm-up fixture.
 - Threads: `tests/conftest.py` pins numba/BLAS to one thread per xdist worker (PERF-02).
+- **Benchmark registry and V&V report** (issue #3): `benchmarks/registry.toml` lists the
+  golden quantities (analytic limits, devsim parity, calibrations, comparisons with
+  measurements and documented failures), each with its reference, source, tolerance and
+  status class. `uv run python -m benchmarks` evaluates the fast subset (7-15 s with a
+  warm numba cache; a cold cache adds the JIT compile, 2-3 min on a loaded machine) and
+  writes `benchmarks/results/fast.{json,md}`; `--slow` adds the slow
+  entries, `--update-report` regenerates the table of
+  [docs/VV_REPORT.md](VV_REPORT.md). `uv run pytest -m benchmark` runs the same subset
+  as tests (`tests/test_benchmarks.py`, part of the default run).
 - Families: `test_api_*` (facades), `test_app_*` (Streamlit `AppTest`, mocked and
   un-mocked smoke tests per page), engine parity (`test_batched_engine.py`,
   `test_api_engine_switch.py`, `test_engine2d*.py`, `test_nplus_engine*.py`,
