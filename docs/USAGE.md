@@ -2670,8 +2670,8 @@ r = simulate_track(DeviceConfig(), LET_keV_um=let, V_bias=50.0, region="all",
 
 **Electrothermal (opt-in, `thermal={"couple": True, "sink": "none"|"cathode"}`)**
 
-- **Physics.** Anisotropic κ (4.71 W/cm/K radial, 3.24 W/cm/K along c; arXiv:1712.00830) and c_v = 0.69 J/g/K × 3.21 g/cm³. Heat sources are Joule J·E (SG edge power), E_g per recombination, and prompt (E_pair − E_g) heat. Mobility and SRH τ follow T; transport stays isothermal SG (no thermodiffusion).
-- **Energy ledger.** The thermal ledger closes to ≤ 1e-7, adiabatic or with the cathode heat sink. The sink heat is the integrated conductive flux, so the ledger is an independent check.
+- **Physics.** Anisotropic κ (4.71 W/cm/K radial, 3.24 W/cm/K along c; arXiv:1712.00830) and c_v = 0.69 J/g/K × 3.21 g/cm³. Heat sources are Joule J·E (SG edge power), E_g per recombination, and prompt (E_pair − E_g) heat. Mobility follows T; the SRH τ are the device's own (including `tau_scale`) scaled by the library law τ(T)/τ(T₀) (issue #21: they were reset to the library values before); transport stays isothermal SG (no thermodiffusion).
+- **Energy ledger.** The thermal ledger closes to ≤ 1e-7, adiabatic or with the cathode heat sink. It is an algebraic identity of the scheme (the sink heat is assembled from the same conductive terms), so it checks the bookkeeping, not the sources. The sources are checked separately: J·E against an analytic resistor (σE² of a neutral slab, to 1e-10) and against the contact work of the electrical energy theorem (`energy=True`, 3.6e-5 at LET 300); the recombination heat against E_g × the pair ledger's recombined count (`tests/test_track_audit_v8.py`, `tests/test_track_engine.py`).
 - **Result.** The effect of heating depends on the core size:
   - 50 nm core: negligible (1.8 K).
   - 10 nm core at LET 1000: ΔT_max 118 K for picoseconds and ΔCCE −2.5e-4, about 19 % of the PHD (stable in time step).
@@ -2695,7 +2695,7 @@ r = simulate_track(DeviceConfig(), LET_keV_um=let, V_bias=50.0, region="all",
 - recombination: (n_d dp + p_d dn + dn dp) g(n, p) + (n_d p_d − n_i²)(g − g_d);
 - Poisson: V (dp − dn) + the Laplacian of dψ.
 
-In absolute unknowns the excess in a 1e19 cm⁻³ layer is resolved only to ~eps × 1e19 per node and stage: the `ledger_floor` was ~1e-6 of N_gen at LET 1 keV/µm. In excess unknowns it is ~n_steps × 4e-16 (MESH_FAST, default stack, 0 V, LET 1: ledger 5.1e-6 → 2.5e-8, floor 9.6e-7 → 9e-14). The CCE agrees with the absolute form to 6e-9 (LET 1000) and 8e-7 (LET 1, where the absolute form was floor-limited).
+In absolute unknowns the excess in a 1e19 cm⁻³ layer is resolved only to ~eps × 1e19 per node and stage: the `ledger_floor` was ~1e-6 of N_gen at LET 1 keV/µm. In excess unknowns the floor is accumulated from the excess actually held, at most n_steps × 4.4e-16 (an a priori bound; MESH_TINY, 0 V, LET 1: 8.6e-14 over 198 steps). The measured evidence is the ledger itself: MESH_FAST, default stack, 0 V, LET 1: ledger 5.1e-6 → 2.5e-8 against an absolute-form floor of 9.6e-7; MESH_TINY: 3.2e-7 → 2.2e-8 against 2.2e-7. The CCE agrees with the absolute form to 6e-9 (LET 1000) and 8e-7 (LET 1, where the absolute form was floor-limited).
 
 `excess=False` restores the absolute form (first release). The thermal coupling and `energy=True` use absolute states, so `excess=None` (default) switches to the absolute form for them; `excess=True` with either raises.
 
@@ -2718,13 +2718,15 @@ A tilted track is not axisymmetric. Two new modules handle it:
   - the box R matters at low field, where the plasma grows to several µm before erosion;
   - undepleted path segments use the E → 0 depleted-slice excess.
 
+  Validity per bias: `frac_below_1e4` is the share of the epi pairs on path elements with E⊥ < 1e4 V/cm; `valid` is share ≤ 0.05 (a convention, not a physical threshold), and a `RuntimeWarning` names the invalid biases. On the microdosimeter preset the default 0, 5 and 10 V points are invalid (shares 0.99, 0.66, 0.24); they are kept to compare with the Fig. 4b data. A precomputed `table=` is checked against the call (θ, s, dead layer, path, junction, τ_n/τ_p after `tau_scale`, T, mobility set, `table_kw`): `ValueError` on a mismatch. The slices use the config's mobility set (`DeviceConfig.mobility`, issue #16; they were always c-axis before).
+
 Facades (`etna.api.track`, exported from `etna`):
 
 | function                                                                                                        | returns                                                                 |
 | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
 | `run_track_event(config, LET_keV_um, V_bias, radial="whk", s_nm=10, mesh="fast")`                               | x = t (s), y = cathode current (e/s); metadata cce, recombined, ledgers |
 | `run_track_cce_let(config, LET_values, V_bias, radial="gaussian", s_nm=50)`                                     | x = LET, y = CCE; PHD, recombined                                       |
-| `run_tilted_alpha_track(config=microdosimeter, V_values, tau_scale=1, s_nm=10, R_um=10, workers=1, table=None)` | x = −V, y = CCE; cce_column, plasma_loss, shape, table, notes           |
+| `run_tilted_alpha_track(config=microdosimeter, V_values, tau_scale=1, s_nm=10, R_um=10, workers=1, table=None)` | x = −V, y = CCE; cce_column, plasma_loss, shape, table, notes, frac_below_1e4, valid |
 
 ### 19.3 Fig. 4b with the tilted model: a calibration, not a reproduction
 

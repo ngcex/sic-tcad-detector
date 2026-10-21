@@ -43,7 +43,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from etna.core.batched.material import EPS, thermal_voltage
+from etna.core.batched.material import EPS, material_params, thermal_voltage
 from etna.core.batched.sweeps import _n_i
 from etna.core.device import local_mobility
 from etna.core.sic_material import SiC4H_Parameters, srh_lifetime
@@ -91,6 +91,9 @@ class CrossSectionDevice:
     # by theta in a uniformly doped depleted epi, N_space = N_D sin^2(theta) gives the
     # in-plane part of the device's field gradient (0 = the uniform-field slice).
     N_space: float = 0.0
+    # low-field mobility set (DeviceConfig.mobility; issue #16): the slice must use the
+    # column device's set, not the library default
+    mobility: str = PARAMS.mobility
     meta: dict = field(default_factory=dict)
 
     def __post_init__(self):
@@ -129,9 +132,10 @@ class CrossSectionDevice:
     def node_mobility(self, T=None):
         T = self.T if T is None else T
         out = []
+        prm = material_params(self.mobility)
         for carrier in ("electron", "hole"):
             mu0 = float(
-                local_mobility(self.N_D, 0.0, 1.0, float(np.mean(T)), carrier, PARAMS)
+                local_mobility(self.N_D, 0.0, 1.0, float(np.mean(T)), carrier, prm)
             )
             f = (
                 saturation_factor(self.E_perp, mu0, carrier, self.T)
@@ -308,7 +312,8 @@ def slice_loss(
 ) -> SliceLoss:
     """Recombined fraction of one transverse slice (LET in keV/um, radial model, the
     field E_perp in V/cm). ``dev_kw`` go to ``slice_device`` (R_cm, r_min_cm, growth,
-    background, N_D, T, tau_n, tau_p, auger_model, carrier_scattering, mu_field)."""
+    background, N_D, T, tau_n, tau_p, auger_model, carrier_scattering, mu_field,
+    mobility)."""
     if dev is None:
         dev = slice_device(E_perp, **dev_kw)
     x, xbc, sysx = dev.dark()

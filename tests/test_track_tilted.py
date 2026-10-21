@@ -62,10 +62,15 @@ def test_excess_unknowns_match_absolute_and_remove_the_floor(tiny0, let):
     r1 = simulate_track(device=dev, dark=dark, LET_keV_um=let, V_bias=0.0, excess=True)
     assert r1.extra["excess"] and not r0.extra["excess"]
     assert r1.cce == pytest.approx(r0.cce, abs=max(5 * r0.ledger_residual, 1e-8))
-    assert r1.extra["ledger_floor"] < 1e-11
+    # ledger_floor is accumulated from the carrier content held in the unknowns (not a
+    # constant): excess form ~1e-13 (MESH_TINY), below its a priori n_steps x 4.4e-16
+    assert 0.0 < r1.extra["ledger_floor"] <= 4.4e-16 * r1.n_steps
     assert r1.ledger_residual < 1e-7
     if let == 1.0:  # the absolute form sits at the float64 floor of the 1e19 layers
         assert r0.extra["ledger_floor"] > 1e-8
+        # the absolute ledger cannot beat its floor; the excess form breaks through it
+        assert r0.ledger_residual > 0.5 * r0.extra["ledger_floor"]
+        assert r1.ledger_residual < 0.2 * r0.extra["ledger_floor"]
         assert r1.ledger_residual < 0.1 * r0.ledger_residual
 
 
@@ -192,11 +197,15 @@ def test_plasma_table_interpolation_and_roundtrip():
 
 def test_tilted_composition_with_a_given_table():
     cfg = microdosimeter_config()
-    r = tilted_alpha_cce(cfg, (5.0, 50.0), table=_toy_table(),
-                         column_kw=dict(h_min_cm=1e-6, h_max_cm=1e-4, z_growth=1.6))  # fmt: skip
+    with pytest.warns(RuntimeWarning, match="outside its validity"):  # 5 V
+        r = tilted_alpha_cce(cfg, (5.0, 50.0), table=_toy_table(),
+                             column_kw=dict(h_min_cm=1e-6, h_max_cm=1e-4,
+                                            z_growth=1.6))  # fmt: skip
     assert np.all(r.cce_column > 0.99)
     assert np.all((r.plasma_loss > 0) & (r.plasma_loss < 3e-3))
-    assert np.allclose(r.cce, r.cce_column - r.plasma_loss)
+    # at 50 V every path element sits in 1e4..1e5 V/cm, where the toy f_ex lies in
+    # [1e-4, 2e-3 - 1e-5]: the pair-weighted loss must too (weights sum to 1)
+    assert r.valid[1] and 1e-4 <= r.plasma_loss[1] <= 2e-3 - 1e-5
     assert r.plasma_loss[0] > r.plasma_loss[1]  # weaker field at 5 V
     assert np.all(r.column_ledger < 1e-6)
 
@@ -227,8 +236,10 @@ def test_facades_smoke():
     r = etna.run_track_event(DeviceConfig(), LET_keV_um=100.0, V_bias=10.0, mesh="tiny")
     assert r.sim_type == "track_event" and 0.9 < r.metadata["cce"] <= 1.0
     assert r.metadata["excess"] is True and r.metadata["ledger_residual"] < 1e-6
-    t = etna.run_tilted_alpha_track(
-        microdosimeter_config(), (10.0, 50.0), table=_toy_table()
-    )
+    with pytest.warns(RuntimeWarning, match="outside its validity"):  # 10 V
+        t = etna.run_tilted_alpha_track(
+            microdosimeter_config(), (10.0, 50.0), table=_toy_table()
+        )
     assert t.sim_type == "cce_tilted_track" and np.all(t.x == [-10.0, -50.0])
-    assert t.metadata["shape"][-1] == pytest.approx(1.0)
+    assert list(t.metadata["valid"]) == [False, True]
+    assert 0.1 < t.metadata["frac_below_1e4"][0] < 0.4  # audit: 0.24 at 10 V

@@ -13,6 +13,8 @@ etna.core.charge_collection_2d (cce_lateral_scan, contact_current_sharing).
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 
 from etna.core.charge_collection_2d import _ALPHA_RANGE_CM, in_mesh_generation_fraction
@@ -22,6 +24,10 @@ from etna.core.generation_profiles import (
 )
 
 from .solver import Solver2D
+
+# a CCE above 1 + this (|I| / I_gen) is a current-extraction or conservation error: the
+# value is still clipped to 1 (legacy compute_cce_2d convention) but flagged and warned
+CCE_CLIP_TOL = 1e-6
 
 
 def alpha_stripe_generation_fv2d(
@@ -106,7 +112,7 @@ def cce_lateral_scan_fv2d(
     ns = dict(node_sets or {})
     if node_set is not None:
         ns[contact] = node_set
-    cce, resid, mism = [], [], []
+    cce, raw, resid, mism = [], [], [], []
     for st, G in zip(states, Gflat):
         I_gen = solver.injected_generation(G)
         cur = _currents_all(solver, st, G, ns)
@@ -114,11 +120,20 @@ def cce_lateral_scan_fv2d(
         mism.append(
             max(abs(cur[c] - direct[c]) for c in cur) / I_gen if I_gen > 0 else np.nan
         )
-        cce.append(
-            float(np.clip(abs(cur[contact]) / I_gen, 0.0, 1.0)) if I_gen > 0 else 0.0
-        )
+        raw.append(abs(cur[contact]) / I_gen if I_gen > 0 else 0.0)
+        cce.append(float(np.clip(raw[-1], 0.0, 1.0)))
         resid.append(sum(cur.values()) / I_gen if I_gen > 0 else np.nan)
     cce = np.array(cce)
+    raw = np.array(raw)
+    clipped = raw > 1.0
+    if np.any(raw > 1.0 + CCE_CLIP_TOL):
+        warnings.warn(
+            f"fv2d CCE above 1 at {int(clipped.sum())} position(s) (max "
+            f"{raw.max():.6g}), clipped to 1: a current-extraction or conservation "
+            "error ('cce_raw', 'cce_clipped')",
+            RuntimeWarning,
+            stacklevel=2,
+        )
     f_in = _in_epi_fraction(info)
     return {
         "x_positions_cm": x_positions_cm,
@@ -129,6 +144,9 @@ def cce_lateral_scan_fv2d(
         "q_collected_over_deposited": cce * f_in,
         "residuals": np.array(resid),
         "direct_mismatch": np.array(mism),
+        # the extracted |I| / I_gen before the [0, 1] clip, and where it exceeded 1
+        "cce_raw": raw,
+        "cce_clipped": clipped,
         "gummel_iterations": [s.iterations for s in states],
         "solver": "fv2d",
     }

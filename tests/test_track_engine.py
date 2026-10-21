@@ -209,7 +209,9 @@ def test_injection_auger_and_carrier_scattering():
         dev = device_from_config(cfg, r=r, **m, **kw)
         out[name] = simulate_track(device=dev, **base)
     assert out["inj"].recombined_fraction < out["const"].recombined_fraction
-    assert out["ccs"].recombined_fraction != out["const"].recombined_fraction
+    # carrier-carrier scattering lowers the mobility in the plasma: it lives longer and
+    # recombines more
+    assert out["ccs"].recombined_fraction > out["const"].recombined_fraction
     for r in out.values():
         assert r.ledger_residual < 1e-6
 
@@ -261,17 +263,30 @@ def test_electrothermal_coupled_run(tiny):
     dev, dark = tiny
     kw = dict(device=dev, dark=dark, LET_keV_um=300.0, radial=gaussian(20e-7))
     iso = simulate_track(**kw)
-    hot = simulate_track(thermal={"couple": True}, **kw)
+    hot = simulate_track(thermal={"couple": True}, energy=True, **kw)
     th = hot.extra["thermal"]
-    assert th["ledger_residual"] < 1e-6
+    assert th["ledger_residual"] < 1e-6  # bookkeeping of the scheme (an identity)
+    # physics of the sources, checked against quantities the heat module does not
+    # compute: the integrated J.E against the contact work of the electrical energy
+    # theorem (contact currents x potentials, displacement, field energy; 3.6e-5
+    # measured), and the recombination heat against the pair ledger's recombined count
+    en = hot.extra["energy"]
+    work = en["contact_work_J"] - en["displacement_J"] - en["field_energy_change_J"]
+    assert th["heat_joule_J"] == pytest.approx(work, rel=1e-3)
+    assert th["heat_joule_J"] > 0
+    from etna.core.sic_material import bandgap
+
+    assert th["heat_recomb_J"] == pytest.approx(
+        float(bandgap(dev.T)) * Q * hot.recombined, rel=1e-6
+    )
     assert th["dT_max_K"] > 0
     assert th["heat_prompt_J"] == pytest.approx(
         hot.N_gen * (7.8 - 3.26) * Q, rel=0.01
     )  # (E_pair - E_g) per pair
     assert abs(hot.cce - iso.cce) < 1e-4  # 20 nm core: lattice heating is small
     assert C_V == pytest.approx(0.69 * 3.21)
-    # cathode heat sink: the sink heat is the integrated conductive flux (independent
-    # of the stored heat), so the ledger checks the scheme's conservation
+    # cathode heat sink: the ledger closes by construction of the scheme (the sink heat
+    # is assembled from the same L T terms): it checks the bookkeeping, not the sources
     sink = simulate_track(thermal={"sink": "cathode"}, **kw).extra["thermal"]
     assert sink["heat_sink_J"] > 0
     assert sink["ledger_residual"] < 1e-6
