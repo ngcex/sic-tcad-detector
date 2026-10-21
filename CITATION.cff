@@ -1,0 +1,53 @@
+# Citation metadata for ETNA (Citation File Format 1.2.0, https://citation-file-format.github.io/).
+# GitHub renders this as "Cite this repository"; Zenodo reads it when it archives a GitHub
+# release (once the repository is linked to Zenodo, issue #3 P1.3).
+#
+# `version` must equal etna/_version.py (checked by .github/workflows/matrix.yml).
+# No DOI yet: one is minted by Zenodo for the first tagged release. Do not add a DOI,
+# identifier or date-released by hand before it exists.
+cff-version: 1.2.0
+message: >-
+  If you use ETNA in your work, please cite the software using the metadata in this
+  file (a DOI will be added once the first release is archived on Zenodo).
+type: software
+title: "ETNA: Epitaxial Tcad Numerical Analysis"
+abstract: >-
+  ETNA is a Python TCAD library with a Streamlit UI for 4H-SiC p+/n-/n+ radiation
+  detectors (proton dosimetry and microdosimetry). It solves Poisson plus electron/hole
+  drift-diffusion in 1D and 2D with devsim and two numba engines that reproduce devsim
+  inside checked parameter boxes, and derives C-V, depletion and field profiles,
+  charge-collection efficiency, dark current, radiation-damage, temperature, dose-rate
+  and microdosimetric observables.
+authors:
+  - family-names: Scalia
+    given-names: Cesare
+    orcid: "https://orcid.org/0000-0002-8399-6549"
+version: 5.0.0
+license: MIT
+repository-code: "https://github.com/ngcex/sic-tcad-detector"
+url: "https://github.com/ngcex/sic-tcad-detector"
+keywords:
+  - TCAD
+  - silicon carbide
+  - 4H-SiC
+  - drift-diffusion
+  - radiation detectors
+  - dosimetry
+  - microdosimetry
+  - devsim
+  - numba
+
+# PLACEHOLDER for a future paper (none exists yet). Kept commented out on purpose: an
+# active `preferred-citation` makes GitHub's "Cite this repository" show the paper
+# INSTEAD of the software. Uncomment and fill in only once the paper is published.
+#
+# preferred-citation:
+#   type: article
+#   title: "<title of the future ETNA methods / software paper>"
+#   authors:
+#     - family-names: Scalia
+#       given-names: Cesare
+#       orcid: "https://orcid.org/0000-0002-8399-6549"
+#   journal: "<journal>"
+#   year: <year>
+#   doi: "<doi, once assigned>"

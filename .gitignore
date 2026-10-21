@@ -44,3 +44,6 @@ htmlcov/
 # generated figures (regenerate with the notebooks / etna.viz)
 figures/*
 !figures/cv_validation_bruzzi2023.png
+
+# MkDocs build output
+site/

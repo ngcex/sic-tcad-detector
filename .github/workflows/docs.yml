@@ -1,0 +1,55 @@
+# ETNA documentation site (issue #3 P4.1): MkDocs + Material, built from mkdocs.yml and
+# the existing docs/ files, deployed to GitHub Pages.
+#
+# NOT ENABLED: manual trigger only (Actions -> Docs -> Run workflow). Before the first
+# run a maintainer must set Settings -> Pages -> Source = "GitHub Actions". To publish on
+# every push to main, add `push: branches: [main]` under `on:` once that is done.
+#
+# mkdocs-material is pinned here instead of a pyproject extra, so the docs toolchain does
+# not enter uv.lock. Local build:
+#   uvx --from mkdocs==1.6.1 --with mkdocs-material==9.7.7 mkdocs build --strict
+name: Docs
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          python-version: "3.13"
+
+      - name: Build the site (strict, warnings fail)
+        run: uvx --from mkdocs==1.6.1 --with mkdocs-material==9.7.7 mkdocs build --strict -d site
+
+      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0
+
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5

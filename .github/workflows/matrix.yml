@@ -1,0 +1,101 @@
+# ETNA cross-platform smoke matrix (issue #3 P3.1, P1.2).
+#
+# The full suite stays on Linux in ci.yml. This workflow runs a QUICK smoke subset on
+# Ubuntu and macOS arm64 (devsim and numba ship macOS arm64 wheels), Python 3.13, to
+# catch platform-dependent installs and numerics:
+#   - project metadata: CITATION.cff schema (cffconvert), CHANGELOG section for the
+#     package version, metadata consistency tests;
+#   - a fixed subset of fast test files that covers material models, analytic limits, the
+#     devsim Poisson / drift-diffusion path, C-V and CCE facades, the batched 1D and 2D
+#     numba engines with their devsim parity, stopping-power data, packaging and run_all
+#     (about 40 s serial on an Apple M4, 2026-10-21).
+# Python 3.14 joins the matrix once devsim and numba publish 3.14 wheels. Windows is
+# not covered (devsim Windows wheel availability not investigated).
+#
+# Kept separate from ci.yml on purpose (ci.yml is the Linux gate). Actions are pinned by
+# commit SHA; Dependabot keeps them current.
+name: Matrix
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: matrix-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONUNBUFFERED: "1"
+  MPLBACKEND: Agg
+  NUMBA_CACHE_DIR: ${{ github.workspace }}/.numba-cache
+
+jobs:
+  metadata:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          python-version: "3.13"
+
+      - name: CITATION.cff is valid (Citation File Format 1.2.0)
+        run: uvx cffconvert --validate -i CITATION.cff
+
+      - name: CHANGELOG.md has a section for etna/_version.py
+        run: python3 scripts/release_notes.py --check-version
+
+  smoke:
+    name: smoke (${{ matrix.os }}, py${{ matrix.python }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14]
+        python: ["3.13"]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: System libraries for devsim (BLAS / LAPACK, Linux only)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libopenblas-dev liblapack-dev
+
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          python-version: ${{ matrix.python }}
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install (dev extra, locked)
+        run: uv sync --locked --extra dev
+
+      - name: Platform
+        run: uv run --no-sync python -c "import platform, sys, numpy, numba, devsim; print(platform.platform(), platform.machine(), sys.version.split()[0], 'numpy', numpy.__version__, 'numba', numba.__version__, 'devsim', getattr(devsim, '__version__', '?'))"
+
+      # -m on the command line replaces the pytest.ini default ("not exhaustive")
+      - name: Smoke tests
+        run: >-
+          uv run --no-sync pytest -n 3 -q --durations=10
+          -m "not exhaustive and not slow"
+          tests/test_project_metadata.py
+          tests/test_packaging.py
+          tests/test_material.py
+          tests/test_analytical.py
+          tests/test_import_lazy.py
+          tests/test_stopping_power.py
+          tests/test_poisson.py
+          tests/test_drift_diffusion.py
+          tests/test_cv.py
+          tests/test_api_cv.py
+          tests/test_api_cce.py
+          tests/test_batched_engine.py
+          tests/test_engine2d.py
+          tests/test_validation.py
+          tests/test_run_all.py

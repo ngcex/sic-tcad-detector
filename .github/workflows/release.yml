@@ -1,0 +1,123 @@
+# ETNA release (issue #3 P1.4).
+#
+# Trigger: a pushed tag vX.Y.Z (created by the maintainer, see docs/RELEASING.md).
+#   1. the tag must equal etna/_version.py and CHANGELOG.md must have a non-empty
+#      "## [X.Y.Z]" section (scripts/release_notes.py);
+#   2. build sdist + wheel (uv builds the wheel from the sdist) and check the metadata;
+#   3. install the wheel into a clean venv OUTSIDE the checkout and run
+#      scripts/wheel_smoke.py there (the same smoke as the CI wheel-smoke job);
+#   4. create the GitHub Release with the changelog section as notes and the sdist + wheel
+#      attached.
+# There is deliberately NO PyPI upload: ETNA is distributed from GitHub only (issue #3,
+# maintainer decision H3). If a Zenodo integration is enabled on the repository, Zenodo
+# archives the published GitHub Release and mints a DOI on its own (no step here).
+#
+# Actions are pinned by commit SHA (issue #3 P3.2); Dependabot keeps them current.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PYTHONUNBUFFERED: "1"
+  MPLBACKEND: Agg
+
+jobs:
+  build-and-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Tag matches etna/_version.py and CHANGELOG.md has its section
+        id: version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version="${TAG#v}"
+          pkg=$(python3 -c "import re,pathlib; print(re.search(r'__version__\s*=\s*\"([^\"]+)\"', pathlib.Path('etna/_version.py').read_text()).group(1))")
+          if [ "$version" != "$pkg" ]; then
+            echo "::error::tag $TAG does not match etna/_version.py ($pkg)"
+            exit 1
+          fi
+          python3 scripts/release_notes.py "$version" > "$RUNNER_TEMP/release-notes.md"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: System libraries for devsim (BLAS / LAPACK)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libopenblas-dev liblapack-dev
+
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          python-version: "3.13"
+
+      - name: Build sdist + wheel
+        run: uv build -o dist
+
+      - name: Package metadata check
+        run: uvx twine check --strict dist/*
+
+      - name: Artefact names carry the tag version
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          ls -l dist
+          test -f "dist/etna-${VERSION}.tar.gz"
+          test -f "dist/etna-${VERSION}-py3-none-any.whl"
+
+      - name: Install the wheel into a clean venv outside the checkout
+        run: |
+          uv venv "$RUNNER_TEMP/wheel-venv" -p 3.13
+          VIRTUAL_ENV="$RUNNER_TEMP/wheel-venv" uv pip install dist/*.whl gdstk
+
+      - name: Smoke test the installed wheel (library + app)
+        working-directory: ${{ runner.temp }}
+        run: '"$RUNNER_TEMP/wheel-venv/bin/python" -I "$GITHUB_WORKSPACE/scripts/wheel_smoke.py" --app'
+
+      - name: SHA-256 checksums
+        run: cd dist && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+
+      - name: Keep the release notes with the artefacts
+        run: cp "$RUNNER_TEMP/release-notes.md" dist/release-notes.md
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  github-release:
+    needs: build-and-smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # create the release and upload its assets
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: dist
+          path: dist
+
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.build-and-smoke.outputs.version }}
+        run: |
+          mv dist/release-notes.md "$RUNNER_TEMP/release-notes.md"
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "ETNA $VERSION" \
+            --notes-file "$RUNNER_TEMP/release-notes.md" \
+            --verify-tag \
+            dist/*

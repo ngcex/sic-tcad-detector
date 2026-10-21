@@ -1,0 +1,53 @@
+name: Bug report
+description: Something crashes, gives a wrong result or disagrees with the documentation.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please check [USAGE §16 Troubleshooting](https://github.com/ngcex/sic-tcad-detector/blob/main/docs/USAGE.md#16-troubleshooting) first.
+        If the question is whether a *physics result* is right (rather than a crash or a code defect), the "Physics or usage question" template may fit better.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected and what you got (error message, traceback, wrong number).
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproducing script
+      description: The smallest Python snippet (or app steps) that shows the problem.
+      render: python
+      placeholder: |
+        from etna import DeviceConfig, run_cv
+        cv = run_cv(DeviceConfig(), 0.0, -30.0, 31)
+        print(cv.metadata)
+    validations:
+      required: true
+  - type: textarea
+    id: metadata
+    attributes:
+      label: Result metadata
+      description: If a result came back, paste `result.metadata` (solver, validated_domain, truncated, fallback_reason, ...).
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: ETNA version or commit
+      description: "`python -c 'import etna; print(etna.__version__)'` and/or `git rev-parse --short HEAD`"
+    validations:
+      required: true
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: How ETNA was installed (checkout + `uv sync --extra dev`, or wheel / git URL).
+      value: |
+        - OS and CPU (e.g. macOS 15 arm64, Ubuntu 24.04 x86_64):
+        - Python:
+        - Install method:
+        - devsim / numba / numpy versions (`uv pip list | grep -Ei 'devsim|numba|numpy'`):
+    validations:
+      required: true

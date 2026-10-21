@@ -1,0 +1,54 @@
+name: Data or validation contribution
+description: Offer measured data (C-V, SIMS/SRP, I(T), CCE, ...) or a literature comparison to calibrate or validate ETNA.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you. Measured data are the most valuable contribution: they turn calibrations and predictions into validated results.
+        Formats and checks: [docs/DATA_REQUEST_CHECKLIST.md](https://github.com/ngcex/sic-tcad-detector/blob/main/docs/DATA_REQUEST_CHECKLIST.md) and `data/measurements/README.md`. You can check a file locally with `uv run python -c "from etna import measurements as M; M.load_cv_csv('file.csv')"` (or `load_sims_csv` / `load_it_csv`).
+        **Do not attach data you are not allowed to share publicly.** If the data are confidential, describe them here and ask for a private channel.
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind of data
+      multiple: true
+      options:
+        - C-V
+        - SIMS / SRP doping profile
+        - I(V) / I(T) leakage
+        - CCE vs bias / LET / fluence
+        - Pulse-height or microdosimetric spectrum
+        - Foundry layout / process dimensions
+        - Literature data (digitised or tabulated)
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: device
+    attributes:
+      label: Device and measurement conditions
+      description: Structure, area, epi thickness, nominal doping, temperature, frequency (C-V), particle and energy, fluence; instrument and uncertainties.
+    validations:
+      required: true
+  - type: textarea
+    id: provenance
+    attributes:
+      label: Provenance
+      description: Who measured it and when, or the full literature reference (figure / table number; how points were digitised).
+    validations:
+      required: true
+  - type: dropdown
+    id: licence
+    attributes:
+      label: May the data be redistributed in this MIT-licensed repository?
+      options:
+        - "Yes: I own the data or have permission, and they may be published in the repository"
+        - "Only for private calibration: do not commit the raw data"
+        - "Not sure (needs checking)"
+    validations:
+      required: true
+  - type: textarea
+    id: files
+    attributes:
+      label: Files or summary
+      description: Attach the files (CSV preferred) if they may be shared, or summarise them.

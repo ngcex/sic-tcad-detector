@@ -2195,7 +2195,13 @@ uv run pytest -n auto -q --durations=20           # slowest tests
 - **Dependencies:** edit `pyproject.toml`, then `uv lock`, and commit `uv.lock`.
   `uv lock --check` must pass (CI). Audit with
   `uv export --frozen --no-hashes --all-extras --no-emit-project > /tmp/r.txt && uvx pip-audit --no-deps --disable-pip -r /tmp/r.txt`.
-- **Version:** bump `etna/_version.py` only.
+- **Version:** bump `etna/_version.py` only (and `version:` in `CITATION.cff`, checked by
+  `tests/test_project_metadata.py`). Releases are GitHub-only tags `vX.Y.Z` built by
+  `.github/workflows/release.yml`; the checklist is in [RELEASING.md](RELEASING.md).
+- **Project files:** `CHANGELOG.md` (add an `[Unreleased]` entry), `CONTRIBUTING.md`,
+  `THIRD_PARTY_LICENSES.md` (refresh the dependency table after a lock change with
+  `uv run python scripts/license_inventory.py --write`), and the docs site from `mkdocs.yml`
+  (`uvx --from mkdocs==1.6.1 --with mkdocs-material==9.7.7 mkdocs build --strict`).
 - **Notebooks:** see section 12. Outputs are stripped, and generators must stay in sync.
 - **Provenance:** a new finding gets an `.issues/` file or a `lab/` log entry with the
   command that reproduces it. Comments in code cite those files.

@@ -1,5 +1,11 @@
 # ETNA — Epitaxial Tcad Numerical Analysis (for 4H-SiC detectors)
 
+[![CI](https://github.com/ngcex/sic-tcad-detector/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ngcex/sic-tcad-detector/actions/workflows/ci.yml)
+[![Matrix (Ubuntu, macOS arm64)](https://github.com/ngcex/sic-tcad-detector/actions/workflows/matrix.yml/badge.svg?branch=main)](https://github.com/ngcex/sic-tcad-detector/actions/workflows/matrix.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python 3.13](https://img.shields.io/badge/python-3.13-blue.svg)](pyproject.toml)
+[![Cite (CITATION.cff)](https://img.shields.io/badge/cite-CITATION.cff-informational.svg)](CITATION.cff)
+
 ETNA is a Python TCAD library with a Streamlit UI for **4H-SiC p⁺/n⁻/n⁺ radiation
 detectors**: the INFN-LNS Petringa group's 4 mm² proton dosimeter and its 25 mm²
 microdosimeter sibling. It solves Poisson plus electron/hole drift-diffusion in 1D and 2D
@@ -297,9 +303,22 @@ the devsim leak guard and test families: [USAGE §14](docs/USAGE.md#14-tests).
 - Engine changes need parity runs; calibrated constants need before/after numbers
   ([USAGE §15](docs/USAGE.md#15-development-workflow)).
 
+## Contributing, citing, releases
+
+- Contributions: [CONTRIBUTING.md](CONTRIBUTING.md) (uv workflow, test and benchmark
+  rules, labelling honesty), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md),
+  [SUPPORT.md](SUPPORT.md) (best effort), [SECURITY.md](SECURITY.md).
+- Citing: [CITATION.cff](CITATION.cff) (GitHub's "Cite this repository"). No DOI yet.
+- Changes: [CHANGELOG.md](CHANGELOG.md); releases are GitHub-only tags `vX.Y.Z`
+  ([docs/RELEASING.md](docs/RELEASING.md)).
+- Documentation site: `mkdocs.yml` builds `docs/`
+  (`uvx --from mkdocs==1.6.1 --with mkdocs-material==9.7.7 mkdocs build --strict`); not
+  published yet.
+
 ## License
 
-MIT, see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE). Third-party licences and data terms:
+[THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
 
 ## Acknowledgements
 
