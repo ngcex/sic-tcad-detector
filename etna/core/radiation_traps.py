@@ -46,8 +46,9 @@ Formulation (opt-in, ``RadiationTrapModel``; nothing here runs unless asked):
 
 KNOWN CONSEQUENCES (reported, not tuned; see docs/USAGE.md):
 - Emergent removal in the NEUTRAL n- region is (eta_Z12 + eta_EH4) = 7.4 /neq (both
-  acceptors filled), vs eta_removal = 5 of the legacy scalar and 5-7.5 measured at
-  252.7 MeV (Radmanovac et al., arXiv:2510.11304). Compensation (bulk Fermi level at the
+  acceptors filled), vs eta_removal = 5 of the legacy scalar and 5-7.5 /neq measured at
+  252.7 MeV (Radmanovac et al., arXiv:2510.11304, 4.5-5.6 per proton, in the si-neq
+  conversion; about 7.0-8.8 /neq in sic-damage). Compensation (bulk Fermi level at the
   Z1/2 level) at ~N_D / 7.4 neq.
 - In the DEPLETED region the steady-state occupancy empties both acceptors (Z1/2
   emission time ~40 ms, EH4 ~30 min at 300 K) and leaves EH6/7 ~90 % ionized: the
@@ -61,8 +62,10 @@ KNOWN CONSEQUENCES (reported, not tuned; see docs/USAGE.md):
   uniform field, see ``trap_diagnostics``). The depleted N_eff, and with it the CCE
   beyond compensation at a given bias, is therefore an ASSUMPTION of the occupancy
   choice, stated, not a prediction.
-- Lifetimes: unchanged (``compute_K_tau``, midgap SRH), so CCE trapping is the legacy
-  one; only the electrostatics changes.
+- Lifetimes: ``RadiationTrapModel.lifetimes`` "legacy" = ``compute_K_tau`` (midgap
+  SRH, every level counted as a trap, the steady opt-in model of 2026-10-18);
+  "occupancy" (the calibrated presets, hence the default "auto") = capture only by the
+  levels whose occupancy allows it (``occupancy_lifetimes``, length mean over the epi).
 """
 
 from __future__ import annotations
@@ -433,12 +436,23 @@ def neutral_state(static_net, fields, n_i, iterations=200):
     return n, pp, trap_charge(fields, n, pp)
 
 
-def trap_diagnostics(N_D, fluence_neq, T=300.0, model=None):
+def electron_mobility(N_D, T=300.0, mobility=None):
+    """Low-field electron mobility (cm^2/Vs) at donor density N_D and T of the
+    mobility set ``mobility`` (None = the default set; ``DeviceConfig.mobility``)."""
+    from etna.core.sic_material import SiC4H_Parameters, mobility_caughey_thomas_T
+
+    prm = SiC4H_Parameters() if mobility is None else SiC4H_Parameters(mobility=mobility)
+    return float(mobility_caughey_thomas_T(float(N_D), float(T), "electron", prm))
+
+
+def trap_diagnostics(N_D, fluence_neq, T=300.0, model=None, mobility=None):
     """Bulk (uniform N_D) state of the trap model at ``fluence_neq``: no solver, pure
     local physics, for validation and docs.
 
     Returns a dict: n_neutral (cm^-3), Ec_minus_EF (eV) of the neutral bulk,
-    resistivity proxy (Ohm cm, electrons only, mu_n = 950: an upper-mobility estimate),
+    resistivity proxy (Ohm cm, electrons only, the low-field electron mobility at
+    (N_D, T) of the set ``mobility``, None = the default set: an upper-mobility
+    estimate; a fixed 950 until 2026-10-21, audit v8 N1),
     N_eff_depleted_ss = net charge with n = p = 0 under steady-state occupancy (the
     space charge this model puts in a depleted region), N_eff_depleted_frozen = the same
     with the occupancy frozen at the neutral-bulk value (the history-frozen
@@ -473,7 +487,9 @@ def trap_diagnostics(N_D, fluence_neq, T=300.0, model=None):
     return {
         "n_neutral": float(n[0]),
         "Ec_minus_EF": float(-V_t * np.log(n[0] / NC)),
-        "resistivity_ohm_cm": float(1.0 / (_Q * 950.0 * n[0])),
+        "resistivity_ohm_cm": float(
+            1.0 / (_Q * electron_mobility(N_D, T, mobility) * n[0])
+        ),
         "N_eff_depleted_ss": Ndep_ss,
         "N_eff_depleted_frozen": Ndep_frozen,
         "neutral_removal_rate": model.neutral_removal_rate,
@@ -496,13 +512,23 @@ def capture_availability(fields, f):
     return lo, up
 
 
-def occupancy_lifetimes(model, fields, f, mask, T, tau0_n, tau0_p):
+def occupancy_lifetimes(model, fields, f, mask, T, tau0_n, tau0_p, x=None):
     """(tau_n, tau_p) (s) of one device with OCCUPANCY-weighted capture by the traps of
     ``model``: 1/tau_n = 1/tau0_n + <sum_k N_k sigma_n,k v_n e_avail,k>, 1/tau_p
-    likewise with the hole-capturing fraction, averaged over the trap nodes ``mask``
-    (the epi). ``RadiationTrapModel.lifetimes == "occupancy"``; the legacy
-    ``compute_K_tau`` counts every level as fully available (a filled EH6/7 donor or
-    acceptor cannot capture an electron, an empty one cannot capture a hole)."""
+    likewise with the hole-capturing fraction. ``RadiationTrapModel.lifetimes ==
+    "occupancy"``; the legacy ``compute_K_tau`` counts every level as fully available
+    (a filled EH6/7 donor or acceptor cannot capture an electron, an empty one cannot
+    capture a hole).
+
+    <.> is the LENGTH (volume, 1D) mean over the nodes ``mask``: the trapezoid integral
+    of the capture rate over x[mask] divided by its length, with ``x`` (N,) the node
+    positions. ``mask`` must be one contiguous interval; the CCE path passes the epi
+    only, junction <= x <= epi_end (``_epi_average_mask``): the n+ cathode layer, whose
+    filled traps cannot capture, is not part of the active volume. The transport
+    kernel takes one lifetime per device, so the volume mean of the capture rate (the
+    rate of a uniform carrier density) is the consistent scalar; a tau(x) field is not
+    implemented. ``x=None`` (or one node): the plain node mean, which depends on the
+    mesh grading (the default path before 2026-10-21, issue #13)."""
     from etna.core.sic_material import SiC4H_Parameters
 
     prm = SiC4H_Parameters()
@@ -512,6 +538,16 @@ def occupancy_lifetimes(model, fields, f, mask, T, tau0_n, tau0_p):
     sp = np.array([r["sigma_p"] for r in rows])[:, None]
     lo, up = capture_availability(fields, f)
     m = np.asarray(mask, dtype=bool)
-    rn = (fields.N_t * sn * vn * lo).sum(axis=0)[m].mean()
-    rp = (fields.N_t * sp * vp * up).sum(axis=0)[m].mean()
+    rate_n = (fields.N_t * sn * vn * lo).sum(axis=0)[m]
+    rate_p = (fields.N_t * sp * vp * up).sum(axis=0)[m]
+    if x is None or m.sum() < 2:
+        rn, rp = rate_n.mean(), rate_p.mean()
+    else:
+        idx = np.nonzero(m)[0]
+        if np.any(np.diff(idx) != 1):
+            raise ValueError("occupancy_lifetimes: mask must be one contiguous interval")
+        xm = np.asarray(x, dtype=float)[m]
+        L = xm[-1] - xm[0]
+        rn = np.trapezoid(rate_n, xm) / L
+        rp = np.trapezoid(rate_p, xm) / L
     return 1.0 / (1.0 / tau0_n + rn), 1.0 / (1.0 / tau0_p + rp)

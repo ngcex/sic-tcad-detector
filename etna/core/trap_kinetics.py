@@ -41,8 +41,7 @@ Model (nothing here runs unless called; ``DeviceConfig`` and every default uncha
 What this does NOT do (stated, not hidden): the trap response AT the AC frequency (the
 lambda-region / admittance-spectroscopy part), transport-limited quasi-Fermi splitting in
 a semi-insulating epi under bias (dark flat-QFL assumption kept), Poole-Frenkel field
-enhancement of emission, the negative-U two-level Z1/2 (single level as Burin Table I),
-temperature changes within one run (one T per solver; build one solver per T).
+enhancement of emission, temperature changes within one run (one T per solver; build one solver per T).
 """
 
 from __future__ import annotations
@@ -444,7 +443,10 @@ class KineticTrapSolver:
         conv = resolve_niel_convention(niel_convention)
         if trap_model is None:
             trap_model = resolve_traps(config.radiation_traps, conv) or True
-        check_trap_convention(resolve_traps(trap_model, conv), conv)
+        # resolve ONCE in the run's convention and hand the MODEL on: a name passed
+        # through would be rebuilt by __init__ in the default convention (issue #12)
+        trap_model = resolve_traps(trap_model, conv)
+        check_trap_convention(trap_model, conv)
         ref = _fluence_reference(device_kwargs(config))
         kappa = (
             1.0

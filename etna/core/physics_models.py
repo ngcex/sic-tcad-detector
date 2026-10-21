@@ -250,7 +250,9 @@ LOW_FIELD_MOBILITY = {
             "Hall 83-124 cm2/Vs at low N_A, and on the anisotropy: Ishikawa 0.9, Hatakeyama "
             "2003 1/1.15 via the review, Ayalew isotropic): uncertainty -35 / +0 % along c. "
             "The 0.90 ratio is the opt-in set 'c_axis_holes_0p9'. Electrons in the p+ "
-            "(Al-doped, minority) are an extrapolation of an N-doped fit",
+            "(Al-doped, minority) are an extrapolation of an N-doped fit. The status "
+            "'verified-primary' covers the 300 K electron parameters only: the T exponent "
+            "and the hole set are secondary (Schaffer 1994 via Ayalew Table 3.5)",
         ),
         direction="c_axis",
     ),  # fmt: skip
@@ -393,7 +395,7 @@ ANISOTROPY = {
         "ayalew2004", 1.2, 1.0,
         Provenance(
             AYALEW_2004 + ", eqs. 3.80-3.81", None, "verified-primary",
-            AYALEW_URL + " (node63)",
+            AYALEW_URL + " (node65)",
             "mu_n,par = 1.2 mu_n, mu_p,par = mu_p (holes isotropic: outdated, see the "
             "review)",
         ),
@@ -646,7 +648,7 @@ BANDGAP_NARROWING = {
         Provenance(
             "M. Lades, PhD thesis TU Munich (2000), Slotboom fit to U. Lindefelt, J. "
             "Appl. Phys. 84, 2628 (1998)",
-            None, "verified-primary", AYALEW_URL + " (node62, Table 3.4)",
+            None, "verified-primary", AYALEW_URL + " (node63, Table 3.4)",
             "Ayalew eq. 3.72 / Table 3.4 (the thesis is the opened source; G = 0.5 per "
             "the review Table XII). The two secondary restatements of Lindefelt's own "
             "four-term formula disagree on exponents and signs, so that form is not "

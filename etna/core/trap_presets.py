@@ -103,7 +103,14 @@ def arrhenius_sigma(A, T=300.0):
 def capan_z12_traps(defects_per_neq=2.5):
     """Z1 and Z2 (V_C at h and k) as two-level negative-U acceptors, Capan Table I
     energies and Arrhenius emission, split [Z2]:[Z1] = 4.4, total ``defects_per_neq``
-    vacancies per neq (cm^-1)."""
+    vacancies per neq (cm^-1).
+
+    The electron cross-sections are the EMISSION cross-sections of the Arrhenius
+    prefactors (``arrhenius_sigma``; detailed balance with one sigma per level), not
+    Capan's capture cross-sections: for Z2(=/0) Capan Table I (arXiv:1812.06462)
+    gives a capture sigma_inf of 2e-16 cm^2 with a 0.03 eV barrier, ~50x below the
+    1.02e-14 used here (audit v8 N8). Capture stays far faster than the lab times
+    (ramp, hold) either way, so no C-V or CCE observable changes at present."""
     fz2 = CAPAN_Z2_TO_Z1 / (1.0 + CAPAN_Z2_TO_Z1)
     out = []
     for name, tab, frac in (("Z1", CAPAN_Z1, 1 - fz2), ("Z2", CAPAN_Z2, fz2)):

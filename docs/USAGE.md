@@ -568,18 +568,20 @@ fluence (`lab/radiation_traps/bench/default_flip.py`):
 
 | x Phi_comp | 0.1 | 0.5 | 0.9 | 1.5 | 10 |
 | --- | --- | --- | --- | --- | --- |
-| old default (legacy, si-neq; Phi_comp 3.48e12) | 0.999618 | 0.998882 | 0.998294 | NaN | NaN |
-| legacy, sic-damage (4.36e12) | 0.999618 | 0.998882 | 0.998294 | NaN | NaN |
-| calibrated traps, si-neq, d 2.87 (1.70e12) | 0.999787 | 0.999572 | 0.999377 | 0.999113 | 0.996910 |
-| **new default** (calibrated traps, sic-damage, d 4.69; 1.80e12) | 0.999798 | 0.999619 | 0.999456 | 0.999237 | 0.997448 |
+| old default (legacy, si-neq; Phi_comp 3.48e12) | 0.999625 | 0.998930 | 0.998391 | NaN | NaN |
+| legacy, sic-damage (4.36e12) | 0.999625 | 0.998930 | 0.998391 | NaN | NaN |
+| calibrated traps, si-neq, d 2.87 (1.70e12) | 0.999792 | 0.999592 | 0.999412 | 0.999171 | 0.997444 |
+| **new default** (calibrated traps, sic-damage, d 4.69; 1.80e12) | 0.999800 | 0.999628 | 0.999471 | 0.999258 | 0.997706 |
 
-Only the **new default** row is on the current c-axis electron mobility (re-measured
-2026-10-21 after the mobility default changed); the other rows were computed on
-`mobility="legacy_perp"` and move by up to about 1e-4 on the current default.
+All rows re-measured 2026-10-21 on the current defaults (c-axis electron mobility; trap
+rows with the epi length-mean occupancy lifetimes of issue #13). Before the issue-#13
+fix the new-default row read 0.999798 / 0.999619 / 0.999456 / 0.999237 / 0.997448 (node
+mean over epi + n+); the legacy rows were on `mobility="legacy_perp"` (0.999618 /
+0.998882 / 0.998294).
 
 At the same absolute fluences (0.1 ... 10 x 3.48e12 p/cm²) the new default gives
-0.999751 / 0.999414 / 0.999122 / 0.998745 / 0.995838 (old: 0.999618 / 0.998882 /
-0.998294 / NaN / NaN). The new default is LESS damaging below compensation (the legacy
+0.999758 / 0.999446 / 0.999180 / 0.998842 / 0.996778 (old default: 0.999625 / 0.998930 /
+0.998391 / NaN / NaN). The new default is LESS damaging below compensation (the legacy
 lifetime K_tau counts every level as a trap, the occupancy lifetimes only free ones) and
 keeps solving beyond it. These CCE numbers are predictions (no measured CCE vs fluence
 of this device).
@@ -618,9 +620,13 @@ The two kinds of per-neq numbers in the chain transform differently:
    does not scale.
 3. **No double counting.** The preset records its convention
    (`RadiationTrapModel.niel_convention`); `resolve_traps("auto", convention)` builds it
-   in the run's convention, and every fluence sweep (`cce_vs_fluence`,
-   `KineticTrapSolver.from_config`, `calibrate_cv`) refuses a calibrated model under
-   another convention (`check_trap_convention`, ValueError). The literature levels
+   in the run's convention (also a preset NAME passed to
+   `KineticTrapSolver.from_config`, `calibrate_cv` or `calibrate_removal`, issue #12),
+   and the fluence sweeps and helpers (`cce_vs_fluence`, `run_radiation_damage`,
+   `compensation_fluence`, `default_fluence_grid`, `trap_compensation_fluence`,
+   `KineticTrapSolver.from_config`, `calibrate_cv`, `removal_observable` both kinds)
+   refuse a calibrated model OBJECT of another convention (`check_trap_convention`,
+   ValueError; the last three guards since issue #15). The literature levels
    carry no convention (they are neutron-anchored).
 4. **What is NOT invariant** (and is reported, not hidden): the share of the removal
    carried by the literature levels (above), the energy transfer from 252.7 MeV to other
@@ -752,8 +758,9 @@ by up to 2.6e-3; `tests/test_radiation_traps.py`):
 Bulk physics (N_D 3.38e13):
 
 - **Emergent neutral-region removal: 7.4 /neq** (both acceptors filled). For comparison,
-  the legacy scalar is 5, and Radmanovac et al. (arXiv:2510.11304) measured 5-7.5 at
-  252.7 MeV.
+  the legacy scalar is 5 (anchored per reactor neq, issue #14), and Radmanovac et al.
+  (arXiv:2510.11304) measured 4.5-5.6 per PROTON at 252.7 MeV: 5-7.5 /neq in the si-neq
+  conversion (kappa 0.851), about 7.0-8.8 /neq in the default sic-damage (kappa 0.639).
 - **This model's own compensation fluence** is therefore min N_D / (7.4 kappa):
   **2.35e12 p/cm^2 at 62 MeV** on the default stack, below the legacy 3.48e12.
   Metadata gives it as `trap_compensation_fluence` (and, since 2026-10-21, as
@@ -1002,8 +1009,15 @@ calibrated removal").
   `initial` state at 0 V, a ramp at `ramp_V_per_s`, then a hold of `hold_s`; its trap
   charge is then frozen. The default is `"steady"`.
 - **`lifetimes="occupancy"`**: CCE lifetimes count only levels able to capture. A
-  filled level cannot capture an electron. The default is `"legacy"`, which uses
-  `compute_K_tau`.
+  filled level cannot capture an electron. The capture rate is LENGTH-averaged over
+  the epi (junction to the n-/n+ step, trapezoid on the mesh) into one tau per device
+  (the transport takes a scalar tau; a tau(x) field is not implemented). Until issue
+  #13 it was a node-count mean over the epi plus the n+ layer, which depended on the
+  mesh grading (1-CCE x0.86-0.96 on the default path). Four times finer 1-nm mesh
+  lines now move the default CCE at 1e14 p/cm² by 6e-7 (before: 1.0e-4); halving every
+  spacing moves it by 1.7e-5 (legacy lifetimes: 3.8e-5, the transport discretisation;
+  `lab/audit_v8/m2_mesh_refinement.py`). The default is `"legacy"`, which uses
+  `compute_K_tau`; the calibrated presets (hence `"auto"`) use `"occupancy"`.
 
 **Presets** (`etna.core.trap_presets.trap_preset(name)`; pass the returned model as
 `DeviceConfig(radiation_traps=...)`):
@@ -1039,7 +1053,9 @@ calibrated removal").
   - On the 3 Radmanovac slopes, a slow EH4-like acceptor and a permanent removal
     (direct, or a midgap acceptor) are degenerate, with correlation -0.999.
   - Direct removal and a midgap acceptor give identical C-V below about 500 K.
-  - Fast acceptors (Z1/2) are seen only through the flat-C-V fluence: scale 0.8 +- 0.65.
+  - Fast acceptors (Z1/2) are seen only through the flat-C-V fluence: scale 0.8 +- 0.65
+    (re-run 2026-10-21 with the c-axis electron mobility in the flat fluence, audit v8
+    N1: s_Z 0.81 +- 0.64, d 2.95 +- 0.39, chi2 1.30 / 2, was 1.24).
 - **Calibrated fits.**
   - Direct removal: d = 2.87 +- 0.22 /neq, chi2 = 1.13 for 2 dof. Model g:
     onsemi 4.94, W2 4.81, W4 4.40.
@@ -1047,8 +1063,11 @@ calibrated removal").
     discriminate (the sigmas are width spreads). The preset uses direct removal
     because the EH4-only fit needs EH4 at 2.3x its DLTS rate, and the removal
     literature points to a permanent compensating species.
-- **Predicted flat-C-V fluences**, all inside the measured brackets:
-  - onsemi: 4.95e12 p/cm2;
+- **Predicted flat-C-V fluences**, all inside the measured brackets (si-neq preset;
+  `semi_insulating_fluence` takes the electron mobility of the default set at N_D since
+  audit v8 N1, a fixed 950 before: onsemi 4.94e12 -> 5.11e12, W4 4.77e13 -> 4.91e13,
+  the neq brackets move by < 0.1 %):
+  - onsemi: 5.11e12 p/cm2 (5.68e12 with the sic-damage preset);
   - W4: above 3.5e13;
   - Kroll et al.: 1.2e13 neq;
   - Gsponer et al.: below 5e14 neq.
@@ -1062,13 +1081,17 @@ calibrated removal").
   - C-V removal is insensitive to sigma_n.
   - The default stays 1.4e-14 (MECHANISMS.md section 4).
 - **CCE beyond compensation** (default stack, 62 MeV), at -40 V, for 1e15 / 5e15
-  p/cm2:
+  p/cm2 (re-measured 2026-10-21 on the current defaults, sic-damage and c-axis; in
+  brackets the si-neq / legacy_perp numbers of `cce_kinetic.py`):
 
-  | Model                                     | CCE at 1e15 | CCE at 5e15 |
-  | ----------------------------------------- | ----------- | ----------- |
-  | steady traps                              | 0.355       | 0.152       |
-  | kinetic, legacy lifetimes                 | 0.831       | 0.472       |
-  | kinetic, occupancy lifetimes (calibrated) | 0.919       | 0.686       |
+  | Model                                     | CCE at 1e15     | CCE at 5e15     |
+  | ----------------------------------------- | --------------- | --------------- |
+  | steady traps                              | 0.405 (0.355)   | 0.172 (0.152)   |
+  | kinetic, legacy lifetimes                 | 0.876 (0.831)   | 0.568 (0.472)   |
+  | kinetic, occupancy lifetimes (calibrated) | 0.948 (0.919)   | 0.779 (0.686)   |
+
+  The calibrated row read 0.941 / 0.756 on the current defaults before the issue-#13
+  lifetime average. The bullets below are from the si-neq bench.
   - The steady-to-kinetic step dominates.
   - The calibrated removal itself changes CCE by less than 0.01 up to 1e15.
   - The unknown post-irradiation occupancy of EH6/7 dominates beyond about 3e14. With
@@ -2224,9 +2247,9 @@ uv run pytest -n0 -x tests/test_api_cce.py        # serial, e.g. with --pdb
 uv run pytest -n auto -q --durations=20           # slowest tests
 ```
 
-- 147 modules and 1924 tests (2026-10-21). `pytest.ini` deselects the `exhaustive` marker
+- 150 modules and 1938 tests (2026-10-21). `pytest.ini` deselects the `exhaustive` marker
   (6 redundant deep variants, each implied by a kept test), so the default run collects
-  1918: all pass with `--extra dev --extra viz`; with `--extra dev` only, 1910 pass and 8
+  1932: all pass with `--extra dev --extra viz`; with `--extra dev` only, 1924 pass and 8
   skip (the manim and gdstk tests). The `slow` marker labels the devsim integration tests
   but does not deselect them.
 - `pytest.ini` adds `--dist loadgroup --no-loadscope-reorder` (inert without `-n`), so
@@ -2619,7 +2642,7 @@ Status **primary** means the numbers were read in the primary source. Status **s
 | `c_axis` mobility (default)                         | electrons primary (Ishikawa 2025 Kyoto thesis Eq. 2.16, drift, parallel to c); holes: `legacy_perp` (unchanged) | 300 K values exactly Eq. 2.16; T law: gamma -2.40 on mu_max (Schaffer's <0001> exponent, secondary) instead of the thesis's -3.4 (a disagreement between drift and Hall fits). Holes unchanged because the primaries disagree (lab/mobility_caxis/notes/LOG.md) |
 | `c_axis_holes_0p9` mobility (opt-in)                | as `c_axis`; holes x 0.90 (thesis drift ratio, primary; Hatakeyama 2003 1/1.15 secondary)                       | Ayalew eq. 3.81 (primary, older) says isotropic: not the default                                                                                                                                                                                                |
 | `ishikawa2025` mobility                             | primary (thesis Eqs. 2.16 and 4.6)                                                                              | Full thesis T laws, fitted 300-600 K; holes are HALL mobilities                                                                                                                                                                                                 |
-| `legacy_perp` / `ayalew2004` mobility               | primary (Ayalew Table 3.5)                                                                                      | Perpendicular to c. The electron gamma -2.40 is Schaffer's <0001> value; the hole -2.15 is borrowed from electrons. `legacy_perp` keeps mu_min T-independent                                                                                                    |
+| `legacy_perp` / `ayalew2004` mobility               | `legacy_perp` secondary (Schaffer 1994 via Ayalew Table 3.5); `ayalew2004` anisotropy primary (eqs. 3.80-3.81) | Perpendicular to c. The electron gamma -2.40 is Schaffer's <0001> value; the hole -2.15 is borrowed from electrons. `legacy_perp` keeps mu_min T-independent                                                                                                    |
 | `lades2000` high-field                              | electrons primary (Ayalew Table 3.6); parallel-to-c and holes secondary (Nilsson 2000 MC)                       | **Hole beta and T laws are an assumption** (no published fit)                                                                                                                                                                                                   |
 | `burin2024` / `ayalew2004` anisotropy               | secondary / primary                                                                                             |                                                                                                                                                                                                                                                                 |
 | `lades2000` BGN                                     | primary (Ayalew Table 3.4)                                                                                      | Lindefelt's own four-term form is restated inconsistently by two secondaries, so it is not offered                                                                                                                                                              |

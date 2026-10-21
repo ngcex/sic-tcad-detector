@@ -59,7 +59,7 @@ fl_ = Fp
 base = run_radiation_damage(cfg, fluences=Fp, V_bias=-40.0, proton_energy_MeV=62.0)
 
 
-def patched(model, fields, f, mask_, T, tau0_n, tau0_p):
+def patched(model, fields, f, mask_, T, tau0_n, tau0_p, x=None):  # x: post-#13 call
     prm = SiC4H_Parameters()
     vn_, vp_ = rt._vth(T, prm.m_e_dos), rt._vth(T, prm.m_h_dos)
     rows_ = level_table(model)

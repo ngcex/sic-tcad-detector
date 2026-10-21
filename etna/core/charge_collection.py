@@ -1025,6 +1025,15 @@ _TRAP_ENGINE_STEP_V = 5.0
 _TRAP_ENGINE_GUMMEL_MAX_ITER = 3000
 
 
+def _epi_average_mask(ref):
+    """Nodes of the epi, junction_pos <= x <= epi_end: the averaging volume of the
+    occupancy lifetimes (issue #13: x >= junction alone also took the n+ cathode
+    layer). Without an n+ layer epi_end is the cathode."""
+    info, x = ref["info"], ref["x"]
+    x_end = info.get("epi_end", x[-1])
+    return (x >= info["junction_pos"]) & (x <= x_end * (1.0 + 1e-12))
+
+
 def _occupancy_taus(ref, dark, trap_model):
     """(tau_n, tau_p) (B,) of the dark trap states with occupancy-weighted capture
     (``RadiationTrapModel.lifetimes == "occupancy"``; radiation_traps.occupancy_lifetimes)
@@ -1035,11 +1044,14 @@ def _occupancy_taus(ref, dark, trap_model):
     n_i = float(ref["info"]["n_i"])
     t0n, t0p = srh_lifetime(T, "electron"), srh_lifetime(T, "hole")
     st = dark.get("state")
+    avg = _epi_average_mask(ref)
     out_n, out_p = [], []
     for b, F in enumerate(dark["fluences_neq"]):
         fl = trap_fields(trap_model, F, ref["epi_mask"], T, n_i)
         f = st.f[b] if st is not None else occupancy(fl, dark["res"].n[b], dark["res"].p[b])
-        tn, tp = occupancy_lifetimes(trap_model, fl, f, ref["epi_mask"], T, t0n, t0p)
+        tn, tp = occupancy_lifetimes(
+            trap_model, fl, f, avg, T, t0n, t0p, x=ref["x"]
+        )
         out_n.append(tn)
         out_p.append(tp)
     return np.array(out_n), np.array(out_p)
@@ -1197,6 +1209,11 @@ def _cce_vs_fluence_multi(
     pristine_tau_p = srh_lifetime(T_dev, "hole")
     ref = _fluence_reference(dev_kw)
 
+    # an energy outside the NIEL table is an INPUT error: raise here, before the
+    # per-point try below turns it into "solver failure" NaNs (audit v8 N3)
+    from etna.core.radiation_damage import get_hardness_factor
+
+    get_hardness_factor(energy_MeV, niel_table)
     P, F = len(damage_params_list), len(fluence_range)
     cce_values = np.zeros((P, F))
     valid = np.zeros((P, F), dtype=bool)

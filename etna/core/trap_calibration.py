@@ -145,13 +145,14 @@ def calibrate_cv(
         raise ValueError("calibrate_cv: no datasets")
     groups = tuple(groups)
     P = len(groups)
-    base = resolve_traps(trap_model) or DEFAULT_TRAP_MODEL
-    scaled_model(base, groups, np.ones(P))  # validates the group names
     from etna.core.radiation_damage import hardness_table
     from etna.core.radiation_damage import resolve_niel_convention
     from etna.core.radiation_traps import check_trap_convention
 
     conv = resolve_niel_convention(niel_convention)
+    # a preset name is built in the run's convention (issue #12)
+    base = resolve_traps(trap_model, conv) or DEFAULT_TRAP_MODEL
+    scaled_model(base, groups, np.ones(P))  # validates the group names
     check_trap_convention(base, conv)
     kappa = (
         1.0
@@ -353,16 +354,22 @@ def neff_window(V, C_per_area, window_um=(10.0, 40.0)):
     return out
 
 
-def semi_insulating_fluence(model, N_D, T=300.0, freq_Hz=1e4, mu_n=950.0, kappa=1.0):
+def semi_insulating_fluence(model, N_D, T=300.0, freq_Hz=1e4, mu_n=None, kappa=1.0,
+                            mobility=None):  # fmt: skip
     """Fluence (units of 1 / kappa neq) at which the NEUTRAL epi of donor density N_D
     (local neutrality with the trap model, ``trap_diagnostics``) reaches a dielectric
     relaxation time eps / (q mu_n n) = 1 / (2 pi freq_Hz): above it the undepleted epi
     does not follow the AC signal and the C-V is flat at eps A / d. Bisection in
     log fluence (n_neutral falls monotonically with fluence). ``mu_n`` (cm^2/Vs) enters
-    logarithmically (stated; holes neglected: E_F stays above midgap)."""
+    logarithmically (stated; holes neglected: E_F stays above midgap); None = the
+    low-field electron mobility at (N_D, T) of the mobility set ``mobility`` (None =
+    the default set, c_axis). Until 2026-10-21 (audit v8 N1) a fixed 950 (the
+    legacy_perp low-doping value): onsemi 1 MHz, si-neq preset 4.94e12 -> 5.11e12."""
     from etna.core.batched.material import EPS, Q
-    from etna.core.radiation_traps import trap_diagnostics
+    from etna.core.radiation_traps import trap_diagnostics, electron_mobility
 
+    if mu_n is None:
+        mu_n = electron_mobility(N_D, T, mobility)
     n_crit = 2 * np.pi * float(freq_Hz) * EPS / (Q * float(mu_n))
     lo, hi = np.log(N_D * 1e-6), np.log(N_D * 1e3)  # neq bracket
     for _ in range(60):
@@ -378,9 +385,13 @@ def semi_insulating_fluence(model, N_D, T=300.0, freq_Hz=1e4, mu_n=950.0, kappa=
 def removal_observable(obs: RemovalObservation, model):
     """Model value of ``obs`` (same units as ``obs.value``) for ``model``."""
     from etna.api.device import DeviceConfig
+    from etna.core.radiation_damage import resolve_niel_convention
+    from etna.core.radiation_traps import check_trap_convention
     from etna.core.trap_kinetics import KineticTrapSolver, simulate_cv
 
     if obs.kind == "flat_fluence":
+        # the slope branch checks in KineticTrapSolver.from_config (issue #15)
+        check_trap_convention(model, resolve_niel_convention(obs.niel_convention))
         return np.log10(
             semi_insulating_fluence(model, obs.N_D, obs.T, obs.freq_Hz, kappa=obs.kappa)
         )
@@ -454,7 +465,14 @@ def calibrate_removal(
         raise ValueError("calibrate_removal: no observations")
     params = tuple(params)
     P = len(params)
-    base = resolve_traps(base_model) or DEFAULT_TRAP_MODEL
+    from etna.core.radiation_damage import resolve_niel_convention
+
+    convs = {resolve_niel_convention(o.niel_convention) for o in obs}
+    # a preset NAME is built in the observations' convention (issue #12); with mixed
+    # conventions it is built in the default one and the observations of another
+    # convention raise (check_trap_convention in removal_observable)
+    conv = convs.pop() if len(convs) == 1 else None
+    base = resolve_traps(base_model, conv) or DEFAULT_TRAP_MODEL
     if x0 is None:
         # start off the lower bound (a zero start pins the bounded TRF at 0)
         x0 = [max(base.donor_removal, 1.0) if p == "donor_removal" else 1.0
@@ -463,15 +481,21 @@ def calibrate_removal(
     parametrized_model(base, params, x0)  # validates names
     nfev = [0]
 
+    raw = {}  # x -> model values as computed (NaN kept: audit v8 N2)
+
     def model_values(x):
         nfev[0] += 1
         m = parametrized_model(base, params, x)
-        return np.array([removal_observable(o, m) for o in obs])
+        v = np.array([removal_observable(o, m) for o in obs], dtype=float)
+        raw[tuple(np.asarray(x, dtype=float))] = v
+        return v
 
     meas = np.array([o.value for o in obs])
     sig = np.array([o.sigma for o in obs])
 
     def resid(x):
+        # a non-finite model value is penalised (residual 1e3) to steer the fit away;
+        # it is reported as NaN with a warning below, never as a model value
         r = (model_values(x) - meas) / sig
         return np.where(np.isfinite(r), r, 1e3)
 
@@ -542,6 +566,15 @@ def calibrate_removal(
                     f"parameters {params[a]!r} and {params[b]!r} correlated "
                     f"({corr[a, b]:+.3f})"
                 )
+    mv = raw.get(tuple(np.asarray(sol.x, dtype=float)))
+    if mv is None:  # the solver's last evaluation was not at sol.x
+        mv = np.where(np.abs(r) >= 1e3, np.nan, r * sig + meas)
+    bad = [o.name for o, v in zip(obs, mv) if not np.isfinite(v)]
+    if bad:
+        warnings.append(
+            f"model value not finite at the solution for {bad} (fitted with a residual "
+            "penalty of 1e3: chi2, sigma and correlation are not meaningful)"
+        )
     order = np.argsort(S)
     return TrapCalibration(
         groups=params,
@@ -559,7 +592,7 @@ def calibrate_removal(
         nfev=nfev[0],
         settings=dict(
             params=list(params),
-            model_values=(r * sig + meas).tolist(),
+            model_values=[float(v) for v in mv],
             observations=[
                 dict(name=o.name, kind=o.kind, value=o.value, sigma=o.sigma,
                      source=o.source) for o in obs
