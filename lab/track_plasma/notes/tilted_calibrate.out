@@ -1,0 +1,66 @@
+(a) base model (s 10 nm, R 10 um, N_D 1e14), posterior of tau_scale
+  tail sigma 5e-04: tau_scale 0.0389 (68 % 0.0366-0.0422, 95 % 0.0343-0.0457) chi2 25.4/dof 2 scale 0.9988 tau_p 23.3 ns edge=False
+  tail sigma 1e-03: tau_scale 0.0389 (68 % 0.0347-0.0469, 95 % 0.0308-0.0566) chi2 6.4/dof 2 scale 0.9988 tau_p 23.3 ns edge=False
+  tail sigma 2e-03: tau_scale 0.0389 (68 % 0.0324-0.0663, 95 % 0.0261-0.1481) chi2 1.6/dof 2 scale 0.9988 tau_p 23.3 ns edge=False
+  all  sigma 5e-04: tau_scale 0.2399 (68 % 0.2377-0.2412, 95 % 0.2360-0.2429) chi2 1484.9/dof 5 scale 0.9913 tau_p 143.9 ns edge=False
+  all  sigma 1e-03: tau_scale 0.2399 (68 % 0.2363-0.2427, 95 % 0.2333-0.2460) chi2 371.2/dof 5 scale 0.9913 tau_p 143.9 ns edge=False
+  all  sigma 2e-03: tau_scale 0.2399 (68 % 0.2335-0.2461, 95 % 0.2278-0.2526) chi2 92.8/dof 5 scale 0.9913 tau_p 143.9 ns edge=False
+  model at the tail mode (all 7 V, free scale of the tail): [0.6812 0.9383 0.9722 0.9896 0.9953 0.9976 0.9988]  data [0.9083 0.9662 0.9806 0.9904 0.9932 0.9976 1.    ]
+(b) tail-best tau_scale per variant (sigma 1e-3)
+  {'s_nm': 1.0}                                tau_scale 0.0385 (68 % 0.0343-0.0463) chi2 6.4
+  {'s_nm': 50.0}                               tau_scale 0.0389 (68 % 0.0347-0.0469) chi2 6.4
+  {'R_um': 5.0}                                tau_scale 0.0290 (68 % 0.0266-0.0338) chi2 5.8
+  {'R_um': 20.0}                               tau_scale 0.0507 (68 % 0.0447-0.0603) chi2 6.9
+  {'mu_field': True}                           tau_scale 0.0460 (68 % 0.0409-0.0550) chi2 5.4
+  {'auger_model': 'injection'}                 tau_scale 0.0389 (68 % 0.0347-0.0469) chi2 6.4
+  {'carrier_scattering': True}                 tau_scale 0.0394 (68 % 0.0350-0.0474) chi2 6.3
+  {'T': 295.0}                                 tau_scale 0.0387 (68 % 0.0345-0.0466) chi2 6.4
+  {'N_space': 82000000000000.0, 'R_um': 20.0}  tau_scale 0.0700 (68 % 0.0632-0.0841) chi2 8.1
+  {'N_D': 50000000000000.0}                    tau_scale 0.0400 (68 % 0.0356-0.0482) chi2 7.1
+  {'N_D': 150000000000000.0}                   tau_scale 0.0387 (68 % 0.0345-0.0465) chi2 5.7
+  {'N_D': 200000000000000.0}                   tau_scale 0.0410 (68 % 0.0365-0.0494) chi2 5.7
+(c) plasma loss by local E_perp band (<2e3 | 2e3-1e4 | >1e4 V/cm) and column
+  tau x0.03333: column/column(50) [0.8809 0.9972 0.9984 0.9993 0.9997 0.9999 1.    ]
+        0 V: 1.73e-01 | 4.54e-02 | 1.24e-04
+        5 V: 0.00e+00 | 6.20e-02 | 8.02e-03
+       10 V: 0.00e+00 | 1.43e-02 | 1.84e-02
+       20 V: 0.00e+00 | 0.00e+00 | 1.35e-02
+       30 V: 0.00e+00 | 0.00e+00 | 7.34e-03
+       40 V: 0.00e+00 | 0.00e+00 | 4.83e-03
+       50 V: 0.00e+00 | 0.00e+00 | 3.58e-03
+  tau x0.05: column/column(50) [0.9085 0.9981 0.9989 0.9995 0.9998 0.9999 1.    ]
+        0 V: 1.69e-01 | 3.20e-02 | 8.42e-05
+        5 V: 0.00e+00 | 4.34e-02 | 5.44e-03
+       10 V: 0.00e+00 | 9.82e-03 | 1.25e-02
+       20 V: 0.00e+00 | 0.00e+00 | 9.15e-03
+       30 V: 0.00e+00 | 0.00e+00 | 4.98e-03
+       40 V: 0.00e+00 | 0.00e+00 | 3.30e-03
+       50 V: 0.00e+00 | 0.00e+00 | 2.45e-03
+  tau x0.1: column/column(50) [0.9453 0.999  0.9995 0.9998 0.9999 1.     1.    ]
+        0 V: 1.11e-01 | 1.70e-02 | 4.27e-05
+        5 V: 0.00e+00 | 2.29e-02 | 2.76e-03
+       10 V: 0.00e+00 | 5.08e-03 | 6.37e-03
+       20 V: 0.00e+00 | 0.00e+00 | 4.71e-03
+       30 V: 0.00e+00 | 0.00e+00 | 2.60e-03
+       40 V: 0.00e+00 | 0.00e+00 | 1.75e-03
+       50 V: 0.00e+00 | 0.00e+00 | 1.33e-03
+  tau x1: column/column(50) [0.9933 0.9999 0.9999 1.     1.     1.     1.    ]
+        0 V: 1.18e-02 | 1.84e-03 | 4.69e-06
+        5 V: 0.00e+00 | 2.56e-03 | 3.03e-04
+       10 V: 0.00e+00 | 6.05e-04 | 7.39e-04
+       20 V: 0.00e+00 | 0.00e+00 | 6.52e-04
+       30 V: 0.00e+00 | 0.00e+00 | 4.39e-04
+       40 V: 0.00e+00 | 0.00e+00 | 3.52e-04
+       50 V: 0.00e+00 | 0.00e+00 | 3.10e-04
+(d) identifiability: scale-projected Jacobian singular values (sigma 1e-3)
+  tau 0.03333 tail: singular values [2.01e+01 3.50e-01 1.68e-03]; column norms (log tau, log10 s, N_D/1e14) [20.08  0.05  0.38]
+  tau 0.03333 all : singular values [351.95  31.31   0.68]; column norms (log tau, log10 s, N_D/1e14) [315.3    2.72 159.45]
+     s    1 nm: chi2 tail     7.6  all   63111.9
+     s   10 nm: chi2 tail     7.7  all   54306.6
+     s   50 nm: chi2 tail     7.7  all   60818.5
+  tau 0.1 tail: singular values [5.70e+00 1.19e-01 6.73e-04]; column norms (log tau, log10 s, N_D/1e14) [5.7  0.02 0.13]
+  tau 0.1 all : singular values [2.88e+02 7.59e+00 1.43e-02]; column norms (log tau, log10 s, N_D/1e14) [255.25   0.86 133.14]
+     s    1 nm: chi2 tail    24.7  all    7790.1
+     s   10 nm: chi2 tail    24.5  all    7960.1
+     s   50 nm: chi2 tail    24.5  all    8044.1
+[calibrate] 0.6 s

@@ -86,7 +86,7 @@ What ETNA is **not**:
 | Doping profile N_D(x)                                     | **inferred**, not measured                                  | inversion of one C-V curve; bulk 3.4e13 is below the documented 0.5-1e14; no SIMS                                                                                          | section 8                                                                                                                   |
 | Full-depletion voltage                                    | **definition-dependent**                                    | analytic V_fd 2.74 V, reach-through 3.10 V, sweep gate 1.2 V_fd = 3.28 V (default stack)                                                                                   | `etna.export.labels.VFD_DEFINITION`                                                                                         |
 | CCE vs bias (1D, alpha in epi)                            | **model** (low injection, steady state)                     | engine verified vs devsim; no measured CCE reproduced for the dosimeter                                                                                                    | `run_cce` docstring                                                                                                         |
-| Microdosimeter alpha CCE shape (Fig. 4b, Phys. Med. 2025) | **not reproduced**                                          | flat to 0.7 % from 0 V in the model; data drop to 0.908 at 0 V                                                                                                             | `run_cce_tilted_alpha` docstring, `lab/microdosimeter/notes/LOG.md` §9                                                      |
+| Microdosimeter alpha CCE shape (Fig. 4b, Phys. Med. 2025) | **not reproduced** (calibration only) | 1D: flat to 0.7 % from 0 V; tilted track + plasma (2.5D) with library lifetimes: rms 0.033. The −20..−50 V tail needs τ_n+τ_p ≈ 23 ns (band 17-42), ~100x below good epi; 0..−10 V not fitted | `run_cce_tilted_alpha` docstring, `lab/microdosimeter/notes/LOG.md` §9, `lab/track_plasma/notes/LOG.md` §§10-12 |
 | Dark current                                              | **calibration** (budget estimate)                           | one N_t fitted to < 18 pA at -60 V, 4 mm²; bias shape f_depl heuristic x Hurkx (1+Gamma), temperature shape assumed                                                        | `run_dark_current`, DESIGN-1                                                                                                |
 | CCE vs proton fluence (default model, since 2026-10-21)   | **model**: removal **calibrated**, CCE **predicted**        | kinetic trap preset: literature levels (Burin/Capan) + direct removal d **calibrated** to 3 published 252.7 MeV C-V slopes (other devices, one temperature: removal mechanism NOT identified, a slow deep acceptor fits equally); NIEL `sic-damage` (computed r_n, spectrum-dependent 1.02-1.20); CCE vs fluence and beyond compensation **predicted**, not measured | `run_radiation_damage` docstring, section 6 "Defaults since 2026-10-21" |
 | Compensation fluence                                      | **model** (calibrated removal x NIEL)                       | 1.80e12 p/cm² at 62 MeV (default stack); 4.36e12 legacy scalar, 3.48e12 legacy si-neq                                                                                   | `compensation_fluence`                                                                                                      |
@@ -2128,9 +2128,9 @@ uv run pytest -n0 -x tests/test_api_cce.py        # serial, e.g. with --pdb
 uv run pytest -n auto -q --durations=20           # slowest tests
 ```
 
-- 135 modules and 1456 tests (2026-10-21). `pytest.ini` deselects the `exhaustive` marker
+- 136 modules and 1766 tests (2026-10-21). `pytest.ini` deselects the `exhaustive` marker
   (6 redundant deep variants, each implied by a kept test), so the default run collects
-  1450: all pass with `--extra dev --extra viz`; with `--extra dev` only, 1442 pass and 8
+  1760: all pass with `--extra dev --extra viz`; with `--extra dev` only, 1752 pass and 8
   skip (the manim and gdstk tests). The `slow` marker labels the devsim integration tests
   but does not deselect them.
 - `pytest.ini` adds `--dist loadgroup --no-loadscope-reorder` (inert without `-n`), so
@@ -2610,7 +2610,7 @@ All three are 1D only. They refuse 2D configs, `radiation_traps`, and `bandgap_n
 
 The track engine solves one ion track in the default stack (or any `DeviceConfig`), axisymmetric in (r, z) at normal incidence. It models the dense track core, plasma (columnar) recombination by SRH + Auger, the pulse-height defect (PHD) and, opt-in, the lattice temperature.
 
-It is a separate engine. Nothing in the `run_*` facades calls it, and `build_cce_let_table` (2D Cartesian sheet track, linear) is unchanged. Issue #9; numbers and commands are in `lab/track_plasma/notes/LOG.md`.
+It is a separate, opt-in engine with its own facades (`run_track_event`, `run_track_cce_let`, `run_tilted_alpha_track`, section 19.2). No other `run_*` facade calls it, and `build_cce_let_table` (2D Cartesian sheet track, linear) is unchanged. Issue #9; numbers and commands are in `lab/track_plasma/notes/LOG.md`.
 
 ```python
 from etna import DeviceConfig
@@ -2665,7 +2665,7 @@ r = simulate_track(DeviceConfig(), LET_keV_um=let, V_bias=50.0, region="all",
 - **Normal-incidence ions at 10–50 V.** Protons and 5.5 / 8 MeV alphas recombine 0.1–0.3 % of their pairs. The p+ dead layer (wrong-contact loss) is larger, at 2–6 %.
 - **0 V.** The CCE _rises_ with LET (0.872 → 0.933 from 0.1 to 3000 keV/µm), so the linear-table assumption fails without depletion.
 - **Steady-state CCE is not the single-particle CCE** even at low injection. SRH in the depletion region needs both carriers at once (n_i ≈ 0).
-- **The 241Am tilted-alpha data (Fig. 4b) are not reproduced** by a normal-incidence proxy of the tilted track. The plasma loss is nearly bias-independent above 5 V. This confirms `lab/microdosimeter/notes/LOG.md` §9.
+- **The 241Am tilted-alpha data (Fig. 4b) are not reproduced** with the library lifetimes. This holds for the normal-incidence proxy and for the proper tilted (2.5D) model of section 19.2, and it confirms `lab/microdosimeter/notes/LOG.md` §9. See 19.3 for what the data do constrain.
 
 **Electrothermal (opt-in, `thermal={"couple": True, "sink": "none"|"cathode"}`)**
 
@@ -2679,4 +2679,84 @@ r = simulate_track(DeviceConfig(), LET_keV_um=let, V_bias=50.0, region="all",
 **Cost and limits**
 
 - **Cost.** 2–5 s per event on `MESH_FAST` (6930 unknowns) and 4–15 s on `MESH_DEFAULT`, dominated by sparse LU. Use DEFAULT or finer for PHD numbers: the mesh error is about 5–8 % of the PHD.
-- **Not modelled:** tilted tracks (3D), velocity saturation, band-gap narrowing, hot carriers, and nuclear-stopping or window defects.
+- **Not modelled:**
+  - a full 3D tilted track (section 19.2 composes 2D transverse slices instead);
+  - self-consistent velocity saturation (only a frozen-field bracket exists, `mu_field`);
+  - band-gap narrowing;
+  - hot carriers;
+  - nuclear-stopping or window defects.
+
+### 19.1 Excess unknowns (the float64 floor, default since the issue #9 follow-up)
+
+`run_transient` now solves for the CHANGE from the dark state, (dψ, dn, dp), by default (`kernels.assemble_excess`). Every term is the exact difference from the dark state, evaluated without cancellation:
+
+- SG flux: a[dn_k B(D) − dn_l B(−D)] + a[n_dk ΔB(D0, δ) − n_dl ΔB(−D0, −δ)], with ΔB(x, d) = B(x + d) − B(x) from `bern_diff` (series / expm1 forms; 1e-14 relative against a 50-digit reference, tested);
+- recombination: (n_d dp + p_d dn + dn dp) g(n, p) + (n_d p_d − n_i²)(g − g_d);
+- Poisson: V (dp − dn) + the Laplacian of dψ.
+
+In absolute unknowns the excess in a 1e19 cm⁻³ layer is resolved only to ~eps × 1e19 per node and stage: the `ledger_floor` was ~1e-6 of N_gen at LET 1 keV/µm. In excess unknowns it is ~n_steps × 4e-16 (MESH_FAST, default stack, 0 V, LET 1: ledger 5.1e-6 → 2.5e-8, floor 9.6e-7 → 9e-14). The CCE agrees with the absolute form to 6e-9 (LET 1000) and 8e-7 (LET 1, where the absolute form was floor-limited).
+
+`excess=False` restores the absolute form (first release). The thermal coupling and `energy=True` use absolute states, so `excess=None` (default) switches to the absolute form for them; `excess=True` with either raises.
+
+### 19.2 Tilted tracks: transverse slices and the 2.5D composition
+
+A tilted track is not axisymmetric. Two new modules handle it:
+
+- **`etna.core.track.cross_section`**: the plane perpendicular to a long, locally uniform track, with the transverse field E⊥ = E sin θ imposed far away. It is a 2D Cartesian half plane (mirror plane through the track and the field), with unit length along the track and absorbing Dirichlet edges at |u| = R, v = R. The physics and numerics are the engine's (`TrackSystem(dev, geometry=...)` now accepts any finite-volume mesh). Backgrounds:
+  - `"depleted"`: n = p = n_i, linear ψ, exact discrete steady state (tested); `N_space` adds an in-plane space charge for the field gradient;
+  - `"neutral"`: n = N_D, E⊥ = 0.
+
+  `slice_loss(E_perp, LET, radial, ...)` returns the recombined fraction of the slice. `mu_field=True` is a frozen-far-field velocity-saturation bracket (Lades 2000 / Nilsson parallel-to-c v_sat).
+
+- **`etna.core.track.tilted`**: `tilted_alpha_cce(config, V_values, tau_scale=..., s_nm=...)`. CCE(V) = CCE_column(V) − Σ_k w_k f_ex(s_k, E⊥(z_k; V)), where:
+  - CCE_column is the single-particle linear response of the tilted generation on the 1D column (track engine, M = 1);
+  - f_ex = f(LET(s)) − f(LET → 0) is the plasma excess of the slice, tabulated in a `PlasmaTable` (6 path nodes × 11 fields, ~77 slices) and interpolated.
+
+  Approximations, reported in `notes`:
+  - the parallel component E cos θ is dropped (it only adds erosion, so the slice overestimates the loss);
+  - the box R matters at low field, where the plasma grows to several µm before erosion;
+  - undepleted path segments use the E → 0 depleted-slice excess.
+
+Facades (`etna.api.track`, exported from `etna`):
+
+| function                                                                                                        | returns                                                                 |
+| --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `run_track_event(config, LET_keV_um, V_bias, radial="whk", s_nm=10, mesh="fast")`                               | x = t (s), y = cathode current (e/s); metadata cce, recombined, ledgers |
+| `run_track_cce_let(config, LET_values, V_bias, radial="gaussian", s_nm=50)`                                     | x = LET, y = CCE; PHD, recombined                                       |
+| `run_tilted_alpha_track(config=microdosimeter, V_values, tau_scale=1, s_nm=10, R_um=10, workers=1, table=None)` | x = −V, y = CCE; cce_column, plasma_loss, shape, table, notes           |
+
+### 19.3 Fig. 4b with the tilted model: a calibration, not a reproduction
+
+Details are in `lab/track_plasma/notes/LOG.md` §§10-12. The bench is `lab/track_plasma/bench/tilted_bench.py`. Device: the microdosimeter preset with N_D 1e14.
+
+**With the library lifetimes (τ_n 1 ns, τ_p 600 ns) the tilted track does not reproduce Fig. 4b.**
+- The plasma loss changes by at most 1e-3 between the fields of −20 and −50 V; the data rise by 1e-2 there.
+- The shape misses by rms 0.033, the same as the normal-incidence proxy (0.034). The tilt was not the missing ingredient.
+
+**What moves the bias-dependent loss.**
+- The bias-dependent loss is SRH recombination during the plasma time, which scales as about 1/E⊥ and 1/(τ_n + τ_p).
+- The following move the loss nearly flat in bias, so the free overall scale absorbs them:
+  - the core radius (thermalization length) s;
+  - the Auger model;
+  - carrier-carrier scattering.
+- Velocity saturation flattens the field dependence.
+
+**Calibration** (free scale, the −20 to −50 V tail):
+
+| quantity | value |
+|---|---|
+| τ_scale | 0.039, 68 % interval 0.035-0.047 at σ 1e-3 |
+| τ_n + τ_p ≈ τ_p | ≈ 23 ns |
+| systematic band (box R, field gradient, v_sat, N_D) | 17-42 ns |
+| χ² | 6.4 for 2 dof at σ 1e-3; 25 at the digitisation σ of 5e-4 |
+
+This lifetime is about 100x below good-epi ambipolar lifetimes (~2 µs, arXiv:1011.1039, abstract).
+
+**What the fit cannot do.**
+- No single τ fits all seven points (χ² 371 for 5 dof).
+- The 0 to −10 V points depend on path elements below 1e4 V/cm, outside the validity of the 2.5D model.
+
+**What the data constrain.**
+- The singular values of the scale-projected Jacobian show ONE constrained direction: the plasma SRH lifetime.
+- **The core radius is not constrained:** Δχ² < 0.2 between s = 1 and 50 nm.
+- Hence no preset: `tau_scale` is a user knob of `run_tilted_alpha_track`.

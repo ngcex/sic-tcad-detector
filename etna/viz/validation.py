@@ -58,7 +58,8 @@ def tilted_alpha_shape(config=None) -> SimResult:
         f"Shape check: rms(model - data) = {np.sqrt(np.mean(resid**2)):.4f}; at 0 V model "
         f"{model_at[d[:, 0] == 0][0]:.4f} vs data {d[d[:, 0] == 0, 1][0]:.4f}; rise -20 -> -50 V "
         f"model {rise_model:+.4f} vs data {rise_data:+.4f}. NOT reproduced (no "
-        "drift-diffusion variant fits; plasma / columnar recombination not modelled)."
+        "drift-diffusion variant fits; the tilted-track plasma model with library "
+        "lifetimes does not either: docs/USAGE.md section 19.3)."
     )
     md = dict(r.metadata)
     md.update(
