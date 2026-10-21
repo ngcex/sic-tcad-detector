@@ -130,6 +130,58 @@ import etna
 print(etna.__version__, importlib.metadata.version("etna"))  # 5.0.0 5.0.0
 ```
 
+### Installing without a checkout
+
+ETNA is distributed from GitHub only (no PyPI release; the name `etna` is taken there).
+Into an existing uv-managed environment:
+
+```bash
+uv pip install "git+https://github.com/ngcex/sic-tcad-detector"                  # library
+uv pip install "etna[viz] @ git+https://github.com/ngcex/sic-tcad-detector"      # + gdstk / manim
+uv pip install "git+https://github.com/ngcex/sic-tcad-detector@<commit-or-tag>"  # pinned
+```
+
+Or build a wheel from a checkout with `uv build` (writes `dist/etna-*.whl` and the
+sdist), then `uv pip install dist/etna-*.whl`.
+
+- **The runtime data is in the wheel.** The hatch `force-include` table in
+  `pyproject.toml` copies the runtime subset of `data/` to `etna/_data/`: the NIST
+  PSTAR/ASTAR CSVs, the SR-NIEL CSVs, the legacy stopping-power tables, the CCE(LET)
+  tables, the digitised validation points, `foundry/layout_params.toml`, the measurement
+  templates and the provenance READMEs. Raw provenance (`data/nist_star/raw/`, the
+  SR-NIEL `.html` pages and fetch script) and notebook inputs (`synthetic_mc_events.csv`)
+  stay in the sdist and the repository. `etna/_paths.py` resolves every data file in
+  this order: `$ETNA_DATA_DIR` if set, then the packaged `etna/_data/`, then the
+  checkout's `data/` (source checkout, editable install). Scripts, notebooks and `lab/`
+  therefore keep reading `data/` in the repository. `tests/test_packaging.py` fails when
+  a new runtime CSV or JSON in `data/` is missing from the table.
+- **The layout parameter file stays user-editable.** In a wheel the default is package
+  data. Copy it out and point `ETNA_LAYOUT_PARAMS` at the copy (section 10):
+
+  ```bash
+  cp "$(python -c 'import etna.export as e; print(e.LAYOUT_PARAMS_PATH)')" my_layout.toml
+  export ETNA_LAYOUT_PARAMS=$PWD/my_layout.toml
+  ```
+
+- **Not in the wheel:** the Streamlit app (`app/`), notebooks, scripts, tests and `lab/`.
+  Use a checkout for those.
+- The CI job `wheel-smoke` (`.github/workflows/ci.yml`) does the following:
+  - builds the sdist and the wheel, and checks the metadata with `twine check`
+  - installs the wheel into a clean venv outside the checkout
+  - runs `scripts/wheel_smoke.py --app` with `python -I`
+
+  The script checks that `etna` is imported from site-packages with the packaged data,
+  then runs `run_cv`, `run_cce`, `run_all`, the SiC->water kappa, `w_creep()`, and the
+  layout params with SVG/GDS and the spec PDF. It also runs the app, copied next to the
+  installed package: the entry script, the measurement templates, the LET tables and
+  `/_stcore/health`. To run it locally:
+
+  ```bash
+  uv build -o /tmp/dist && uv venv /tmp/v -p 3.13
+  VIRTUAL_ENV=/tmp/v uv pip install /tmp/dist/etna-*.whl gdstk
+  cd /tmp && /tmp/v/bin/python -I "$OLDPWD/scripts/wheel_smoke.py" --app
+  ```
+
 The version is defined once, in `etna/_version.py`; `pyproject.toml` reads it through
 hatch (`dynamic = ["version"]`).
 
@@ -1043,7 +1095,7 @@ header carries solver, domain, config and version.
 | C-V Analysis            | `run_cv`                                                                        | max reverse bias (default -50 V), points (40)                                                                                                                                                                                                                                                                                          | C-V, Mott-Schottky, eps*A/C and depletion edge vs V, full-depletion marker, CSV                                                                                                                                                                                                                                                                                                                                  |
 | Charge Collection (CCE) | `run_cce`                                                                       | V_start (-10), V_stop (-40), points (30); reverse bias only                                                                                                                                                                                                                                                                            | CCE vs bias, CSV                                                                                                                                                                                                                                                                                                                                                                                                 |
 | Field Map               | `run_field`, 1D or 2D                                                           | reverse bias (default -50 V, down to -200)                                                                                                                                                                                                                                                                                             | 1D: E(x), potential, net doping, CSV. 2D: heatmap viewer (field, potential, doping)                                                                                                                                                                                                                                                                                                                              |
-| Radiation Damage        | `run_radiation_damage`                                                          | proton energy (30/62/70/150 MeV), fluence range (default 0.7e-3 to 0.7 x the compensation fluence; with the opt-in charged-traps checkbox (`radiation_traps=True`) 0.01 x it to 1e16 neq), points (6), bias (-20 V)                                                                                                                                                                                                           | CCE vs fluence with NaN gaps explained. A persistent banner says kappa is SR-NIEL (Si neq) with the SiC neutron normalisation open                                                                                                                                                                                                                                                                               |
+| Radiation Damage        | `run_radiation_damage`                                                          | proton energy (30/62/70/150 MeV), fluence range (default 0.7e-3 to 0.7 x the compensation fluence; with the opt-in charged-traps checkbox (`radiation_traps=True`) 0.01 x it to 1e16 neq), points (6), bias (-20 V)                                                                                                                    | CCE vs fluence with NaN gaps explained. A persistent banner says kappa is SR-NIEL (Si neq) with the SiC neutron normalisation open                                                                                                                                                                                                                                                                               |
 | Dark Current            | total leakage vs T at one bias (`ParametricSweep` over T of `run_dark_current`) | T range (250-400 K), points (6), bias (-20 V), advanced N_t                                                                                                                                                                                                                                                                            | I_total vs T, CSV. A calibration banner is shown; only the total is shown                                                                                                                                                                                                                                                                                                                                        |
 | Microdosimetry          | `run_microdosimetry`                                                            | MC events CSV upload, SV thickness (10 µm) and width (100 µm, depth = width)                                                                                                                                                                                                                                                           | y·d(y), y_F / y_D, CSV. Independent of the sidebar                                                                                                                                                                                                                                                                                                                                                               |
 | Batch Sweep             | `ParametricSweep`                                                               | one of epi thickness, p+ thickness, N_A, N_D junction, N_D bulk, transition length, T, area; comma-separated values; facade (CCE vs bias, C-V, CCE vs temperature)                                                                                                                                                                     | overlaid curves, bulk CSV, per-value failures listed                                                                                                                                                                                                                                                                                                                                                             |
@@ -1144,7 +1196,9 @@ drawing values, **not foundry dimensions**. Replace them with the mask data and 
 - Other file: `ex.load_layout_params(path)`, the `layout_params=` argument of
   `build_spec` / `spec_to_pdf` / `cross_section_svg` / `cross_section_png` /
   `layout_svg` / `layout_gds` (path, mapping or `LayoutParams`), the environment
-  variable `ETNA_LAYOUT_PARAMS`, or the upload box on the Export page.
+  variable `ETNA_LAYOUT_PARAMS`, or the upload box on the Export page. In an installed
+  wheel the default (`ex.LAYOUT_PARAMS_PATH`, under `etna/_data/foundry/`) is package
+  data: copy it out, edit the copy and set `ETNA_LAYOUT_PARAMS` (section 3).
 - Validation (`LayoutParamsError`, the message names the field, e.g.
   `dosimeter.guard_ring_width.value: must be > 0`): schema version, required keys, units,
   positive values, integer counts, known classes, die larger than the active area, rings
@@ -1361,9 +1415,9 @@ uv run pytest -n0 -x tests/test_api_cce.py        # serial, e.g. with --pdb
 uv run pytest -n auto -q --durations=20           # slowest tests
 ```
 
-- 119 modules and 1514 tests (2026-10-21). `pytest.ini` deselects the `exhaustive` marker
+- 120 modules and 1528 tests (2026-10-21). `pytest.ini` deselects the `exhaustive` marker
   (6 redundant deep variants, each implied by a kept test), so the default run collects
-  1508: all pass with `--extra dev --extra viz`; with `--extra dev` only, 1500 pass and 8
+  1522: all pass with `--extra dev --extra viz`; with `--extra dev` only, 1514 pass and 8
   skip (the manim and gdstk tests). The `slow` marker labels the devsim integration tests
   but does not deselect them.
 - `pytest.ini` adds `--dist loadgroup --no-loadscope-reorder` (inert without `-n`), so

@@ -21,7 +21,6 @@ References:
 """
 
 import logging
-from pathlib import Path
 
 import numpy as np
 
@@ -373,7 +372,9 @@ def compute_kappa_table(
     ValueError
         If ``source`` is omitted or not one of ``"bragg"``/``"legacy_unsafe"``.
     """
-    data_dir = Path(__file__).parent.parent.parent / "data"
+    from etna._paths import data_root
+
+    data_dir = data_root()
 
     if source not in ("bragg", "legacy_unsafe"):
         raise ValueError(
