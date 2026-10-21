@@ -124,14 +124,20 @@ pulls in native libraries (cairo, pango) through the system package manager.
   installed package, and devsim loads UMFPACK as a separate, replaceable shared library.
   On that reading, the LGPL obligations rest with the distributor of the devsim wheel,
   and ETNA's MIT licence is not affected.
+- **Observed on macOS arm64** (devsim 2.10.0, 2026-10-21; loaded images listed through
+  `_dyld_get_image_name` after a devsim solve, plus devsim's own verbose output):
+  - devsim prints "loading UMFPACK 5.1 as direct solver";
+  - the library loaded is the bundled copy at `devsim/umfpack/libumfpack_lgpl.dylib`;
+  - BLAS: devsim searches `DEVSIM_MATH_LIBS="libopenblas.dylib:liblapack.dylib:libblas.dylib"`,
+    reports `libopenblas.dylib` as missing, and loads the system `liblapack.dylib`. The
+    images in use are Apple's Accelerate `libBLAS` / `libLAPACK` (part of macOS). No
+    Homebrew OpenBLAS is needed.
 - **Still UNVERIFIED (open question from issue #3):**
   - that the same UMFPACK build and NOTICE ship in the Linux and Windows devsim wheels;
     only the macOS arm64 wheel was inspected;
-  - which file the `./`-relative `dlopen` resolves to at run time (the bundled copy or
-    another `libumfpack_lgpl` on the library path);
-  - whether devsim's UMFPACK 5.1 build matches the licence text quoted in the NOTICE;
-  - which BLAS is loaded on each platform. The loader asks for `libopenblas` on Linux
-    and macOS, and the CI installs `libopenblas-dev` (BSD-3-Clause) on Ubuntu.
+  - which BLAS is loaded on Linux. The loader asks for `libopenblas` first, and the CI
+    installs `libopenblas-dev` (BSD-3-Clause) on Ubuntu;
+  - whether devsim's UMFPACK 5.1 build matches the licence text quoted in the NOTICE.
 
   A redistributor of a bundle that contains devsim (a Docker image, a frozen app) should
   check these points before shipping.

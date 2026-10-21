@@ -8,7 +8,10 @@
 #   - a fixed subset of fast test files that covers material models, analytic limits, the
 #     devsim Poisson / drift-diffusion path, C-V and CCE facades, the batched 1D and 2D
 #     numba engines with their devsim parity, stopping-power data, packaging and run_all
-#     (about 40 s serial on an Apple M4, 2026-10-21).
+#     (about 40 s serial on an Apple M4 with a WARM numba cache, 2026-10-21; a cold CI
+#     runner also JIT-compiles the kernels, hence the numba cache steps below).
+# macOS needs no extra system libraries: devsim falls back from libopenblas to the system
+# liblapack (Apple Accelerate), observed locally (THIRD_PARTY_LICENSES.md section 2).
 # Python 3.14 joins the matrix once devsim and numba publish 3.14 wheels. Windows is
 # not covered (devsim Windows wheel availability not investigated).
 #
@@ -75,6 +78,19 @@ jobs:
 
       - name: Install (dev extra, locked)
         run: uv sync --locked --extra dev
+
+      # Same numba-cache scheme as ci.yml: pin source mtimes (numba validates a cached
+      # kernel by source mtime + size), key on the exact source hash, no restore-keys.
+      # `touch -t` (not GNU `-d @epoch`) so the step also works with BSD touch on macOS.
+      - name: Pin source mtimes for the numba cache
+        shell: bash
+        run: git ls-files -z etna | xargs -0 touch -t 202311142213.20
+
+      - name: numba JIT cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: .numba-cache
+          key: numba-matrix-${{ runner.os }}-${{ runner.arch }}-py${{ matrix.python }}-${{ hashFiles('etna/**/*.py', 'uv.lock') }}
 
       - name: Platform
         run: uv run --no-sync python -c "import platform, sys, numpy, numba, devsim; print(platform.platform(), platform.machine(), sys.version.split()[0], 'numpy', numpy.__version__, 'numba', numba.__version__, 'devsim', getattr(devsim, '__version__', '?'))"
