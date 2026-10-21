@@ -204,12 +204,18 @@ def solve_equilibrium(device_info):
     RuntimeError
         If the solver fails to converge.
     """
+    # Strict cap = the relaxed tier's (100). A failed devsim.solve restores the initial
+    # guess, so with a cap of 40 a 2D build needing 41-100 iterations (hw 150 um: 44)
+    # re-ran the same Newton path in the relaxed tier from iteration 0. Both tiers have
+    # relative_error 1e-8 and differ only in absolute_error (1e10 vs 1e12), which the
+    # Poisson-only update (AbsError ~1e-14) never comes near, so the strict solve stops
+    # at the same iterate: same state, bit for bit, without the wasted 40 iterations.
     try:
         devsim.solve(
             type="dc",
             absolute_error=DC_ABS_ERROR,
             relative_error=DC_REL_ERROR,
-            maximum_iterations=40,
+            maximum_iterations=100,
         )
         logger.info("Equilibrium solve converged")
     except devsim.error:
@@ -521,4 +527,3 @@ def extract_depletion_width_2d_center(device_info, center_x_tol_cm=1e-6):
 
     W = float(edge - junction_pos)
     return min(max(W, 0.0), float(epi_thickness))
-
