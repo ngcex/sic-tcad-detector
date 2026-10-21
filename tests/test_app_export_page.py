@@ -14,7 +14,7 @@ import etna
 from etna import DeviceConfig, MeshData, SimResult
 from etna.api.run_all import Report, SectionResult
 
-LABEL_START = "simulation output, validated against devsim reference"
+LABEL_START = "simulation output; fast engines cross-checked against the devsim reference"
 
 
 def _page():

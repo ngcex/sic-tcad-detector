@@ -35,7 +35,7 @@ from etna.export.layout_params import PlaceholderDimensionWarning, load_layout_p
 
 
 LABEL = (
-    "simulation output, validated against devsim reference; "
+    "simulation output; fast engines cross-checked against the devsim reference solver; "
     "not validated against measurement except where stated"
 )
 

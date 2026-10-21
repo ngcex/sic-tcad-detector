@@ -35,6 +35,7 @@ last Run click). No module-level side effects -- all work happens in render().
 from __future__ import annotations
 
 import math
+import re
 
 import numpy as np
 import streamlit as st
@@ -131,6 +132,39 @@ AREA_NO_OP_TEXT = (
 NON_POSITIVE_TEXT = (
     "Values must be finite, positive numbers (no nan, inf, 0 or negatives)."
 )
+
+
+NO_DATA_REASON = "returned no data (failed to converge or truncated to nothing)"
+_TABLE_COVER = re.compile(r"donor_table must cover the epi: last depth ([0-9.eE+-]+) um")
+_REASON_MAX = 200
+
+
+def failure_reason(error: "str | None") -> str:
+    """Short human-readable reason for a failed sweep value, from the
+    ``metadata["error"]`` string (``"<ExceptionName>: <message>"``). The full text
+    stays in the 'Error details' expander."""
+    if not error:
+        return NO_DATA_REASON
+    name, sep, msg = error.partition(": ")
+    if not sep or " " in name:
+        name, msg = "", error
+    m = _TABLE_COVER.search(msg)
+    if m:
+        depth = float(m.group(1))
+        return (
+            f"the tabulated epi profile covers only {depth:g} µm; use an epi "
+            f"thickness ≤ {depth:g} µm"
+        )
+    if name in ("RuntimeError", "error"):  # error: devsim.error
+        return "the solver did not converge for this value"
+    if msg.startswith("Invalid DeviceConfig: "):
+        msg = "invalid for this device: " + msg[len("Invalid DeviceConfig: "):]
+    msg = msg.strip().splitlines()[0] if msg.strip() else (name or "unknown error")
+    return msg if len(msg) <= _REASON_MAX else msg[: _REASON_MAX - 1] + "…"
+
+
+def _reason_list(reasons: list) -> str:
+    return "\n".join(f"- {r}" for r in reasons)
 
 
 # a tabulated epi profile covers only its own depth: thinner epis only
@@ -246,13 +280,14 @@ def render() -> None:
             ok_values: list[float] = []
             ok_results: list = []
             errors: list[str] = []
+            reasons: list[str] = []  # one short line per failed value (shown inline)
             for val, res in zip(values, results):
                 if len(res.x) < 1:
-                    if res.metadata.get("error"):
-                        errors.append(
-                            f"{PARAM_LABELS.get(param, param)} = {val:g}: "
-                            f"{res.metadata['error']}"
-                        )
+                    point = f"{PARAM_LABELS.get(param, param)} = {val:g}"
+                    err = res.metadata.get("error")
+                    if err:
+                        errors.append(f"{point}: {err}")
+                    reasons.append(f"{point}: {failure_reason(err)}")
                     continue
                 ok_values.append(val)
                 ok_results.append(res)
@@ -260,7 +295,8 @@ def render() -> None:
             if not ok_results:
                 st.error(
                     "All swept values failed. Check the values (they must be "
-                    "valid for the device) or try a narrower range."
+                    "valid for the device) or try a narrower range.\n\n"
+                    + _reason_list(reasons)
                 )
                 if errors:
                     with st.expander("Error details"):
@@ -276,6 +312,7 @@ def render() -> None:
                 st.session_state["sweep_n_ok"] = len(ok_results)
                 st.session_state["sweep_n_requested"] = len(values)
                 st.session_state["sweep_errors"] = errors
+                st.session_state["sweep_reasons"] = reasons
                 st.session_state["sweep_base_config"] = cfg
         except Exception as e:  # incl. devsim.error (not a RuntimeError)
             show_error(e, "Try a narrower value range.")
@@ -286,10 +323,11 @@ def render() -> None:
         n_ok = st.session_state.get("sweep_n_ok", 0)
         n_requested = st.session_state.get("sweep_n_requested", 0)
         if n_ok < n_requested:
+            reasons = st.session_state.get("sweep_reasons") or []
             st.warning(
                 f"{n_ok} of {n_requested} values completed successfully; the "
-                "rest failed to converge or returned no data and are omitted "
-                "from the plot below."
+                "rest failed and are omitted from the plot below."
+                + ("\n\n" + _reason_list(reasons) if reasons else "")
             )
             errors = st.session_state.get("sweep_errors") or []
             if errors:

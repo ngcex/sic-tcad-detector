@@ -8,7 +8,7 @@ import numpy as np
 
 # Verbatim on every export (JSON, CSV, Markdown, PDF, SVG, PNG, VTK, animations).
 VALIDATION_LABEL = (
-    "simulation output, validated against devsim reference; "
+    "simulation output; fast engines cross-checked against the devsim reference solver; "
     "not validated against measurement except where stated"
 )
 

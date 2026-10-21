@@ -945,8 +945,8 @@ def donor_table_spec(epi_thickness_cm, donor_table):
     epi_um = epi_thickness_cm * 1e4
     if d[-1] < epi_um * (1.0 - 1e-9):
         raise ValueError(
-            f"donor_table must cover the epi: last depth {d[-1]!r} um < epi thickness "
-            f"{epi_um!r} um"
+            f"donor_table must cover the epi: last depth {float(d[-1]):g} um < epi "
+            f"thickness {float(epi_um):g} um"
         )
     return d * 1e-4, np.log10(n)
 

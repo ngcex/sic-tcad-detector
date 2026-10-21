@@ -55,7 +55,7 @@ from etna.core.transient import transient_cce_vs_dose_rate
 
 logger = logging.getLogger(__name__)
 
-# Domain in which the batched engine was validated against the devsim path
+# Domain in which the batched engine was cross-checked against the devsim path
 # (parity to ~1e-14 for W/psi, <= 3e-6 for CCE -- ~1e-15 on the default device since both
 # paths extract the cathode current in the balanced form; tests/test_batched_engine.py and
 # tests/test_api_engine_switch.py pin representative points).
