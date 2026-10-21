@@ -56,7 +56,7 @@ findings.
 - **Suggested fix.** Scale the device's lifetimes by the library temperature law,
   `tau(T) = dev.tau * srh_lifetime(T) / srh_lifetime(dev.T)`, for both carriers. Add a
   test: coupled vs isothermal at ΔT → 0 must agree for `tau_scale != 1`.
-- **Confidence: high** (reproduced; the code path is unambiguous).
+- **Confidence: high** (reproduced; the code path is unambiguous). GitHub issue #21.
 - Mobility is not affected: `node_mobility(T)` uses `dev.mobility` and the device doping.
 
 ---
