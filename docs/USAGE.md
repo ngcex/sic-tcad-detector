@@ -1878,9 +1878,9 @@ uv run pytest -n0 -x tests/test_api_cce.py        # serial, e.g. with --pdb
 uv run pytest -n auto -q --durations=20           # slowest tests
 ```
 
-- 131 modules and 1701 tests (2026-10-21). `pytest.ini` deselects the `exhaustive` marker
+- 132 modules and 1709 tests (2026-10-21). `pytest.ini` deselects the `exhaustive` marker
   (6 redundant deep variants, each implied by a kept test), so the default run collects
-  1695: all pass with `--extra dev --extra viz`; with `--extra dev` only, 1687 pass and 8
+  1703: all pass with `--extra dev --extra viz`; with `--extra dev` only, 1695 pass and 8
   skip (the manim and gdstk tests). The `slow` marker labels the devsim integration tests
   but does not deselect them.
 - `pytest.ini` adds `--dist loadgroup --no-loadscope-reorder` (inert without `-n`), so
