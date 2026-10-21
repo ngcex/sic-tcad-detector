@@ -15,8 +15,9 @@ deposits in a rectangular sensitive volume (SV), with
   energy can escape the SV (or enter it from a SiC surround);
 - adaptive stepping (energy-loss fraction per step) so particles that stop inside the SV
   (alpha Bragg peak) end at the CSDA range;
-- per-event deterministic counter-based random streams (SplitMix64 seeded from
-  (seed, event index)): results do not depend on the numba thread count.
+- per-event deterministic random streams (SplitMix64 started at a hash of
+  (seed, event index), so events are independent): results do not depend on the numba
+  thread count.
 
 Calibrated vs predicted: nothing here is fitted. Mean stopping and electron ranges are
 NIST data (SiC composed); the fluctuation model is Geant4's (its parameters are Geant4's
@@ -291,12 +292,33 @@ def _uniform(st):
     return ((_next_u64(st) >> np.uint64(11)) + 0.5) * (1.0 / 9007199254740992.0)
 
 
+@njit(cache=True, inline="always")
+def _mix64(z):
+    # SplitMix64 finaliser (Stafford variant 13): a bijection of uint64
+    z = (z ^ (z >> np.uint64(30))) * _M1
+    z = (z ^ (z >> np.uint64(27))) * _M2
+    return z ^ (z >> np.uint64(31))
+
+
+_K_SEED = np.uint64(0x6A09E667F3BCC909)  # sqrt(2) fraction bits (any odd constant)
+_K_EVENT = np.uint64(0xBB67AE8584CAA73B)  # sqrt(3) fraction bits
+
+
 @njit(cache=True)
 def _seed_state(seed, event):
+    """Start counter of the (seed, event) stream: a hash, not a linear combination.
+
+    A linear start (``seed*M1 + event*GOLD``) put event k+1 one draw behind event k on
+    the same Weyl sequence (issue #17). Here the start is mix64(mix64(seed ^ K1) ^
+    mix64(event*GOLD + K2)): asymmetric in (seed, event), no zero fixed point, and the
+    starts of different events are pseudo-random points on the 2^64 cycle (two streams
+    of L draws overlap with probability ~ n_events^2 L / 2^64, < 1e-4 for 1e6 events
+    of 1e3 draws).
+    """
     st = np.empty(1, dtype=np.uint64)
-    st[0] = np.uint64(seed) * _M1 + np.uint64(event) * _GOLD + _M2
-    for _ in range(4):
-        _next_u64(st)
+    h_seed = _mix64(np.uint64(seed) ^ _K_SEED)
+    h_event = _mix64(np.uint64(event) * _GOLD + _K_EVENT)
+    st[0] = _mix64(h_seed ^ h_event)
     return st
 
 
@@ -1319,7 +1341,9 @@ def mean_csda_deposit_keV(particle, E_MeV, path_um, material="sic"):
     stops = R1 <= rng[0]
     E1 = np.exp(np.interp(np.maximum(R1, rng[0]), rng, lnE))
     frac = tab.L_el / (tab.L_el + tab.L_nuc)
-    cum = np.concatenate([[0.0], np.cumsum(0.5 * (frac[1:] + frac[:-1]) * np.diff(Egrid))])
+    cum = np.concatenate(
+        [[0.0], np.cumsum(0.5 * (frac[1:] + frac[:-1]) * np.diff(Egrid))]
+    )
     hi = np.interp(E, Egrid, cum)
     lo = np.where(stops, -tab.E_min, np.interp(E1, Egrid, cum))
     return (hi - lo) * 1e3

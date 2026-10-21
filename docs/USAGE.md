@@ -1290,8 +1290,10 @@ A numba float64 parallel condensed-history sampler for `"proton"`, `"alpha"` and
   delta rays made there can enter, and the beam is degraded by it.
 - **Stepping.** Adaptive (`step_fraction`, the energy-loss fraction per step), so an
   alpha stopping in the SV ends at the CSDA range.
-- **Random numbers.** A SplitMix64 stream per (seed, event). Results are independent of
-  the thread count, and `event_offset` continues a stream.
+- **Random numbers.** A SplitMix64 stream per (seed, event), started at a hash of the
+  pair, so events are independent (issue #17: before, event k+1 reused event k's draws
+  shifted by one and the standard errors were 1.6-2x too small). Results are
+  independent of the thread count, and `event_offset` continues a stream.
 
 It returns `TrackEvents`: `edep_keV` (= primary + delta part), `chord_um`,
 `E_sv_entry_MeV`, entry point and direction, `stop_path_um` and optional `hits`
@@ -1354,8 +1356,8 @@ Benchmarks: `uv run python lab/mc_transport/bench/bench.py` (25-100 s, depending
 
 - **Consistency (not validation; same tables).** The mean deposit equals the NIST CSDA
   integral within 0.1 % (8e6 events).
-- **Variance.** 0.84-1.06 x the Vavilov/Bohr variance xi T_max (1 - beta²/2).
-- **Vavilov regime (kappa 0.1-0.5).** The most probable value is within 1-3 % of the
+- **Variance.** 0.83-1.04 x the Vavilov/Bohr variance xi T_max (1 - beta²/2).
+- **Vavilov regime (kappa 0.1-0.5).** The most probable value is within 0.2-6 % of the
   numerical Vavilov density. The FWHM is 10-12 % narrower.
 - **Landau regime (kappa < 0.03).** The MPV is 2-12 % above PDG Eq. 34.12 and the FWHM is
   1.2-1.8 x 4 xi. The PDG and Bichsel 1988 report that thin-Si distributions are wider
@@ -1366,9 +1368,9 @@ Benchmarks: `uv run python lab/mc_transport/bench/bench.py` (25-100 s, depending
 - **Delta rays.** A bare 10 um SV keeps 0.914 of the mean (62 MeV p). A 100-300 um SiC
   surround restores 1.01.
 - **Effects separated (62 MeV p, normal beam).**
-  - Straggling alone keeps y_F (2.77) and raises y_D from 2.77 to 3.62.
+  - Straggling alone keeps y_F (2.77) and raises y_D from 2.77 to 3.61.
   - Delta-ray escape from a bare SV lowers y_F to 2.53 and y_D to 2.85.
-  - A 300 um SiC surround brings them back to 2.75 / 3.23.
+  - A 300 um SiC surround brings them back to 2.76 / 3.22.
   - The bare-SV default is therefore not a detector prediction for an SV inside a chip:
     set `surround_um` to the real overlayer/substrate.
 - **Speed.** 10 M events/s on 10 threads and 2 M events/s on 1 (Apple M4, light load),
