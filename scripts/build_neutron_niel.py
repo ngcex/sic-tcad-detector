@@ -40,7 +40,6 @@ from etna.core.neutron_niel import (
     damage_csv_name,
     material_niel_from_isotopes,
     niel_csv_name,
-    parse_mf3_section,
     read_text,
     run_njoy,
     lethargy_average,

@@ -33,8 +33,9 @@ M_C = 12.011
 NJOY_VERSION = "NJOY2016.78 (conda-forge njoy2016 2016.78)"
 
 # isotope -> (ENDF/B-VIII.0 file, MAT, natural atom fraction, sha256 of the file)
-# Atom fractions: IUPAC representative isotopic compositions (CIAAW), as listed by
-# NIST "Atomic Weights and Isotopic Compositions".
+# Atom fractions: NIST "Atomic Weights and Isotopic Compositions" (checked 2026-10-21,
+# physics.nist.gov/cgi-bin/Compositions/stand_alone.pl?ele=Si / ?ele=C: Si-28
+# 0.92223(19), Si-29 0.04685(8), Si-30 0.03092(11); C-12 0.9893(8), C-13 0.0107(8)).
 ENDF_FILES = {
     "Si28": (
         "n-014_Si_028.endf",
@@ -260,7 +261,11 @@ def spectrum_average(
 def watt_spectrum(a: float = 0.988, b: float = 2.249):
     """Watt fission spectrum chi(E) ~ exp(-E/a) sinh(sqrt(b E)), E in MeV.
 
-    Defaults: the ENDF/B thermal U-235 parameters a = 0.988 MeV, b = 2.249 /MeV.
+    Defaults a = 0.988 MeV, b = 2.249 /MeV: the values commonly used for thermal
+    U-235 fission (attributed to a JAEA/JENDL page by a web search; that page could
+    not be opened, so the attribution is UNVERIFIED). Sensitivity of r_n
+    (data/niel/README.md): a 0.965 / b 2.29 gives 1.0721 vs 1.0687; a 0.8 / 1.2 MeV
+    gives 1.106 / 1.034.
     """
     return lambda E: np.exp(-E / a) * np.sinh(np.sqrt(b * E))
 

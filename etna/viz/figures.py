@@ -615,10 +615,14 @@ def _damage(fig, res, notes, **_):
             label=f"compensation {phi_c:.2g} cm$^{{-2}}$",
         )
     ax.set_ylim(0, 1.08)
-    ax.set_xlabel(S.UNITS["fluence"][1])
+    neutron = md.get("particle") == "neutron"
+    ax.set_xlabel(
+        r"Neutron fluence (cm$^{-2}$)" if neutron else S.UNITS["fluence"][1]
+    )
     ax.set_ylabel(S.UNITS["cce"][1])
     ax.set_title(
-        f"CCE vs fluence ({md.get('energy_MeV', '')} MeV p, {md.get('V_bias', '')} V)"
+        f"CCE vs fluence ({md.get('energy_MeV', '')} MeV {'n' if neutron else 'p'}, "
+        f"{md.get('V_bias', '')} V)"
     )
     _legend(ax, loc="lower left")
     notes.insert(0, NOTES["damage"])

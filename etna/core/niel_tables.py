@@ -150,7 +150,8 @@ SR_NIEL_PROTON_SIC = (
 # an independent Python elastic integration reproduces HEATR to 1e-4; E_d 35/21 eV
 # changes nothing at the 5th digit; ENDF/B-VII.1 changes r_n by -0.16 %.
 #
-# Spectrum average: Watt fission spectrum (a 0.988 MeV, b 2.249 /MeV), 1 keV-20 MeV.
+# Spectrum average: Watt fission spectrum (a 0.988 MeV, b 2.249 /MeV, the usual thermal
+# U-235 values; source attribution unverified, see neutron_niel.watt_spectrum), 1 keV-20 MeV.
 
 # Si, pointwise at 1.000 MeV (cf. ASTM 95 MeV mb = NIEL_NEUTRON_1MEV_SI_MEV_CM2_G)
 NIEL_NEUTRON_1MEV_SI_NJOY_MEV_CM2_G = 2.03224e-3

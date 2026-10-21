@@ -109,7 +109,7 @@ compositions); per-gram normalisation with 28.0855 and 12.011 g/mol; SiC = 1:1 m
 | ------------------------------------------------------------------------ | --------------------------------------------------------------- |
 | NIEL_n,Si(1.000 MeV), pointwise                                          | 2.0322e-3 MeV cm^2/g = **0.998 x ASTM 95 MeV mb**               |
 | NIEL_n,SiC(1.000 MeV), pointwise                                         | **2.2989e-3 MeV cm^2/g** (76.5 MeV mb per atom); SiC/Si = 1.131 |
-| Watt fission spectrum (a 0.988 MeV, b 2.249 /MeV, 1 keV-20 MeV) averages | Si 2.1806e-3 (kappa_Si,fission 1.0705), SiC 2.3303e-3           |
+| Watt fission spectrum (a 0.988 MeV, b 2.249 /MeV -- the usual thermal U-235 values; source attribution unverified -- 1 keV-20 MeV) averages | Si 2.1806e-3 (kappa_Si,fission 1.0705), SiC 2.3303e-3           |
 | **r_n = SiC/Si, fission spectrum**                                       | **1.0687** (`R_N_SIC_SI_FISSION`)                               |
 
 ### Checks
@@ -132,7 +132,8 @@ compositions); per-gram normalisation with 28.0855 and 12.011 g/mol; SiC = 1:1 m
 
 - **Spectrum** (dominant): the reactor spectrum behind the introduction rates (TRIGA
   Vienna) is not available here. Watt only: 1.069 (1 keV cut), 1.067 (0.1 MeV), 1.019
-  (1 MeV cut); mono-energetic 1 MeV: 1.131. Adding a 1/E slowing-down tail (1 keV-1 MeV,
+  (1 MeV cut); Watt parameters a 0.965 / b 2.29: 1.072, a 0.8 or 1.2 MeV (b 2.249):
+  1.106 / 1.034; mono-energetic 1 MeV: 1.131. Adding a 1/E slowing-down tail (1 keV-1 MeV,
   illustrative shape, not a measured spectrum) carrying 30 / 50 / 70 % of the >1 keV
   flux gives 1.10 / 1.14 / 1.20, because C recoils clear the threshold at energies where
   Si barely displaces (1-100 keV: SiC/Si = 3.4). **Plausible range 1.02-1.20.**
@@ -143,6 +144,12 @@ compositions); per-gram normalisation with 28.0855 and 12.011 g/mol; SiC = 1:1 m
   documented on the calculator page, so the proton/neutron consistency is uncertain at
   this ~2 % level.
 - E_d and library: < 0.2 %.
+- **Definition of the 1 MeV point** (matters only for `sic-1mev` and the neutron
+  tables): the damage function is resonant around 1 MeV. NIEL_n,SiC "at 1 MeV" is
+  2.299e-3 pointwise, 2.303e-3 averaged over 0.9-1.1 MeV and 2.215e-3 over 0.5-2 MeV in
+  lethargy (a 4 % spread from the definition alone); the pointwise value is used. For
+  the same reason the bin-averaged neutron tables do not give kappa = 1 at 1 MeV in
+  their own conventions (0.953 `si-neq`, 0.976 `sic-1mev`).
 
 ### How it is used (opt-in; defaults unchanged)
 

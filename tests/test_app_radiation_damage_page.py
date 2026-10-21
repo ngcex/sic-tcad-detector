@@ -254,3 +254,49 @@ def test_charged_traps_checkbox_opt_in(monkeypatch):
         1e16 / get_hardness_factor(62), rel=1e-2
     )
     assert any("semi-insulating" in (i.value or "") for i in at.info)
+
+
+def test_neutron_sic_damage_choices_reach_the_facade(monkeypatch):
+    """The opt-in particle / NIEL-convention selectors are passed to
+    run_radiation_damage (default runs pass neither: byte-identical calls)."""
+    seen = {}
+
+    def fake(cfg, **kwargs):
+        seen.update(kwargs)
+        r = _fake_run_radiation_damage(cfg, **kwargs)
+        r.metadata.update(particle=kwargs.get("particle", "proton"))
+        return r
+
+    monkeypatch.setattr(etna, "run_radiation_damage", fake)
+    at = AppTest.from_function(_run_radiation_damage_page)
+    at.session_state["device_config"] = DeviceConfig()
+    at.run()
+    at.radio(key="rad_particle").set_value("neutron").run()
+    at.selectbox(key="rad_niel_convention").set_value("sic-damage").run()
+    assert at.exception == []
+    assert any("neutron" in (c.value or "") and "sic-damage" in (c.value or "")
+               for c in at.caption)
+    at.button[0].click()
+    at.run()
+    assert at.exception == []
+    assert seen["particle"] == "neutron"
+    assert seen["niel_convention"] == "sic-damage"
+    assert seen["proton_energy_MeV"] == pytest.approx(1.0)
+    assert "damage_result" in at.session_state
+
+
+def test_default_run_passes_no_niel_keywords(monkeypatch):
+    seen = {}
+
+    def fake(cfg, **kwargs):
+        seen.update(kwargs)
+        return _fake_run_radiation_damage(cfg, **kwargs)
+
+    monkeypatch.setattr(etna, "run_radiation_damage", fake)
+    at = AppTest.from_function(_run_radiation_damage_page)
+    at.session_state["device_config"] = DeviceConfig()
+    at.run()
+    at.button[0].click()
+    at.run()
+    assert at.exception == []
+    assert "particle" not in seen and "niel_convention" not in seen

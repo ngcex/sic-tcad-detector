@@ -104,8 +104,16 @@ def build_damage_figure(result: SimResult) -> go.Figure:
     )
     fig.add_hline(y=1.0, line_dash="dash", line_color="#9AA0A6", opacity=0.5)
     fig.update_layout(
-        title="CCE vs Proton Fluence",
-        xaxis_title="Proton Fluence (p/cm²)",
+        title=(
+            "CCE vs Neutron Fluence"
+            if result.metadata.get("particle") == "neutron"
+            else "CCE vs Proton Fluence"
+        ),
+        xaxis_title=(
+            "Neutron Fluence (n/cm²)"
+            if result.metadata.get("particle") == "neutron"
+            else "Proton Fluence (p/cm²)"
+        ),
         xaxis_type="log",
         xaxis_exponentformat="power",
         yaxis_title="Charge Collection Efficiency",

@@ -189,3 +189,19 @@ def test_api_compensation_fluence_scales_with_the_convention():
     n = compensation_fluence(cfg, 1.0, particle="neutron")
     k = get_hardness_factor(1.0, hardness_table("neutron", "si-neq"))
     assert n == pytest.approx(base * get_hardness_factor(62.0) / k, rel=1e-9)
+
+
+def test_damage_figures_label_neutron_runs():
+    from app.components.results import build_damage_figure
+    from etna import DeviceConfig, SimResult
+
+    r = SimResult(
+        config=DeviceConfig(),
+        sim_type="damage",
+        x=np.geomspace(1e11, 1e12, 3),
+        y=np.array([0.99, 0.98, 0.97]),
+        metadata={"V_bias": -40.0, "energy_MeV": 14.0, "particle": "neutron"},
+        mesh=None,
+    )
+    fig = build_damage_figure(r)
+    assert "Neutron" in fig.layout.xaxis.title.text
