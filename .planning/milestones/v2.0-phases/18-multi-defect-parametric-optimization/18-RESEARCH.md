@@ -4,6 +4,12 @@
 **Domain:** Multi-defect TCAD comparison, parametric radiation hardness sweeps, and validation against published 4H-SiC irradiation data
 **Confidence:** HIGH
 
+> **Erratum 2026-10-21 (historical record kept as written).** The validation targets proposed
+> here are unreliable: Burin et al. (arXiv:2407.16710) has no proton or CCE data, and the
+> "Moscatelli NIM A 845 (2017) 628" and "Raffi Sensors 21 (2021) 1048" citations resolve to
+> unrelated papers (doi:10.1016/j.nima.2016.06.030, doi:10.3390/s21041048). See
+> `.planning/CARRIER_REMOVAL_REVIEW.md`.
+
 ## Summary
 
 Phase 18 is the capstone of v2.0: it pulls together all the radiation damage physics (Phases 13-17) into three user-facing capabilities: (1) comparing single-effective-defect vs three-defect model predictions, (2) parametric optimization of device design for radiation hardness, and (3) publication-quality validation against published experimental data.

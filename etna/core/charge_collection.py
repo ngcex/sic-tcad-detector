@@ -723,8 +723,8 @@ def cce_vs_fluence(
         - "lifetime_model": str
 
     Points at or beyond full donor removal (eta_removal * Phi_neq >= min N_D of
-    the epi; ~8.75e12 p/cm^2 at 62 MeV for N_D_bulk 8.5e13 with the SR-NIEL kappa
-    1.942 and eta 5, ~4.86e13 with the pre-2026-10-20 placeholder 0.35) are NOT
+    the epi; ~3.48e12 p/cm^2 at 62 MeV for the default stack (N_D_bulk 3.4e13) with the
+    SR-NIEL kappa 1.942 and eta 5, ~4.86e13 with the pre-2026-10-20 placeholder 0.35) are NOT
     solved: CCE is NaN with a reason.
 
     ``radiation_traps`` (OPT-IN, default None = the legacy removal model above,

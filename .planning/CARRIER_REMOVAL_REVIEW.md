@@ -53,8 +53,9 @@ drift. Transit times are 78 ps for electrons and 285 ps for holes.
 
 - Trapping alone gives 1 % loss at about 8e12 p/cm^2 and 20 % at about 1.6e14 p/cm^2
   (62 MeV). These fluences do not depend on N_D.
-- The simulator's 0.2 % at 0.9 Phi_comp agrees with this first-order estimate within a
-  factor of 2 (the field is non-uniform and the saturation velocities are assumed).
+- The simulator's 0.16 % at 0.9 Phi_comp (nb14 run of 2026-10-21) is a factor of about 2.5
+  below this first-order estimate (0.39 %); the field is non-uniform and the drift
+  velocities are assumed.
 - So raising N_D_bulk to 1e14 moves the refusal point out by 3x. It would make about 1 %
   loss visible just below the new Phi_comp. It does **not** produce a 1e11-1e12 onset.
 - No plausible removal rate does that either. A higher eta only moves the refusal point
@@ -109,7 +110,9 @@ the data within 0-50 %, which is partly luck given how 5.0 was chosen.
 **CCE versus fluence: the measured onset.**
 
 - Gsponer et al., arXiv:2310.02047: 50 um, 1.5e14, TRIGA. Alpha CCE stays above 80 % up to
-  1e15 neq in reverse bias. There is no removal rate because C-V is flat after
+  1e15 neq in reverse bias. (Correction 2026-10-21: the abstract states "CCE better than 50 %
+  up to 1e15 neq/cm^2" and reverse-bias CCE scaling as Phi_eq^-0.63; the 80 % figure was not
+  re-checked against the full text, so nb14 quotes the abstract.) There is no removal rate because C-V is flat after
   irradiation. The detectors still work in forward and reverse bias, beyond full
   compensation.
 - De Napoli 2022, a review of several sources: neutron CCE "remaining very high only
@@ -130,8 +133,14 @@ the data within 0-50 %, which is partly luck given how 5.0 was chosen.
      source data.
    - The R^2 of -0.38 therefore compares the model with an invented curve. It is the same
      pattern as the fabricated kappa in nb18/19 (PHYSICS_REVIEW_v6).
-   - The Moscatelli 2017 / "Raffi 2021, Sensors 21, 1048" references in cell 2 were not
-     verified in this review.
+   - The Moscatelli 2017 / "Raffi 2021, Sensors 21, 1048" references in cell 2 are wrong
+     (checked on Crossref 2026-10-21): NIM A 845 (2017) 628-632 is Sotiropoulou et al., "High
+     performance embedded system for real-time pattern matching"
+     (doi:10.1016/j.nima.2016.06.030); Sensors 21 (2021) 1048 is Ullah et al., "Simultaneous
+     Acquisition of Ultrasound and Gamma Signals with a Single-Channel Readout"
+     (doi:10.3390/s21041048). Neither has SiC data. No 24 MeV Moscatelli or 70 MeV Raffi/Rafi
+     SiC paper was found by search; De Napoli 2022 cites a Moscatelli neutron result and a
+     Rafi et al. electron study, which were not checked.
 2. **Below Phi_comp the model behaves correctly.** Removal lowers V_fd, the detector stays
    over-depleted at -40 V, and the loss is trapping-limited (a few tenths of a percent).
 3. **eta_removal = 5 / neq is mis-sourced but not mis-valued at high energy.**
@@ -163,6 +172,10 @@ the data within 0-50 %, which is partly luck given how 5.0 was chosen.
     detectors (cite Gsponer 2310.02047 and De Napoli 2022), converted with kappa.
   - State that below Phi_comp an over-depleted 10 um device is trapping-limited by
     construction.
+  - **Done 2026-10-21:** nb14 rewritten (curve, R^2, onset band, Moscatelli/Raffi removed;
+    trapping-only estimate computed in the notebook from `compute_K_tau`: 1 % at 8.05e12,
+    20 % at 1.61e14 p/cm^2; simulated 0.16 % vs estimated 0.39 % at 0.9 Phi_comp; one
+    refused point at 1.5 Phi_comp shown). Phase-18 records carry an erratum note.
 - **Re-cite eta_removal.** Cite Radmanovac et al. (arXiv:2510.11304; 252.7 MeV p,
   4.5-5.6 /p, about 5-6.6 /Si-neq) instead of "= eta_Z12". Note that 15 MeV p and reactor
   neutrons on power-diode drift layers give about 3x more per Si-neq (Lebedev 2017,

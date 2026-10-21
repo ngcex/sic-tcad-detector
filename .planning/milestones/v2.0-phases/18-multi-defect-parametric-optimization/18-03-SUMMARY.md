@@ -55,6 +55,13 @@ completed: 2026-03-26
 
 # Phase 18 Plan 03: Validation Notebook Summary
 
+> **Erratum 2026-10-21 (historical record kept as written).** The "Burin 2024" validation target,
+> the onset expectation and the approximate reference curve used for the agreement metrics were
+> unsourced (Burin et al. has no proton or CCE data). The Moscatelli (NIM A 845, 628) and Raffi
+> (Sensors 21, 1048) citations resolve to unrelated papers (doi:10.1016/j.nima.2016.06.030,
+> doi:10.3390/s21041048). Notebook 14 no longer contains them. See
+> `.planning/CARRIER_REMOVAL_REVIEW.md`.
+
 **Publication-quality validation notebook comparing simulator CCE predictions against Burin 2024, Moscatelli 2016, and Raffi 2021 with explicit device/energy mismatch documentation and trend agreement metrics**
 
 ## Performance
