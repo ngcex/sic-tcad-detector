@@ -93,7 +93,7 @@ states.
 
 ## Major
 
-### M1. `KineticTrapSolver.from_config` runs a preset given by name in the wrong NIEL convention (silent)
+### M1. `KineticTrapSolver.from_config` runs a preset given by name in the wrong NIEL convention (silent) (issue #12)
 
 - **Where:** `etna/core/trap_kinetics.py:445-454` and `:364`.
   - `from_config` checks `resolve_traps(trap_model, conv)` but passes the raw string to `cls(...)`.
@@ -110,7 +110,7 @@ trap_model="radmanovac_calibrated", niel_convention="si-neq")` gives
   `resolve_traps(trap_model, conv)` in `calibrate_cv`.
 - **Confidence:** high. Found independently by sub-audits B and C.
 
-### M2. Default-path CCE lifetimes are a node-count mean over a mask that includes the n+ buffer and substrate
+### M2. Default-path CCE lifetimes are a node-count mean over a mask that includes the n+ buffer and substrate (issue #13)
 
 - **Where:** `etna/core/radiation_traps.py:514-517` (`occupancy_lifetimes`: `(...)[m].mean()`),
   called from `charge_collection.py:1040-1042` with `ref["epi_mask"]` (x >= junction).
@@ -140,7 +140,7 @@ changes by a factor of 0.96 / 0.86 / 0.88. The result also depends on mesh refin
 - **Confidence:** high that it depends on the discretisation; medium on which average is right.
   Found by B and D.
 
-### M3. The legacy `eta_removal = 5 /neq` changed per-proton meaning with the default flip, although its only data backing is per proton
+### M3. The legacy `eta_removal = 5 /neq` changed per-proton meaning with the default flip, although its only data backing is per proton (issue #14)
 
 - **Where:** `etna/core/radiation_damage.py:280`. It is used by:
   - the `"auto"` fallback;
@@ -169,7 +169,7 @@ legacy Phi_comp rose from 3.48e12 to 4.36e12, while the calibrated trap model gi
 - **Confidence:** medium-high. The arithmetic is certain; the severity depends on that decision.
   The review itself notes the value carries a x2-3 uncertainty at 62 MeV.
 
-### M4. `trap_compensation_fluence` bypasses `check_trap_convention` (silent wrong number)
+### M4. `trap_compensation_fluence` bypasses `check_trap_convention` (silent wrong number) (issue #15)
 
 - **Where:** `etna/api/simulation.py:1828-1846`.
 - **What is wrong:** an explicit `RadiationTrapModel` built in one convention is evaluated
@@ -187,7 +187,7 @@ legacy Phi_comp rose from 3.48e12 to 4.36e12, while the calibrated trap model gi
   both places.
 - **Confidence:** high.
 
-### M5. Tilted-alpha plasma slices ignore `DeviceConfig.mobility`
+### M5. Tilted-alpha plasma slices ignore `DeviceConfig.mobility` (issue #16)
 
 - **Where:**
   - `etna/core/track/cross_section.py:54` sets the module-level `PARAMS = SiC4H_Parameters()`,
