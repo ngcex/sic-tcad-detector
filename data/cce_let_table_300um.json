@@ -5,6 +5,7 @@
   },
   "bias_V": 50.0,
   "x_ion_um": 0.0,
+  "mobility": "c_axis",
   "LET_keV_um": [
     0.5,
     1.077217345015942,

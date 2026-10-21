@@ -121,6 +121,7 @@ def test_c_axis_against_the_independent_cross_checks():
         )
 
 
+@pytest.mark.filterwarnings("ignore:low-field mobility:UserWarning")
 @pytest.mark.parametrize("name", ["legacy_perp", "c_axis", "ishikawa2025"])
 @pytest.mark.parametrize("carrier", ["electron", "hole"])
 def test_devsim_expression_is_the_numpy_evaluation(name, carrier):
@@ -129,7 +130,7 @@ def test_devsim_expression_is_the_numpy_evaluation(name, carrier):
     from etna.core.device import mobility_ct_expression
 
     p = SiC4H_Parameters(mobility=name)
-    for T in (200.0, 300.0, 410.0):
+    for T in (250.0, 300.0, 410.0):
         expr = mobility_ct_expression("NN", T, carrier, p)
         # eval of a string ETNA itself generates (floats, pow, NN): safe in this test
         assert set(expr) <= set("0123456789.e+-*/() ,NNpow")
@@ -212,3 +213,26 @@ def test_legacy_perp_reproduces_the_pre_change_pins():
     assert fl.y[0] == pytest.approx(0.999809, abs=1e-6)
     fl_new = sim.run_flash_recombination(DeviceConfig(), dose_rates_Gy_s=[20.0])
     assert fl_new.y[0] == pytest.approx(0.999791, abs=1e-6)
+
+
+def test_ishikawa2025_warns_outside_its_fitted_T_range():
+    """The thesis T laws were fitted at 300-600 K; below, the electron t^-3.4 grows fast
+    (2159 cm2/Vs at 250 K vs 1819 with the kept -2.40): a warning, not an error. The
+    array-T path (track engine) is the scalar expression, broadcast."""
+    import warnings
+
+    from etna.core.physics_models import MobilityExtrapolationWarning
+
+    s = L["ishikawa2025"]
+    with pytest.warns(MobilityExtrapolationWarning, match="300-600 K"):
+        s.mobility(1e14, 250.0, "electron")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", MobilityExtrapolationWarning)
+        L["c_axis"].mobility(1e14, 150.0, "electron")  # no stated range: no warning
+        T = np.array([300.0, 350.0, 450.0, 600.0])
+        for c in ("electron", "hole"):
+            np.testing.assert_allclose(
+                s.mobility(np.full(4, 1e16), T, c),
+                [s.mobility(1e16, t, c) for t in T],
+                rtol=1e-14,
+            )

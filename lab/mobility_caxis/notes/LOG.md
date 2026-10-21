@@ -293,3 +293,35 @@ the new field. Regenerated: `data/cce_let_table_{100,300}um.json`,
 `lab/geometry2d/notes/devsim_baselines.json` / `devsim_psi.npz` (devsim_baselines.py).
 Notebooks carry no committed outputs; nb14's first-order transit times (78 / 285 ps, high-
 field velocities) are not ETNA mobility numbers and were left.
+
+## 10. Mesh convergence of the change (`section_convergence`, batched, h / h/2 / h/4)
+
+| | -2 V | -10 V | -40 V |
+| --- | --- | --- | --- |
+| after - before, h | -6.7608e-4 | -5.4935e-5 | -1.4082e-5 |
+| h/2 | -6.7760e-4 | -5.4906e-5 | -1.4054e-5 |
+| h/4 | -6.7838e-4 | -5.4901e-5 | -1.4044e-5 |
+
+The change is mesh-converged to 0.3 % (-2 V) and 0.06 % (-10 V); the CCE itself moves by
+2e-5 (-2 V) and 1e-7 (-10 V) from h to h/4, both sets alike.
+
+## 11. Decision points for the reviewer
+
+- **Every moved CCE pin comes from the hole x 0.90**, not from the electrons
+  (decomposition, section 5 (2)): c-axis electrons alone move the CCE by at most +8.5e-6,
+  so an electrons-only variant would keep every legacy pin within 1e-5. The hole ratio
+  rests on one opened primary (Ishikawa thesis: resistivity ratio about 0.9; its Hall
+  83 / 94 = 0.88 and conductance about 0.82 agree in sign) and one secondary
+  (Hatakeyama 2003, 1/1.15); Ayalew eq. 3.81 (primary, older) says isotropic. If the
+  stricter reading of "only if the primaries agree" is wanted, set `mu_max_p` /
+  `mu_min_p` of "c_axis" back to the legacy 125 / 15.9 (one line); the electron change
+  alone then reproduces the legacy CCE pins to < 1e-5 while transit times keep t_e x0.83.
+- **Merge hazard:** `lab/geometry2d/notes/devsim_baselines.json` / `devsim_psi.npz` and
+  `data/cce_let_table_*.json` depend on the 2D meshes that a parallel branch changes.
+  Whoever merges second reruns `lab/geometry2d/bench/devsim_baselines.py` (minutes) and
+  `lab/mobility_caxis/bench/rebuild_let_tables.py data_out c_axis 6` (13 + 22 min) and
+  copies the tables to data/. The npz cannot be hand-merged.
+- **ishikawa2025 below 300 K** warns (`MobilityExtrapolationWarning`), not refused.
+- **lab scripts** that read `SiC4H_Parameters` mobility fields directly
+  (`lab/solver2d/solver2d/engine.py`, `lab/microdosimeter/mdlab.py`, bench/hypotheses*)
+  still compute the perpendicular (legacy) set; they are frozen lab records.

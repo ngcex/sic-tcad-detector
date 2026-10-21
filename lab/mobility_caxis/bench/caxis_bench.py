@@ -4,6 +4,7 @@ lab/mobility_caxis/notes/LOG.md and docs/USAGE.md section 18.
     uv run python lab/mobility_caxis/bench/caxis_bench.py            # 1D facades, ~1 min
     uv run python lab/mobility_caxis/bench/caxis_bench.py --slow     # + radiation damage,
                                                                      #   FLASH transient
+    uv run python lab/mobility_caxis/bench/caxis_bench.py --track    # + track engine, ~100 s
 
 "before" = DeviceConfig(mobility="legacy_perp") (the default until 2026-10-21, the
 perpendicular-to-c set), "after" = DeviceConfig() ("c_axis"), "ishikawa" = the opt-in
@@ -115,6 +116,30 @@ def section_decomposition():
     finally:
         for k in hyb:
             L.pop(k)
+
+
+def section_convergence():
+    """Mesh convergence of the CCE and of its after - before change (batched engine,
+    refine_mesh levels 0 / 1 / 2 = h, h/2, h/4)."""
+    from etna.api.models import _batch
+    from etna.core.batched.sweeps import alpha_generation, cce_sweep
+    from etna.core.generation_profiles import ALPHA_RANGE_SIC_CM
+
+    print("\n(2c) mesh convergence of the alpha CCE at -2 / -10 / -40 V (h, h/2, h/4)")
+    V = [-2.0, -10.0, -40.0]
+    out = {}
+    for s in SETS[:2]:
+        for lvl in (0, 1, 2):
+            c = cfg(s)
+            pb, x, kw = _batch(c, refine=lvl)
+            sub, epi = kw["substrate_thickness_cm"], kw["epi_thickness_cm"]
+            G = alpha_generation(x, sub, ALPHA_RANGE_SIC_CM, 1e18, epi_end=sub + epi)
+            r = cce_sweep(pb, V, sub, G, T=c.T, N_A=c.N_A)
+            out[s, lvl] = r.cce[:, 0]
+    for lvl in (0, 1, 2):
+        row(f"before / after / delta  h/{2**lvl}",
+            list(out["legacy_perp", lvl]) + list(out["c_axis", lvl])
+            + list(out["c_axis", lvl] - out["legacy_perp", lvl]), "{:+.7e}")  # fmt: skip
 
 
 def section_transit():
@@ -255,11 +280,15 @@ if __name__ == "__main__":
     section_mobility()
     section_cv()
     section_cce()
+    section_decomposition()
+    section_convergence()
     section_transit()
     section_dark()
     section_temperature()
     section_tilted()
     section_validation()
+    if "--track" in sys.argv:
+        section_track()  # ~100 s
     section_flash()
     if "--slow" in sys.argv:
         section_slow()

@@ -5,6 +5,7 @@
   },
   "bias_V": 50.0,
   "x_ion_um": 0.0,
+  "mobility": "legacy_perp",
   "LET_keV_um": [
     0.5,
     0.7192249441438314,

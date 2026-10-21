@@ -79,6 +79,11 @@ class Provenance:
 # --------------------------------------------------------------------------- mobility
 
 
+class MobilityExtrapolationWarning(UserWarning):
+    """A low-field mobility set is evaluated outside the fitted range of its T law."""
+
+
+
 @dataclass(frozen=True)
 class LowFieldMobility:
     """Doping/temperature low-field mobility, N = total doping, t = T / 300 K.
@@ -148,14 +153,37 @@ class LowFieldMobility:
             mu_max = g("mu_max") * t ** g("gamma")
             mu_min = g("mu_min") * t ** g("beta") if g("beta") != 0.0 else g("mu_min")
             return mu_min + (mu_max - mu_min) / (1.0 + (N / g("N_ref")) ** g("alpha"))
-        if np.ndim(T) != 0:
-            return np.vectorize(lambda TT, NN: self.mobility(NN, TT, carrier))(T, N)
+        self.check_T(T)
+        if np.ndim(T) != 0:  # array T (track engine): the same expression, broadcast
+            t = np.asarray(T, dtype=float) / 300.0
+            A = (g("mu_max") - g("mu_min")) * t ** g("gamma")
+            C = g("mu_min") * t ** g("beta") if g("beta") != 0.0 else g("mu_min")
+            return A / (1.0 + (N / g("N_ref")) ** g("alpha") * t ** g("delta")) + C
         A, B, C, N_ref, alpha = self.coefficients(T, carrier)
         return A / (1.0 + (N / N_ref) ** alpha * B) + C
+
+    def check_T(self, T):
+        """Warn when T leaves the fitted range of the T law
+        (``T_range_K``; None = no stated range): the law is then an extrapolation."""
+        if self.T_range_K is None:
+            return
+        lo, hi = self.T_range_K
+        T = np.asarray(T, dtype=float)
+        if T.size and (np.min(T) < lo - 1e-9 or np.max(T) > hi + 1e-9):
+            import warnings
+
+            warnings.warn(
+                f"low-field mobility {self.name!r}: T outside its fitted range "
+                f"{lo:g}-{hi:g} K (the T law is extrapolated; below 300 K the electron "
+                "(T/300)^-3.4 grows fast)",
+                MobilityExtrapolationWarning,
+                stacklevel=3,
+            )
 
     def devsim_expression(self, N_expr, T, carrier):
         """devsim string of ``mobility`` at the density expression ``N_expr`` (the T-
         dependent constants inlined at full precision, same order of operations)."""
+        self.check_T(T)
         A, B, C, N_ref, alpha = self.coefficients(T, carrier)
         if self.form == "ct":
             # written mu_min + (mu_max(T) - mu_min) / (...) as the numpy evaluation
@@ -797,7 +825,8 @@ def resolve_models(models) -> PhysicsModels:
 
 
 __all__ = [
-    "Provenance", "LowFieldMobility", "HighFieldMobility", "Anisotropy", "AlphaParams",
+    "Provenance", "LowFieldMobility", "MobilityExtrapolationWarning",
+    "HighFieldMobility", "Anisotropy", "AlphaParams",
     "ImpactIonizationModel", "BandgapNarrowing", "PhysicsModels", "resolve_models",
     "LOW_FIELD_MOBILITY", "HIGH_FIELD_MOBILITY", "ANISOTROPY", "IMPACT_IONIZATION",
     "BANDGAP_NARROWING", "hatakeyama_anisotropic_alpha", "replace",
