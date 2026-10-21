@@ -110,16 +110,16 @@ if __name__ == "__main__":
                 x = contact_refine(x0, lev)
             t = time.perf_counter()
             c, C, W = solve(cfg, np.asarray(x))
+            res.append((c, C, W))
+            print(f"{mode:8s} L{lev} N={len(x):6d} ({time.perf_counter() - t:.1f}s) "
+                  f"CCE-CCE0={np.array2string(c - res[0][0], precision=2)} "
+                  f"dC/C0={np.array2string(C / res[0][1] - 1, precision=2)}", flush=True)  # fmt: skip
             if mode == "contact":
                 ci = solve(cfg, np.asarray(x), injected=True)
                 res_inj.append(ci)
                 print(f"   injected-normalised CCE - L0: "
                       f"{np.array2string(ci - res_inj[0], precision=2)}  "
                       f"(trapz - injected: {np.array2string(c - ci, precision=2)})")  # fmt: skip
-            res.append((c, C, W))
-            print(f"{mode:8s} L{lev} N={len(x):6d} ({time.perf_counter() - t:.1f}s) "
-                  f"CCE-CCE0={np.array2string(c - res[0][0], precision=2)} "
-                  f"dC/C0={np.array2string(C / res[0][1] - 1, precision=2)}", flush=True)  # fmt: skip
         if mode == "uniform":
             for k, name in enumerate(("CCE", "C", "W")):
                 a = [r[k] for r in res]

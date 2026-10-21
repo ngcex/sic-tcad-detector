@@ -270,9 +270,10 @@ collected current by the box-rule integral of the generation over ALL mesh nodes
 on the contact nodes the contact equation replaces the continuity equation (Dirichlet
 carrier densities): pairs assigned there are counted and never injected. With the
 default normalisation that leaves a purely mesh-dependent CCE deficit equal to the
-cathode nodes' share of the generation -- measured at 50 V: 1.3e-3 on this planar
-device (50 nm cells at the cathode), 4.6e-3 on the coarser mesh of the alternative
-builders -- which would masquerade as a structure difference. The library now
+cathode nodes' share of the generation -- measured at 50 V on the legacy depth mesh:
+1.3e-3 on this planar device, 4.6e-3 on the coarser mesh of the alternative builders
+(about 1e-5 with the graded 0.1 nm cathode cell) -- which would masquerade as a
+structure difference. The library now
 normalises by the injected (non-contact) generation and `alpha_stripe_generation` /
 `cce_lateral_scan` zero the contact nodes by default (`zero_on_contacts=True`), so
 I_generated is what the model injects and the five meshes are comparable. The remaining

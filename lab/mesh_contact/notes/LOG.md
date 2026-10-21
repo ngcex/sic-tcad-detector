@@ -143,6 +143,12 @@ Reading:
 - Cost: mesa 2380 -> 3836 nodes, guard ring 11455 -> 20445 (79 -> 141 depth lines).
   devsim guard ring at 10 V: build + ramp + 11-point scan 110 s (load-dependent; the
   legacy mesh took 30 s in the first pass); fv2d 2.4 s on the same mesh, parity <= 1e-15.
+- devsim at 50 V on the graded mesh (`bench/gr_devsim_50v.py`, proxy with a 10 um SV,
+  11.4k nodes): reaches 50 V, every point from 22.5 V on the aggressive tier (12 points,
+  rel 1e-6), as the legacy mesh did in notebook 19; 419 s under load (over this log's
+  2-minute budget: run once). CCE(0) devsim 0.9990784 = fv2d 0.9990784. The full 50 um
+  guard ring at 50 V under devsim on the graded mesh was NOT run (time budget): notebook
+  19 is the first place that run happens; expect several minutes for that cell.
 
 ### The AMR "converged" values of the first pass were not converged
 

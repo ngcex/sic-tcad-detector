@@ -20,7 +20,8 @@ REF = json.loads((NOTES / "devsim_baselines.json").read_text())
 
 
 def gr(tol=1e-5):
-    st = guard_ring_structure()
+    # the first-pass study started from the legacy depth mesh (LOG section 6)
+    st = guard_ring_structure(depth_mesh="legacy")
     info = st.info
     xcut = info["sv_half_width_cm"] + 0.5 * info["gap_cm"]
     ref = REF["gr"]

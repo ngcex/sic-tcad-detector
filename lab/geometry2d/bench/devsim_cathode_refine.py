@@ -37,7 +37,9 @@ def run(extra, V):
 
     A._add_depth_mesh_lines = patched
     try:
-        info = A.create_mesa_device(device_name="cathref", pillar_half_width_um=10.0)
+        info = A.create_mesa_device(
+            device_name="cathref", pillar_half_width_um=10.0, depth_mesh="legacy"
+        )
     finally:
         A._add_depth_mesh_lines = _orig
     try:

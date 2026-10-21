@@ -53,6 +53,7 @@ def run(tag):
             pillar_half_width_um=50.0,
             trench_width_um=10.0,
             trench_depth_um=10.0,
+            depth_mesh="legacy",  # the references are on the legacy depth mesh
         )
     elif tag == "gr":
         mesh, _ = mesh_from_builder(
@@ -61,6 +62,7 @@ def run(tag):
             guard_ring_width_um=5.0,
             guard_ring_gap_um=3.0,
             guard_ring_depth_um=1.0,
+            depth_mesh="legacy",
         )
     else:
         mesh, _ = mesh_from_builder(

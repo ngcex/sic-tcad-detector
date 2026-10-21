@@ -21,8 +21,8 @@ from etna.core.fv2d import (
 from etna.core.fv2d.refine import refine_lines  # noqa: E402
 from etna.core.fv2d.structures import build_mesh, mesa_structure  # noqa: E402
 
-dm, _ = mesh_from_builder(create_mesa_device)
-st = mesa_structure()
+dm, _ = mesh_from_builder(create_mesa_device, depth_mesh="legacy")
+st = mesa_structure(depth_mesh="legacy")
 for V in (10.0, 50.0):
     ys = dm.ys
     prev = None

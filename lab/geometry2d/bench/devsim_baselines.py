@@ -60,7 +60,10 @@ def _prepare(info, V, V_step_max=2.5):
 def run_mesa(V=50.0, n=9):
     t0 = time.time()
     info = create_mesa_device(
-        pillar_half_width_um=50.0, trench_width_um=10.0, trench_depth_um=10.0
+        pillar_half_width_um=50.0,
+        trench_width_um=10.0,
+        trench_depth_um=10.0,
+        depth_mesh="legacy",  # references stay on the legacy depth mesh (README)
     )
     _prepare(info, V)
     t_ramp = time.time() - t0
@@ -90,6 +93,7 @@ def run_gr(V=10.0, n=11):
         guard_ring_width_um=5.0,
         guard_ring_gap_um=3.0,
         guard_ring_depth_um=1.0,
+        depth_mesh="legacy",
     )
     _prepare(info, V)
     t_ramp = time.time() - t0

@@ -18,9 +18,6 @@ from etna.core.contact_mesh import (
     junction_ps,
     resolve_depth_mesh,
 )
-from etna.core.devsim_lock import set_devsim_quiet
-
-set_devsim_quiet(True)
 
 REF_10V = 0.963065122
 REF_50V = 0.999090639
