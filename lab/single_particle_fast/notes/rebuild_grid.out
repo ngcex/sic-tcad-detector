@@ -1,0 +1,37 @@
+# rebuild_tables.py OUT 6 devsim_grid 10  (2026-10-21 18:42, load avg 7.5)
+cce_let_table_100um.json [devsim_grid, cut 10.0, n_jobs 6]: 10.1 s (build 0.5 s, 8208 nodes)
+  Q_gen ratio-1 max 4.4e-16; all converged True
+  LET    0.5000: CCE fast 0.9999741486 table 0.9999661619 diff +7.99e-06 t95 rel diff -4.54e-06
+  LET    0.7192: CCE fast 0.9999741853 table 0.9999694853 diff +4.70e-06 t95 rel diff +1.96e-04
+  LET    1.0346: CCE fast 0.9999741853 table 0.9999705363 diff +3.65e-06 t95 rel diff +1.96e-04
+  LET    1.4882: CCE fast 0.9999741853 table 0.9999713032 diff +2.88e-06 t95 rel diff +1.95e-04
+  LET    2.1407: CCE fast 0.9999741853 table 0.9999718520 diff +2.33e-06 t95 rel diff +1.94e-04
+  LET    3.0792: CCE fast 0.9999741853 table 0.9999724383 diff +1.75e-06 t95 rel diff +1.94e-04
+  LET    4.4293: CCE fast 0.9999741853 table 0.9999728820 diff +1.30e-06 t95 rel diff +1.93e-04
+  LET    6.3714: CCE fast 0.9999741853 table 0.9999731883 diff +9.97e-07 t95 rel diff +1.92e-04
+  LET    9.1649: CCE fast 0.9999741853 table 0.9999733316 diff +8.54e-07 t95 rel diff +9.24e-07
+  LET   13.1833: CCE fast 0.9999741853 table 0.9999735491 diff +6.36e-07 t95 rel diff +9.24e-07
+  LET   18.9635: CCE fast 0.9999741714 table 0.9999738187 diff +3.53e-07 t95 rel diff -7.38e-08
+  LET   27.2780: CCE fast 0.9999741853 table 0.9999738615 diff +3.24e-07 t95 rel diff +5.38e-07
+  LET   39.2380: CCE fast 0.9999741853 table 0.9999739884 diff +1.97e-07 t95 rel diff +2.25e-07
+  LET   56.4419: CCE fast 0.9999741853 table 0.9999740499 diff +1.35e-07 t95 rel diff +2.25e-07
+  LET   81.1888: CCE fast 0.9999741853 table 0.9999740926 diff +9.27e-08 t95 rel diff +2.25e-07
+  LET  116.7861: CCE fast 0.9999741853 table 0.9999741223 diff +6.30e-08 t95 rel diff +2.25e-07
+  LET  167.9909: CCE fast 0.9999741853 table 0.9999741430 diff +4.23e-08 t95 rel diff +2.25e-07
+  LET  241.6465: CCE fast 0.9999741853 table 0.9999741573 diff +2.80e-08 t95 rel diff +2.25e-07
+  LET  347.5964: CCE fast 0.9999741853 table 0.9999741673 diff +1.80e-08 t95 rel diff +2.25e-07
+  LET  500.0000: CCE fast 0.9999741853 table 0.9999741743 diff +1.11e-08 t95 rel diff +2.25e-07
+  max |dCCE| 7.99e-06, max |dt95|/t95 1.96e-04
+cce_let_table_300um.json [devsim_grid, cut 10.0, n_jobs 6]: 15.6 s (build 0.7 s, 10944 nodes)
+  Q_gen ratio-1 max 2.2e-16; all converged True
+  LET    0.5000: CCE fast 0.9999741486 table 0.9999569261 diff +1.72e-05 t95 rel diff -5.88e-06
+  LET    1.0772: CCE fast 0.9999741853 table 0.9999635539 diff +1.06e-05 t95 rel diff +1.89e-04
+  LET    2.3208: CCE fast 0.9999741853 table 0.9999691455 diff +5.04e-06 t95 rel diff +1.98e-04
+  LET    5.0000: CCE fast 0.9999741853 table 0.9999711500 diff +3.04e-06 t95 rel diff +1.95e-04
+  LET   10.7722: CCE fast 0.9999741853 table 0.9999723234 diff +1.86e-06 t95 rel diff +2.95e-06
+  LET   23.2079: CCE fast 0.9999741725 table 0.9999732284 diff +9.44e-07 t95 rel diff +8.94e-07
+  LET   50.0000: CCE fast 0.9999741853 table 0.9999736913 diff +4.94e-07 t95 rel diff +9.10e-07
+  LET  107.7217: CCE fast 0.9999741853 table 0.9999739245 diff +2.61e-07 t95 rel diff +9.10e-07
+  LET  232.0794: CCE fast 0.9999741853 table 0.9999740880 diff +9.73e-08 t95 rel diff +5.98e-07
+  LET  500.0000: CCE fast 0.9999741853 table 0.9999741432 diff +4.21e-08 t95 rel diff +5.98e-07
+  max |dCCE| 1.72e-05, max |dt95|/t95 1.98e-04

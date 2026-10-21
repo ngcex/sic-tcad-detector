@@ -1,0 +1,10 @@
+# uv run python lab/single_particle_fast/bench/time_convergence.py 2  (2026-10-21, load avg 40-47)
+adaptive rtol 0.001          CCE 0.9999816950 (balance 0.9999816950) t95 0.109821 ns Ipk 1.02336e-04 steps 123 lu 77 17.87s t_end 9.91e-08 conv True hist [0, 3, 4, 15, 34, 41, 21, 2, 3]
+adaptive rtol 0.0001         CCE 0.9999823233 (balance 0.9999823233) t95 0.109779 ns Ipk 1.02335e-04 steps 234 lu 29 13.20s t_end 3.97e-08 conv True hist [0, 4, 9, 29, 72, 80, 36, 2, 2]
+adaptive rtol 1e-05          CCE 0.9999821875 (balance 0.9999821875) t95 0.109772 ns Ipk 1.02337e-04 steps 500 lu 35 16.72s t_end 5.29e-08 conv True hist [2, 7, 18, 61, 152, 182, 73, 3, 2]
+adaptive rtol 1e-06          CCE 0.9999821642 (balance 0.9999821642) t95 0.109769 ns Ipk 1.02338e-04 steps 1075 lu 38 42.93s t_end 6.28e-09 conv True hist [5, 13, 39, 131, 326, 393, 164, 4, 0]
+adaptive stop 1e-11          CCE 0.9999821876 (balance 0.9999821876) t95 0.109772 ns Ipk 1.02337e-04 steps 501 lu 36 25.61s t_end 1.54e-07 conv True hist [2, 7, 18, 61, 152, 182, 73, 3, 2]
+grid frac 0.1 inj 1e-12      CCE 0.9999743504 (balance nan) t95 0.116788 ns Ipk 9.70563e-05 steps 94 lu 26 7.01s t_end 7.07e-09 conv True hist [0, 0, 0, 0, 25, 24, 24, 21, 0]
+grid frac 0.05 inj 5e-13     CCE 0.9999777355 (balance nan) t95 0.113172 ns Ipk 9.99027e-05 steps 186 lu 24 12.51s t_end 5.11e-09 conv True hist [0, 0, 0, 10, 48, 47, 47, 34, 0]
+grid frac 0.025 inj 2.5e-13  CCE 0.9999796871 (balance nan) t95 0.111417 ns Ipk 1.01288e-04 steps 368 lu 24 28.67s t_end 4.11e-09 conv True hist [0, 0, 0, 30, 94, 93, 93, 58, 0]
+grid frac 0.0125 inj 1.25e-13 CCE 0.9999808027 (balance nan) t95 0.110576 ns Ipk 1.01922e-04 steps 726 lu 25 57.03s t_end 3.42e-09 conv True hist [0, 0, 0, 70, 186, 185, 186, 99, 0]

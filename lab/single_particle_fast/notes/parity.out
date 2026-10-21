@@ -1,0 +1,13 @@
+# uv run python lab/single_particle_fast/bench/parity.py  (2026-10-21, load avg 30-50; first run, hw 150 block kept; the
+# hw 2 / hw 50 blocks: parity_hw2_hw50.out (this run's hw 2 LET 15.8 read the LET from the file name, 7.4e-7 off))
+Searching DEVSIM_MATH_LIBS="libopenblas.dylib:liblapack.dylib:libblas.dylib"
+Loading "libopenblas.dylib": MISSING DLL
+Loading "liblapack.dylib": ALL BLAS/LAPACK LOADED
+Skipping libblas.dylib
+loading UMFPACK 5.1 as direct solver
+# hw 150: fast build 37.05 s, 49248 nodes, devsim build 13.1 s
+hw 150 LET 0.5: Q_gen ratio-1 0.0e+00 | steps devsim 82 twin 81 | series dI/peak 4.0e-06 dDisp/peak 3.6e-05
+  CCE devsim 0.9999569261 devsim-signed 0.9999756249 twin 0.9999741485 | twin-devsim +1.72e-05 twin-signed -1.48e-06 | I_dark*t_end/Q_gen 5.3e-05
+  t95 devsim 0.1167875 twin 0.1167868 ns | adaptive CCE 0.9999822967 (balance 0.9999822966, ledger 1.8e-08) t95 0.1097781 ns, adaptive-twin +8.15e-06
+  wall: devsim 437.4 s, twin 269.85 s (21 LU), adaptive 462.80 s (238 steps, 30 LU)
+  10 um cut (10944 nodes, build 8.13 s): adaptive CCE 0.9999822960 (cut - full -7.5e-10) t95 0.1097782 ns, 45.25 s

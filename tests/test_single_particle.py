@@ -357,9 +357,17 @@ class TestIonTrackGeneration:
 
 
 @pytest.mark.slow
+@pytest.mark.exhaustive
 class TestCCEVsBias:
     """Default stack (p+ / graded epi / n+, anode current): raw single-particle CCE
     <= 1 and monotone in bias, and the run converges before t_collect.
+
+    Exhaustive since 2026-10-21 (80 s of devsim): the default suite runs the same check
+    on the fast devsim-grid twin (tests/test_single_particle_fast.py::
+    test_cce_le_one_and_monotone_in_bias_fast), whose parity with devsim is
+    tests/test_single_particle_fast_parity.py (10 and 50 V, hw 2). Measured then with the
+    c-axis mobility default: devsim 0.9998840594 at 10 V (hw 2, LET 10), not the
+    0.99986637 quoted below (which predates that default).
 
     Folds in the former TestChargeConservation (0.5 <= CCE, Q > 0 at 50 V). The
     legacy (no n+) pin with old doping that lived here is gone: the legacy physics
@@ -481,10 +489,18 @@ def serial_linear_table():
 
 
 @pytest.mark.slow
+@pytest.mark.exhaustive
 class TestBuildCCELetTableSmallMesh:
     """build_cce_let_table on a small mesh (hw 2 um, 5 mesh columns): the shared-device
     table equals a fresh device per LET, method="linear" equals method="full" within
     the table tolerance (1e-6), and n_jobs > 1 reproduces the serial table.
+
+    Exhaustive since 2026-10-21 (~160 s of devsim, the suite's longest unit): the
+    default suite runs the same table logic (linear vs full, simulated rows, t_collection,
+    n_jobs parity, build-once determinism) on the fast engine's devsim-grid scheme
+    (tests/test_single_particle_fast.py) and devsim's build-once check plus the
+    devsim-vs-fast row parity on a 2-LET devsim table
+    (tests/test_single_particle_fast_parity.py).
 
     The serial tables are class-scoped fixtures: the parallel parity test (formerly
     tests/test_cce_let_parallel.py, timing: lab/perf_profile/bench_cce_let_parallel.py)

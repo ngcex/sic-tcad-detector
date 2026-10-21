@@ -2769,7 +2769,7 @@ All three are 1D only. They refuse 2D configs, `radiation_traps`, and `bandgap_n
 
 The track engine solves one ion track in the default stack (or any `DeviceConfig`), axisymmetric in (r, z) at normal incidence. It models the dense track core, plasma (columnar) recombination by SRH + Auger, the pulse-height defect (PHD) and, opt-in, the lattice temperature.
 
-It is a separate, opt-in engine with its own facades (`run_track_event`, `run_track_cce_let`, `run_tilted_alpha_track`, section 19.2). No other `run_*` facade calls it, and `build_cce_let_table` (2D Cartesian sheet track, linear) is unchanged. Issue #9; numbers and commands are in `lab/track_plasma/notes/LOG.md`.
+It is a separate, opt-in engine with its own facades (`run_track_event`, `run_track_cce_let`, `run_tilted_alpha_track`, section 19.2). No other `run_*` facade calls it, and `build_cce_let_table` (2D Cartesian sheet track, linear) keeps devsim by default (its opt-in `engine="fast"` reuses this engine's kernels, section 19.4). Issue #9; numbers and commands are in `lab/track_plasma/notes/LOG.md`.
 
 ```python
 from etna import DeviceConfig
@@ -2923,6 +2923,77 @@ This lifetime is about 100x below good-epi ambipolar lifetimes (~2 µs, arXiv:10
 - Hence no preset: `tau_scale` is a user knob of `run_tilted_alpha_track`.
 
 ---
+
+### 19.4 Fast CCE(LET) tables: `build_cce_let_table(engine="fast")` (opt-in)
+
+`build_cce_let_table(..., engine="fast", fast_options={...})` builds the same table (same
+columns, device, sheet-track generation, anode conduction-current CCE, terminal-current
+t_collection) without devsim's transient. Default stays `engine="devsim"`. Code:
+`etna.core.track.planar` (engine), `etna.core.single_particle_fast` (table); numbers and
+commands: `lab/single_particle_fast/notes/LOG.md`.
+
+- **Same discrete device.** devsim's own mesh (mesh-only `create_sic_2d_device` build,
+  imported verbatim: volumes, couplings, doping, node mobilities whose edge average is
+  devsim's edge mobility), dark state by fv2d (dark potential = devsim's to 4e-11 V).
+  The transient reuses the track engine (`TrackSystem`, numba kernels, SuperLU with a
+  reused factorisation) in excess unknowns, so the dark contact current is exactly 0.
+- **Schemes** (`fast_options["scheme"]`):
+  - `"adaptive"` (default): TR-BDF2 with local-truncation-error control (`rtol` 1e-4),
+    instantaneous deposition, stop when the stored excess is below 1e-9 of the pairs.
+    Every LET is simulated (`method` is a devsim cost saver and is not used).
+  - `"devsim_grid"`: devsim's 1 ps injection step, 10 % BDF1 grid, estimator and stop;
+    `method="linear"` / `"full"` run devsim's own table logic. This is the parity twin.
+- **Lateral cut** (`lateral_width_um`, default 10 um beyond the track; `None` = full
+  half-width): the laterally uniform device is cut with a reflecting side; Q_generated
+  stays the full device's. CCE moves by < 1e-9 at hw 50 and 150.
+- **Error estimates** (`error_estimate=True`, in `table.attrs["error_estimate"]`): at the
+  middle LET, rtol / 10 (time), twice the cut (lateral), devsim's mesher with every
+  spacing halved (mesh).
+
+Parity and accuracy (hw 2 / 50 / 150 um, 50 V; details in the LOG):
+
+| quantity | value |
+|---|---|
+| devsim-grid twin vs devsim, current series (same steps) | 8e-11 (LET 500) to 5e-8 (LET 0.5) of the peak; 1.2e-8 at 10 V |
+| twin vs devsim, CCE at LET 500 (hw 2) | 5e-10 |
+| twin vs devsim, CCE at low LET | devsim's dark-current offset: 3.6e-7 (hw 2, LET 0.5) to 1.7e-5 (hw 150, LET 0.5) |
+| twin vs devsim, t_collection | <= 6e-6 relative |
+| converged in time (adaptive) vs devsim's 10 % grid | CCE +8.15e-6 at every LET and width; t_collection 0.1098 vs 0.1168 ns |
+| mesh (devsim's mesher, spacings / 2, / 4) | CCE +9.5e-7, +1.5e-6; t_collection -0.2 %, -0.3 % |
+
+**The committed `data/cce_let_table_*.json` are not regenerated.** They agree with the
+fast engine only to ~1e-5, not 1e-6, for two reasons, both in devsim's numbers:
+
+- **Dark-current offset.** devsim's estimator sums (|I| - |I_dark|) dt. Its I_dark is
+  round-off of the 1e18-1e19 contact layers (8e-15, 2e-13 and 6e-13 A/cm at hw 2, 50
+  and 150), of opposite sign to the signal. That offsets the CCE by about
+  2 I_dark t_end / Q_gen, i.e. by up to 1.7e-5 at LET 0.5.
+- **Time-step error.** The 1 ps injection step and the 10 % BDF1 grid lower the CCE by
+  8.15e-6 at every LET. Halving the steps converges at first order towards the adaptive
+  value. The transient is homogeneous (LET-independent), not linear, in the excess:
+  depleted-region SRH of the excess pairs is ~dn dp / (tau_p dn + tau_n dp).
+
+The devsim-grid twin reproduces the committed tables to <= 1e-6 at LET >= 13 keV/um
+(1e-8 at LET 500). Both variants can rebuild them into a scratch directory with
+`lab/single_particle_fast/bench/rebuild_tables.py OUT_DIR [n_jobs] [scheme]`.
+
+**Cost** (n_jobs 6, 10 um cut, load ~7): 41 s for the 100 um table (20 LETs) and 44 s for
+the 300 um table (10 LETs) with the adaptive scheme; 10 s and 16 s with the twin. devsim
+needs ~15 and ~26 min. Per point, single thread: 4-15 s CPU for the adaptive scheme
+(238 steps) vs 63 s for devsim at hw 50 (80 steps).
+
+**Tests.** The devsim table-logic and bias tests
+(`TestBuildCCELetTableSmallMesh`, `TestCCEVsBias`) are now `exhaustive`. The default
+suite runs the same checks on the fast twin (`tests/test_single_particle_fast.py`) plus
+one devsim parity file at hw 2 (`tests/test_single_particle_fast_parity.py`).
+
+```python
+from etna.core.single_particle import build_cce_let_table
+
+tab = build_cce_let_table(half_width_um=50.0, V_bias=50.0, n_let_points=20, let_min=0.5,
+                          let_max=500.0, engine="fast", n_jobs=6)
+tab.attrs["wall_s"], tab["CCE_raw"].iloc[0]          # ~0.9999823 at every LET
+```
 
 ## 20. Uncertainty quantification and global sensitivity (`etna.uq`, `run_uq`)
 

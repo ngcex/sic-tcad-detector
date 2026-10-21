@@ -1,0 +1,3 @@
+# uv run python lab/single_particle_fast/bench/time_error_origin.py  (2026-10-21)
+tau x 1: CCE grid 0.9999743506 adaptive 0.9999823233 adaptive-grid +7.97e-06 (1 - CCE adaptive 1.77e-05)
+tau x 1e+06: CCE grid 0.9999973538 adaptive 0.9999973542 adaptive-grid +3.44e-10 (1 - CCE adaptive 2.65e-06)

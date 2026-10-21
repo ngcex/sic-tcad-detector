@@ -38,6 +38,7 @@ SPLIT_PER_TEST = (
     "tests/test_v3_baseline_regression.py::test_",
     "tests/test_incomplete_ionization_engines.py::test_",
     "tests/test_fluence_engine.py::test_",
+    "tests/test_single_particle_fast_parity.py::test_",
 )
 
 # Parametrized tests whose cases are independent devsim reference runs (5-25 s each):
@@ -51,7 +52,11 @@ SPLIT_PER_PARAM = (
 
 # unit (file, file::Class or full nodeid of a split test) -> approx. seconds
 HEAVY = {
-    "tests/test_single_particle.py::TestBuildCCELetTableSmallMesh": 160,
+    # TestBuildCCELetTableSmallMesh (160) and TestCCEVsBias (80) are exhaustive since
+    # 2026-10-21: the fast engine runs their checks, devsim parity below
+    "tests/test_single_particle_fast.py": 40,
+    "tests/test_single_particle_fast_parity.py::test_devsim_grid_twin_matches_devsim_and_build_once": 30,
+    "tests/test_single_particle_fast_parity.py::test_devsim_grid_twin_series_at_10V": 12,
     "tests/test_track_engine.py": 40,
     "tests/test_device2d_convergence.py::TestReverseBiasConvergence::test_converges_at_minus_50V_300um": 150,
     "tests/test_engine2d.py::test_sweep_row_failing_config_hw25": 150,
@@ -65,7 +70,6 @@ HEAVY = {
     "tests/test_dark_current.py::TestDarkCurrentCalibration::test_calibration_point_unchanged_by_lag_fix": 90,
     "tests/test_charge_collection_2d.py::TestCCELateralScan": 90,
     "tests/test_api_device.py::TestBuildDevice": 80,
-    "tests/test_single_particle.py::TestCCEVsBias": 80,
     "tests/test_dark_current.py::TestDarkCurrentVsFluence": 75,
     "tests/test_device2d_convergence.py::TestReverseBiasConvergence::test_converges_at_minus_50V_100um": 67,
     "tests/test_nplus.py": 65,

@@ -1,0 +1,15 @@
+# NUMBA_NUM_THREADS=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 uv run python lab/single_particle_fast/bench/timing.py devsim  (2026-10-21 18:35-18:39; adaptive newton_tol 1e-11 then)
+# load 32.3, NUMBA_NUM_THREADS=1
+hw 50 cut 10.0: build cpu 0.87 s wall 2.77 s, 8208 nodes
+  adaptive: cpu 14.74 s wall 45.45 s (238 steps, 30 LU)
+  devsim_grid: cpu 7.41 s wall 16.65 s (81 steps, 22 LU)
+hw 150 cut 10.0: build cpu 1.60 s wall 4.29 s, 10944 nodes
+  adaptive: cpu 21.11 s wall 36.27 s (238 steps, 30 LU)
+  devsim_grid: cpu 11.62 s wall 19.10 s (81 steps, 22 LU)
+hw 50 cut None: build cpu 2.27 s wall 5.30 s, 17784 nodes
+  adaptive: cpu 35.48 s wall 50.03 s (238 steps, 30 LU)
+  devsim_grid: cpu 17.98 s wall 24.20 s (81 steps, 21 LU)
+# load 35.7
+devsim hw 50: build cpu 3.64 s wall 4.08 s
+  transient: cpu 62.92 s wall 64.16 s (80 steps)
+# load 15.4

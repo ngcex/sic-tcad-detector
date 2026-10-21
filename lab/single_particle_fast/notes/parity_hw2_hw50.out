@@ -1,0 +1,34 @@
+# uv run python lab/single_particle_fast/bench/parity.py 2 50  (2026-10-21, load avg 40-47)
+# hw 2, 10 V: fast build 1.83 s, 3420 nodes, devsim build 0.0 s
+hw 2 10 V LET 10: Q_gen ratio-1 0.0e+00 | steps devsim 89 twin 90 | series dI/peak 1.2e-08 dDisp/peak 1.4e-07
+  CCE devsim 0.9998840594 devsim-signed 0.9998841027 twin 0.9998841213 | twin-devsim +6.20e-08 twin-signed +1.86e-08 | I_dark*t_end/Q_gen 4.3e-08
+  t95 devsim 0.6239896 twin 0.6239897 ns | adaptive CCE 0.9999134939 (balance 0.9999134939, ledger 3.3e-10) t95 0.5827406 ns, adaptive-twin +2.94e-05
+  wall: devsim 0.0 s, twin 11.04 s (25 LU), adaptive 11.64 s (239 steps, 31 LU)
+# hw 2, 50 V: fast build 1.04 s, 3420 nodes, devsim build 1.0 s
+hw 2 50 V LET 0.5: Q_gen ratio-1 0.0e+00 | steps devsim 81 twin 81 | series dI/peak 5.1e-08 dDisp/peak 6.5e-07
+  CCE devsim 0.9999737925 devsim-signed 0.9999744052 twin 0.9999741498 | twin-devsim +3.57e-07 twin-signed -2.55e-07 | I_dark*t_end/Q_gen 6.7e-07
+  t95 devsim 0.1167870 twin 0.1167868 ns | adaptive CCE 0.9999822983 (balance 0.9999822993, ledger 1.1e-09) t95 0.1097777 ns, adaptive-twin +8.15e-06
+  wall: devsim 6.7 s, twin 8.96 s (22 LU), adaptive 8.21 s (234 steps, 29 LU)
+hw 2 50 V LET 15.8114: Q_gen ratio-1 2.2e-16 | steps devsim 81 twin 81 | series dI/peak 3.6e-09 dDisp/peak 2.3e-08
+  CCE devsim 0.9999741601 devsim-signed 0.9999741814 twin 0.9999741713 | twin-devsim +1.12e-08 twin-signed -1.01e-08 | I_dark*t_end/Q_gen 2.1e-08
+  t95 devsim 0.1167881 twin 0.1167881 ns | adaptive CCE 0.9999823233 (balance 0.9999823233, ledger 1.3e-11) t95 0.1097792 ns, adaptive-twin +8.15e-06
+  wall: devsim 8.1 s, twin 5.31 s (22 LU), adaptive 8.89 s (234 steps, 29 LU)
+hw 2 50 V LET 5: Q_gen ratio-1 0.0e+00 | steps devsim 81 twin 81 | series dI/peak 1.1e-08 dDisp/peak 1.2e-07
+  CCE devsim 0.9999741173 devsim-signed 0.9999741847 twin 0.9999741648 | twin-devsim +4.75e-08 twin-signed -1.99e-08 | I_dark*t_end/Q_gen 6.7e-08
+  t95 devsim 0.1167872 twin 0.1167872 ns | adaptive CCE 0.9999823159 (balance 0.9999823159, ledger 1.1e-12) t95 0.1097782 ns, adaptive-twin +8.15e-06
+  wall: devsim 7.5 s, twin 5.63 s (22 LU), adaptive 11.91 s (234 steps, 29 LU)
+hw 2 50 V LET 500: Q_gen ratio-1 -1.1e-16 | steps devsim 81 twin 81 | series dI/peak 7.9e-11 dDisp/peak 7.5e-10
+  CCE devsim 0.9999741813 devsim-signed 0.9999741820 twin 0.9999741817 | twin-devsim +4.58e-10 twin-signed -2.16e-10 | I_dark*t_end/Q_gen 6.7e-10
+  t95 devsim 0.1168288 twin 0.1168288 ns | adaptive CCE 0.9999823355 (balance 0.9999823355, ledger 2.9e-12) t95 0.1098256 ns, adaptive-twin +8.15e-06
+  wall: devsim 7.7 s, twin 7.60 s (22 LU), adaptive 15.17 s (234 steps, 29 LU)
+# hw 50, 50 V: fast build 10.98 s, 17784 nodes, devsim build 2.1 s
+hw 50 50 V LET 0.5: Q_gen ratio-1 -1.1e-16 | steps devsim 82 twin 81 | series dI/peak 6.6e-07 dDisp/peak 8.7e-06
+  CCE devsim 0.9999661619 devsim-signed 0.9999752889 twin 0.9999741486 | twin-devsim +7.99e-06 twin-signed -1.14e-06 | I_dark*t_end/Q_gen 1.7e-05
+  t95 devsim 0.1167874 twin 0.1167868 ns | adaptive CCE 0.9999822966 (balance 0.9999822966, ledger 2.2e-11) t95 0.1097782 ns, adaptive-twin +8.15e-06
+  wall: devsim 98.6 s, twin 55.76 s (21 LU), adaptive 102.20 s (238 steps, 30 LU)
+  10 um cut (8208 nodes, build 3.42 s): adaptive CCE 0.9999822966 (cut - full -2.9e-11) t95 0.1097774 ns, 33.93 s
+hw 50 50 V LET 500: Q_gen ratio-1 0.0e+00 | steps devsim 81 twin 81 | series dI/peak 7.2e-10 dDisp/peak 3.5e-09
+  CCE devsim 0.9999741743 devsim-signed 0.9999741901 twin 0.9999741853 | twin-devsim +1.11e-08 twin-signed -4.75e-09 | I_dark*t_end/Q_gen 1.6e-08
+  t95 devsim 0.1168094 twin 0.1168094 ns | adaptive CCE 0.9999823378 (balance 0.9999823378, ledger 2.3e-12) t95 0.1098030 ns, adaptive-twin +8.15e-06
+  wall: devsim 112.3 s, twin 58.76 s (21 LU), adaptive 99.75 s (238 steps, 30 LU)
+  10 um cut (8208 nodes, build 3.72 s): adaptive CCE 0.9999823378 (cut - full -1.2e-12) t95 0.1098031 ns, 40.99 s

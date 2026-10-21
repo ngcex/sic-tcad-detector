@@ -546,6 +546,8 @@ def build_cce_let_table(
     device_kwargs=None,
     method="linear",
     n_jobs=1,
+    engine="devsim",
+    fast_options=None,
 ):
     """Build CCE(LET) lookup table from transient simulations.
 
@@ -589,6 +591,14 @@ def build_cce_let_table(
         discarded, an anchor not prefetched is simulated in the parent. Parity with
         n_jobs=1: tests/test_single_particle.py::TestBuildCCELetTableSmallMesh.
 
+    engine : {"devsim", "fast"}
+        "devsim" (default): the devsim transients above. "fast" (opt-in): the numba
+        TR-BDF2 / SuperLU single-ion transient on devsim's own mesh
+        (etna.core.single_particle_fast.build_cce_let_table_fast, ``fast_options``
+        forwarded: scheme, lateral_width_um, rtol, error_estimate, ...); same columns.
+    fast_options : dict or None
+        Keyword arguments of build_cce_let_table_fast (engine="fast" only).
+
     Returns
     -------
     table : pandas.DataFrame
@@ -625,6 +635,19 @@ def build_cce_let_table(
     """
     if method not in ("linear", "full"):
         raise ValueError(f"method must be 'linear' or 'full', got {method!r}")
+    if engine == "fast":
+        from etna.core.single_particle_fast import build_cce_let_table_fast
+
+        return build_cce_let_table_fast(
+            half_width_um=half_width_um, V_bias=V_bias, n_let_points=n_let_points,
+            let_min=let_min, let_max=let_max, x_ion_cm=x_ion_cm, contact=contact,
+            device_kwargs=device_kwargs, method=method, n_jobs=n_jobs,
+            **(fast_options or {}),
+        )  # fmt: skip
+    if engine != "devsim":
+        raise ValueError(f"engine must be 'devsim' or 'fast', got {engine!r}")
+    if fast_options:
+        raise ValueError("fast_options needs engine='fast'")
     LET_values = np.logspace(np.log10(let_min), np.log10(let_max), n_let_points)
 
     # One device for the whole table: the build (mesh, Poisson, equilibrium, DD setup,
@@ -695,11 +718,12 @@ def _build_cce_let_table_on_device(
                 **sim_kw,
             )
 
-        rows, done = None, {}
-        if method == "linear" and n_let_points > 3:
-            rows, done = _linear_table(device_info, LET_values, x_ion_cm, point)
-        if rows is None:  # "full", or the linear check failed: simulate the rest
-            rows = [done[i] if i in done else point(i) for i in range(n_let_points)]
+        def q_gen(i):
+            return ion_track_generation_2d(
+                device_info, LET_values[i], x_ion_cm=x_ion_cm
+            )[1]
+
+        rows = _assemble_table(LET_values, method, point, q_gen)
     finally:
         try:
             delete_device_and_mesh(device_info["device_name"])
@@ -712,6 +736,21 @@ def _build_cce_let_table_on_device(
             item.cancel()
 
     return pd.DataFrame(rows)
+
+
+def _assemble_table(LET_values, method, point, q_gen):
+    """Table rows from ``point(i, return_series=False, **sim_kw)`` (one simulated row,
+    with ``return_series`` (row, series)) and ``q_gen(i)`` (generated charge, C/cm):
+    method="linear" (n > 3) synthesises from the let_max series (_linear_table) and
+    falls back to simulating the rest, "full" simulates every LET. Engine-agnostic
+    (devsim, or engine="fast" with its devsim-grid scheme)."""
+    n_let_points = len(LET_values)
+    rows, done = None, {}
+    if method == "linear" and n_let_points > 3:
+        rows, done = _linear_table(LET_values, point, q_gen)
+    if rows is None:  # "full", or the linear check failed: simulate the rest
+        rows = [done[i] if i in done else point(i) for i in range(n_let_points)]
+    return rows
 
 
 def _prefetch_plan(method, n_let_points, n_jobs):
@@ -813,10 +852,11 @@ def synthesize_linear_response(
     return None
 
 
-def _linear_table(device_info, LET_values, x_ion_cm, point):
+def _linear_table(LET_values, point, q_gen):
     """(rows, simulated) for build_cce_let_table(method="linear"); rows is None when the
     let_max transient fails or the middle-LET check misses (the caller then simulates
-    the rest). ``simulated`` maps grid index -> simulated row."""
+    the rest). ``simulated`` maps grid index -> simulated row; ``q_gen(i)`` the
+    generated charge (C/cm) of LET index i."""
     n = len(LET_values)
     i_hi, i_mid = n - 1, n // 2
     row_hi, ref = point(i_hi, rtol_converged=_LINEAR_REF_RTOL, return_series=True)
@@ -827,9 +867,7 @@ def _linear_table(device_info, LET_values, x_ion_cm, point):
 
     def synth(i, Q_gen=None):
         if Q_gen is None:
-            _, Q_gen = ion_track_generation_2d(
-                device_info, LET_values[i], x_ion_cm=x_ion_cm
-            )
+            Q_gen = q_gen(i)
         out = synthesize_linear_response(
             ref["times"], ref["currents"], ref["I_dark"], Q_gen / q_gen_hi
         )
